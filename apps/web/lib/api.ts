@@ -179,3 +179,31 @@ export async function deleteAlert(alertId: string): Promise<void> {
     throw new Error(error.error || 'Failed to delete alert')
   }
 }
+
+// Stripe Checkout
+export interface CreateCheckoutParams {
+  priceId: string
+  userId: string
+  successUrl: string
+  cancelUrl: string
+}
+
+export interface CheckoutSession {
+  url: string
+  sessionId: string
+}
+
+export async function createCheckoutSession(params: CreateCheckoutParams): Promise<CheckoutSession> {
+  const response = await fetch(`${API_BASE_URL}/api/payments/create-checkout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(params)
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to create checkout session')
+  }
+  return response.json()
+}
