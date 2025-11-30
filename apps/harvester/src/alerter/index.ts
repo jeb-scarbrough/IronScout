@@ -4,7 +4,8 @@ import { redisConnection } from '../config/redis'
 import { AlertJobData } from '../config/queues'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Initialize Resend only if API key is provided
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@zeroedin.com'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
@@ -179,14 +180,17 @@ async function sendNotification(alert: any, reason: string) {
         retailerUrl: latestPrice.url
       })
 
-      await resend.emails.send({
-        from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
-        to: [alert.user.email],
-        subject: `🎉 Price Drop Alert: ${alert.product.name}`,
-        html
-      })
-
-      console.log(`[Alerter] Price drop email sent to ${alert.user.email}`)
+      if (resend) {
+        await resend.emails.send({
+          from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+          to: [alert.user.email],
+          subject: `🎉 Price Drop Alert: ${alert.product.name}`,
+          html
+        })
+        console.log(`[Alerter] Price drop email sent to ${alert.user.email}`)
+      } else {
+        console.log(`[Alerter] Email sending disabled (no RESEND_API_KEY) - would send price drop alert to ${alert.user.email}`)
+      }
     } else if (alert.alertType === 'BACK_IN_STOCK') {
       const html = generateBackInStockEmailHTML({
         userName: alert.user.name || 'there',
@@ -198,14 +202,17 @@ async function sendNotification(alert: any, reason: string) {
         retailerUrl: latestPrice.url
       })
 
-      await resend.emails.send({
-        from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
-        to: [alert.user.email],
-        subject: `✨ Back in Stock: ${alert.product.name}`,
-        html
-      })
-
-      console.log(`[Alerter] Back in stock email sent to ${alert.user.email}`)
+      if (resend) {
+        await resend.emails.send({
+          from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+          to: [alert.user.email],
+          subject: `✨ Back in Stock: ${alert.product.name}`,
+          html
+        })
+        console.log(`[Alerter] Back in stock email sent to ${alert.user.email}`)
+      } else {
+        console.log(`[Alerter] Email sending disabled (no RESEND_API_KEY) - would send back-in-stock alert to ${alert.user.email}`)
+      }
     }
   } catch (error) {
     console.error(`[Alerter] Failed to send email:`, error)

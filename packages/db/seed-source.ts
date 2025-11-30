@@ -5,22 +5,34 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('Seeding test crawl source...')
 
-  // Create a test RSS feed source
-  const source = await prisma.source.upsert({
+  // Check if source already exists
+  const existing = await prisma.source.findFirst({
     where: {
       url: 'https://fakestoreapi.com/products',
     },
-    create: {
-      name: 'Fake Store API (Test)',
-      url: 'https://fakestoreapi.com/products',
-      type: 'JSON',
-      enabled: true,
-      interval: 3600, // 1 hour
-    },
-    update: {
-      enabled: true,
-    },
   })
+
+  let source
+  if (existing) {
+    // Update existing source
+    source = await prisma.source.update({
+      where: { id: existing.id },
+      data: { enabled: true },
+    })
+    console.log('Updated existing test source')
+  } else {
+    // Create new source
+    source = await prisma.source.create({
+      data: {
+        name: 'Fake Store API (Test)',
+        url: 'https://fakestoreapi.com/products',
+        type: 'JSON',
+        enabled: true,
+        interval: 3600, // 1 hour
+      },
+    })
+    console.log('Created new test source')
+  }
 
   console.log(`✓ Created test source: ${source.name}`)
   console.log(`  URL: ${source.url}`)
