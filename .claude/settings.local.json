@@ -55,7 +55,13 @@
       "Bash(docker ps:*)",
       "Bash(docker exec:*)",
       "Bash(stripe:*)",
-      "Bash(\"/c/Program Files/stripe/stripe.exe\" --version)"
+      "Bash(\"/c/Program Files/stripe/stripe.exe\" --version)",
+      "Bash(npx shadcn-ui@latest add:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(netstat:*)",
+      "Bash(pnpm update:*)",
+      "Bash(pnpm build:*)",
+      "Bash(timeout 15 pnpm dev:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,4 +1,4 @@
-import { getServerSession } from 'next-auth'
+import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
@@ -7,7 +7,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession()
+  const session = await auth()
 
   // Require authentication for admin
   if (!session) {

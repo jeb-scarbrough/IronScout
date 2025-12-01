@@ -24,7 +24,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const isPremiumRetailer = lowestPrice.retailer.tier === 'PREMIUM'
 
   return (
-    <>
     <Card className="group hover:shadow-lg transition-all duration-200 overflow-hidden">
       <div className="relative">
         <div className="aspect-square relative overflow-hidden bg-gray-50">
@@ -137,6 +136,6 @@ export function ProductCard({ product }: ProductCardProps) {
         open={showAlertDialog}
         onOpenChange={setShowAlertDialog}
       />
-    </>
+    </Card>
   )
 }

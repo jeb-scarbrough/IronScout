@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
+import { auth } from '@/lib/auth'
 import { AlertsManager } from '@/components/dashboard/alerts-manager'
 
 export default async function AlertsPage() {
-  const session = await getServerSession()
+  const session = await auth()
 
   if (!session) {
     redirect('/api/auth/signin')

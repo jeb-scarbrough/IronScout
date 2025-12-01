@@ -5,7 +5,7 @@ import { SearchHeader } from '@/components/search/search-header'
 import { SortSelect } from '@/components/search/sort-select'
 
 interface SearchPageProps {
-  searchParams: {
+  searchParams: Promise<{
     q?: string
     category?: string
     brand?: string
@@ -14,11 +14,12 @@ interface SearchPageProps {
     inStock?: string
     sortBy?: string
     page?: string
-  }
+  }>
 }
 
-export default function SearchPage({ searchParams }: SearchPageProps) {
-  const query = searchParams.q || ''
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams
+  const query = params.q || ''
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -36,7 +37,7 @@ export default function SearchPage({ searchParams }: SearchPageProps) {
             <SortSelect />
           </div>
           <Suspense fallback={<div className="text-center py-8">Loading results...</div>}>
-            <SearchResults searchParams={searchParams} />
+            <SearchResults searchParams={params} />
           </Suspense>
         </div>
       </div>

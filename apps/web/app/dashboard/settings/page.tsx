@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
+import { auth } from '@/lib/auth'
 import { UserSettings } from '@/components/dashboard/user-settings'
 
 export default async function SettingsPage() {
-  const session = await getServerSession()
+  const session = await auth()
 
   if (!session) {
     redirect('/api/auth/signin')

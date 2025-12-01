@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
+import { auth } from '@/lib/auth'
 import { BillingOverview } from '@/components/billing/billing-overview'
 import { SubscriptionDetails } from '@/components/billing/subscription-details'
 import { PaymentHistory } from '@/components/billing/payment-history'
 
 export default async function BillingPage() {
-  const session = await getServerSession()
+  const session = await auth()
   
   if (!session) {
     redirect('/api/auth/signin')

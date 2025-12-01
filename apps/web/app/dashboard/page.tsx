@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
+import { auth } from '@/lib/auth'
 import { DashboardOverview } from '@/components/dashboard/dashboard-overview'
 import { RecentAlerts } from '@/components/dashboard/recent-alerts'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 
 export default async function DashboardPage() {
-  const session = await getServerSession()
+  const session = await auth()
   
   if (!session) {
     redirect('/api/auth/signin')
