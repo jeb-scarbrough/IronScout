@@ -118,11 +118,14 @@ export default function SignUpPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
+                maxLength={128}
                 disabled={loading}
               />
-              <p className="text-xs text-muted-foreground">
-                Must be at least 8 characters long
-              </p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>• Minimum: 8 characters (15+ recommended)</p>
+                <p>• Maximum: 128 characters</p>
+                <p>• Use any characters you like - no complexity rules!</p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
@@ -134,6 +137,7 @@ export default function SignUpPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
+                maxLength={128}
                 disabled={loading}
               />
             </div>
