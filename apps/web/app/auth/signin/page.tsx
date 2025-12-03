@@ -49,7 +49,7 @@ export default function SignInPage() {
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Sign in to ZeroedIn</CardTitle>
+          <CardTitle>Sign in to IronScout.ai</CardTitle>
           <CardDescription>Choose your preferred sign-in method</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

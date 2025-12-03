@@ -1,8 +1,8 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 
-const router = Router()
+const router: any = Router()
 
 // Query schema
 const listLogsSchema = z.object({
@@ -15,7 +15,7 @@ const listLogsSchema = z.object({
 })
 
 // GET /api/logs - List logs with filtering
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const { page, limit, level, event, executionId, search } = listLogsSchema.parse(req.query)
 
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/logs/events - Get list of unique events
-router.get('/events', async (req, res) => {
+router.get('/events', async (req: Request, res: Response) => {
   try {
     const events = await prisma.executionLog.findMany({
       select: {
@@ -79,7 +79,7 @@ router.get('/events', async (req, res) => {
       },
     })
 
-    res.json(events.map((e) => e.event))
+    res.json(events.map((e: any) => e.event))
   } catch (error) {
     console.error('Error fetching events:', error)
     res.status(500).json({ error: 'Failed to fetch events' })

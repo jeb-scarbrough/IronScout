@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import { crawlQueue, fetchQueue, CrawlJobData } from '../config/queues'
 

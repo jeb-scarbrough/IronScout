@@ -1,13 +1,14 @@
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import { writeQueue, NormalizeJobData, NormalizedProduct } from '../config/queues'
+import { normalizeAmmoProduct } from './ammo-utils'
 
 // Normalizer worker - standardizes extracted data into a common format
 export const normalizerWorker = new Worker<NormalizeJobData>(
   'normalize',
   async (job: Job<NormalizeJobData>) => {
-    const { executionId, sourceId, rawItems } = job.data
+    const { executionId, sourceId, rawItems, contentHash } = job.data
 
     console.log(`[Normalizer] Normalizing ${rawItems.length} items`)
 
@@ -67,6 +68,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
         executionId,
         sourceId,
         normalizedItems,
+        contentHash, // Pass hash to be stored after successful write
       })
 
       await prisma.executionLog.create({
@@ -133,11 +135,18 @@ async function normalizeItem(rawItem: any, source: any): Promise<NormalizedProdu
     url = new URL(url, baseUrl).toString()
   }
 
+  // Apply ammo-specific normalization
+  const ammoData = normalizeAmmoProduct({
+    name,
+    upc: rawItem.upc || rawItem.UPC || rawItem.gtin || null,
+    brand: rawItem.brand || extractBrand(name) || null,
+  })
+
   return {
     name,
     description: (rawItem.description || '').trim() || undefined,
     category,
-    brand: extractBrand(name) || undefined,
+    brand: ammoData.brand || undefined,
     imageUrl: rawItem.imageUrl || rawItem.image || undefined,
     price,
     currency: 'USD', // Default to USD, could be extracted from source
@@ -145,11 +154,25 @@ async function normalizeItem(rawItem: any, source: any): Promise<NormalizedProdu
     inStock: rawItem.inStock !== false, // Default to true unless explicitly false
     retailerName: source.name,
     retailerWebsite: new URL(source.url).origin,
+
+    // Ammo-specific normalized fields
+    upc: ammoData.upc || undefined,
+    caliber: ammoData.caliber || undefined,
+    grainWeight: ammoData.grainWeight || undefined,
+    caseMaterial: ammoData.caseMaterial || undefined,
+    purpose: ammoData.purpose || undefined,
+    roundCount: ammoData.roundCount || undefined,
+    productId: ammoData.productId, // Canonical product ID (UPC or hash)
   }
 }
 
-// Extract numeric price from text
-function extractPrice(priceText: string): number | null {
+// Extract numeric price from text or number
+function extractPrice(priceText: string | number): number | null {
+  // If already a number, return it
+  if (typeof priceText === 'number') {
+    return priceText > 0 ? priceText : null
+  }
+
   // Remove currency symbols and common formatting
   const cleaned = priceText.replace(/[$£€¥,]/g, '').trim()
   const match = cleaned.match(/\d+\.?\d*/)

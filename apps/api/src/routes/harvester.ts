@@ -1,8 +1,25 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
+import { Queue } from 'bullmq'
+import Redis from 'ioredis'
 
-const router = Router()
+const router: any = Router()
+
+// Redis connection for BullMQ
+const redisHost = process.env.REDIS_HOST || 'localhost'
+const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10)
+const redisPassword = process.env.REDIS_PASSWORD || undefined
+
+const redisConnection = {
+  host: redisHost,
+  port: redisPort,
+  password: redisPassword,
+  maxRetriesPerRequest: null,
+}
+
+// Create crawl queue
+const crawlQueue = new Queue('crawl', { connection: redisConnection })
 
 // Validation schema
 const triggerCrawlSchema = z.object({
@@ -10,7 +27,7 @@ const triggerCrawlSchema = z.object({
 })
 
 // POST /api/harvester/trigger - Trigger manual crawl
-router.post('/trigger', async (req, res) => {
+router.post('/trigger', async (req: Request, res: Response) => {
   try {
     const { sourceId } = triggerCrawlSchema.parse(req.body)
 
@@ -45,24 +62,31 @@ router.post('/trigger', async (req, res) => {
       }
     }
 
-    // Create execution records for each source
-    const executions = await Promise.all(
-      sources.map((source) =>
-        prisma.execution.create({
-          data: {
-            sourceId: source.id,
-            status: 'PENDING',
-          },
-          include: {
-            source: true,
-          },
-        })
-      )
-    )
+    // Create execution records and queue jobs for each source
+    const executions = []
 
-    // TODO: Queue jobs in BullMQ
-    // For now, just return the created executions
-    // The harvester worker should be running separately and pick these up
+    for (const source of sources) {
+      // Create execution record
+      const execution = await prisma.execution.create({
+        data: {
+          sourceId: source.id,
+          status: 'PENDING',
+        },
+        include: {
+          source: true,
+        },
+      })
+
+      executions.push(execution)
+
+      // Queue job in BullMQ
+      await crawlQueue.add('crawl', {
+        sourceId: source.id,
+        executionId: execution.id,
+      })
+
+      console.log(`[API] Queued crawl job for source ${source.name} (execution: ${execution.id})`)
+    }
 
     res.json({
       message: `Triggered crawl for ${executions.length} source(s)`,
@@ -78,7 +102,7 @@ router.post('/trigger', async (req, res) => {
 })
 
 // GET /api/harvester/status - Get harvester service status
-router.get('/status', async (req, res) => {
+router.get('/status', async (req: Request, res: Response) => {
   try {
     // Check for running executions
     const runningCount = await prisma.execution.count({

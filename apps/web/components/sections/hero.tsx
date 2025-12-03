@@ -21,7 +21,7 @@ export function Hero() {
           </h1>
           
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            ZeroedIn uses AI to monitor millions of products across thousands of retailers, 
+            IronScout.ai uses AI to monitor millions of products across thousands of retailers, 
             alerting you to price drops and deals before they go mainstream.
           </p>
 

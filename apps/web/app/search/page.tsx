@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { SearchResults } from '@/components/search/search-results'
-import { SearchFilters } from '@/components/search/search-filters'
+import { SearchFiltersAmmo } from '@/components/search/search-filters-ammo'
 import { SearchHeader } from '@/components/search/search-header'
 import { SortSelect } from '@/components/search/sort-select'
 
@@ -12,7 +12,14 @@ interface SearchPageProps {
     minPrice?: string
     maxPrice?: string
     inStock?: string
-    sortBy?: string
+    // Ammo-specific filters
+    caliber?: string
+    grainWeight?: string
+    caseMaterial?: string
+    purpose?: string
+    minRounds?: string
+    maxRounds?: string
+    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance'
     page?: string
   }>
 }
@@ -28,7 +35,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <div className="flex flex-col lg:flex-row gap-6 mt-6">
         {/* Filters Sidebar - Hidden on mobile, shown on desktop */}
         <aside className="w-full lg:w-64 flex-shrink-0">
-          <SearchFilters />
+          <SearchFiltersAmmo />
         </aside>
 
         {/* Main Content */}

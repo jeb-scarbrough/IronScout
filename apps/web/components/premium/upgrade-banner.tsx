@@ -26,7 +26,7 @@ export function UpgradeBanner({
   const [dismissed, setDismissed] = useState(false)
 
   // Don't show if user is already premium or banner is dismissed
-  if (session?.user?.tier === 'PREMIUM' || dismissed) {
+  if ((session?.user as any)?.tier === 'PREMIUM' || dismissed) {
     return null
   }
 

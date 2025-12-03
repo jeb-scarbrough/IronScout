@@ -40,7 +40,7 @@ export function Features() {
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            Why Choose ZeroedIn?
+            Why Choose IronScout.ai?
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             We combine cutting-edge AI technology with comprehensive market data to give you 

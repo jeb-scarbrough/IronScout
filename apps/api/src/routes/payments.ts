@@ -1,11 +1,11 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import Stripe from 'stripe'
 
-const router = Router()
+const router: any = Router()
 
-const stripe = process.env.STRIPE_SECRET_KEY 
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' })
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-08-16' })
   : null
 
 const createCheckoutSchema = z.object({
@@ -20,7 +20,7 @@ const webhookSchema = z.object({
   data: z.any()
 })
 
-router.post('/create-checkout', async (req, res) => {
+router.post('/create-checkout', async (req: Request, res: Response) => {
   try {
     const { priceId, userId, successUrl, cancelUrl } = createCheckoutSchema.parse(req.body)
     
@@ -55,7 +55,7 @@ router.post('/create-checkout', async (req, res) => {
   }
 })
 
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', async (req: Request, res: Response) => {
   try {
     const sig = req.headers['stripe-signature'] as string
     
@@ -88,7 +88,7 @@ router.post('/webhook', async (req, res) => {
   }
 })
 
-router.get('/plans', async (req, res) => {
+router.get('/plans', async (req: Request, res: Response) => {
   try {
     const mockPlans = [
       {

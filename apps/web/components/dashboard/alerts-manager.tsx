@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Bell, ExternalLink, Trash2, Edit2, Check, X, Filter } from 'lucide-react'
-import { getUserAlerts, updateAlert, deleteAlert, type Alert } from '@/lib/api'
+import { getUserAlerts, updateAlert, deleteAlert, type Alert as AlertType } from '@/lib/api'
 import Image from 'next/image'
 
 export function AlertsManager() {
   const { data: session } = useSession()
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [filteredAlerts, setFilteredAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<AlertType[]>([])
+  const [filteredAlerts, setFilteredAlerts] = useState<AlertType[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -58,7 +58,7 @@ export function AlertsManager() {
     setFilteredAlerts(filtered)
   }
 
-  const isTriggered = (alert: Alert) => {
+  const isTriggered = (alert: AlertType) => {
     if (!alert.product.currentPrice || !alert.targetPrice) return false
     return alert.product.currentPrice <= alert.targetPrice
   }
@@ -71,11 +71,11 @@ export function AlertsManager() {
       setAlerts(alerts.filter(a => a.id !== alertId))
     } catch (err) {
       console.error('Failed to delete alert:', err)
-      alert('Failed to delete alert')
+      window.alert('Failed to delete alert')
     }
   }
 
-  const handleToggleActive = async (alert: Alert) => {
+  const handleToggleActive = async (alert: AlertType) => {
     try {
       await updateAlert(alert.id, { isActive: !alert.isActive })
       setAlerts(alerts.map(a =>
@@ -83,11 +83,11 @@ export function AlertsManager() {
       ))
     } catch (err) {
       console.error('Failed to toggle alert:', err)
-      alert('Failed to update alert')
+      window.alert('Failed to update alert')
     }
   }
 
-  const startEdit = (alert: Alert) => {
+  const startEdit = (alert: AlertType) => {
     setEditingId(alert.id)
     setEditPrice(alert.targetPrice?.toString() || '')
   }
@@ -101,7 +101,7 @@ export function AlertsManager() {
     try {
       const newPrice = parseFloat(editPrice)
       if (isNaN(newPrice) || newPrice <= 0) {
-        alert('Please enter a valid price')
+        window.alert('Please enter a valid price')
         return
       }
 
@@ -113,11 +113,11 @@ export function AlertsManager() {
       setEditPrice('')
     } catch (err) {
       console.error('Failed to update alert:', err)
-      alert('Failed to update alert')
+      window.alert('Failed to update alert')
     }
   }
 
-  const getAlertStatus = (alert: Alert) => {
+  const getAlertStatus = (alert: AlertType) => {
     if (!alert.isActive) return { label: 'Paused', variant: 'secondary' as const }
     if (isTriggered(alert)) return { label: 'Triggered', variant: 'default' as const }
     return { label: 'Active', variant: 'outline' as const }

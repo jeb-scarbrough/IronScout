@@ -12,7 +12,7 @@ export function DealerCTA() {
           
           <p className="text-lg md:text-xl opacity-90 mb-8 max-w-2xl mx-auto">
             Join thousands of successful retailers who have increased their revenue 
-            by partnering with ZeroedIn. Get started today and see results within weeks.
+            by partnering with IronScout.ai. Get started today and see results within weeks.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">

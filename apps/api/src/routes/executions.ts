@@ -1,8 +1,8 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 
-const router = Router()
+const router: any = Router()
 
 // Query schema
 const listExecutionsSchema = z.object({
@@ -13,7 +13,7 @@ const listExecutionsSchema = z.object({
 })
 
 // GET /api/executions - List executions with pagination
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const { page, limit, status, sourceId } = listExecutionsSchema.parse(req.query)
 
@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/executions/stats - Get execution statistics
-router.get('/stats', async (req, res) => {
+router.get('/stats', async (req: Request, res: Response) => {
   try {
     const [total, successful, failed, running, activeSources] = await Promise.all([
       prisma.execution.count(),
@@ -97,7 +97,7 @@ router.get('/stats', async (req, res) => {
 })
 
 // GET /api/executions/:id - Get single execution with logs
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
@@ -123,7 +123,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // GET /api/executions/:id/logs - Get logs for execution
-router.get('/:id/logs', async (req, res) => {
+router.get('/:id/logs', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const { level, event } = req.query
@@ -145,7 +145,7 @@ router.get('/:id/logs', async (req, res) => {
 })
 
 // DELETE /api/executions/:id - Delete execution and its logs
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 

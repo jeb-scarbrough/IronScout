@@ -42,7 +42,7 @@ stripe --version
 1. Open: https://dashboard.stripe.com/test/products
 2. Click **"+ Add product"**
 3. Fill in:
-   - **Name**: `ZeroedIn Premium`
+   - **Name**: `IronScout.ai Premium`
    - **Description**: `Premium subscription with unlimited alerts and price tracking`
    - Under **Pricing**:
      - Select **Recurring**

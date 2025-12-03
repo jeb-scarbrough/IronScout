@@ -5,14 +5,14 @@ import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getUserAlerts, getProductPriceHistory, Alert, PriceHistory } from '@/lib/api'
+import { getUserAlerts, getProductPriceHistory, type Alert as AlertType, PriceHistory } from '@/lib/api'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { TrendingDown, TrendingUp, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 export function TrackedProductsCharts() {
   const { data: session } = useSession()
-  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [alerts, setAlerts] = useState<AlertType[]>([])
   const [priceData, setPriceData] = useState<Record<string, PriceHistory>>({})
   const [loading, setLoading] = useState(true)
 
@@ -23,11 +23,13 @@ export function TrackedProductsCharts() {
   }, [session])
 
   const fetchData = async () => {
+    if (!session?.user?.id) return
+
     try {
       setLoading(true)
 
       // Get active alerts
-      const userAlerts = await getUserAlerts(session!.user.id, true)
+      const userAlerts = await getUserAlerts(session.user.id, true)
 
       // Take top 3 most recent alerts
       const topAlerts = userAlerts.slice(0, 3)
@@ -37,7 +39,7 @@ export function TrackedProductsCharts() {
       const histories: Record<string, PriceHistory> = {}
       for (const alert of topAlerts) {
         try {
-          const history = await getProductPriceHistory(alert.productId, 30)
+          const history = await getProductPriceHistory(alert.productId)
           histories[alert.productId] = history
         } catch (error) {
           console.error(`Failed to fetch history for ${alert.productId}:`, error)
@@ -114,7 +116,7 @@ export function TrackedProductsCharts() {
             const trendPercentage = firstPrice > 0 ? ((priceTrend / firstPrice) * 100).toFixed(1) : '0'
 
             // Check if price is below target
-            const isPriceBelowTarget = alert.targetPrice && history.stats.current <= alert.targetPrice
+            const isPriceBelowTarget = alert.targetPrice && history.stats.currentPrice <= alert.targetPrice
 
             return (
               <div key={alert.id} className="border rounded-lg p-4 space-y-3">
@@ -148,11 +150,11 @@ export function TrackedProductsCharts() {
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="bg-muted/50 rounded p-2">
                     <div className="text-xs text-muted-foreground">Current</div>
-                    <div className="text-sm font-bold">${history.stats.current.toFixed(2)}</div>
+                    <div className="text-sm font-bold">${history.stats.currentPrice.toFixed(2)}</div>
                   </div>
                   <div className="bg-muted/50 rounded p-2">
                     <div className="text-xs text-muted-foreground">Lowest</div>
-                    <div className="text-sm font-bold text-green-600">${history.stats.lowest.toFixed(2)}</div>
+                    <div className="text-sm font-bold text-green-600">${history.stats.lowestPrice.toFixed(2)}</div>
                   </div>
                   <div className="bg-muted/50 rounded p-2">
                     <div className="text-xs text-muted-foreground">Target</div>

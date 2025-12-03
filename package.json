@@ -1,7 +1,7 @@
 {
-  "name": "zeroedin",
+  "name": "ironscout",
   "version": "1.0.0",
-  "description": "AI-native proactive purchasing assistant platform",
+  "description": "AI-powered ammunition price tracking and comparison platform",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -14,8 +14,8 @@
     "type-check": "pnpm run --recursive type-check"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.19.25",
+    "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@10.15.0"
 }

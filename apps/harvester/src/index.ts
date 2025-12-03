@@ -34,7 +34,7 @@ async function main() {
       break
 
     default:
-      console.log('ZeroedIn Harvester Service')
+      console.log('IronScout.ai Harvester Service')
       console.log('')
       console.log('Usage:')
       console.log('  pnpm dev run       - Trigger immediate crawl of all enabled sources')

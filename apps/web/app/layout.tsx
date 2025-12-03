@@ -8,7 +8,7 @@ import { Footer } from '@/components/layout/footer'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'ZeroedIn - AI-Powered Shopping Assistant',
+  title: 'IronScout.ai - AI-Powered Shopping Assistant',
   description: 'Your proactive, personalized purchasing assistant. Find the best deals with AI-powered insights.',
   keywords: 'shopping, deals, AI, price comparison, alerts',
 }

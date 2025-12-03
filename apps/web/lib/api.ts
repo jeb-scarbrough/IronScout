@@ -8,6 +8,13 @@ export interface Product {
   brand?: string
   imageUrl?: string
   prices: Price[]
+  // Ammo-specific fields
+  upc?: string
+  caliber?: string
+  grainWeight?: number
+  caseMaterial?: string
+  purpose?: string
+  roundCount?: number
 }
 
 export interface Price {
@@ -204,6 +211,37 @@ export async function createCheckoutSession(params: CreateCheckoutParams): Promi
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.error || 'Failed to create checkout session')
+  }
+  return response.json()
+}
+
+// Price History
+export interface PriceHistoryPoint {
+  date: string
+  price: number
+  retailerId: string
+  retailerName: string
+  inStock: boolean
+}
+
+export interface PriceHistory {
+  timeline: PriceHistoryPoint[]
+  stats: {
+    lowestPrice: number
+    highestPrice: number
+    averagePrice: number
+    currentPrice: number
+  }
+  history?: Array<{
+    retailer: string
+    data: PriceHistoryPoint[]
+  }>
+}
+
+export async function getProductPriceHistory(productId: string): Promise<PriceHistory> {
+  const response = await fetch(`${API_BASE_URL}/api/products/${productId}/price-history`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch price history')
   }
   return response.json()
 }

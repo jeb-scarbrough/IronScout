@@ -1,7 +1,7 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 
-const router = Router()
+const router: any = Router()
 
 const marketTrendsSchema = z.object({
   category: z.string().optional(),
@@ -14,7 +14,7 @@ const priceVelocitySchema = z.object({
   timeframe: z.enum(['24h', '7d', '30d']).default('7d')
 })
 
-router.get('/market-trends', async (req, res) => {
+router.get('/market-trends', async (req: Request, res: Response) => {
   try {
     const { category, timeframe, limit } = marketTrendsSchema.parse(req.query)
     
@@ -49,7 +49,7 @@ router.get('/market-trends', async (req, res) => {
   }
 })
 
-router.get('/price-velocity', async (req, res) => {
+router.get('/price-velocity', async (req: Request, res: Response) => {
   try {
     const { productId, timeframe } = priceVelocitySchema.parse(req.query)
     
@@ -82,7 +82,7 @@ router.get('/price-velocity', async (req, res) => {
   }
 })
 
-router.get('/subscription-info', async (req, res) => {
+router.get('/subscription-info', async (req: Request, res: Response) => {
   res.status(501).json({
     error: 'Feature not implemented',
     message: 'POST-MVP FEATURE: Data as a Service subscriptions will be available in future releases'

@@ -1,6 +1,6 @@
-# ZeroedIn - Full System Setup Guide
+# IronScout.ai - Full System Setup Guide
 
-This guide will help you set up and test the complete ZeroedIn system with harvester, admin console, and real crawling.
+This guide will help you set up and test the complete IronScout.ai system with harvester, admin console, and real crawling.
 
 ## Prerequisites
 
@@ -142,7 +142,7 @@ sudo tail -f /var/log/redis/redis-server.log
 ### Database Connection Errors
 ```bash
 # Verify DATABASE_URL in packages/db/.env
-# Should be: postgresql://admin:M@dison389!@10.10.9.28:5432/zeroedin
+# Should be: postgresql://admin:M@dison389!@10.10.9.28:5432/ironscout
 ```
 
 ### Harvester Workers Not Processing

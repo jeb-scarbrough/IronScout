@@ -4,12 +4,11 @@ import FacebookProvider from 'next-auth/providers/facebook'
 import TwitterProvider from 'next-auth/providers/twitter'
 import GitHubProvider from 'next-auth/providers/github'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@next-auth/prisma-adapter'
-import { prisma } from '@zeroedin/db'
+import { PrismaAdapter } from '@auth/prisma-adapter'
+import { prisma } from '@ironscout/db'
 import bcrypt from 'bcryptjs'
-import type { NextAuthOptions } from 'next-auth'
 
-export const authOptions: NextAuthOptions = {
+export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     // Email/Password Authentication
@@ -22,20 +21,20 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Missing email or password')
+          return null
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email as string }
         })
 
         if (!user || !user.password) {
-          throw new Error('Invalid email or password')
+          return null
         }
 
-        const isValid = await bcrypt.compare(credentials.password, user.password)
+        const isValid = await bcrypt.compare(credentials.password as string, user.password)
         if (!isValid) {
-          throw new Error('Invalid email or password')
+          return null
         }
 
         return {
@@ -65,7 +64,6 @@ export const authOptions: NextAuthOptions = {
       TwitterProvider({
         clientId: process.env.TWITTER_CLIENT_ID,
         clientSecret: process.env.TWITTER_CLIENT_SECRET,
-        version: '2.0',
       })
     ] : []),
 
@@ -80,15 +78,25 @@ export const authOptions: NextAuthOptions = {
     signIn: '/auth/signin',
   },
   callbacks: {
-    session: async ({ session, token }) => {
-      if (session?.user && token?.sub) {
-        session.user.id = token.sub
+    async session({ session, token, user }) {
+      if (session?.user) {
+        session.user.id = token.sub || user?.id || ''
+        // Fetch tier from database if needed
+        if (token.sub) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { tier: true }
+          })
+          if (dbUser) {
+            session.user.tier = dbUser.tier
+          }
+        }
       }
       return session
     },
-    jwt: async ({ user, token }) => {
+    async jwt({ token, user }) {
       if (user) {
-        token.uid = user.id
+        token.sub = user.id
       }
       return token
     },
@@ -96,10 +104,4 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
-}
-
-// For server-side auth checks
-export async function auth() {
-  const { getServerSession } = await import('next-auth/next')
-  return getServerSession(authOptions)
-}
+})

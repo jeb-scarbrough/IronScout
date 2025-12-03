@@ -45,7 +45,7 @@ export function PriceHistoryChart({ productId }: PriceHistoryChartProps) {
     try {
       setLoading(true)
       setError(null)
-      const history = await getProductPriceHistory(productId, days)
+      const history = await getProductPriceHistory(productId)
       setData(history)
     } catch (err) {
       setError('Failed to load price history')
@@ -155,19 +155,19 @@ export function PriceHistoryChart({ productId }: PriceHistoryChartProps) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="text-center p-3 bg-muted rounded-lg">
             <div className="text-sm text-muted-foreground">Current</div>
-            <div className="text-lg font-bold">${data.stats.current.toFixed(2)}</div>
+            <div className="text-lg font-bold">${data.stats.currentPrice.toFixed(2)}</div>
           </div>
           <div className="text-center p-3 bg-muted rounded-lg">
             <div className="text-sm text-muted-foreground">Lowest</div>
-            <div className="text-lg font-bold text-green-600">${data.stats.lowest.toFixed(2)}</div>
+            <div className="text-lg font-bold text-green-600">${data.stats.lowestPrice.toFixed(2)}</div>
           </div>
           <div className="text-center p-3 bg-muted rounded-lg">
             <div className="text-sm text-muted-foreground">Highest</div>
-            <div className="text-lg font-bold text-red-600">${data.stats.highest.toFixed(2)}</div>
+            <div className="text-lg font-bold text-red-600">${data.stats.highestPrice.toFixed(2)}</div>
           </div>
           <div className="text-center p-3 bg-muted rounded-lg">
             <div className="text-sm text-muted-foreground">Average</div>
-            <div className="text-lg font-bold">${data.stats.average.toFixed(2)}</div>
+            <div className="text-lg font-bold">${data.stats.averagePrice.toFixed(2)}</div>
           </div>
         </div>
 
@@ -231,22 +231,22 @@ export function PriceHistoryChart({ productId }: PriceHistoryChartProps) {
         <div className="mt-6">
           <h4 className="font-semibold mb-3">Price by Retailer</h4>
           <div className="space-y-2">
-            {data.history.map((retailerHistory, index) => {
-              const latestPrice = retailerHistory.prices[retailerHistory.prices.length - 1]
-              const oldestPrice = retailerHistory.prices[0]
+            {data.history?.map((retailerHistory, index) => {
+              const latestPrice = retailerHistory.data[retailerHistory.data.length - 1]
+              const oldestPrice = retailerHistory.data[0]
               const change = latestPrice.price - oldestPrice.price
               const changePercent = oldestPrice.price > 0
                 ? ((change / oldestPrice.price) * 100).toFixed(1)
                 : '0'
 
               return (
-                <div key={retailerHistory.retailer.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={retailerHistory.retailer} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: RETAILER_COLORS[index % RETAILER_COLORS.length] }}
                     />
-                    <span className="font-medium">{retailerHistory.retailer.name}</span>
+                    <span className="font-medium">{retailerHistory.retailer}</span>
                   </div>
                   <div className="text-right">
                     <div className="font-bold">${latestPrice.price.toFixed(2)}</div>

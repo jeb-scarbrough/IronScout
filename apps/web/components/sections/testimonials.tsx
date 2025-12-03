@@ -5,7 +5,7 @@ const testimonials = [
   {
     name: 'Sarah Johnson',
     role: 'Frequent Online Shopper',
-    content: 'ZeroedIn saved me over $500 last month alone! The price alerts are incredibly accurate and timely.',
+    content: 'IronScout.ai saved me over $500 last month alone! The price alerts are incredibly accurate and timely.',
     rating: 5,
     avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=64&h=64&fit=crop&crop=face',
   },
@@ -19,7 +19,7 @@ const testimonials = [
   {
     name: 'Emily Rodriguez',
     role: 'Budget-Conscious Parent',
-    content: 'As a mom of three, every dollar counts. ZeroedIn helps me find the best deals on everything my family needs.',
+    content: 'As a mom of three, every dollar counts. IronScout.ai helps me find the best deals on everything my family needs.',
     rating: 5,
     avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=64&h=64&fit=crop&crop=face',
   },
@@ -34,7 +34,7 @@ export function Testimonials() {
             What Our Users Say
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Join thousands of smart shoppers who are already saving money with ZeroedIn.
+            Join thousands of smart shoppers who are already saving money with IronScout.ai.
           </p>
         </div>
 

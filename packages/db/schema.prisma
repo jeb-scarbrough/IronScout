@@ -39,6 +39,16 @@ model Product {
   category    String
   brand       String?
   imageUrl    String?
+
+  // Ammo-specific fields for normalization
+  upc         String?  @unique
+  caliber     String?  // e.g., "9mm", ".223 Remington", "12 Gauge"
+  grainWeight Int?     // Bullet weight in grains
+  caseMaterial String? // e.g., "Brass", "Steel", "Aluminum"
+  purpose     String?  // e.g., "Target", "Defense", "Hunting"
+  roundCount  Int?     // Rounds per box/case
+  metadata    Json?    // Additional flexible data
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -51,7 +61,7 @@ model Product {
 model Retailer {
   id          String      @id @default(cuid())
   name        String
-  website     String
+  website     String      @unique
   logoUrl     String?
   tier        RetailerTier @default(STANDARD)
   createdAt   DateTime    @default(now())
@@ -111,15 +121,21 @@ model Advertisement {
 }
 
 model Source {
-  id          String      @id @default(cuid())
-  name        String
-  url         String
-  type        SourceType  @default(HTML)
-  enabled     Boolean     @default(true)
-  interval    Int         @default(3600) // seconds between crawls
-  lastRunAt   DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  url               String            // Feed URL or scrape target
+  type              SourceType        @default(HTML)
+  enabled           Boolean           @default(true)
+  interval          Int               @default(3600) // seconds between crawls (feeds: 43200=12h, scrapers: 3600=1h)
+  lastRunAt         DateTime?
+  paginationConfig  Json?             // { type: "none"|"query_param"|"path", maxPages: 100, param: "page", startValue: 1, increment: 1 }
+
+  // Affiliate feed configuration
+  affiliateNetwork  AffiliateNetwork? // Which affiliate network (for feeds only)
+  feedHash          String?           // Hash of last fetched feed (for change detection)
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   executions  Execution[]
 
@@ -253,10 +269,24 @@ enum LogLevel {
 }
 
 enum SourceType {
-  RSS
-  HTML
-  JSON
-  JS_RENDERED
+  // Scraper types (web scraping)
+  HTML          // Static HTML scraping
+  JS_RENDERED   // JavaScript-rendered pages (Playwright)
+  RSS           // RSS feeds
+  JSON          // JSON APIs
+
+  // Affiliate feed types
+  FEED_CSV      // CSV affiliate feeds
+  FEED_XML      // XML affiliate feeds
+  FEED_JSON     // JSON affiliate feeds
+}
+
+enum AffiliateNetwork {
+  IMPACT        // Impact Radius
+  AVANTLINK     // AvantLink
+  SHAREASALE    // ShareASale
+  CJ            // Commission Junction
+  RAKUTEN       // Rakuten Advertising
 }
 
 // POST-MVP FEATURE: Not for initial implementation

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ZeroedIn s an AI-powered shopping assistant platform that tracks and aggregates live product listings for ammunition, gun parts & accessories from multiple vendor sites. The platform provides proactive price monitoring, real-time alerts, and AI-powered product recommendations. Built as a pnpm monorepo with three main applications:
+IronScout.ai is an AI-powered shopping assistant platform that tracks and aggregates live product listings for ammunition, gun parts & accessories from multiple vendor sites. The platform provides proactive price monitoring, real-time alerts, and AI-powered product recommendations. Built as a pnpm monorepo with three main applications:
 
 
 1. **Web App** (`apps/web/`) - Next.js 14 frontend with App Router
@@ -193,7 +193,7 @@ Each feature area has a dedicated router in `src/routes/`:
 
 ```typescript
 import { Router } from 'express'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import { z } from 'zod'
 
 const router = Router()
@@ -218,7 +218,7 @@ export default router
 Always import Prisma from shared package:
 
 ```typescript
-import { prisma } from '@zeroedin/db'  // ✅ Correct
+import { prisma } from '@ironscout/db'  // ✅ Correct
 ```
 
 Never instantiate a new PrismaClient in API or web code.
@@ -236,7 +236,7 @@ API allows requests from frontend URL (configured in `src/index.ts`). Environmen
 ### Workspace Structure
 
 ```
-ZeroedIn/
+IronScout/
 ├── apps/
 │   ├── api/         - Express backend
 │   ├── web/         - Next.js frontend
@@ -249,11 +249,11 @@ ZeroedIn/
 
 ### Shared Dependencies
 
-The `@zeroedin/db` package is shared across all apps:
+The `@ironscout/db` package is shared across all apps:
 
 ```typescript
 // In any app
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 ```
 
 When you modify `packages/db/schema.prisma`, all apps automatically get the updated types after running `pnpm db:generate`.
@@ -264,7 +264,7 @@ When you modify `packages/db/schema.prisma`, all apps automatically get the upda
 
 **Root `.env`** (for database operations):
 ```env
-DATABASE_URL="postgresql://username:password@host:5432/zeroedin"
+DATABASE_URL="postgresql://username:password@host:5432/ironscout"
 ```
 
 **API `.env`** (`apps/api/.env`):
@@ -304,7 +304,7 @@ cp apps/web/.env.example apps/web/.env.local
 
 1. **PostgreSQL** - Database (tested with PostgreSQL 14+)
    - Default connection: 10.10.9.28:5432
-   - Database name: zeroedin
+   - Database name: ironscout
 
 2. **Redis** - Queue system for harvester
    - Default: localhost:6379
@@ -419,7 +419,7 @@ redis-cli ping
 
 1. **No direct database access from frontend** - Always use API
 2. **pnpm only** - npm/yarn will break workspace references
-3. **Always import `prisma` from `@zeroedin/db`** - Never instantiate PrismaClient
+3. **Always import `prisma` from `@ironscout/db`** - Never instantiate PrismaClient
 4. **Post-MVP features** - Do not implement DataSubscription or MarketReport features unless explicitly requested
 5. **Redis required** - Harvester cannot function without Redis
 6. **Cascading deletes** - Be aware that deleting users/products/sources will cascade delete related records

@@ -74,7 +74,7 @@ export default function SignUpPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Create an Account</CardTitle>
-          <CardDescription>Sign up to get started with ZeroedIn</CardDescription>
+          <CardDescription>Sign up to get started with IronScout.ai</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {errorMessage && (

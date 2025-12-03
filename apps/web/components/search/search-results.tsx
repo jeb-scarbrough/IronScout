@@ -12,7 +12,7 @@ interface SearchResultsProps {
     minPrice?: string
     maxPrice?: string
     inStock?: string
-    sortBy?: string
+    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance'
     page?: string
   }
 }
@@ -47,7 +47,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
       )
     }
 
-    const mixedResults = []
+    const mixedResults: Array<{ type: 'product' | 'ad'; data: any }> = []
     let adIndex = 0
 
     products.forEach((product, index) => {

@@ -1,8 +1,8 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 
-const router = Router()
+const router: any = Router()
 
 // Validation schemas
 const createSourceSchema = z.object({
@@ -22,7 +22,7 @@ const updateSourceSchema = z.object({
 })
 
 // GET /api/sources - List all sources
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const sources = await prisma.source.findMany({
       orderBy: { createdAt: 'desc' },
@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/sources/:id - Get single source
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
@@ -67,7 +67,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/sources - Create new source
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const data = createSourceSchema.parse(req.body)
 
@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
 })
 
 // PUT /api/sources/:id - Update source
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const data = updateSourceSchema.parse(req.body)
@@ -107,7 +107,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // DELETE /api/sources/:id - Delete source
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
@@ -123,7 +123,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 // POST /api/sources/:id/toggle - Toggle source enabled status
-router.post('/:id/toggle', async (req, res) => {
+router.post('/:id/toggle', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 

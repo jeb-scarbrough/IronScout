@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@zeroedin.com'
+const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
 
 interface PriceDropEmailData {
   userName: string
@@ -33,7 +33,7 @@ export async function sendPriceDropEmail(
 
   try {
     await resend.emails.send({
-      from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+      from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
       to: [to],
       subject: `🎉 Price Drop Alert: ${data.productName}`,
       html
@@ -53,7 +53,7 @@ export async function sendBackInStockEmail(
 
   try {
     await resend.emails.send({
-      from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+      from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
       to: [to],
       subject: `✨ Back in Stock: ${data.productName}`,
       html
@@ -169,14 +169,14 @@ function generatePriceDropEmailHTML(data: PriceDropEmailData): string {
                 <tr>
                   <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e5e5e5;">
                     <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">
-                      This alert was triggered by your ZeroedIn price tracking
+                      This alert was triggered by your IronScout.ai price tracking
                     </p>
                     <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
                       <a href="${process.env.FRONTEND_URL}/dashboard/alerts" style="color: #667eea; text-decoration: none;">Manage your alerts</a> |
                       <a href="${process.env.FRONTEND_URL}/dashboard/settings" style="color: #667eea; text-decoration: none;">Notification settings</a>
                     </p>
                     <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">
-                      © ${new Date().getFullYear()} ZeroedIn. All rights reserved.
+                      © ${new Date().getFullYear()} IronScout.ai. All rights reserved.
                     </p>
                   </td>
                 </tr>
@@ -276,14 +276,14 @@ function generateBackInStockEmailHTML(data: BackInStockEmailData): string {
                 <tr>
                   <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e5e5e5;">
                     <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">
-                      This alert was triggered by your ZeroedIn stock tracking
+                      This alert was triggered by your IronScout.ai stock tracking
                     </p>
                     <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
                       <a href="${process.env.FRONTEND_URL}/dashboard/alerts" style="color: #f5576c; text-decoration: none;">Manage your alerts</a> |
                       <a href="${process.env.FRONTEND_URL}/dashboard/settings" style="color: #f5576c; text-decoration: none;">Notification settings</a>
                     </p>
                     <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">
-                      © ${new Date().getFullYear()} ZeroedIn. All rights reserved.
+                      © ${new Date().getFullYear()} IronScout.ai. All rights reserved.
                     </p>
                   </td>
                 </tr>

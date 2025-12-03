@@ -1,8 +1,8 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 
-const router = Router()
+const router: any = Router()
 
 const createAlertSchema = z.object({
   userId: z.string(),
@@ -17,7 +17,7 @@ const updateAlertSchema = z.object({
 })
 
 // Create new alert
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const alertData = createAlertSchema.parse(req.body)
 
@@ -80,7 +80,7 @@ router.post('/', async (req, res) => {
 })
 
 // Get alerts for a user
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', async (req: Request, res: Response) => {
   try {
     const { userId } = req.params
     const { activeOnly } = req.query
@@ -124,7 +124,7 @@ router.get('/:userId', async (req, res) => {
     })
 
     // Format response with current price info
-    const formattedAlerts = alerts.map(alert => ({
+    const formattedAlerts = alerts.map((alert: any) => ({
       id: alert.id,
       userId: alert.userId,
       productId: alert.productId,
@@ -149,7 +149,7 @@ router.get('/:userId', async (req, res) => {
 })
 
 // Update alert
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const updateData = updateAlertSchema.parse(req.body)
@@ -190,7 +190,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // Delete alert
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 

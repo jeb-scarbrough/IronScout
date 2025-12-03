@@ -1,6 +1,6 @@
-# ZeroedIn - AI-Powered Shopping Assistant
+# IronScout.ai - AI-Powered Shopping Assistant
 
-ZeroedIn is an AI-native, responsive purchasing assistant platform that discovers, normalizes, and presents product deals across the internet. It supports user subscriptions, premium dealer prioritization, affiliate revenue, and display ads. The foundation includes stubs for a future Data as a Service (DaaS) offering.
+IronScout.ai is an AI-native, responsive purchasing assistant platform that discovers, normalizes, and presents product deals across the internet. It supports user subscriptions, premium dealer prioritization, affiliate revenue, and display ads. The foundation includes stubs for a future Data as a Service (DaaS) offering.
 
 ## 🚀 Features
 
@@ -38,7 +38,7 @@ This project is built as a modern monorepo using:
 ### Project Structure
 
 ```
-ZeroedIn/
+IronScout/
 ├── apps/
 │   ├── api/                 # Express.js backend API
 │   │   ├── src/
@@ -71,7 +71,7 @@ ZeroedIn/
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd ZeroedIn
+   cd IronScout
    ```
 
 2. **Install dependencies**
@@ -113,7 +113,7 @@ ZeroedIn/
 
 #### Root `.env`
 ```env
-DATABASE_URL="postgresql://username:password@localhost:5432/zeroedin"
+DATABASE_URL="postgresql://username:password@localhost:5432/ironscout"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret-key-here"
 GOOGLE_CLIENT_ID="your-google-client-id"
@@ -126,7 +126,7 @@ API_URL="http://localhost:8000"
 
 #### API `.env` (`apps/api/.env`)
 ```env
-DATABASE_URL="postgresql://username:password@localhost:5432/zeroedin"
+DATABASE_URL="postgresql://username:password@localhost:5432/ironscout"
 STRIPE_SECRET_KEY="sk_test_your-stripe-secret-key"
 STRIPE_WEBHOOK_SECRET="whsec_your-webhook-secret"
 FRONTEND_URL="http://localhost:3000"
@@ -257,4 +257,4 @@ For support and questions:
 
 ---
 
-Built with ❤️ by the ZeroedIn team
+Built with ❤️ by the IronScout.ai team

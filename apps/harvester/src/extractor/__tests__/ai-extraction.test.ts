@@ -167,7 +167,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       expect(products).toHaveLength(1)
       expect(products[0]).toMatchObject({
@@ -198,7 +198,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       expect(products).toEqual([])
       expect(products).toHaveLength(0)
@@ -221,7 +221,7 @@ describe('AI Extraction - Full Page Approach', () => {
       })
 
       // Simulate the cleaning process from the actual code
-      const responseText = result.content[0].text
+      const responseText = (result.content[0] as any).text
       const cleanedResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
       const products = JSON.parse(cleanedResponse)
 
@@ -246,7 +246,7 @@ describe('AI Extraction - Full Page Approach', () => {
       })
 
       // Should throw JSON parse error
-      expect(() => JSON.parse(result.content[0].text)).toThrow()
+      expect(() => JSON.parse((result.content[0] as any).text)).toThrow()
     })
 
     it('should handle AI returning object instead of array', async () => {
@@ -272,7 +272,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const response = JSON.parse(result.content[0].text)
+      const response = JSON.parse((result.content[0] as any).text)
 
       // Should detect it's not an array
       expect(Array.isArray(response)).toBe(false)
@@ -304,7 +304,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       // Simulate conversion logic from actual code
       const price = typeof products[0].price === 'number'
@@ -401,7 +401,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       // Simulate validation logic
       const validProducts = products.filter((p: any) => p.product_title && p.price)
@@ -443,7 +443,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       // Simulate validation logic
       const validProducts = products.filter((p: any) => p.product_title && p.price)
@@ -493,7 +493,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       expect(products[0].in_stock).toBe(true)
       expect(products[1].in_stock).toBe(false)
@@ -591,7 +591,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
       const validProducts = products.filter((p: any) => p.product_title && p.price)
 
       expect(products).toHaveLength(4)
@@ -649,7 +649,7 @@ describe('AI Extraction - Full Page Approach', () => {
         messages: [{ role: 'user', content: 'Extract...' }]
       })
 
-      const products = JSON.parse(result.content[0].text)
+      const products = JSON.parse((result.content[0] as any).text)
 
       expect(products).toHaveLength(4)
       expect(products.map((p: any) => p.caliber)).toEqual([

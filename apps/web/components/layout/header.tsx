@@ -27,7 +27,7 @@ export function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <ShoppingBag className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">ZeroedIn</span>
+            <span className="text-xl font-bold">IronScout.ai</span>
           </Link>
 
           {/* Desktop Search */}

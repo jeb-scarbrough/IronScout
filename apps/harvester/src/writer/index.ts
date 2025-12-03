@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import { alertQueue, WriteJobData } from '../config/queues'
 
@@ -7,7 +7,7 @@ import { alertQueue, WriteJobData } from '../config/queues'
 export const writerWorker = new Worker<WriteJobData>(
   'write',
   async (job: Job<WriteJobData>) => {
-    const { executionId, sourceId, normalizedItems } = job.data
+    const { executionId, sourceId, normalizedItems, contentHash } = job.data
 
     console.log(`[Writer] Writing ${normalizedItems.length} items to database`)
 
@@ -51,23 +51,39 @@ export const writerWorker = new Worker<WriteJobData>(
             },
           })
 
-          // Upsert product (match by name and category for simplicity)
-          // In production, you might use SKU or other unique identifiers
+          // Upsert product using canonical productId (UPC or hash-based)
+          // This ensures proper consolidation across different retailers
           const product = await prisma.product.upsert({
             where: {
-              id: `${item.name}_${item.category}`.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+              id: item.productId,
             },
             create: {
-              id: `${item.name}_${item.category}`.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+              id: item.productId,
               name: item.name,
               description: item.description,
               category: item.category,
               brand: item.brand,
               imageUrl: item.imageUrl,
+              // Ammo-specific fields
+              upc: item.upc,
+              caliber: item.caliber,
+              grainWeight: item.grainWeight,
+              caseMaterial: item.caseMaterial,
+              purpose: item.purpose,
+              roundCount: item.roundCount,
             },
             update: {
               description: item.description || undefined,
               imageUrl: item.imageUrl || undefined,
+              // Update brand if not previously set
+              brand: item.brand || undefined,
+              // Update ammo fields if they weren't previously set
+              upc: item.upc || undefined,
+              caliber: item.caliber || undefined,
+              grainWeight: item.grainWeight || undefined,
+              caseMaterial: item.caseMaterial || undefined,
+              purpose: item.purpose || undefined,
+              roundCount: item.roundCount || undefined,
             },
           })
 
@@ -142,7 +158,7 @@ export const writerWorker = new Worker<WriteJobData>(
               level: 'WARN',
               event: 'WRITE_ITEM_FAIL',
               message: `Failed to write item: ${errorMsg}`,
-              metadata: { item },
+              metadata: { item: JSON.parse(JSON.stringify(item)) },
             },
           })
         }
@@ -159,6 +175,24 @@ export const writerWorker = new Worker<WriteJobData>(
           duration,
         },
       })
+
+      // Update feed hash if provided (for change detection on next run)
+      if (contentHash) {
+        await prisma.source.update({
+          where: { id: sourceId },
+          data: { feedHash: contentHash },
+        })
+
+        await prisma.executionLog.create({
+          data: {
+            executionId,
+            level: 'INFO',
+            event: 'HASH_UPDATED',
+            message: 'Feed hash updated for future change detection',
+            metadata: { contentHash },
+          },
+        })
+      }
 
       await prisma.executionLog.create({
         data: {

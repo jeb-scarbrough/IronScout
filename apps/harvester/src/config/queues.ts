@@ -29,18 +29,21 @@ export interface ExtractJobData {
   sourceId: string
   content: string
   sourceType: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED'
+  contentHash?: string // Hash of fetched content for caching
 }
 
 export interface NormalizeJobData {
   executionId: string
   sourceId: string
   rawItems: any[]
+  contentHash?: string // Hash to be stored after successful write
 }
 
 export interface WriteJobData {
   executionId: string
   sourceId: string
   normalizedItems: NormalizedProduct[]
+  contentHash?: string // Hash to be stored after successful write
 }
 
 export interface AlertJobData {
@@ -63,6 +66,15 @@ export interface NormalizedProduct {
   inStock: boolean
   retailerName: string
   retailerWebsite: string
+
+  // Ammo-specific normalized fields
+  productId: string      // Canonical product ID (UPC or hash-based)
+  upc?: string          // Universal Product Code
+  caliber?: string      // e.g., "9mm", ".223 Remington"
+  grainWeight?: number  // Bullet weight in grains
+  caseMaterial?: string // "Brass", "Steel", etc.
+  purpose?: string      // "Target", "Defense", "Hunting", etc.
+  roundCount?: number   // Rounds per box/case
 }
 
 // Create queues

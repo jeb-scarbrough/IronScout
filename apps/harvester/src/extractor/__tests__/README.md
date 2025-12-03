@@ -1,6 +1,6 @@
 # AI Extraction Test Suite
 
-This test suite provides comprehensive coverage for the AI-powered HTML extraction functionality used in the ZeroedIn harvester.
+This test suite provides comprehensive coverage for the AI-powered HTML extraction functionality used in the IronScout.ai harvester.
 
 ## Overview
 

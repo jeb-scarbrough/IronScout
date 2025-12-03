@@ -24,7 +24,7 @@ export default async function AdminLayout({
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-8">
               <Link href="/admin" className="text-xl font-bold text-gray-900">
-                ZeroedIn Admin
+                IronScout.ai Admin
               </Link>
               <nav className="hidden md:flex space-x-4">
                 <Link

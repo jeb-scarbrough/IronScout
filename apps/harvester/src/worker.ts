@@ -12,7 +12,7 @@ import { normalizerWorker } from './normalizer'
 import { writerWorker } from './writer'
 import { alerterWorker } from './alerter'
 
-console.log('Starting ZeroedIn Harvester Workers...')
+console.log('Starting IronScout.ai Harvester Workers...')
 console.log('---')
 console.log('Active Workers:')
 console.log('  - Scheduler (crawl jobs)')

@@ -1,7 +1,7 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 
-const router = Router()
+const router: any = Router()
 
 const placementSchema = z.object({
   position: z.enum(['top', 'middle', 'bottom', 'sidebar']).default('middle'),
@@ -9,7 +9,7 @@ const placementSchema = z.object({
   limit: z.string().default('3')
 })
 
-router.get('/placement', async (req, res) => {
+router.get('/placement', async (req: Request, res: Response) => {
   try {
     const { position, category, limit } = placementSchema.parse(req.query)
     const limitNum = parseInt(limit)

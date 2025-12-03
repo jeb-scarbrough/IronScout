@@ -10,7 +10,7 @@ export function Footer() {
           <div className="space-y-4">
             <Link href="/" className="flex items-center space-x-2">
               <ShoppingBag className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">ZeroedIn</span>
+              <span className="text-xl font-bold">IronScout.ai</span>
             </Link>
             <p className="text-sm text-muted-foreground">
               Your AI-powered shopping assistant. Find the best deals with intelligent insights and real-time alerts.
@@ -101,7 +101,7 @@ export function Footer() {
         </div>
 
         <div className="border-t mt-12 pt-8 text-center text-sm text-muted-foreground">
-          <p>&copy; 2024 ZeroedIn. All rights reserved.</p>
+          <p>&copy; 2024 IronScout.ai. All rights reserved.</p>
         </div>
       </div>
     </footer>

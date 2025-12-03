@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import * as cheerio from 'cheerio'
 import { redisConnection } from '../config/redis'
 import { normalizeQueue, ExtractJobData } from '../config/queues'
@@ -8,7 +8,7 @@ import { normalizeQueue, ExtractJobData } from '../config/queues'
 export const extractorWorker = new Worker<ExtractJobData>(
   'extract',
   async (job: Job<ExtractJobData>) => {
-    const { executionId, sourceId, content, sourceType } = job.data
+    const { executionId, sourceId, content, sourceType, contentHash } = job.data
 
     console.log(`[Extractor] Extracting data for execution ${executionId}`)
 
@@ -60,6 +60,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
         executionId,
         sourceId,
         rawItems,
+        contentHash, // Pass hash to be stored after successful write
       })
 
       await prisma.executionLog.create({
@@ -121,9 +122,10 @@ async function extractFromRSS(content: string): Promise<any[]> {
 }
 
 // Extract from JSON response
-async function extractFromJSON(content: string): Promise<any[]> {
+async function extractFromJSON(content: string | any): Promise<any[]> {
   try {
-    const data = JSON.parse(content)
+    // Handle case where axios already parsed the JSON
+    const data = typeof content === 'string' ? JSON.parse(content) : content
     // Assume the JSON has a products array
     return Array.isArray(data) ? data : data.products || [data]
   } catch (error) {

@@ -20,7 +20,7 @@ export function CTA() {
           
           <p className="text-lg md:text-xl opacity-90 mb-8 max-w-2xl mx-auto">
             Join thousands of smart shoppers who save an average of $200 per month 
-            with ZeroedIn's AI-powered deal discovery.
+            with IronScout.ai's AI-powered deal discovery.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

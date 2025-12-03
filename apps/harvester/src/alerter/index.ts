@@ -1,12 +1,19 @@
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import { AlertJobData } from '../config/queues'
 import { Resend } from 'resend'
 
 // Initialize Resend only if API key is provided
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
-const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@zeroedin.com'
+let resend: Resend | null = null
+try {
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY)
+  }
+} catch (error) {
+  console.warn('[Alerter] Resend API key not configured - email notifications will be disabled')
+}
+const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 // Alerter worker - evaluates alerts and sends notifications
@@ -78,8 +85,17 @@ export const alerterWorker = new Worker<AlertJobData>(
         }
 
         if (shouldTrigger) {
-          // TODO: Send actual notification (email, webhook, push, etc.)
-          // For now, just log it
+          // Check cooldown period - don't trigger same alert within 24 hours
+          const cooldownHours = 24
+          const now = new Date()
+          const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
+
+          if (alert.lastTriggered && alert.lastTriggered > cooldownThreshold) {
+            console.log(`[Alerter] Alert ${alert.id} in cooldown period, skipping`)
+            continue
+          }
+
+          // Send notification
           await sendNotification(alert, triggerReason)
 
           await prisma.executionLog.create({
@@ -97,13 +113,17 @@ export const alerterWorker = new Worker<AlertJobData>(
             },
           })
 
-          triggeredCount++
+          // Update lastTriggered timestamp
+          await prisma.alert.update({
+            where: { id: alert.id },
+            data: {
+              lastTriggered: now,
+              // Deactivate BACK_IN_STOCK alerts after triggering (one-time alerts)
+              isActive: alert.alertType === 'BACK_IN_STOCK' ? false : true,
+            },
+          })
 
-          // Optionally deactivate one-time alerts
-          // await prisma.alert.update({
-          //   where: { id: alert.id },
-          //   data: { isActive: false },
-          // })
+          triggeredCount++
         }
       }
 
@@ -182,7 +202,7 @@ async function sendNotification(alert: any, reason: string) {
 
       if (resend) {
         await resend.emails.send({
-          from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+          from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
           to: [alert.user.email],
           subject: `🎉 Price Drop Alert: ${alert.product.name}`,
           html
@@ -204,7 +224,7 @@ async function sendNotification(alert: any, reason: string) {
 
       if (resend) {
         await resend.emails.send({
-          from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+          from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
           to: [alert.user.email],
           subject: `✨ Back in Stock: ${alert.product.name}`,
           html
@@ -302,12 +322,12 @@ function generatePriceDropEmailHTML(data: {
                 </tr>
                 <tr>
                   <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e5e5e5;">
-                    <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">This alert was triggered by your ZeroedIn price tracking</p>
+                    <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">This alert was triggered by your IronScout.ai price tracking</p>
                     <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
                       <a href="${FRONTEND_URL}/dashboard/alerts" style="color: #667eea; text-decoration: none;">Manage your alerts</a> |
                       <a href="${FRONTEND_URL}/dashboard/settings" style="color: #667eea; text-decoration: none;">Notification settings</a>
                     </p>
-                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} ZeroedIn. All rights reserved.</p>
+                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} IronScout.ai. All rights reserved.</p>
                   </td>
                 </tr>
               </table>
@@ -388,12 +408,12 @@ function generateBackInStockEmailHTML(data: {
                 </tr>
                 <tr>
                   <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e5e5e5;">
-                    <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">This alert was triggered by your ZeroedIn stock tracking</p>
+                    <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px; text-align: center;">This alert was triggered by your IronScout.ai stock tracking</p>
                     <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
                       <a href="${FRONTEND_URL}/dashboard/alerts" style="color: #f5576c; text-decoration: none;">Manage your alerts</a> |
                       <a href="${FRONTEND_URL}/dashboard/settings" style="color: #f5576c; text-decoration: none;">Notification settings</a>
                     </p>
-                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} ZeroedIn. All rights reserved.</p>
+                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} IronScout.ai. All rights reserved.</p>
                   </td>
                 </tr>
               </table>

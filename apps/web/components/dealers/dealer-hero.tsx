@@ -12,7 +12,7 @@ export function DealerHero() {
           </h1>
           
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Join thousands of retailers using ZeroedIn to connect with motivated buyers 
+            Join thousands of retailers using IronScout.ai to connect with motivated buyers 
             and increase their sales through our AI-powered platform.
           </p>
 

@@ -1,4 +1,4 @@
-# ZeroedIn - Quick Start Guide
+# IronScout.ai - Quick Start Guide
 
 Get the complete system running in 5 minutes!
 
@@ -60,7 +60,7 @@ Open **3 separate terminals**:
 cd apps/harvester
 pnpm worker
 ```
-✅ You should see: "Starting ZeroedIn Harvester Workers..."
+✅ You should see: "Starting IronScout.ai Harvester Workers..."
 
 ### Terminal 2 - API Server
 ```bash
