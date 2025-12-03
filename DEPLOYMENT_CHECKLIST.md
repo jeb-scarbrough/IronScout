@@ -18,11 +18,11 @@ Use this checklist to ensure you have everything ready before deploying to Rende
 - [ ] Obtained Publishable Key (`pk_test_...` or `pk_live_...`)
 - [ ] Will configure webhook after deployment *(URL needed from Render)*
 
-### SendGrid (Email Service)
-- [ ] Created SendGrid account
-- [ ] Verified sender email address
-- [ ] Created API key with Full Access
-- [ ] Noted sender email address
+### Resend (Email Service)
+- [ ] Created Resend account
+- [ ] Verified sender domain or email address
+- [ ] Created API key
+- [ ] Noted sender email address (FROM_EMAIL)
 
 ### Google OAuth (Social Login)
 - [ ] Created Google Cloud project
@@ -74,8 +74,8 @@ REDIS_HOST=_______________________________________________ (from Step 4)
 REDIS_PORT=_______________________________________________ (from Step 4)
 STRIPE_SECRET_KEY=________________________________________
 STRIPE_WEBHOOK_SECRET=____________________________________ (after webhook setup)
-SENDGRID_API_KEY=_________________________________________
-SENDGRID_FROM_EMAIL=______________________________________
+RESEND_API_KEY=___________________________________________
+FROM_EMAIL=_______________________________________________
 ```
 
 ### For Web Service:
@@ -90,8 +90,8 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=_______________________
 REDIS_HOST=_______________________________________________ (from Step 4)
 REDIS_PORT=_______________________________________________ (from Step 4)
 ANTHROPIC_API_KEY=________________________________________
-SENDGRID_API_KEY=_________________________________________
-SENDGRID_FROM_EMAIL=______________________________________
+RESEND_API_KEY=___________________________________________
+FROM_EMAIL=_______________________________________________
 ```
 
 ## ☐ 7. Code Verification

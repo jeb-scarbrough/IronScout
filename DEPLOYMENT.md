@@ -73,7 +73,7 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
 
 2. **External API Keys** (obtain before deployment)
    - Stripe API keys (https://stripe.com)
-   - SendGrid API key (https://sendgrid.com)
+   - Resend API key (https://resend.com)
    - Anthropic API key (https://anthropic.com) - for AI extraction
    - Google OAuth credentials (https://console.cloud.google.com)
 
@@ -130,8 +130,8 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
    REDIS_PORT=6379 (from Step 2)
    STRIPE_SECRET_KEY=sk_test_... (or sk_live_... for production)
    STRIPE_WEBHOOK_SECRET=whsec_...
-   SENDGRID_API_KEY=SG....
-   SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+   RESEND_API_KEY=re_...
+   FROM_EMAIL=alerts@yourdomain.com
    ```
 
    **For Web Service (`ironscout-web`):**
@@ -146,8 +146,8 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
    REDIS_HOST=red-xxxxx.ohio-redis.render.com (from Step 2)
    REDIS_PORT=6379 (from Step 2)
    ANTHROPIC_API_KEY=sk-ant-...
-   SENDGRID_API_KEY=SG....
-   SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+   RESEND_API_KEY=re_...
+   FROM_EMAIL=alerts@yourdomain.com
    ```
 
 4. **Deploy**

@@ -44,9 +44,9 @@ services:
         sync: false  # Set manually in Render dashboard
       - key: STRIPE_WEBHOOK_SECRET
         sync: false  # Set manually in Render dashboard
-      - key: SENDGRID_API_KEY
+      - key: RESEND_API_KEY
         sync: false  # Set manually in Render dashboard
-      - key: SENDGRID_FROM_EMAIL
+      - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
 
   # Next.js Web Frontend
@@ -105,7 +105,7 @@ services:
         sync: false  # Set manually after creating Redis instance
       - key: ANTHROPIC_API_KEY
         sync: false  # Set manually in Render dashboard
-      - key: SENDGRID_API_KEY
+      - key: RESEND_API_KEY
         sync: false  # Set manually in Render dashboard
-      - key: SENDGRID_FROM_EMAIL
+      - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
