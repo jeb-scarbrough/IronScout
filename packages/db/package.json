@@ -2,7 +2,9 @@
   "name": "@ironscout/db",
   "version": "1.0.0",
   "description": "Database schema and utilities for IronScout.ai",
-  "main": "index.ts",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

@@ -21,14 +21,14 @@ export interface FetchJobData {
   sourceId: string
   executionId: string
   url: string
-  type: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED'
+  type: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED' | 'FEED_CSV' | 'FEED_XML' | 'FEED_JSON'
 }
 
 export interface ExtractJobData {
   executionId: string
   sourceId: string
   content: string
-  sourceType: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED'
+  sourceType: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED' | 'FEED_CSV' | 'FEED_XML' | 'FEED_JSON'
   contentHash?: string // Hash of fetched content for caching
 }
 
