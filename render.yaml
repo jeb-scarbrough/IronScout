@@ -39,7 +39,7 @@ services:
         fromService:
           type: web
           name: ironscout-web
-          property: host
+          property: hostURL
       - key: STRIPE_SECRET_KEY
         sync: false  # Set manually in Render dashboard
       - key: STRIPE_WEBHOOK_SECRET
@@ -65,12 +65,12 @@ services:
         fromService:
           type: web
           name: ironscout-api
-          property: host
+          property: hostURL
       - key: NEXTAUTH_URL
         fromService:
           type: web
           name: ironscout-web
-          property: host
+          property: hostURL
       - key: NEXTAUTH_SECRET
         generateValue: true
       - key: AUTH_TRUST_HOST
