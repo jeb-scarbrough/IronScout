@@ -156,7 +156,7 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
 
 ### Step 4: Database Setup
 
-After deployment, you need to run database migrations:
+After deployment, you need to push the database schema:
 
 1. **Connect to the API service shell**
    ```bash
@@ -164,11 +164,14 @@ After deployment, you need to run database migrations:
    # Click "Shell" tab
    ```
 
-2. **Run migrations**
+2. **Push database schema**
    ```bash
    cd packages/db
-   pnpm prisma migrate deploy
+   pnpm prisma db push
    ```
+
+   **Note:** We use `db push` instead of `migrate deploy` to sync the schema directly.
+   This is simpler for initial deployment and handles schema changes smoothly.
 
 3. **Seed initial data (optional)**
    ```bash
