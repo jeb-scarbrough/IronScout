@@ -1,5 +1,8 @@
 # Render.com Infrastructure as Code
 # This file defines all services for the IronScout.ai application
+#
+# IMPORTANT: Redis must be created manually in Render dashboard
+# Redis cannot be defined in Blueprint files - see DEPLOYMENT.md for instructions
 
 databases:
   - name: ironscout-db
@@ -8,11 +11,6 @@ databases:
     plan: free  # Change to 'starter' or 'standard' for production
     region: ohio
     ipAllowList: []  # Empty = allow all Render services
-
-  - name: ironscout-redis
-    plan: free  # Change to 'starter' for production
-    region: ohio
-    maxmemoryPolicy: noeviction
 
 services:
   # API Backend Service
@@ -34,15 +32,9 @@ services:
           name: ironscout-db
           property: connectionString
       - key: REDIS_HOST
-        fromService:
-          type: redis
-          name: ironscout-redis
-          property: host
+        sync: false  # Set manually after creating Redis instance
       - key: REDIS_PORT
-        fromService:
-          type: redis
-          name: ironscout-redis
-          property: port
+        sync: false  # Set manually after creating Redis instance
       - key: FRONTEND_URL
         fromService:
           type: web
@@ -108,15 +100,9 @@ services:
           name: ironscout-db
           property: connectionString
       - key: REDIS_HOST
-        fromService:
-          type: redis
-          name: ironscout-redis
-          property: host
+        sync: false  # Set manually after creating Redis instance
       - key: REDIS_PORT
-        fromService:
-          type: redis
-          name: ironscout-redis
-          property: port
+        sync: false  # Set manually after creating Redis instance
       - key: ANTHROPIC_API_KEY
         sync: false  # Set manually in Render dashboard
       - key: SENDGRID_API_KEY

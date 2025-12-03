@@ -44,6 +44,7 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
 ### 2. **Redis** (`ironscout-redis`)
 - Managed Redis instance
 - Used for BullMQ job queues in the harvester pipeline
+- **Note:** Must be created manually (not in Blueprint)
 - Plan: Free (can upgrade to Starter)
 
 ### 3. **API Service** (`ironscout-api`)
@@ -90,7 +91,25 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
    - Go to https://dashboard.render.com
    - Connect your GitHub account if not already connected
 
-### Step 2: Deploy from Blueprint
+### Step 2: Create Redis Instance
+
+**IMPORTANT:** Redis cannot be created via Blueprint and must be created manually first.
+
+1. **Create Redis**
+   - In Render dashboard, click "New +" → "Redis"
+   - Name: `ironscout-redis`
+   - Region: `Ohio` (or same as other services)
+   - Plan: `Free` (or `Starter` for production)
+   - Max Memory Policy: `noeviction`
+   - Click "Create Redis"
+
+2. **Note Redis Connection Details**
+   - After creation, go to the Redis instance page
+   - Copy the **Internal Redis URL** (e.g., `redis://red-xxxxx:6379`)
+   - Extract the host (e.g., `red-xxxxx.ohio-redis.render.com`) and port (`6379`)
+   - You'll need these for environment variables in the next step
+
+### Step 3: Deploy from Blueprint
 
 1. **Create New Blueprint**
    - Click "New +" → "Blueprint"
@@ -107,6 +126,8 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
 
    **For API Service (`ironscout-api`):**
    ```
+   REDIS_HOST=red-xxxxx.ohio-redis.render.com (from Step 2)
+   REDIS_PORT=6379 (from Step 2)
    STRIPE_SECRET_KEY=sk_test_... (or sk_live_... for production)
    STRIPE_WEBHOOK_SECRET=whsec_...
    SENDGRID_API_KEY=SG....
@@ -122,6 +143,8 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
 
    **For Harvester Worker (`ironscout-harvester`):**
    ```
+   REDIS_HOST=red-xxxxx.ohio-redis.render.com (from Step 2)
+   REDIS_PORT=6379 (from Step 2)
    ANTHROPIC_API_KEY=sk-ant-...
    SENDGRID_API_KEY=SG....
    SENDGRID_FROM_EMAIL=noreply@yourdomain.com
@@ -131,7 +154,7 @@ IronScout.ai is deployed as a microservices architecture on Render.com:
    - Click "Apply"
    - Render will provision all services in parallel
 
-### Step 3: Database Setup
+### Step 4: Database Setup
 
 After deployment, you need to run database migrations:
 
@@ -152,7 +175,7 @@ After deployment, you need to run database migrations:
    pnpm db:seed
    ```
 
-### Step 4: Stripe Webhook Configuration
+### Step 5: Stripe Webhook Configuration
 
 1. **Get your API URL**
    - From Render dashboard, copy the ironscout-api URL
@@ -170,7 +193,7 @@ After deployment, you need to run database migrations:
    - Copy the webhook signing secret
    - Update `STRIPE_WEBHOOK_SECRET` in Render dashboard
 
-### Step 5: OAuth Configuration
+### Step 6: OAuth Configuration
 
 1. **Configure Google OAuth redirect URIs**
    - Go to https://console.cloud.google.com
@@ -179,7 +202,7 @@ After deployment, you need to run database migrations:
      - `https://your-app.onrender.com/api/auth/callback/google`
      - `https://ironscout-web.onrender.com/api/auth/callback/google`
 
-### Step 6: Verify Deployment
+### Step 7: Verify Deployment
 
 1. **Check Service Status**
    - All services should show "Live" status in Render dashboard

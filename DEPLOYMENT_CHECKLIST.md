@@ -44,19 +44,34 @@ Use this checklist to ensure you have everything ready before deploying to Rende
 - [ ] Set up billing (if using paid plans)
 - [ ] Verified email address
 
-## ☐ 4. Database Preparation
+## ☐ 4. Redis Instance Creation
+
+**IMPORTANT:** Redis must be created before deploying the Blueprint.
+
+- [ ] Created Redis instance in Render dashboard
+  - Name: `ironscout-redis`
+  - Region: `Ohio` (or same as other services)
+  - Plan: `Free` (or `Starter` for production)
+  - Max Memory Policy: `noeviction`
+- [ ] Noted Redis host (e.g., `red-xxxxx.ohio-redis.render.com`)
+- [ ] Noted Redis port (typically `6379`)
+- [ ] Redis instance showing "Available" status
+
+## ☐ 5. Database Preparation
 
 - [ ] Reviewed Prisma schema (`packages/db/schema.prisma`)
 - [ ] All migrations created (`packages/db/prisma/migrations/`)
 - [ ] Seed scripts ready (optional) (`packages/db/seed.ts`)
 - [ ] Know which data to seed initially
 
-## ☐ 5. Environment Variables Prepared
+## ☐ 6. Environment Variables Prepared
 
 Have the following values ready to paste into Render dashboard:
 
 ### For API Service:
 ```
+REDIS_HOST=_______________________________________________ (from Step 4)
+REDIS_PORT=_______________________________________________ (from Step 4)
 STRIPE_SECRET_KEY=________________________________________
 STRIPE_WEBHOOK_SECRET=____________________________________ (after webhook setup)
 SENDGRID_API_KEY=_________________________________________
@@ -72,12 +87,14 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=_______________________
 
 ### For Harvester Worker:
 ```
+REDIS_HOST=_______________________________________________ (from Step 4)
+REDIS_PORT=_______________________________________________ (from Step 4)
 ANTHROPIC_API_KEY=________________________________________
 SENDGRID_API_KEY=_________________________________________
 SENDGRID_FROM_EMAIL=______________________________________
 ```
 
-## ☐ 6. Code Verification
+## ☐ 7. Code Verification
 
 - [ ] All services build locally without errors:
   ```bash
@@ -97,7 +114,7 @@ SENDGRID_FROM_EMAIL=______________________________________
   curl http://localhost:8000/health
   ```
 
-## ☐ 7. Review render.yaml
+## ☐ 8. Review render.yaml
 
 - [ ] Service names are unique
 - [ ] Build commands are correct
@@ -106,7 +123,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] Database connection strings are properly referenced
 - [ ] Selected appropriate plans (free/starter/standard)
 
-## ☐ 8. Documentation Review
+## ☐ 9. Documentation Review
 
 - [ ] Read DEPLOYMENT.md completely
 - [ ] Understand the architecture diagram
@@ -116,14 +133,14 @@ SENDGRID_FROM_EMAIL=______________________________________
 
 ## Post-Deployment Steps (Do After Deploying)
 
-## ☐ 9. Initial Deployment Verification
+## ☐ 10. Initial Deployment Verification
 
 - [ ] All services show "Live" status in Render dashboard
 - [ ] No errors in logs
 - [ ] Database is provisioned
 - [ ] Redis is provisioned
 
-## ☐ 10. Database Setup
+## ☐ 11. Database Setup
 
 - [ ] Connected to API service shell
 - [ ] Ran migrations:
@@ -136,7 +153,7 @@ SENDGRID_FROM_EMAIL=______________________________________
   pnpm db:seed
   ```
 
-## ☐ 11. Stripe Webhook Configuration
+## ☐ 12. Stripe Webhook Configuration
 
 - [ ] Copied API service URL from Render dashboard
 - [ ] Created webhook in Stripe dashboard:
@@ -150,7 +167,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] Added `STRIPE_WEBHOOK_SECRET` to API service environment variables
 - [ ] Service auto-redeployed after adding secret
 
-## ☐ 12. OAuth Redirect URIs
+## ☐ 13. OAuth Redirect URIs
 
 ### Google OAuth
 - [ ] Added redirect URI to Google Cloud Console:
@@ -162,7 +179,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] Twitter redirect URI configured
 - [ ] GitHub redirect URI configured
 
-## ☐ 13. Service Verification
+## ☐ 14. Service Verification
 
 ### API Service
 - [ ] Health check returns 200:
@@ -186,7 +203,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] No connection errors to database
 - [ ] Can process test jobs (check admin console)
 
-## ☐ 14. Feature Testing
+## ☐ 15. Feature Testing
 
 - [ ] User can sign up with email/password
 - [ ] User can sign in with Google
@@ -198,7 +215,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] Admin console is accessible
 - [ ] Can view execution logs in admin console
 
-## ☐ 15. Monitoring Setup
+## ☐ 16. Monitoring Setup
 
 - [ ] Reviewed logs for all services
 - [ ] Set up log alerts for errors
@@ -209,7 +226,7 @@ SENDGRID_FROM_EMAIL=______________________________________
   - [ ] High error rates
   - [ ] Resource limits
 
-## ☐ 16. Security
+## ☐ 17. Security
 
 - [ ] All secrets are set via Render dashboard (not in code)
 - [ ] Database has SSL enabled (default on Render)
@@ -217,21 +234,21 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] CORS is properly configured
 - [ ] Environment variables reviewed for security
 
-## ☐ 17. Performance
+## ☐ 18. Performance
 
 - [ ] Page load times are acceptable
 - [ ] API response times are acceptable
 - [ ] Database queries are optimized
 - [ ] Consider upgrading from free tier if needed
 
-## ☐ 18. Backup Strategy
+## ☐ 19. Backup Strategy
 
 - [ ] Verified automatic database backups are enabled
 - [ ] Know how to restore from backup
 - [ ] Documented backup retention policy
 - [ ] Consider manual backup for critical data
 
-## ☐ 19. Documentation
+## ☐ 20. Documentation
 
 - [ ] Updated README.md with production URL
 - [ ] Documented any production-specific configuration
@@ -239,7 +256,7 @@ SENDGRID_FROM_EMAIL=______________________________________
 - [ ] Team knows how to view logs
 - [ ] Team knows how to deploy updates
 
-## ☐ 20. Go Live Preparation (Production Only)
+## ☐ 21. Go Live Preparation (Production Only)
 
 - [ ] Switch Stripe from test to live keys
 - [ ] Switch all OAuth apps from test to production
