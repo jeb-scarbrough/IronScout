@@ -1,7 +1,7 @@
 {
-  "name": "@zeroedin/db",
+  "name": "@ironscout/db",
   "version": "1.0.0",
-  "description": "Database schema and utilities for ZeroedIn",
+  "description": "Database schema and utilities for IronScout.ai",
   "main": "index.ts",
   "scripts": {
     "db:generate": "prisma generate",
@@ -12,10 +12,10 @@
     "db:seed-source": "tsx seed-source.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.14.0"
+    "@prisma/client": "^6.19.0"
   },
   "devDependencies": {
-    "prisma": "^6.14.0",
-    "tsx": "^4.7.0"
+    "prisma": "^6.19.0",
+    "tsx": "^4.21.0"
   }
 }

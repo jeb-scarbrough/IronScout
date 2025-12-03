@@ -4,7 +4,7 @@ This guide explains how the email notification system works and how to test it.
 
 ## Overview
 
-ZeroedIn uses [Resend](https://resend.com) to send email notifications when price alerts are triggered. The system is fully integrated with the harvester pipeline.
+IronScout.ai uses [Resend](https://resend.com) to send email notifications when price alerts are triggered. The system is fully integrated with the harvester pipeline.
 
 ## Architecture
 
@@ -48,13 +48,13 @@ When the harvester detects price changes:
 **API (apps/api/.env):**
 ```env
 RESEND_API_KEY="re_6hZmLKHD_B9EGENv5LGXa6YxxKF8atQEG"
-FROM_EMAIL="alerts@zeroedin.com"
+FROM_EMAIL="alerts@ironscout.ai"
 ```
 
 **Harvester (apps/harvester/.env):**
 ```env
 RESEND_API_KEY="re_6hZmLKHD_B9EGENv5LGXa6YxxKF8atQEG"
-FROM_EMAIL="alerts@zeroedin.com"
+FROM_EMAIL="alerts@ironscout.ai"
 FRONTEND_URL="http://localhost:3000"
 ```
 
@@ -127,10 +127,10 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 async function sendTestEmail() {
   try {
     const result = await resend.emails.send({
-      from: 'ZeroedIn Alerts <alerts@zeroedin.com>',
+      from: 'IronScout.ai Alerts <alerts@ironscout.ai>',
       to: ['your-test-email@example.com'], // Replace with your email
-      subject: 'Test Email from ZeroedIn',
-      html: '<h1>Hello!</h1><p>This is a test email from ZeroedIn.</p>'
+      subject: 'Test Email from IronScout.ai',
+      html: '<h1>Hello!</h1><p>This is a test email from IronScout.ai.</p>'
     })
     console.log('Email sent:', result)
   } catch (error) {

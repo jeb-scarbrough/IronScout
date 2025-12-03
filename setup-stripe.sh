@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# ZeroedIn Stripe Setup Helper Script
+# IronScout.ai Stripe Setup Helper Script
 # This script helps you configure Stripe for local development
 
 echo "=================================="
-echo "ZeroedIn Stripe Setup Helper"
+echo "IronScout.ai Stripe Setup Helper"
 echo "=================================="
 echo ""
 
@@ -76,7 +76,7 @@ echo ""
 echo "Please do this manually in Stripe Dashboard:"
 echo "  1. Visit: https://dashboard.stripe.com/test/products"
 echo "  2. Click '+ Add product'"
-echo "  3. Name: ZeroedIn Premium"
+echo "  3. Name: IronScout.ai Premium"
 echo "  4. Description: Premium subscription with unlimited alerts"
 echo "  5. Pricing: Recurring, \$9.99/month"
 echo "  6. Click 'Save product'"

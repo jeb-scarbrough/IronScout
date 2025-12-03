@@ -1,6 +1,6 @@
-# ZeroedIn Harvester Service
+# IronScout.ai Harvester Service
 
-Automated product price crawler and harvester service for ZeroedIn.
+Automated product price crawler and harvester service for IronScout.ai.
 
 ## Overview
 

@@ -1,8 +1,8 @@
 
-# ZeroedIn — Full Application Specification
+# IronScout.ai — Full Application Specification
 
 ## Overview
-ZeroedIn is an AI-native, responsive purchasing assistant platform that discovers, normalizes, and presents product deals across the internet. It supports user subscriptions, premium dealer prioritization, affiliate revenue, and display ads. The foundation includes stubs for a future Data as a Service (DaaS) offering.
+IronScout.ai is an AI-native, responsive purchasing assistant platform that discovers, normalizes, and presents product deals across the internet. It supports user subscriptions, premium dealer prioritization, affiliate revenue, and display ads. The foundation includes stubs for a future Data as a Service (DaaS) offering.
 
 ---
 
@@ -12,7 +12,7 @@ Create the foundational architecture and code stubs for the MVP, featuring a res
 ---
 
 ## 2. Core Concept
-ZeroedIn acts as a proactive purchasing assistant. It aggregates and ranks real-time deals, offering users personalized search results and alerts. Premium dealers are prioritized, and users can subscribe for faster alerting and richer insights.
+IronScout.ai acts as a proactive purchasing assistant. It aggregates and ranks real-time deals, offering users personalized search results and alerts. Premium dealers are prioritized, and users can subscribe for faster alerting and richer insights.
 
 ---
 

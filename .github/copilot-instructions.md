@@ -1,10 +1,10 @@
-# ZeroedIn Copilot Instructions
+# IronScout.ai Copilot Instructions
 
-AI coding agents should use this guide to understand the ZeroedIn architecture and conventions for maximum productivity.
+AI coding agents should use this guide to understand the IronScout.ai architecture and conventions for maximum productivity.
 
 ## Architecture Overview
 
-**ZeroedIn** is an AI-powered shopping assistant platform built as a monorepo with clear separation between frontend and backend.
+**IronScout.ai** is an AI-powered shopping assistant platform built as a monorepo with clear separation between frontend and backend.
 
 - **Framework**: Next.js 14 (frontend) + Express.js (backend)
 - **Package Manager**: pnpm workspaces (critical - all scripts use `pnpm`, not npm)
@@ -15,7 +15,7 @@ AI coding agents should use this guide to understand the ZeroedIn architecture a
 
 1. **Web App** (`apps/web/`): Next.js with App Router, handles UI, authentication sessions, stripe integration
 2. **API** (`apps/api/`): Express REST API, database queries, business logic
-3. **Database Package** (`packages/db/`): Shared Prisma schema and client (critical import: `@zeroedin/db`)
+3. **Database Package** (`packages/db/`): Shared Prisma schema and client (critical import: `@ironscout/db`)
 
 **Key Insight**: The frontend and API are separate deployable units. Frontend cannot directly access database—must go through API.
 

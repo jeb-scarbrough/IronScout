@@ -1,4 +1,4 @@
-import { prisma } from '@zeroedin/db'
+import { prisma } from '@ironscout/db'
 
 async function updateSources() {
   console.log('Updating sources to crawl ALL calibers...\\n')

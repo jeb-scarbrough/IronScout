@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# ZeroedIn System Test Script
+# IronScout.ai System Test Script
 # This script helps verify each component is working
 
 set -e
 
 echo "======================================"
-echo "ZeroedIn System Test"
+echo "IronScout.ai System Test"
 echo "======================================"
 echo ""
 

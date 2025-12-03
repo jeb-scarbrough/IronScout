@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ZeroedIn Development Script
+# IronScout.ai Development Script
 # Manages all three services (web, api, harvester)
 
 set -e
@@ -21,7 +21,7 @@ mkdir -p "$PIDS_DIR"
 
 print_header() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}  ZeroedIn Development Manager${NC}"
+    echo -e "${BLUE}  IronScout.ai Development Manager${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 

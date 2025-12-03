@@ -24,7 +24,7 @@ You need to create products and prices in Stripe:
 1. Go to [Stripe Products](https://dashboard.stripe.com/test/products)
 2. Click **+ Add product**
 3. Fill in:
-   - **Name**: ZeroedIn Premium
+   - **Name**: IronScout.ai Premium
    - **Description**: Premium subscription with unlimited alerts and price tracking
    - **Pricing**: Recurring, $9.99/month
 4. Click **Save product**
@@ -180,7 +180,7 @@ For Stripe-specific issues:
 - [Stripe Documentation](https://stripe.com/docs)
 - [Stripe Support](https://support.stripe.com/)
 
-For ZeroedIn issues:
+For IronScout.ai issues:
 - Check API logs: `apps/api/` terminal
 - Check database: `pnpm db:studio` (from packages/db)
 - Check webhook logs: Stripe CLI terminal

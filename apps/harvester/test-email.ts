@@ -4,7 +4,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@zeroedin.com'
+const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
 
 // IMPORTANT: Replace with your actual test email
 const TEST_EMAIL = 'your-email@example.com'
@@ -51,7 +51,7 @@ async function sendPriceDropTestEmail() {
                       </tr>
                     </table>
                     <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                      This is a <strong>test email</strong> from ZeroedIn. Your alert system is working correctly! 🎊
+                      This is a <strong>test email</strong> from IronScout.ai. Your alert system is working correctly! 🎊
                     </p>
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
@@ -64,8 +64,8 @@ async function sendPriceDropTestEmail() {
                 </tr>
                 <tr>
                   <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e5e5e5;">
-                    <p style="margin: 0; color: #6b7280; font-size: 14px; text-align: center;">This is a test email from ZeroedIn</p>
-                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} ZeroedIn</p>
+                    <p style="margin: 0; color: #6b7280; font-size: 14px; text-align: center;">This is a test email from IronScout.ai</p>
+                    <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; text-align: center;">© ${new Date().getFullYear()} IronScout.ai</p>
                   </td>
                 </tr>
               </table>
@@ -78,10 +78,10 @@ async function sendPriceDropTestEmail() {
 
   try {
     console.log(`Sending test email to: ${TEST_EMAIL}`)
-    console.log(`From: ZeroedIn Alerts <${FROM_EMAIL}>`)
+    console.log(`From: IronScout.ai Alerts <${FROM_EMAIL}>`)
 
     const result = await resend.emails.send({
-      from: `ZeroedIn Alerts <${FROM_EMAIL}>`,
+      from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
       to: [TEST_EMAIL],
       subject: '🎉 Test: Price Drop Alert',
       html
@@ -106,5 +106,5 @@ async function sendPriceDropTestEmail() {
 }
 
 // Run the test
-console.log('🧪 Testing ZeroedIn Email System...\n')
+console.log('🧪 Testing IronScout.ai Email System...\n')
 sendPriceDropTestEmail()
