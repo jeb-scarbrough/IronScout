@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import Script from 'next/script'
 import './globals.css'
 import { Providers } from './providers'
 import { Header } from '@/components/layout/header'
@@ -21,13 +20,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* AvantLink Affiliate Verification */}
-        <Script
-          src="https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=83b35735960abca5c62924f3fbe01e4e919343a3"
-          strategy="lazyOnload"
-        />
-      </head>
       <body className={inter.className}>
         <Providers>
           <div className="min-h-screen flex flex-col">
