@@ -11,7 +11,8 @@ import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 
 interface ProductCardProps {
-  product: Product
+  product: Product & { relevanceScore?: number }
+  showRelevance?: boolean
 }
 
 // Helper to get purpose badge variant and color
@@ -31,7 +32,7 @@ const getPurposeBadge = (purpose?: string) => {
   return { label: purpose, className: 'bg-gray-100 text-gray-800 hover:bg-gray-100' }
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, showRelevance = false }: ProductCardProps) {
   const [showAlertDialog, setShowAlertDialog] = useState(false)
 
   const lowestPrice = product.prices.reduce((min, price) =>
@@ -65,6 +66,15 @@ export function ProductCard({ product }: ProductCardProps) {
             <Badge className="bg-yellow-500 text-yellow-900 flex items-center gap-1">
               <Crown className="h-3 w-3" />
               Premium
+            </Badge>
+          </div>
+        )}
+
+        {/* Relevance Score */}
+        {showRelevance && product.relevanceScore !== undefined && product.relevanceScore > 0 && (
+          <div className="absolute bottom-2 left-2">
+            <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs">
+              {product.relevanceScore}% match
             </Badge>
           </div>
         )}
