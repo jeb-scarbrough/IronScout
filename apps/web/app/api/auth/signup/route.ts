@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@ironscout/db'
 import bcrypt from 'bcryptjs'
 
+// Admin emails cannot be registered via credentials (must use OAuth)
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+
 export async function POST(req: Request) {
   try {
     const { email, password, name } = await req.json()
@@ -11,6 +14,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
+      )
+    }
+
+    // Block admin email registration via credentials
+    // Admins must use OAuth (Google, GitHub, etc.) which verifies email ownership
+    if (ADMIN_EMAILS.includes(email.toLowerCase())) {
+      return NextResponse.json(
+        { error: 'This email cannot be registered. Please use Google or GitHub sign-in.' },
+        { status: 403 }
       )
     }
 

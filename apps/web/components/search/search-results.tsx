@@ -5,6 +5,7 @@ import { AdCard } from '@/components/ads/ad-card'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Sparkles, Search, Crown, SlidersHorizontal } from 'lucide-react'
 import { SearchHeader } from './search-header'
+import { AIExplanationBanner } from '@/components/premium'
 import Link from 'next/link'
 
 interface SearchResultsProps {
@@ -21,8 +22,19 @@ interface SearchResultsProps {
     maxGrain?: string
     caseMaterial?: string
     purpose?: string
-    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance'
+    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance' | 'best_value'
     page?: string
+    // Premium filters
+    bulletType?: string
+    pressureRating?: string
+    isSubsonic?: string
+    shortBarrelOptimized?: string
+    suppressorSafe?: string
+    lowFlash?: string
+    lowRecoil?: string
+    matchGrade?: string
+    minVelocity?: string
+    maxVelocity?: string
   }
 }
 
@@ -34,9 +46,13 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   // Get session for user tier
   const session = await auth()
   const userId = session?.user?.id
+  const userTier = (session?.user as any)?.tier || 'FREE'
+  const isPremium = userTier === 'PREMIUM'
   
   // Build explicit filters from URL params
   const explicitFilters: ExplicitFilters = {}
+  
+  // Basic filters
   if (searchParams.caliber) explicitFilters.caliber = searchParams.caliber
   if (searchParams.purpose) explicitFilters.purpose = searchParams.purpose
   if (searchParams.caseMaterial) explicitFilters.caseMaterial = searchParams.caseMaterial
@@ -47,8 +63,27 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   if (searchParams.inStock === 'true') explicitFilters.inStock = true
   if (searchParams.brand) explicitFilters.brand = searchParams.brand
   
+  // Premium filters (only apply if user is Premium)
+  if (isPremium) {
+    if (searchParams.bulletType) explicitFilters.bulletType = searchParams.bulletType as any
+    if (searchParams.pressureRating) explicitFilters.pressureRating = searchParams.pressureRating as any
+    if (searchParams.isSubsonic === 'true') explicitFilters.isSubsonic = true
+    if (searchParams.shortBarrelOptimized === 'true') explicitFilters.shortBarrelOptimized = true
+    if (searchParams.suppressorSafe === 'true') explicitFilters.suppressorSafe = true
+    if (searchParams.lowFlash === 'true') explicitFilters.lowFlash = true
+    if (searchParams.lowRecoil === 'true') explicitFilters.lowRecoil = true
+    if (searchParams.matchGrade === 'true') explicitFilters.matchGrade = true
+    if (searchParams.minVelocity) explicitFilters.minVelocity = parseInt(searchParams.minVelocity)
+    if (searchParams.maxVelocity) explicitFilters.maxVelocity = parseInt(searchParams.maxVelocity)
+  }
+  
   // Check if any explicit filters are active
   const hasFilters = Object.keys(explicitFilters).length > 0
+  
+  // Count Premium filters
+  const premiumFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized', 
+                             'suppressorSafe', 'lowFlash', 'lowRecoil', 'matchGrade', 'minVelocity', 'maxVelocity']
+  const premiumFiltersActive = premiumFilterKeys.filter(k => searchParams[k as keyof typeof searchParams]).length
   
   if (!query) {
     return (
@@ -67,6 +102,13 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             <p className="text-muted-foreground">"cheap bulk .223 for target practice"</p>
             <p className="text-muted-foreground">"match grade 6.5 Creedmoor"</p>
             <p className="text-muted-foreground">"AR15 ammo for beginners"</p>
+            {isPremium && (
+              <>
+                <p className="text-amber-600 dark:text-amber-400 mt-3 font-medium">Premium examples:</p>
+                <p className="text-amber-600 dark:text-amber-400">"9mm for compact carry, low flash"</p>
+                <p className="text-amber-600 dark:text-amber-400">"subsonic .300 blackout for suppressor"</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -99,6 +141,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             processingTimeMs={searchMetadata.processingTimeMs}
             vectorSearchUsed={searchMetadata.vectorSearchUsed}
             hasFilters={hasFilters}
+            isPremium={isPremium}
           />
           <div className="text-center py-12 mt-6">
             <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -147,9 +190,18 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           vectorSearchUsed={searchMetadata.vectorSearchUsed}
           hasFilters={hasFilters}
           explicitFilters={explicitFilters}
+          isPremium={isPremium}
+          premiumFiltersActive={premiumFiltersActive}
         />
         
         <div className="space-y-6 mt-6">
+          {/* AI Explanation Banner */}
+          <AIExplanationBanner 
+            intent={intent} 
+            isPremium={isPremium}
+            processingTimeMs={searchMetadata.processingTimeMs}
+          />
+          
           {/* Results Limited Banner */}
           {_meta?.resultsLimited && (
             <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between">
@@ -174,12 +226,24 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             </div>
           )}
 
+          {/* Premium Features Used Banner */}
+          {isPremium && searchMetadata.premiumFeaturesUsed && searchMetadata.premiumFeaturesUsed.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+              <Crown className="h-4 w-4" />
+              <span>Premium features active: {searchMetadata.premiumFeaturesUsed.join(', ')}</span>
+            </div>
+          )}
+
           {/* Results Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {mixedResults.map((item, index) => (
               <div key={`${item.type}-${index}`}>
                 {item.type === 'product' ? (
-                  <ProductCard product={item.data} showRelevance={sortBy === 'relevance'} />
+                  <ProductCard 
+                    product={item.data} 
+                    showRelevance={sortBy === 'relevance' || sortBy === 'best_value'}
+                    showPremiumFeatures={isPremium}
+                  />
                 ) : (
                   <AdCard ad={item.data} />
                 )}
@@ -255,7 +319,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
     console.error('Search error:', error)
     return (
       <>
-        <SearchHeader query={query} />
+        <SearchHeader query={query} isPremium={isPremium} />
         <div className="text-center py-12 mt-6">
           <p className="text-muted-foreground">Failed to load search results</p>
           <p className="text-sm text-muted-foreground mt-2">Please try again later</p>

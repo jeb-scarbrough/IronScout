@@ -15,7 +15,84 @@ export interface Product {
   caseMaterial?: string
   purpose?: string
   roundCount?: number
+  relevanceScore?: number
+  
+  // Premium fields (only populated for Premium users)
+  premium?: PremiumProductData
 }
+
+/**
+ * Premium-only product data
+ * Contains ballistic fields, performance badges, and AI insights
+ */
+export interface PremiumProductData {
+  // Structured ballistic fields
+  bulletType?: BulletType
+  pressureRating?: PressureRating
+  muzzleVelocityFps?: number
+  isSubsonic?: boolean
+  
+  // Performance characteristics
+  shortBarrelOptimized?: boolean
+  suppressorSafe?: boolean
+  lowFlash?: boolean
+  lowRecoil?: boolean
+  controlledExpansion?: boolean
+  matchGrade?: boolean
+  factoryNew?: boolean
+  
+  // Data quality
+  dataSource?: DataSource
+  dataConfidence?: number
+  
+  // Premium ranking data
+  premiumRanking?: {
+    finalScore: number
+    breakdown: {
+      baseRelevance: number
+      performanceMatch: number
+      bestValueScore: number
+      safetyBonus: number
+    }
+    badges: PerformanceBadge[]
+    explanation?: string
+    bestValue?: {
+      score: number
+      grade: 'A' | 'B' | 'C' | 'D' | 'F'
+      summary: string
+    }
+  }
+}
+
+// Enum types matching backend
+export type BulletType = 
+  | 'JHP' | 'HP' | 'BJHP' | 'XTP' | 'HST' | 'GDHP' | 'VMAX'
+  | 'FMJ' | 'TMJ' | 'CMJ' | 'MC' | 'BALL'
+  | 'SP' | 'JSP' | 'PSP' | 'RN' | 'FPRN'
+  | 'FRANGIBLE' | 'AP' | 'TRACER' | 'BLANK' | 'WADCUTTER' | 'SWC' | 'LSWC'
+  | 'BUCKSHOT' | 'BIRDSHOT' | 'SLUG'
+  | 'OTHER'
+
+export type PressureRating = 'STANDARD' | 'PLUS_P' | 'PLUS_P_PLUS' | 'NATO' | 'UNKNOWN'
+
+export type DataSource = 'MANUFACTURER' | 'RETAILER_FEED' | 'PARSED' | 'MANUAL' | 'AI_INFERRED' | 'UNKNOWN'
+
+export type PerformanceBadge = 
+  | 'short-barrel-optimized'
+  | 'suppressor-safe'
+  | 'low-flash'
+  | 'low-recoil'
+  | 'match-grade'
+  | 'subsonic'
+  | '+P'
+  | '+P+'
+  | 'nato-spec'
+  | 'controlled-expansion'
+  | 'high-expansion'
+  | 'bonded'
+  | 'barrier-blind'
+  | 'frangible'
+  | 'lead-free'
 
 export interface Price {
   id: string
@@ -265,10 +342,34 @@ export interface SearchIntent {
   originalQuery: string
   keywords?: string[]
   confidence: number
+  purposeDetected?: string
   explanation?: string
+  
+  // Premium intent (only populated for Premium users)
+  premiumIntent?: PremiumSearchIntent
+}
+
+/**
+ * Premium-only search intent fields
+ */
+export interface PremiumSearchIntent {
+  environment?: 'indoor' | 'outdoor' | 'both'
+  barrelLength?: 'short' | 'standard' | 'long'
+  suppressorUse?: boolean
+  safetyConstraints?: Array<'low-overpenetration' | 'low-flash' | 'low-recoil' | 'barrier-blind' | 'frangible'>
+  priorityFocus?: 'performance' | 'value' | 'balanced'
+  preferredBulletTypes?: string[]
+  explanation: string
+  reasoning?: {
+    environmentReason?: string
+    barrelReason?: string
+    safetyReason?: string
+    bulletTypeReason?: string
+  }
 }
 
 export interface ExplicitFilters {
+  // Basic filters (FREE + PREMIUM)
   caliber?: string
   purpose?: string
   caseMaterial?: string
@@ -278,19 +379,32 @@ export interface ExplicitFilters {
   maxGrain?: number
   inStock?: boolean
   brand?: string
+  
+  // Premium filters
+  bulletType?: BulletType
+  pressureRating?: PressureRating
+  isSubsonic?: boolean
+  shortBarrelOptimized?: boolean
+  suppressorSafe?: boolean
+  lowFlash?: boolean
+  lowRecoil?: boolean
+  matchGrade?: boolean
+  controlledExpansion?: boolean
+  minVelocity?: number
+  maxVelocity?: number
 }
 
 export interface AISearchParams {
   query: string
   page?: number
   limit?: number
-  sortBy?: 'relevance' | 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc'
-  userId?: string // For tier-based result limits
-  filters?: ExplicitFilters // Explicit filters that override AI intent
+  sortBy?: 'relevance' | 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'best_value'
+  userId?: string
+  filters?: ExplicitFilters
 }
 
 export interface AISearchResponse {
-  products: (Product & { relevanceScore?: number })[]
+  products: Product[]
   intent: SearchIntent
   facets: Record<string, Record<string, number>>
   pagination: {
@@ -298,25 +412,59 @@ export interface AISearchResponse {
     limit: number
     total: number
     totalPages: number
+    actualTotal?: number
   }
   searchMetadata: {
     parsedFilters: Record<string, any>
+    explicitFilters?: ExplicitFilters
     aiEnhanced: boolean
     vectorSearchUsed: boolean
     processingTimeMs: number
+    userTier?: 'FREE' | 'PREMIUM'
+    premiumFeaturesUsed?: string[]
+  }
+  _meta?: {
+    tier: 'FREE' | 'PREMIUM'
+    maxResults: number
+    resultsLimited: boolean
+    upgradeMessage?: string
+    premiumFeatures?: {
+      bestValueSort: string
+      advancedFilters: string
+      performanceBadges: string
+    }
   }
 }
 
 export interface ParsedFiltersResponse {
   filters: Record<string, any>
+  premiumFilters?: Record<string, any>
   intent: SearchIntent
   explanation: string
+  tier: 'FREE' | 'PREMIUM'
+}
+
+/**
+ * Premium filter definitions from API
+ */
+export interface PremiumFilterDefinition {
+  label: string
+  type: 'select' | 'boolean' | 'range'
+  description?: string
+  options?: Array<{ value: string; label: string; category?: string }>
+  min?: number
+  max?: number
+  unit?: string
+}
+
+export interface PremiumFiltersResponse {
+  available: boolean
+  filters: Record<string, PremiumFilterDefinition>
+  upgradeMessage?: string
 }
 
 /**
  * AI-powered semantic search
- * Accepts natural language queries like "best ammo for long range AR15"
- * Optionally accepts explicit filters that override AI-parsed intent
  */
 export async function aiSearch(params: AISearchParams): Promise<AISearchResponse> {
   const { userId, filters, ...searchParams } = params
@@ -325,12 +473,10 @@ export async function aiSearch(params: AISearchParams): Promise<AISearchResponse
     'Content-Type': 'application/json'
   }
   
-  // Pass user ID for tier-based result limits
   if (userId) {
     headers['X-User-Id'] = userId
   }
   
-  // Build request body with filters if provided
   const body: any = { ...searchParams }
   if (filters && Object.keys(filters).length > 0) {
     body.filters = filters
@@ -351,14 +497,19 @@ export async function aiSearch(params: AISearchParams): Promise<AISearchResponse
 
 /**
  * Parse a natural language query into structured filters
- * Useful for showing users what the AI understood
  */
-export async function parseQueryToFilters(query: string): Promise<ParsedFiltersResponse> {
+export async function parseQueryToFilters(query: string, userId?: string): Promise<ParsedFiltersResponse> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+  
+  if (userId) {
+    headers['X-User-Id'] = userId
+  }
+  
   const response = await fetch(`${API_BASE_URL}/api/search/nl-to-filters`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers,
     body: JSON.stringify({ query })
   })
   
@@ -381,4 +532,95 @@ export async function getSearchSuggestions(query: string): Promise<string[]> {
   
   const data = await response.json()
   return data.suggestions || []
+}
+
+/**
+ * Get available Premium filters
+ */
+export async function getPremiumFilters(userId?: string): Promise<PremiumFiltersResponse> {
+  const headers: Record<string, string> = {}
+  
+  if (userId) {
+    headers['X-User-Id'] = userId
+  }
+  
+  const response = await fetch(`${API_BASE_URL}/api/search/premium-filters`, {
+    headers
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to get premium filters')
+  }
+  
+  return response.json()
+}
+
+// ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Human-readable bullet type labels
+ */
+export const BULLET_TYPE_LABELS: Record<BulletType, string> = {
+  JHP: 'Jacketed Hollow Point',
+  HP: 'Hollow Point',
+  BJHP: 'Bonded JHP',
+  XTP: 'XTP (Hornady)',
+  HST: 'HST (Federal)',
+  GDHP: 'Gold Dot HP',
+  VMAX: 'V-Max',
+  FMJ: 'Full Metal Jacket',
+  TMJ: 'Total Metal Jacket',
+  CMJ: 'Complete Metal Jacket',
+  MC: 'Metal Case',
+  BALL: 'Ball',
+  SP: 'Soft Point',
+  JSP: 'Jacketed Soft Point',
+  PSP: 'Pointed Soft Point',
+  RN: 'Round Nose',
+  FPRN: 'Flat Point RN',
+  FRANGIBLE: 'Frangible',
+  AP: 'Armor Piercing',
+  TRACER: 'Tracer',
+  BLANK: 'Blank',
+  WADCUTTER: 'Wadcutter',
+  SWC: 'Semi-Wadcutter',
+  LSWC: 'Lead SWC',
+  BUCKSHOT: 'Buckshot',
+  BIRDSHOT: 'Birdshot',
+  SLUG: 'Slug',
+  OTHER: 'Other',
+}
+
+/**
+ * Pressure rating labels
+ */
+export const PRESSURE_RATING_LABELS: Record<PressureRating, string> = {
+  STANDARD: 'Standard',
+  PLUS_P: '+P',
+  PLUS_P_PLUS: '+P+',
+  NATO: 'NATO Spec',
+  UNKNOWN: 'Unknown',
+}
+
+/**
+ * Performance badge display configuration
+ */
+export const BADGE_CONFIG: Record<PerformanceBadge, { label: string; color: string; icon?: string }> = {
+  'short-barrel-optimized': { label: 'Short Barrel', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300' },
+  'suppressor-safe': { label: 'Suppressor Safe', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
+  'low-flash': { label: 'Low Flash', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300' },
+  'low-recoil': { label: 'Low Recoil', color: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' },
+  'match-grade': { label: 'Match Grade', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' },
+  'subsonic': { label: 'Subsonic', color: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300' },
+  '+P': { label: '+P', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300' },
+  '+P+': { label: '+P+', color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' },
+  'nato-spec': { label: 'NATO', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300' },
+  'controlled-expansion': { label: 'Controlled Expansion', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300' },
+  'high-expansion': { label: 'High Expansion', color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300' },
+  'bonded': { label: 'Bonded', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' },
+  'barrier-blind': { label: 'Barrier Blind', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300' },
+  'frangible': { label: 'Frangible', color: 'bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-300' },
+  'lead-free': { label: 'Lead Free', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' },
 }

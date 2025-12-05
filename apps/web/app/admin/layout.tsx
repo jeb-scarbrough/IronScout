@@ -2,6 +2,9 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
+// Admin emails from environment variable
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+
 export default async function AdminLayout({
   children,
 }: {
@@ -14,8 +17,13 @@ export default async function AdminLayout({
     redirect('/auth/signin?callbackUrl=/admin')
   }
 
-  // TODO: Add role-based access control (ADMIN role check)
-  // For now, any authenticated user can access admin
+  // Check if user is an admin
+  const userEmail = session.user?.email?.toLowerCase()
+  const isAdmin = userEmail && ADMIN_EMAILS.includes(userEmail)
+
+  if (!isAdmin) {
+    redirect('/?error=unauthorized')
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

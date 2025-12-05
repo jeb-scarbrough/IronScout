@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, SlidersHorizontal, Crown } from 'lucide-react'
 import { ExplicitFilters } from '@/lib/api'
+import { EnhancedSortSelect } from './sort-select'
 
 interface SearchIntent {
   calibers?: string[]
@@ -12,6 +13,14 @@ interface SearchIntent {
   brands?: string[]
   qualityLevel?: string
   confidence: number
+  premiumIntent?: {
+    explanation?: string
+    environment?: string
+    barrelLength?: string
+    suppressorUse?: boolean
+    safetyConstraints?: string[]
+    preferredBulletTypes?: string[]
+  }
 }
 
 interface SearchHeaderProps {
@@ -22,6 +31,8 @@ interface SearchHeaderProps {
   vectorSearchUsed?: boolean
   hasFilters?: boolean
   explicitFilters?: ExplicitFilters
+  isPremium?: boolean
+  premiumFiltersActive?: number
 }
 
 export function SearchHeader({ 
@@ -31,7 +42,9 @@ export function SearchHeader({
   processingTimeMs,
   vectorSearchUsed,
   hasFilters,
-  explicitFilters
+  explicitFilters,
+  isPremium = false,
+  premiumFiltersActive = 0
 }: SearchHeaderProps) {
   const [showDetails, setShowDetails] = useState(false)
   
@@ -43,8 +56,9 @@ export function SearchHeader({
   )
 
   // Build list of active explicit filters for display
-  const activeFilters: Array<{ label: string; value: string; color: string }> = []
+  const activeFilters: Array<{ label: string; value: string; color: string; isPremium?: boolean }> = []
   if (explicitFilters) {
+    // Basic filters
     if (explicitFilters.caliber) {
       activeFilters.push({ label: 'Caliber', value: explicitFilters.caliber, color: 'blue' })
     }
@@ -72,9 +86,39 @@ export function SearchHeader({
     if (explicitFilters.brand) {
       activeFilters.push({ label: 'Brand', value: explicitFilters.brand, color: 'indigo' })
     }
+    
+    // Premium filters
+    if (explicitFilters.bulletType) {
+      activeFilters.push({ label: 'Bullet', value: explicitFilters.bulletType, color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.pressureRating) {
+      activeFilters.push({ label: 'Pressure', value: explicitFilters.pressureRating.replace('PLUS_P_PLUS', '+P+').replace('PLUS_P', '+P'), color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.isSubsonic) {
+      activeFilters.push({ label: 'Type', value: 'Subsonic', color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.shortBarrelOptimized) {
+      activeFilters.push({ label: 'Opt.', value: 'Short Barrel', color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.suppressorSafe) {
+      activeFilters.push({ label: 'Type', value: 'Suppressor Safe', color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.lowFlash) {
+      activeFilters.push({ label: 'Type', value: 'Low Flash', color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.lowRecoil) {
+      activeFilters.push({ label: 'Type', value: 'Low Recoil', color: 'amber', isPremium: true })
+    }
+    if (explicitFilters.matchGrade) {
+      activeFilters.push({ label: 'Grade', value: 'Match Grade', color: 'amber', isPremium: true })
+    }
   }
 
-  const getColorClasses = (color: string) => {
+  const getColorClasses = (color: string, isPremiumFilter?: boolean) => {
+    if (isPremiumFilter) {
+      return 'bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/50 dark:to-orange-900/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+    }
+    
     const colorMap: Record<string, string> = {
       blue: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
       purple: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300',
@@ -84,6 +128,7 @@ export function SearchHeader({
       emerald: 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300',
       teal: 'bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300',
       indigo: 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300',
+      amber: 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300',
     }
     return colorMap[color] || colorMap.blue
   }
@@ -106,19 +151,33 @@ export function SearchHeader({
           )}
         </div>
         
-        <div className="flex items-center gap-2">
-          {hasFilters && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Filtered</span>
-            </div>
-          )}
-          {vectorSearchUsed && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-200 dark:border-blue-800 rounded-full">
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs font-medium text-blue-600">AI Search</span>
-            </div>
-          )}
+        <div className="flex items-center gap-3">
+          {/* Sort Select */}
+          <EnhancedSortSelect isPremium={isPremium} />
+          
+          {/* Filter indicators */}
+          <div className="flex items-center gap-2">
+            {hasFilters && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Filtered</span>
+              </div>
+            )}
+            
+            {premiumFiltersActive > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 border border-amber-200 dark:border-amber-700 rounded-full">
+                <Crown className="h-3.5 w-3.5 text-amber-600" />
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">{premiumFiltersActive} Premium</span>
+              </div>
+            )}
+            
+            {vectorSearchUsed && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-200 dark:border-blue-800 rounded-full">
+                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                <span className="text-xs font-medium text-blue-600">AI Search</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -128,8 +187,9 @@ export function SearchHeader({
           {activeFilters.map((filter, i) => (
             <span 
               key={i} 
-              className={`px-2.5 py-1 rounded-full text-xs font-medium ${getColorClasses(filter.color)}`}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getColorClasses(filter.color, filter.isPremium)}`}
             >
+              {filter.isPremium && <Crown className="h-3 w-3" />}
               {filter.label}: {filter.value}
             </span>
           ))}
@@ -145,6 +205,9 @@ export function SearchHeader({
           >
             <Sparkles className="h-4 w-4 text-purple-500" />
             <span>AI understood your search</span>
+            {isPremium && intent.premiumIntent && (
+              <Crown className="h-3.5 w-3.5 text-amber-500" />
+            )}
             {showDetails ? (
               <ChevronUp className="h-4 w-4" />
             ) : (
@@ -201,9 +264,42 @@ export function SearchHeader({
                     Quality: {intent.qualityLevel}
                   </span>
                 )}
+                
+                {/* Premium Intent Details */}
+                {isPremium && intent.premiumIntent && (
+                  <>
+                    {intent.premiumIntent.environment && (
+                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        {intent.premiumIntent.environment}
+                      </span>
+                    )}
+                    {intent.premiumIntent.barrelLength && (
+                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        {intent.premiumIntent.barrelLength} barrel
+                      </span>
+                    )}
+                    {intent.premiumIntent.suppressorUse && (
+                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        suppressor use
+                      </span>
+                    )}
+                    {intent.premiumIntent.preferredBulletTypes?.map((type, i) => (
+                      <span key={i} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        {type}
+                      </span>
+                    ))}
+                  </>
+                )}
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
                 Confidence: {Math.round(intent.confidence * 100)}%
+                {isPremium && intent.premiumIntent && (
+                  <span className="ml-2 text-amber-600">• Premium analysis enabled</span>
+                )}
               </div>
             </div>
           )}

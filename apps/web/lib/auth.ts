@@ -8,6 +8,9 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from '@ironscout/db'
 import bcrypt from 'bcryptjs'
 
+// Admin emails - must use OAuth, not credentials
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   trustHost: true,
@@ -22,6 +25,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          return null
+        }
+
+        const email = (credentials.email as string).toLowerCase()
+
+        // Block admin emails from credentials login
+        // Admins must use OAuth for verified email ownership
+        if (ADMIN_EMAILS.includes(email)) {
+          console.warn(`[Auth] Blocked credentials login attempt for admin email: ${email}`)
           return null
         }
 

@@ -2,12 +2,14 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -41,14 +43,65 @@ model Product {
   brand       String?
   imageUrl    String?
 
-  // Ammo-specific fields for normalization
-  upc         String?  @unique
-  caliber     String?  // e.g., "9mm", ".223 Remington", "12 Gauge"
-  grainWeight Int?     // Bullet weight in grains
-  caseMaterial String? // e.g., "Brass", "Steel", "Aluminum"
-  purpose     String?  // e.g., "Target", "Defense", "Hunting"
-  roundCount  Int?     // Rounds per box/case
-  metadata    Json?    // Additional flexible data
+  // =============================================
+  // Core Ammo Attributes (Always Required)
+  // =============================================
+  upc          String?  @unique
+  caliber      String?  // e.g., "9mm", ".223 Remington", "12 Gauge"
+  grainWeight  Int?     // Bullet weight in grains
+  caseMaterial String?  // e.g., "Brass", "Steel", "Aluminum"
+  purpose      String?  // e.g., "Target", "Defense", "Hunting"
+  roundCount   Int?     // Rounds per box/case
+
+  // =============================================
+  // Ballistic Performance Fields (Premium Filters)
+  // =============================================
+  
+  // Bullet construction type - critical for purpose matching
+  bulletType     BulletType?      // JHP, FMJ, SP, etc.
+  
+  // Pressure rating - affects +P filtering and safety recommendations
+  pressureRating PressureRating?  @default(STANDARD)
+  
+  // Velocity data - used for subsonic detection, expansion thresholds
+  muzzleVelocityFps    Int?       // Muzzle velocity in feet per second
+  barrelLengthReference Decimal?  @db.Decimal(4, 2) // Barrel length (inches) used for velocity measurement
+  
+  // Subsonic indicator - for suppressor use and reduced noise
+  // Can be computed from velocity (<1125 fps) or explicitly set
+  isSubsonic     Boolean?
+  
+  // =============================================
+  // Optimization Flags (Premium AI Features)
+  // =============================================
+  
+  // Short barrel optimization (<4" barrels) - affects defensive ammo recommendations
+  shortBarrelOptimized Boolean?
+  
+  // Suppressor compatibility
+  suppressorSafe      Boolean?    // Won't damage suppressors
+  
+  // Safety characteristics for defensive use
+  lowFlash            Boolean?    // Reduced muzzle flash (indoor/low-light)
+  lowRecoil           Boolean?    // Reduced felt recoil
+  controlledExpansion Boolean?    // Designed to limit overpenetration
+  
+  // Quality indicators
+  matchGrade          Boolean?    // Match/competition quality
+  factoryNew          Boolean?    @default(true) // Not remanufactured
+  
+  // =============================================
+  // Data Quality Tracking
+  // =============================================
+  
+  // How the ballistic data was populated
+  dataSource     DataSource?      @default(UNKNOWN)
+  dataConfidence Decimal?         @db.Decimal(3, 2) // 0.00-1.00 confidence score
+  
+  // =============================================
+  // Flexible Metadata (Future Extensibility)
+  // =============================================
+  metadata    Json?    // Additional data without schema changes
 
   // Vector embedding for semantic search (1536 dimensions for OpenAI text-embedding-3-small)
   embedding   Unsupported("vector(1536)")?
@@ -60,6 +113,12 @@ model Product {
   alerts  Alert[]
   reports ProductReport[]
 
+  // Indexes for premium filter queries
+  @@index([caliber])
+  @@index([bulletType])
+  @@index([pressureRating])
+  @@index([isSubsonic])
+  @@index([purpose])
   @@map("products")
 }
 
@@ -98,6 +157,9 @@ model Price {
   retailer Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
   reports  ProductReport[]
 
+  @@index([productId])
+  @@index([retailerId])
+  @@index([inStock])
   @@map("prices")
 }
 
@@ -256,6 +318,10 @@ model MarketReport {
   @@map("market_reports")
 }
 
+// =============================================
+// Enums
+// =============================================
+
 enum UserTier {
   FREE
   PREMIUM
@@ -345,6 +411,72 @@ enum DaaSPlan {
   BASIC
   PROFESSIONAL
   ENTERPRISE
+}
+
+// =============================================
+// Ammunition-Specific Enums
+// =============================================
+
+// Bullet construction types - critical for purpose matching
+enum BulletType {
+  // Hollow Points (Defensive)
+  JHP           // Jacketed Hollow Point - most common defensive
+  HP            // Hollow Point (unjacketed)
+  BJHP          // Bonded Jacketed Hollow Point - barrier blind
+  XTP           // eXtreme Terminal Performance (Hornady)
+  HST           // Hi-Shok Two (Federal HST)
+  GDHP          // Gold Dot Hollow Point (Speer)
+  VMAX          // V-Max (Hornady varmint)
+  
+  // Full Metal Jacket (Training/Target)
+  FMJ           // Full Metal Jacket - most common training
+  TMJ           // Total Metal Jacket - fully encapsulated
+  CMJ           // Complete Metal Jacket
+  MC            // Metal Case (same as FMJ)
+  BALL          // Military ball ammo
+  
+  // Soft Point (Hunting/General)
+  SP            // Soft Point
+  JSP           // Jacketed Soft Point
+  PSP           // Pointed Soft Point
+  RN            // Round Nose
+  FPRN          // Flat Point Round Nose
+  
+  // Specialty
+  FRANGIBLE     // Breaks apart on impact (training, CQB)
+  AP            // Armor Piercing
+  TRACER        // Tracer rounds
+  BLANK         // Blank rounds
+  WADCUTTER     // Target/competition (revolver)
+  SWC           // Semi-Wadcutter
+  LSWC          // Lead Semi-Wadcutter
+  
+  // Shotgun specific
+  BUCKSHOT      // Buckshot
+  BIRDSHOT      // Birdshot
+  SLUG          // Slug
+  
+  // Unknown/Other
+  OTHER
+}
+
+// Pressure rating levels
+enum PressureRating {
+  STANDARD      // Standard pressure
+  PLUS_P        // +P (higher pressure, ~10% more)
+  PLUS_P_PLUS   // +P+ (even higher, LEO/military)
+  NATO          // NATO spec (similar to +P)
+  UNKNOWN
+}
+
+// How the product data was sourced/populated
+enum DataSource {
+  MANUFACTURER  // Direct from manufacturer specs
+  RETAILER_FEED // From retailer/affiliate feed
+  PARSED        // Parsed from product name/description
+  MANUAL        // Manually entered/verified
+  AI_INFERRED   // AI-inferred from context
+  UNKNOWN
 }
 
 // NextAuth.js required models

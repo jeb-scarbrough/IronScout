@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react'
+import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Crown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
+import { PremiumFilters } from '@/components/premium'
 
 // Common calibers for the ammunition market
 const CALIBERS = [
@@ -36,11 +37,18 @@ const exampleQueries = [
   "subsonic 300 blackout",
 ]
 
+const premiumExampleQueries = [
+  "9mm for compact carry, low flash",
+  "subsonic .300 blackout for suppressor",
+  "short barrel optimized defense ammo",
+]
+
 interface UnifiedSearchProps {
   initialQuery?: string
+  isPremium?: boolean
 }
 
-export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
+export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedSearchProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -54,6 +62,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
 
   // Filter state
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [premiumFiltersOpen, setPremiumFiltersOpen] = useState(false)
   
   // Get current filter values from URL
   const getFiltersFromUrl = () => ({
@@ -69,16 +78,24 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
 
   const [filters, setFilters] = useState(getFiltersFromUrl())
   
-  // Count active filters
+  // Count active filters (basic)
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
     if (key === 'inStock') return value === true
     return value !== ''
   }).length
 
+  // Count Premium filters
+  const premiumFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized', 
+                             'suppressorSafe', 'lowFlash', 'lowRecoil', 'matchGrade']
+  const premiumFiltersActive = premiumFilterKeys.filter(k => searchParams.get(k)).length
+
   // Auto-open filters if any are active
   useEffect(() => {
     if (activeFilterCount > 0 && !filtersOpen) {
       setFiltersOpen(true)
+    }
+    if (premiumFiltersActive > 0 && !premiumFiltersOpen) {
+      setPremiumFiltersOpen(true)
     }
   }, [])
 
@@ -307,22 +324,47 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                 </button>
               ))}
             </div>
+            
+            {/* Premium example queries */}
+            {isPremium && (
+              <div className="mt-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  <p className="text-sm text-amber-600 dark:text-amber-400">Premium AI examples:</p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {premiumExampleQueries.map((example, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setQuery(example)
+                        handleSearch(example)
+                      }}
+                      className="text-sm px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-700 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors text-amber-600 dark:text-amber-400"
+                    >
+                      "{example}"
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Advanced Filters Toggle */}
-      <div className="max-w-3xl mx-auto mt-4">
+      {/* Filter Toggles */}
+      <div className="max-w-3xl mx-auto mt-4 flex items-center justify-center gap-3">
+        {/* Basic Filters Toggle */}
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all mx-auto ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
             filtersOpen 
               ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-foreground' 
               : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
           }`}
         >
           <SlidersHorizontal className="h-4 w-4" />
-          <span className="font-medium text-sm">Advanced Filters</span>
+          <span className="font-medium text-sm">Filters</span>
           {activeFilterCount > 0 && (
             <span className="px-2 py-0.5 bg-blue-500 text-white rounded-full text-xs font-semibold min-w-[20px] text-center">
               {activeFilterCount}
@@ -330,9 +372,28 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
           )}
           <ChevronDown className={`h-4 w-4 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
         </button>
+
+        {/* Premium Filters Toggle */}
+        <button
+          onClick={() => setPremiumFiltersOpen(!premiumFiltersOpen)}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
+            premiumFiltersOpen 
+              ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200' 
+              : 'bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:border-amber-300 dark:hover:border-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+          }`}
+        >
+          <Crown className="h-4 w-4" />
+          <span className="font-medium text-sm">Premium Filters</span>
+          {premiumFiltersActive > 0 && (
+            <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-xs font-semibold min-w-[20px] text-center">
+              {premiumFiltersActive}
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 transition-transform ${premiumFiltersOpen ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {/* Advanced Filters Panel */}
+      {/* Basic Filters Panel */}
       {filtersOpen && (
         <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 animate-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between mb-4">
@@ -498,6 +559,13 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
           <p className="mt-4 text-xs text-muted-foreground">
             Filters work alongside AI search to narrow your results. The AI will still understand your intent while respecting your explicit criteria.
           </p>
+        </div>
+      )}
+
+      {/* Premium Filters Panel */}
+      {premiumFiltersOpen && (
+        <div className="mt-6 p-6 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-200 dark:border-amber-800 animate-in slide-in-from-top-2 duration-200">
+          <PremiumFilters isPremium={isPremium} />
         </div>
       )}
     </div>

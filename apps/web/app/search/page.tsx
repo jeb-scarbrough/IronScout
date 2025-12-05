@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import { SearchResults } from '@/components/search/search-results'
 import { UnifiedSearch } from '@/components/search/unified-search'
-import { SortSelect } from '@/components/search/sort-select'
+import { EnhancedSortSelect } from '@/components/search/sort-select'
+import { auth } from '@/lib/auth'
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -17,27 +18,43 @@ interface SearchPageProps {
     maxGrain?: string
     caseMaterial?: string
     purpose?: string
-    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance'
+    sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance' | 'best_value'
     page?: string
+    // Premium filters
+    bulletType?: string
+    pressureRating?: string
+    isSubsonic?: string
+    shortBarrelOptimized?: string
+    suppressorSafe?: string
+    lowFlash?: string
+    lowRecoil?: string
+    matchGrade?: string
+    minVelocity?: string
+    maxVelocity?: string
   }>
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams
   const query = params.q || ''
+  
+  // Get session for user tier
+  const session = await auth()
+  const userTier = (session?.user as any)?.tier || 'FREE'
+  const isPremium = userTier === 'PREMIUM'
 
   return (
     <div className="container mx-auto px-4 py-6">
       {/* Unified Search Interface */}
       <div className="mb-8">
-        <UnifiedSearch initialQuery={query} />
+        <UnifiedSearch initialQuery={query} isPremium={isPremium} />
       </div>
 
       {/* Sort & Results */}
       <div className="flex flex-col">
         {query && (
           <div className="flex justify-end mb-4">
-            <SortSelect />
+            <EnhancedSortSelect isPremium={isPremium} />
           </div>
         )}
         <Suspense fallback={

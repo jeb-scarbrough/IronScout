@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { aiSearch, getSearchSuggestions, parseSearchIntent, backfillProductEmbeddings, updateProductEmbedding } from '../services/ai-search'
+import { aiSearch, getSearchSuggestions, parseSearchIntent, backfillProductEmbeddings, updateProductEmbedding, ParseOptions } from '../services/ai-search'
 import { prisma } from '@ironscout/db'
 import { requireAdmin, rateLimit } from '../middleware/auth'
 import { TIER_CONFIG, getMaxSearchResults, hasPriceHistoryAccess } from '../config/tiers'
@@ -30,6 +30,18 @@ async function getUserTier(req: Request): Promise<keyof typeof TIER_CONFIG> {
   }
 }
 
+// Valid bullet types for Premium filter validation
+const BULLET_TYPES = [
+  'JHP', 'HP', 'BJHP', 'XTP', 'HST', 'GDHP', 'VMAX',
+  'FMJ', 'TMJ', 'CMJ', 'MC', 'BALL',
+  'SP', 'JSP', 'PSP', 'RN', 'FPRN',
+  'FRANGIBLE', 'AP', 'TRACER', 'BLANK', 'WADCUTTER', 'SWC', 'LSWC',
+  'BUCKSHOT', 'BIRDSHOT', 'SLUG', 'OTHER'
+] as const
+
+// Valid pressure ratings for Premium filter validation
+const PRESSURE_RATINGS = ['STANDARD', 'PLUS_P', 'PLUS_P_PLUS', 'NATO', 'UNKNOWN'] as const
+
 /**
  * AI-powered semantic search with optional explicit filters
  * POST /api/search/semantic
@@ -40,15 +52,17 @@ async function getUserTier(req: Request): Promise<keyof typeof TIER_CONFIG> {
  * - "match grade .308 for precision rifle competition"
  * 
  * Also accepts explicit filters that override/narrow AI intent:
- * - caliber, purpose, caseMaterial, minPrice, maxPrice, minGrain, maxGrain, inStock
+ * - Basic: caliber, purpose, caseMaterial, minPrice, maxPrice, minGrain, maxGrain, inStock
+ * - Premium: bulletType, pressureRating, isSubsonic, shortBarrelOptimized, suppressorSafe, etc.
  */
 const semanticSearchSchema = z.object({
   query: z.string().min(1).max(500),
   page: z.number().int().positive().default(1),
   limit: z.number().int().min(1).max(100).default(20),
-  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc']).default('relevance'),
+  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc', 'best_value']).default('relevance'),
   // Explicit filters that override AI intent
   filters: z.object({
+    // Basic filters (FREE + PREMIUM)
     caliber: z.string().optional(),
     purpose: z.string().optional(),
     caseMaterial: z.string().optional(),
@@ -58,6 +72,19 @@ const semanticSearchSchema = z.object({
     maxGrain: z.number().optional(),
     inStock: z.boolean().optional(),
     brand: z.string().optional(),
+    
+    // Premium filters (PREMIUM only - will be ignored for FREE users)
+    bulletType: z.enum(BULLET_TYPES).optional(),
+    pressureRating: z.enum(PRESSURE_RATINGS).optional(),
+    isSubsonic: z.boolean().optional(),
+    shortBarrelOptimized: z.boolean().optional(),
+    suppressorSafe: z.boolean().optional(),
+    lowFlash: z.boolean().optional(),
+    lowRecoil: z.boolean().optional(),
+    matchGrade: z.boolean().optional(),
+    controlledExpansion: z.boolean().optional(),
+    minVelocity: z.number().optional(),
+    maxVelocity: z.number().optional(),
   }).optional(),
 })
 
@@ -69,22 +96,65 @@ router.post('/semantic', async (req: Request, res: Response) => {
     
     console.log('[Search Route] Parsed filters:', filters)
     
-    // Get user tier for result limiting
+    // Get user tier
     const userTier = await getUserTier(req)
     const maxResults = getMaxSearchResults(userTier)
+    const isPremium = userTier === 'PREMIUM'
+    
+    // Strip Premium filters for FREE users
+    let effectiveFilters = filters
+    if (!isPremium && filters) {
+      const { 
+        bulletType, pressureRating, isSubsonic, 
+        shortBarrelOptimized, suppressorSafe, lowFlash, lowRecoil,
+        matchGrade, controlledExpansion, minVelocity, maxVelocity,
+        ...basicFilters 
+      } = filters
+      effectiveFilters = basicFilters
+      
+      // Log if Premium filters were stripped
+      const strippedCount = Object.keys(filters).length - Object.keys(basicFilters).length
+      if (strippedCount > 0) {
+        console.log(`[Search Route] Stripped ${strippedCount} Premium filters for FREE user`)
+      }
+    }
     
     // Apply tier-based limit
     const tierLimitedLimit = Math.min(limit, maxResults)
     
+    // Prevent FREE users from using best_value sort
+    const effectiveSortBy = (!isPremium && sortBy === 'best_value') ? 'relevance' : sortBy
+    
     const result = await aiSearch(query, { 
       page, 
       limit: tierLimitedLimit, 
-      sortBy,
-      explicitFilters: filters, // Pass explicit filters to AI search
+      sortBy: effectiveSortBy,
+      explicitFilters: effectiveFilters,
+      userTier, // Pass user tier to enable Premium features
     })
     
     // Check if results are limited
     const hasMoreResults = result.pagination.total > maxResults && userTier === 'FREE'
+    
+    // Build meta response
+    const metaResponse: any = {
+      tier: userTier,
+      maxResults,
+      resultsLimited: hasMoreResults,
+    }
+    
+    if (hasMoreResults) {
+      metaResponse.upgradeMessage = `Showing ${maxResults} of ${result.pagination.total} results. Upgrade to Premium to see all results.`
+    }
+    
+    // Add Premium feature hints for FREE users
+    if (!isPremium) {
+      metaResponse.premiumFeatures = {
+        bestValueSort: 'Upgrade to Premium to sort by Best Value score',
+        advancedFilters: 'Upgrade to Premium for bullet type, pressure rating, and performance filters',
+        performanceBadges: 'Upgrade to Premium to see performance badges and AI-powered recommendations'
+      }
+    }
     
     // Adjust pagination info for tier limits
     const adjustedResult = {
@@ -93,16 +163,9 @@ router.post('/semantic', async (req: Request, res: Response) => {
         ...result.pagination,
         total: userTier === 'FREE' ? Math.min(result.pagination.total, maxResults) : result.pagination.total,
         totalPages: Math.ceil(Math.min(result.pagination.total, maxResults) / tierLimitedLimit),
-        actualTotal: result.pagination.total // Always show the real total count
+        actualTotal: result.pagination.total
       },
-      _meta: {
-        tier: userTier,
-        maxResults,
-        resultsLimited: hasMoreResults,
-        upgradeMessage: hasMoreResults 
-          ? `Showing ${maxResults} of ${result.pagination.total} results. Upgrade to Premium to see all results.`
-          : undefined
-      }
+      _meta: metaResponse
     }
     
     res.json(adjustedResult)
@@ -123,6 +186,8 @@ router.post('/semantic', async (req: Request, res: Response) => {
 /**
  * Parse a query without searching (for debugging/preview)
  * POST /api/search/parse
+ * 
+ * Premium users get enhanced intent parsing with environment, barrel length, etc.
  */
 const parseSchema = z.object({
   query: z.string().min(1).max(500),
@@ -132,9 +197,18 @@ router.post('/parse', async (req: Request, res: Response) => {
   try {
     const { query } = parseSchema.parse(req.body)
     
-    const intent = await parseSearchIntent(query)
+    // Get user tier for Premium parsing
+    const userTier = await getUserTier(req)
+    const parseOptions: ParseOptions = { userTier }
     
-    res.json({ intent })
+    const intent = await parseSearchIntent(query, parseOptions)
+    
+    res.json({ 
+      intent,
+      tier: userTier,
+      // Indicate if Premium parsing was used
+      premiumParsing: userTier === 'PREMIUM' && !!intent.premiumIntent
+    })
   } catch (error) {
     console.error('Parse error:', error)
     
@@ -188,14 +262,18 @@ router.post('/nl-to-filters', async (req: Request, res: Response) => {
   try {
     const { query } = parseSchema.parse(req.body)
     
-    const intent = await parseSearchIntent(query)
+    // Get user tier for Premium parsing
+    const userTier = await getUserTier(req)
+    const parseOptions: ParseOptions = { userTier }
+    
+    const intent = await parseSearchIntent(query, parseOptions)
     
     // Convert intent to filter format matching existing search API
     const filters: Record<string, any> = {}
     
     if (intent.calibers?.length) {
-      filters.caliber = intent.calibers[0] // Primary caliber for filter UI
-      filters.caliberOptions = intent.calibers // All matching calibers
+      filters.caliber = intent.calibers[0]
+      filters.caliberOptions = intent.calibers
     }
     
     if (intent.purpose) {
@@ -227,10 +305,37 @@ router.post('/nl-to-filters', async (req: Request, res: Response) => {
       filters.inStock = true
     }
     
+    // Add Premium filters if available and user is Premium
+    const premiumFilters: Record<string, any> = {}
+    if (userTier === 'PREMIUM' && intent.premiumIntent) {
+      if (intent.premiumIntent.preferredBulletTypes?.length) {
+        premiumFilters.bulletType = intent.premiumIntent.preferredBulletTypes[0]
+        premiumFilters.bulletTypeOptions = intent.premiumIntent.preferredBulletTypes
+      }
+      
+      if (intent.premiumIntent.suppressorUse) {
+        premiumFilters.suppressorSafe = true
+      }
+      
+      if (intent.premiumIntent.barrelLength === 'short') {
+        premiumFilters.shortBarrelOptimized = true
+      }
+      
+      if (intent.premiumIntent.safetyConstraints?.includes('low-flash')) {
+        premiumFilters.lowFlash = true
+      }
+      
+      if (intent.premiumIntent.safetyConstraints?.includes('low-recoil')) {
+        premiumFilters.lowRecoil = true
+      }
+    }
+    
     res.json({
       filters,
+      premiumFilters: userTier === 'PREMIUM' ? premiumFilters : undefined,
       intent,
-      explanation: intent.explanation || generateExplanation(intent),
+      explanation: generateExplanation(intent, userTier === 'PREMIUM'),
+      tier: userTier
     })
   } catch (error) {
     console.error('NL to filters error:', error)
@@ -241,7 +346,7 @@ router.post('/nl-to-filters', async (req: Request, res: Response) => {
 /**
  * Generate human-readable explanation of parsed intent
  */
-function generateExplanation(intent: any): string {
+function generateExplanation(intent: any, isPremium: boolean): string {
   const parts: string[] = []
   
   if (intent.calibers?.length) {
@@ -268,12 +373,106 @@ function generateExplanation(intent: any): string {
     parts.push('in stock only')
   }
   
+  // Add Premium explanation if available
+  if (isPremium && intent.premiumIntent?.explanation) {
+    return intent.premiumIntent.explanation
+  }
+  
   if (parts.length === 0) {
     return 'Searching all products'
   }
   
   return `Looking for: ${parts.join(', ')}`
 }
+
+/**
+ * Get available Premium filters for UI
+ * GET /api/search/premium-filters
+ * 
+ * Returns the list of Premium filters with their options
+ */
+router.get('/premium-filters', async (req: Request, res: Response) => {
+  try {
+    const userTier = await getUserTier(req)
+    
+    // Return filter definitions even for FREE users (for UI display)
+    // but indicate they require Premium
+    res.json({
+      available: userTier === 'PREMIUM',
+      filters: {
+        bulletType: {
+          label: 'Bullet Type',
+          type: 'select',
+          options: [
+            { value: 'JHP', label: 'Jacketed Hollow Point (JHP)', category: 'defensive' },
+            { value: 'HP', label: 'Hollow Point (HP)', category: 'defensive' },
+            { value: 'BJHP', label: 'Bonded JHP', category: 'defensive' },
+            { value: 'HST', label: 'Federal HST', category: 'defensive' },
+            { value: 'GDHP', label: 'Gold Dot HP', category: 'defensive' },
+            { value: 'FMJ', label: 'Full Metal Jacket (FMJ)', category: 'training' },
+            { value: 'TMJ', label: 'Total Metal Jacket (TMJ)', category: 'training' },
+            { value: 'SP', label: 'Soft Point (SP)', category: 'hunting' },
+            { value: 'JSP', label: 'Jacketed Soft Point (JSP)', category: 'hunting' },
+            { value: 'FRANGIBLE', label: 'Frangible', category: 'specialty' },
+          ]
+        },
+        pressureRating: {
+          label: 'Pressure Rating',
+          type: 'select',
+          options: [
+            { value: 'STANDARD', label: 'Standard' },
+            { value: 'PLUS_P', label: '+P' },
+            { value: 'PLUS_P_PLUS', label: '+P+' },
+            { value: 'NATO', label: 'NATO Spec' },
+          ]
+        },
+        isSubsonic: {
+          label: 'Subsonic',
+          type: 'boolean',
+          description: 'Ammunition traveling below 1,125 fps'
+        },
+        shortBarrelOptimized: {
+          label: 'Short Barrel Optimized',
+          type: 'boolean',
+          description: 'Designed for compact pistols (<4" barrel)'
+        },
+        suppressorSafe: {
+          label: 'Suppressor Safe',
+          type: 'boolean',
+          description: 'Safe for use with suppressors'
+        },
+        lowFlash: {
+          label: 'Low Flash',
+          type: 'boolean',
+          description: 'Reduced muzzle flash for low-light'
+        },
+        lowRecoil: {
+          label: 'Low Recoil',
+          type: 'boolean',
+          description: 'Reduced felt recoil'
+        },
+        matchGrade: {
+          label: 'Match Grade',
+          type: 'boolean',
+          description: 'Competition/precision quality'
+        },
+        velocityRange: {
+          label: 'Muzzle Velocity',
+          type: 'range',
+          min: 700,
+          max: 3500,
+          unit: 'fps'
+        }
+      },
+      upgradeMessage: userTier === 'FREE' 
+        ? 'Upgrade to Premium to access advanced filters and performance-based search'
+        : undefined
+    })
+  } catch (error) {
+    console.error('Premium filters error:', error)
+    res.status(500).json({ error: 'Failed to get premium filters' })
+  }
+})
 
 // ============================================
 // Admin Endpoints for Vector Embedding Management
@@ -282,8 +481,6 @@ function generateExplanation(intent: any): string {
 /**
  * Get embedding statistics
  * GET /api/search/admin/embedding-stats
- * 
- * Requires: X-Admin-Key header or authenticated admin user
  */
 router.get('/admin/embedding-stats', requireAdmin, async (req: Request, res: Response) => {
   try {
@@ -316,10 +513,84 @@ router.get('/admin/embedding-stats', requireAdmin, async (req: Request, res: Res
 })
 
 /**
+ * Get ballistic field statistics (Phase 2)
+ * GET /api/search/admin/ballistic-stats
+ */
+router.get('/admin/ballistic-stats', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const stats = await prisma.$queryRaw<Array<{
+      total: bigint
+      with_bullet_type: bigint
+      with_pressure_rating: bigint
+      with_velocity: bigint
+      with_subsonic: bigint
+      with_short_barrel: bigint
+      with_suppressor_safe: bigint
+      with_low_flash: bigint
+      with_match_grade: bigint
+    }>>`
+      SELECT 
+        COUNT(*) as total,
+        COUNT("bulletType") as with_bullet_type,
+        COUNT("pressureRating") as with_pressure_rating,
+        COUNT("muzzleVelocityFps") as with_velocity,
+        COUNT("isSubsonic") as with_subsonic,
+        COUNT("shortBarrelOptimized") as with_short_barrel,
+        COUNT("suppressorSafe") as with_suppressor_safe,
+        COUNT("lowFlash") as with_low_flash,
+        COUNT("matchGrade") as with_match_grade
+      FROM products
+    `
+    
+    const result = stats[0]
+    const total = Number(result.total)
+    
+    res.json({
+      total,
+      fields: {
+        bulletType: { 
+          count: Number(result.with_bullet_type), 
+          percent: total > 0 ? Math.round((Number(result.with_bullet_type) / total) * 100) : 0 
+        },
+        pressureRating: { 
+          count: Number(result.with_pressure_rating), 
+          percent: total > 0 ? Math.round((Number(result.with_pressure_rating) / total) * 100) : 0 
+        },
+        muzzleVelocityFps: { 
+          count: Number(result.with_velocity), 
+          percent: total > 0 ? Math.round((Number(result.with_velocity) / total) * 100) : 0 
+        },
+        isSubsonic: { 
+          count: Number(result.with_subsonic), 
+          percent: total > 0 ? Math.round((Number(result.with_subsonic) / total) * 100) : 0 
+        },
+        shortBarrelOptimized: { 
+          count: Number(result.with_short_barrel), 
+          percent: total > 0 ? Math.round((Number(result.with_short_barrel) / total) * 100) : 0 
+        },
+        suppressorSafe: { 
+          count: Number(result.with_suppressor_safe), 
+          percent: total > 0 ? Math.round((Number(result.with_suppressor_safe) / total) * 100) : 0 
+        },
+        lowFlash: { 
+          count: Number(result.with_low_flash), 
+          percent: total > 0 ? Math.round((Number(result.with_low_flash) / total) * 100) : 0 
+        },
+        matchGrade: { 
+          count: Number(result.with_match_grade), 
+          percent: total > 0 ? Math.round((Number(result.with_match_grade) / total) * 100) : 0 
+        },
+      }
+    })
+  } catch (error) {
+    console.error('Ballistic stats error:', error)
+    res.status(500).json({ error: 'Failed to get ballistic stats' })
+  }
+})
+
+/**
  * Trigger embedding backfill (async - returns immediately)
  * POST /api/search/admin/backfill-embeddings
- * 
- * Requires: X-Admin-Key header or authenticated admin user
  */
 let backfillInProgress = false
 let backfillProgress = { processed: 0, total: 0, errors: [] as string[] }
@@ -335,7 +606,6 @@ router.post('/admin/backfill-embeddings', requireAdmin, rateLimit({ max: 1, wind
   backfillInProgress = true
   backfillProgress = { processed: 0, total: 0, errors: [] }
   
-  // Start backfill in background
   backfillProductEmbeddings({
     batchSize: 50,
     onProgress: (processed, total) => {
@@ -361,8 +631,6 @@ router.post('/admin/backfill-embeddings', requireAdmin, rateLimit({ max: 1, wind
 /**
  * Get backfill progress
  * GET /api/search/admin/backfill-progress
- * 
- * Requires: X-Admin-Key header or authenticated admin user
  */
 router.get('/admin/backfill-progress', requireAdmin, (req: Request, res: Response) => {
   res.json({
@@ -377,8 +645,6 @@ router.get('/admin/backfill-progress', requireAdmin, (req: Request, res: Respons
 /**
  * Update embedding for a single product
  * POST /api/search/admin/update-embedding/:productId
- * 
- * Requires: X-Admin-Key header or authenticated admin user
  */
 router.post('/admin/update-embedding/:productId', requireAdmin, rateLimit({ max: 100, windowMs: 60000 }), async (req: Request, res: Response) => {
   try {
@@ -434,6 +700,28 @@ router.get('/debug/purposes', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Debug purposes error:', error)
     res.status(500).json({ error: 'Failed to get purposes' })
+  }
+})
+
+/**
+ * Debug endpoint - get unique bullet types in database
+ * GET /api/search/debug/bullet-types
+ */
+router.get('/debug/bullet-types', async (req: Request, res: Response) => {
+  try {
+    const bulletTypes = await prisma.product.groupBy({
+      by: ['bulletType'],
+      _count: { bulletType: true },
+      orderBy: { _count: { bulletType: 'desc' } },
+      take: 50
+    })
+    
+    res.json({
+      bulletTypes: bulletTypes.map(b => ({ value: b.bulletType, count: b._count.bulletType }))
+    })
+  } catch (error) {
+    console.error('Debug bullet types error:', error)
+    res.status(500).json({ error: 'Failed to get bullet types' })
   }
 })
 
