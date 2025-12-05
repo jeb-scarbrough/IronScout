@@ -63,7 +63,11 @@ const semanticSearchSchema = z.object({
 
 router.post('/semantic', async (req: Request, res: Response) => {
   try {
+    console.log('[Search Route] Received request body:', JSON.stringify(req.body, null, 2))
+    
     const { query, page, limit, sortBy, filters } = semanticSearchSchema.parse(req.body)
+    
+    console.log('[Search Route] Parsed filters:', filters)
     
     // Get user tier for result limiting
     const userTier = await getUserTier(req)
@@ -386,6 +390,50 @@ router.post('/admin/update-embedding/:productId', requireAdmin, rateLimit({ max:
   } catch (error: any) {
     console.error('Update embedding error:', error)
     res.status(500).json({ error: error.message || 'Failed to update embedding' })
+  }
+})
+
+/**
+ * Debug endpoint - get unique caliber values in database
+ * GET /api/search/debug/calibers
+ */
+router.get('/debug/calibers', async (req: Request, res: Response) => {
+  try {
+    const calibers = await prisma.product.groupBy({
+      by: ['caliber'],
+      _count: { caliber: true },
+      orderBy: { _count: { caliber: 'desc' } },
+      take: 50
+    })
+    
+    res.json({
+      calibers: calibers.map(c => ({ value: c.caliber, count: c._count.caliber }))
+    })
+  } catch (error) {
+    console.error('Debug calibers error:', error)
+    res.status(500).json({ error: 'Failed to get calibers' })
+  }
+})
+
+/**
+ * Debug endpoint - get unique purpose values in database
+ * GET /api/search/debug/purposes
+ */
+router.get('/debug/purposes', async (req: Request, res: Response) => {
+  try {
+    const purposes = await prisma.product.groupBy({
+      by: ['purpose'],
+      _count: { purpose: true },
+      orderBy: { _count: { purpose: 'desc' } },
+      take: 50
+    })
+    
+    res.json({
+      purposes: purposes.map(p => ({ value: p.purpose, count: p._count.purpose }))
+    })
+  } catch (error) {
+    console.error('Debug purposes error:', error)
+    res.status(500).json({ error: 'Failed to get purposes' })
   }
 })
 

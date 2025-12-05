@@ -68,6 +68,15 @@ export async function aiSearch(
     explicitFilters = {}
   } = options
   
+  console.log('[AI Search] Starting search with:', {
+    query,
+    page,
+    limit,
+    sortBy,
+    explicitFilters,
+    hasFilters: Object.keys(explicitFilters).length > 0
+  })
+  
   // 1. Parse the natural language query into structured intent
   const intent = await parseSearchIntent(query)
   
@@ -87,21 +96,27 @@ export async function aiSearch(
   const total = await prisma.product.count({ where })
   
   // 6. Fetch products - use vector search if enabled and sorting by relevance
+  // But prefer standard search when explicit filters are set for more reliable filtering
   const skip = (page - 1) * limit
   let products: any[]
   let vectorSearchUsed = false
+  const hasExplicitFilters = Object.keys(explicitFilters).length > 0
   
-  if (useVectorSearch && sortBy === 'relevance') {
+  if (useVectorSearch && sortBy === 'relevance' && !hasExplicitFilters) {
     try {
-      // Try vector-enhanced search
+      // Try vector-enhanced search (only when no explicit filters)
       products = await vectorEnhancedSearch(query, mergedIntent, explicitFilters, { skip, limit: limit * 2 })
       vectorSearchUsed = true
+      console.log('[AI Search] Vector search returned', products.length, 'results')
     } catch (error) {
-      console.warn('Vector search failed, falling back to standard search:', error)
+      console.warn('[AI Search] Vector search failed, falling back to standard search:', error)
       products = await standardSearch(where, skip, limit * 2)
     }
   } else {
+    // Use standard Prisma search with explicit filters
+    console.log('[AI Search] Using standard search', hasExplicitFilters ? '(explicit filters active)' : '')
     products = await standardSearch(where, skip, limit * 2)
+    console.log('[AI Search] Standard search returned', products.length, 'results')
   }
   
   // 7. AI-enhanced re-ranking based on intent (if not already vector-ranked)
@@ -352,41 +367,85 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
   const where: any = {}
   const orConditions: any[] = []
   
-  // Caliber filter (explicit takes priority)
+  // Caliber filter (explicit takes priority) - use contains for partial matching
   const calibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
   if (calibers && calibers.length > 0) {
-    where.caliber = { in: calibers, mode: 'insensitive' }
+    // Use OR with contains for flexible caliber matching
+    // e.g., "9mm" should match "9mm", "9mm Luger", "9x19mm"
+    where.OR = calibers.map(cal => ({
+      caliber: { contains: cal, mode: 'insensitive' }
+    }))
   }
   
-  // Purpose filter (explicit takes priority)
+  // Purpose filter (explicit takes priority) - use contains for flexibility
   const purpose = explicitFilters.purpose || intent.purpose
   if (purpose) {
-    where.purpose = { equals: purpose, mode: 'insensitive' }
+    // Add to existing OR or create AND condition
+    if (where.OR) {
+      // We need to restructure to AND the purpose with caliber OR
+      where.AND = [
+        { OR: where.OR },
+        { purpose: { contains: purpose, mode: 'insensitive' } }
+      ]
+      delete where.OR
+    } else {
+      where.purpose = { contains: purpose, mode: 'insensitive' }
+    }
   }
   
   // Grain weight filter - explicit range or AI-detected specific weights
   if (explicitFilters.minGrain !== undefined || explicitFilters.maxGrain !== undefined) {
-    where.grainWeight = {}
+    const grainCondition: any = {}
     if (explicitFilters.minGrain !== undefined) {
-      where.grainWeight.gte = explicitFilters.minGrain
+      grainCondition.gte = explicitFilters.minGrain
     }
     if (explicitFilters.maxGrain !== undefined) {
-      where.grainWeight.lte = explicitFilters.maxGrain
+      grainCondition.lte = explicitFilters.maxGrain
+    }
+    if (where.AND) {
+      where.AND.push({ grainWeight: grainCondition })
+    } else {
+      where.grainWeight = grainCondition
     }
   } else if (intent.grainWeights && intent.grainWeights.length > 0) {
-    where.grainWeight = { in: intent.grainWeights }
+    if (where.AND) {
+      where.AND.push({ grainWeight: { in: intent.grainWeights } })
+    } else {
+      where.grainWeight = { in: intent.grainWeights }
+    }
   }
   
-  // Case material filter (explicit takes priority)
+  // Case material filter (explicit takes priority) - use contains
   const caseMaterials = explicitFilters.caseMaterial ? [explicitFilters.caseMaterial] : intent.caseMaterials
   if (caseMaterials && caseMaterials.length > 0) {
-    where.caseMaterial = { in: caseMaterials, mode: 'insensitive' }
+    const caseCondition = {
+      OR: caseMaterials.map(mat => ({
+        caseMaterial: { contains: mat, mode: 'insensitive' }
+      }))
+    }
+    if (where.AND) {
+      where.AND.push(caseCondition)
+    } else if (where.OR) {
+      where.AND = [{ OR: where.OR }, caseCondition]
+      delete where.OR
+    } else {
+      where.caseMaterial = { in: caseMaterials, mode: 'insensitive' }
+    }
   }
   
-  // Brand filter (explicit takes priority)
+  // Brand filter (explicit takes priority) - use contains
   const brands = explicitFilters.brand ? [explicitFilters.brand] : intent.brands
   if (brands && brands.length > 0) {
-    where.brand = { in: brands, mode: 'insensitive' }
+    const brandCondition = {
+      OR: brands.map(b => ({
+        brand: { contains: b, mode: 'insensitive' }
+      }))
+    }
+    if (where.AND) {
+      where.AND.push(brandCondition)
+    } else {
+      where.brand = { in: brands, mode: 'insensitive' }
+    }
   }
   
   // If no structured filters matched, fall back to text search
@@ -406,6 +465,8 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
       where.OR = orConditions
     }
   }
+  
+  console.log('[AI Search] Built where clause:', JSON.stringify(where, null, 2))
   
   return where
 }
