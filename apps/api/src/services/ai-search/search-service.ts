@@ -174,13 +174,27 @@ export async function aiSearch(
 /**
  * Merge explicit filters with AI-parsed intent
  * Explicit filters take priority over AI interpretation
+ * 
+ * IMPORTANT: Some AI-parsed values are caliber-specific (like grain weights)
+ * and should be discarded when the user explicitly changes the caliber
  */
 function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters): SearchIntent {
   const merged = { ...intent }
   
+  // Track if caliber was explicitly changed from AI interpretation
+  const caliberExplicitlyChanged = filters.caliber && 
+    !intent.calibers?.some(c => c.toLowerCase().includes(filters.caliber!.toLowerCase()))
+  
   // Explicit caliber overrides AI-detected calibers
   if (filters.caliber) {
     merged.calibers = [filters.caliber]
+    
+    // If caliber changed, discard AI grain weights (they're caliber-specific)
+    // e.g., 124gr/147gr are 9mm weights, not applicable to .45 ACP
+    if (caliberExplicitlyChanged) {
+      console.log('[AI Search] Caliber explicitly changed - discarding AI grain weights')
+      merged.grainWeights = undefined
+    }
   }
   
   // Explicit purpose overrides AI-detected purpose
@@ -195,11 +209,9 @@ function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters):
   
   // Explicit grain range overrides AI-detected
   if (filters.minGrain !== undefined || filters.maxGrain !== undefined) {
-    // Build grain weights array from range
-    if (filters.minGrain !== undefined && filters.maxGrain !== undefined) {
-      // We'll handle this in the where clause instead
-      merged.grainWeights = undefined
-    }
+    // User explicitly set grain range - clear AI grain weights
+    // The actual range filter is applied in buildWhereClause
+    merged.grainWeights = undefined
   }
   
   // Explicit price range
@@ -219,6 +231,13 @@ function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters):
   if (filters.brand) {
     merged.brands = [filters.brand]
   }
+  
+  console.log('[AI Search] Merged intent:', {
+    calibers: merged.calibers,
+    purpose: merged.purpose,
+    grainWeights: merged.grainWeights,
+    caliberExplicitlyChanged
+  })
   
   return merged
 }
