@@ -159,7 +159,8 @@ export async function getUserAlerts(userId: string, activeOnly: boolean = false)
   if (!response.ok) {
     throw new Error('Failed to fetch alerts')
   }
-  return response.json()
+  const data = await response.json()
+  return Array.isArray(data) ? data : (data.alerts || [])
 }
 
 export async function updateAlert(alertId: string, params: UpdateAlertParams): Promise<Alert> {
