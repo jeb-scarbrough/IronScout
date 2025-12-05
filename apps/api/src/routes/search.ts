@@ -19,7 +19,7 @@ const semanticSearchSchema = z.object({
   query: z.string().min(1).max(500),
   page: z.number().int().positive().default(1),
   limit: z.number().int().min(1).max(100).default(20),
-  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc']).default('relevance'),
+  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc']).default('relevance'),
 })
 
 router.post('/semantic', async (req: Request, res: Response) => {
