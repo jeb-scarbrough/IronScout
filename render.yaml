@@ -102,3 +102,28 @@ services:
         sync: false  # Set manually in Render dashboard
       - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
+
+  # Dealer Portal (B2B retailer interface)
+  - type: web
+    name: ironscout-dealer
+    runtime: node
+    region: ohio
+    plan: free  # Change to 'starter' or 'standard' for production
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/dealer build
+    startCommand: cd apps/dealer && pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ironscout-db
+          property: connectionString
+      - key: REDIS_HOST
+        sync: false  # Set manually after creating Redis instance
+      - key: REDIS_PORT
+        sync: false  # Set manually after creating Redis instance
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEXT_PUBLIC_API_URL
+        sync: false  # Set manually: https://ironscout-api.onrender.com
