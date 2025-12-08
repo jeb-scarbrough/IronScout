@@ -61,11 +61,13 @@ services:
       - key: NEXT_PUBLIC_API_URL
         sync: false  # Set manually: https://ironscout-api.onrender.com
       - key: NEXTAUTH_URL
-        sync: false  # Set manually: https://ironscout-web.onrender.com
+        sync: false  # Set manually: https://ironscout.ai
       - key: NEXTAUTH_SECRET
         generateValue: true
       - key: AUTH_TRUST_HOST
         value: true
+      - key: COOKIE_DOMAIN
+        value: .ironscout.ai  # For cross-subdomain auth
       - key: DATABASE_URL
         fromDatabase:
           name: ironscout-db
@@ -74,6 +76,8 @@ services:
         sync: false  # Set manually in Render dashboard
       - key: GOOGLE_CLIENT_SECRET
         sync: false  # Set manually in Render dashboard
+      - key: ADMIN_EMAILS
+        sync: false  # Set manually: comma-separated admin emails
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
         sync: false  # Set manually in Render dashboard
 
@@ -126,4 +130,37 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: NEXT_PUBLIC_API_URL
-        sync: false  # Set manually: https://ironscout-api.onrender.com
+        sync: false  # Set manually: https://api.ironscout.ai
+      - key: NEXT_PUBLIC_DEALER_URL
+        value: https://dealer.ironscout.ai
+      - key: RESEND_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: ADMIN_EMAILS
+        sync: false  # Set manually: comma-separated admin emails
+
+  # Admin Portal (internal administration)
+  - type: web
+    name: ironscout-admin
+    runtime: node
+    region: ohio
+    plan: free  # Change to 'starter' or 'standard' for production
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/admin build
+    startCommand: cd apps/admin && pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ironscout-db
+          property: connectionString
+      - key: NEXTAUTH_SECRET
+        sync: false  # Must match web app's NEXTAUTH_SECRET
+      - key: ADMIN_EMAILS
+        sync: false  # Set manually: comma-separated admin emails
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://ironscout.ai
+      - key: NEXT_PUBLIC_DEALER_URL
+        value: https://dealer.ironscout.ai
+      - key: RESEND_API_KEY
+        sync: false  # Set manually in Render dashboard

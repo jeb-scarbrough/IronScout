@@ -11,6 +11,12 @@ import bcrypt from 'bcryptjs'
 // Admin emails - must use OAuth, not credentials
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 
+// Cookie domain for cross-subdomain auth (e.g., .ironscout.ai)
+// In development, leave undefined to use the current domain
+const COOKIE_DOMAIN = process.env.NODE_ENV === 'production' 
+  ? process.env.COOKIE_DOMAIN || '.ironscout.ai'
+  : undefined
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   trustHost: true,
@@ -90,18 +96,60 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: '/auth/signin',
   },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === 'production' 
+        ? '__Secure-authjs.session-token'
+        : 'authjs.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    callbackUrl: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Secure-authjs.callback-url'
+        : 'authjs.callback-url',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    csrfToken: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Host-authjs.csrf-token'
+        : 'authjs.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        // Note: __Host- prefix requires no domain to be set
+      },
+    },
+  },
   callbacks: {
     async session({ session, token, user }) {
       if (session?.user) {
         session.user.id = token.sub || user?.id || ''
+        // Add email to session for admin checks
+        session.user.email = token.email as string || session.user.email
         // Fetch tier from database if needed
         if (token.sub) {
           const dbUser = await prisma.user.findUnique({
             where: { id: token.sub },
-            select: { tier: true }
+            select: { tier: true, email: true }
           })
           if (dbUser) {
             session.user.tier = dbUser.tier
+            // Check if user is admin
+            session.user.isAdmin = ADMIN_EMAILS.includes(dbUser.email.toLowerCase())
           }
         }
       }
@@ -110,6 +158,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id
+        token.email = user.email
       }
       return token
     },
