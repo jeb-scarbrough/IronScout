@@ -1,18 +1,25 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@ironscout/db';
-import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 
-// Create Redis connection for BullMQ
-const redisConnection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-});
+// Lazy-load Redis and BullMQ to avoid connection during build
+let dealerFeedIngestQueue: import('bullmq').Queue | null = null;
 
-// Create queue reference (connects to same queue as harvester)
-const dealerFeedIngestQueue = new Queue('dealer-feed-ingest', {
-  connection: redisConnection,
-});
+async function getQueue() {
+  if (!dealerFeedIngestQueue) {
+    const { Queue } = await import('bullmq');
+    const Redis = (await import('ioredis')).default;
+    
+    const redisConnection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+      maxRetriesPerRequest: null,
+    });
+    
+    dealerFeedIngestQueue = new Queue('dealer-feed-ingest', {
+      connection: redisConnection,
+    });
+  }
+  return dealerFeedIngestQueue;
+}
 
 /**
  * Trigger a manual feed refresh
@@ -85,7 +92,8 @@ export async function POST(request: Request) {
     });
 
     // Queue the feed ingestion job
-    await dealerFeedIngestQueue.add(
+    const queue = await getQueue();
+    await queue.add(
       'ingest-manual',
       {
         dealerId: session.dealerId,

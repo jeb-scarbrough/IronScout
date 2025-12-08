@@ -1,10 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
@@ -44,11 +45,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10">
-      <h2 className="mb-6 text-center text-2xl font-bold text-gray-900">
-        Sign in to your account
-      </h2>
-
+    <>
       {error === 'admin_required' && (
         <div className="mb-4 rounded-md bg-yellow-50 p-4">
           <p className="text-sm text-yellow-700">
@@ -112,6 +109,30 @@ export default function LoginPage() {
           {isLoading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
+    </>
+  );
+}
+
+function LoginFormFallback() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="h-10 bg-gray-200 rounded" />
+      <div className="h-10 bg-gray-200 rounded" />
+      <div className="h-10 bg-gray-300 rounded" />
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10">
+      <h2 className="mb-6 text-center text-2xl font-bold text-gray-900">
+        Sign in to your account
+      </h2>
+
+      <Suspense fallback={<LoginFormFallback />}>
+        <LoginForm />
+      </Suspense>
 
       <div className="mt-6">
         <div className="relative">
