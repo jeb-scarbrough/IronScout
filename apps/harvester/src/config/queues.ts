@@ -9,6 +9,11 @@ export const QUEUE_NAMES = {
   NORMALIZE: 'normalize',
   WRITE: 'write',
   ALERT: 'alert',
+  // Dealer Portal queues
+  DEALER_FEED_INGEST: 'dealer-feed-ingest',
+  DEALER_SKU_MATCH: 'dealer-sku-match',
+  DEALER_BENCHMARK: 'dealer-benchmark',
+  DEALER_INSIGHT: 'dealer-insight',
 } as const
 
 // Job data interfaces
@@ -102,6 +107,56 @@ export const alertQueue = new Queue<AlertJobData>(QUEUE_NAMES.ALERT, {
   connection: redisConnection,
 })
 
+// ============================================================================
+// DEALER PORTAL QUEUES
+// ============================================================================
+
+export interface DealerFeedIngestJobData {
+  dealerId: string
+  feedId: string
+  feedRunId: string
+  feedType: 'URL' | 'AUTH_URL' | 'FTP' | 'SFTP' | 'UPLOAD'
+  url?: string
+  username?: string
+  password?: string
+}
+
+export interface DealerSkuMatchJobData {
+  dealerId: string
+  feedRunId: string
+  dealerSkuIds: string[] // Batch of SKU IDs to process
+}
+
+export interface DealerBenchmarkJobData {
+  canonicalSkuIds?: string[] // Optional: specific SKUs to recalculate
+  fullRecalc?: boolean // If true, recalculate all benchmarks
+}
+
+export interface DealerInsightJobData {
+  dealerId: string
+  dealerSkuIds?: string[] // Optional: specific SKUs to analyze
+}
+
+export const dealerFeedIngestQueue = new Queue<DealerFeedIngestJobData>(
+  QUEUE_NAMES.DEALER_FEED_INGEST,
+  { connection: redisConnection }
+)
+
+export const dealerSkuMatchQueue = new Queue<DealerSkuMatchJobData>(
+  QUEUE_NAMES.DEALER_SKU_MATCH,
+  { connection: redisConnection }
+)
+
+export const dealerBenchmarkQueue = new Queue<DealerBenchmarkJobData>(
+  QUEUE_NAMES.DEALER_BENCHMARK,
+  { connection: redisConnection }
+)
+
+export const dealerInsightQueue = new Queue<DealerInsightJobData>(
+  QUEUE_NAMES.DEALER_INSIGHT,
+  { connection: redisConnection }
+)
+
 // Export all queues
 export const queues = {
   crawl: crawlQueue,
@@ -110,4 +165,9 @@ export const queues = {
   normalize: normalizeQueue,
   write: writeQueue,
   alert: alertQueue,
+  // Dealer queues
+  dealerFeedIngest: dealerFeedIngestQueue,
+  dealerSkuMatch: dealerSkuMatchQueue,
+  dealerBenchmark: dealerBenchmarkQueue,
+  dealerInsight: dealerInsightQueue,
 }

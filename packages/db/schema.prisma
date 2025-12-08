@@ -112,6 +112,9 @@ model Product {
   prices  Price[]
   alerts  Alert[]
   reports ProductReport[]
+  
+  // Dealer portal link
+  canonicalSkus CanonicalSku[]
 
   // Indexes for premium filter queries
   @@index([caliber])
@@ -133,6 +136,9 @@ model Retailer {
 
   prices        Price[]
   subscriptions Subscription[]
+  
+  // Dealer portal link
+  dealer        Dealer?
 
   @@map("retailers")
 }
@@ -479,7 +485,440 @@ enum DataSource {
   UNKNOWN
 }
 
+// =============================================
+// DEALER PORTAL MODELS
+// =============================================
+
+model Dealer {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  passwordHash    String
+  emailVerified   Boolean       @default(false)
+  verifyToken     String?       // Email verification token
+  resetToken      String?       // Password reset token
+  resetTokenExp   DateTime?     // Reset token expiration
+  
+  // Business info
+  businessName    String
+  contactName     String
+  websiteUrl      String
+  phone           String?
+  storeType       StoreType     @default(ONLINE_ONLY)
+  
+  // Status & tier
+  status          DealerStatus  @default(PENDING)
+  tier            DealerTier    @default(FOUNDING)
+  
+  // Pixel tracking
+  pixelApiKey     String?       @unique
+  pixelEnabled    Boolean       @default(false)
+  
+  // Shipping config
+  shippingType    ShippingType  @default(UNKNOWN)
+  shippingFlat    Decimal?      @db.Decimal(10, 2)
+  shippingPerUnit Decimal?      @db.Decimal(10, 2)
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  feeds           DealerFeed[]
+  skus            DealerSku[]
+  insights        DealerInsight[]
+  pixelEvents     PixelEvent[]
+  clickEvents     ClickEvent[]
+  notificationPref DealerNotificationPref?
+  
+  // Link to Retailer (for buyer-facing listings)
+  retailer        Retailer?     @relation(fields: [retailerId], references: [id])
+  retailerId      String?       @unique
+
+  @@map("dealers")
+}
+
+model DealerFeed {
+  id              String        @id @default(cuid())
+  dealerId        String
+  name            String?       // Optional feed name
+  feedType        FeedType
+  url             String?
+  username        String?       // Encrypted at app layer
+  password        String?       // Encrypted at app layer
+  scheduleMinutes Int           @default(60)
+  status          FeedStatus    @default(PENDING)
+  feedHash        String?       // For change detection
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
+  lastError       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  dealer          Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  runs            DealerFeedRun[]
+  skus            DealerSku[]
+
+  @@index([dealerId])
+  @@map("dealer_feeds")
+}
+
+model DealerFeedRun {
+  id              String        @id @default(cuid())
+  dealerId        String
+  feedId          String
+  status          FeedRunStatus
+  errors          Json?         // Array of error objects
+  rowCount        Int           @default(0)
+  processedCount  Int           @default(0)
+  matchedCount    Int           @default(0)
+  failedCount     Int           @default(0)
+  duration        Int?          // milliseconds
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+
+  feed            DealerFeed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+
+  @@index([dealerId])
+  @@index([feedId])
+  @@index([startedAt])
+  @@map("dealer_feed_runs")
+}
+
+model DealerSku {
+  id                String        @id @default(cuid())
+  dealerId          String
+  feedId            String?
+  feedRunId         String?
+  
+  // Raw data from feed
+  rawTitle          String
+  rawDescription    String?       @db.Text
+  rawPrice          Decimal       @db.Decimal(10, 2)
+  rawUpc            String?
+  rawSku            String?       // Dealer's internal SKU
+  rawCaliber        String?
+  rawGrain          String?
+  rawCase           String?
+  rawBulletType     String?
+  rawBrand          String?
+  rawPackSize       Int?
+  rawInStock        Boolean       @default(true)
+  rawUrl            String?
+  rawImageUrl       String?
+  
+  // Mapping to canonical
+  canonicalSkuId    String?
+  mappingConfidence MappingConfidence @default(NONE)
+  needsReview       Boolean       @default(false)
+  mappedAt          DateTime?
+  mappedBy          String?       // 'auto' or 'manual' or admin ID
+  
+  // Parsed hints (from regex/AI)
+  parsedCaliber     String?
+  parsedGrain       Int?
+  parsedPackSize    Int?
+  parsedBulletType  String?
+  parsedBrand       String?
+  parseConfidence   Decimal?      @db.Decimal(3, 2)
+  
+  // For deduplication within dealer
+  dealerSkuHash     String?       // Hash of key attributes
+  
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  dealer            Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  feed              DealerFeed?   @relation(fields: [feedId], references: [id], onDelete: SetNull)
+  canonicalSku      CanonicalSku? @relation(fields: [canonicalSkuId], references: [id])
+  insights          DealerInsight[]
+
+  @@unique([dealerId, dealerSkuHash])
+  @@index([dealerId])
+  @@index([feedId])
+  @@index([canonicalSkuId])
+  @@index([needsReview])
+  @@index([isActive])
+  @@map("dealer_skus")
+}
+
+model CanonicalSku {
+  id              String        @id @default(cuid())
+  upc             String?       @unique
+  caliber         String
+  grain           Int
+  caseType        String?
+  bulletType      String?
+  brand           String
+  packSize        Int
+  name            String        // Canonical display name
+  imageUrl        String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  dealerSkus      DealerSku[]
+  snapshots       PricingSnapshot[]
+  benchmark       Benchmark?
+
+  // Optional link to consumer-facing Product
+  productId       String?
+  product         Product?      @relation(fields: [productId], references: [id])
+
+  @@index([upc])
+  @@index([caliber, grain, brand, packSize])
+  @@map("canonical_skus")
+}
+
+model PricingSnapshot {
+  id              String        @id @default(cuid())
+  canonicalSkuId  String
+  dealerId        String
+  price           Decimal       @db.Decimal(10, 2)
+  pricePerRound   Decimal?      @db.Decimal(10, 4)
+  packSize        Int
+  inStock         Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+
+  canonicalSku    CanonicalSku  @relation(fields: [canonicalSkuId], references: [id], onDelete: Cascade)
+
+  @@index([canonicalSkuId])
+  @@index([dealerId])
+  @@index([createdAt])
+  @@map("pricing_snapshots")
+}
+
+model Benchmark {
+  id              String              @id @default(cuid())
+  canonicalSkuId  String              @unique
+  medianPrice     Decimal             @db.Decimal(10, 2)
+  minPrice        Decimal             @db.Decimal(10, 2)
+  maxPrice        Decimal             @db.Decimal(10, 2)
+  avgPrice        Decimal?            @db.Decimal(10, 2)
+  sellerCount     Int
+  source          BenchmarkSource
+  confidence      BenchmarkConfidence
+  dataPoints      Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  canonicalSku    CanonicalSku        @relation(fields: [canonicalSkuId], references: [id], onDelete: Cascade)
+
+  @@map("benchmarks")
+}
+
+model DealerInsight {
+  id              String            @id @default(cuid())
+  dealerId        String
+  dealerSkuId     String?
+  canonicalSkuId  String?
+  type            InsightType
+  confidence      InsightConfidence
+  title           String
+  message         String            @db.Text
+  
+  // Insight data
+  dealerPrice     Decimal?          @db.Decimal(10, 2)
+  marketMedian    Decimal?          @db.Decimal(10, 2)
+  marketMin       Decimal?          @db.Decimal(10, 2)
+  marketMax       Decimal?          @db.Decimal(10, 2)
+  sellerCount     Int?
+  priceDelta      Decimal?          @db.Decimal(10, 2)
+  deltaPercent    Decimal?          @db.Decimal(5, 2)
+  
+  metadata        Json?             // Additional context
+  
+  // Status
+  isActive        Boolean           @default(true)
+  dismissedAt     DateTime?
+  dismissedUntil  DateTime?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  dealer          Dealer            @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerSku       DealerSku?        @relation(fields: [dealerSkuId], references: [id], onDelete: SetNull)
+
+  @@index([dealerId])
+  @@index([type])
+  @@index([isActive])
+  @@map("dealer_insights")
+}
+
+model PixelEvent {
+  id              String        @id @default(cuid())
+  dealerId        String
+  orderId         String
+  orderValue      Decimal       @db.Decimal(10, 2)
+  orderCurrency   String        @default("USD")
+  skuList         Json?         // Array of { sku, qty, price }
+  
+  // Attribution
+  clickEventId    String?       // Link to originating click
+  attributedAt    DateTime?
+  
+  // Request metadata
+  userAgent       String?
+  ipHash          String?       // Hashed for privacy
+  referrer        String?
+  
+  createdAt       DateTime      @default(now())
+
+  dealer          Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+
+  @@index([dealerId])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("pixel_events")
+}
+
+model ClickEvent {
+  id              String        @id @default(cuid())
+  dealerId        String
+  dealerSkuId     String?
+  canonicalSkuId  String?
+  
+  // Session tracking
+  sessionId       String?
+  
+  // Request metadata
+  userAgent       String?
+  ipHash          String?
+  referrer        String?
+  
+  createdAt       DateTime      @default(now())
+
+  dealer          Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+
+  @@index([dealerId])
+  @@index([dealerSkuId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("click_events")
+}
+
+model DealerNotificationPref {
+  id                  String        @id @default(cuid())
+  dealerId            String        @unique
+  
+  fatalFeedErrors     Boolean       @default(true)
+  nonFatalFeedIssues  Boolean       @default(false)
+  successfulUpdates   Boolean       @default(false)
+  weeklyPulse         Boolean       @default(true)
+  insightAlerts       Boolean       @default(true)
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  dealer              Dealer        @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+
+  @@map("dealer_notification_prefs")
+}
+
+model AdminAuditLog {
+  id              String        @id @default(cuid())
+  adminUserId     String        // Reference to User.id (admin)
+  dealerId        String?       // Target dealer if applicable
+  action          String        // e.g., 'impersonate', 'suspend', 'approve'
+  resource        String?       // e.g., 'dealer', 'feed', 'sku'
+  resourceId      String?
+  oldValue        Json?
+  newValue        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime      @default(now())
+
+  @@index([adminUserId])
+  @@index([dealerId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+// =============================================
+// DEALER PORTAL ENUMS
+// =============================================
+
+enum DealerStatus {
+  PENDING           // Awaiting admin approval
+  ACTIVE            // Approved and operational
+  SUSPENDED         // Admin suspended
+}
+
+enum DealerTier {
+  FOUNDING          // Free 12-month program
+  BASIC             // Free limited features (post-founding)
+  PRO               // Paid full features
+  ENTERPRISE        // Custom pricing
+}
+
+enum StoreType {
+  ONLINE_ONLY
+  RETAIL_AND_ONLINE
+}
+
+enum ShippingType {
+  FLAT              // Flat rate shipping
+  PER_UNIT          // Per-unit/per-round shipping
+  CALCULATED        // Calculated at checkout (unknown)
+  FREE              // Free shipping
+  UNKNOWN
+}
+
+enum FeedType {
+  URL               // Public HTTP/HTTPS
+  AUTH_URL          // Basic Auth URL
+  FTP               // FTP
+  SFTP              // SFTP
+  UPLOAD            // Manual CSV upload
+}
+
+enum FeedStatus {
+  PENDING           // Not yet run
+  HEALTHY           // Last run successful
+  WARNING           // Last run had non-fatal issues
+  FAILED            // Last run failed
+}
+
+enum FeedRunStatus {
+  RUNNING
+  SUCCESS
+  WARNING
+  FAILURE
+}
+
+enum MappingConfidence {
+  HIGH              // UPC + Brand + Pack match
+  MEDIUM            // Attribute match without UPC
+  LOW               // Partial match, flagged for review
+  NONE              // Cannot map
+}
+
+enum BenchmarkSource {
+  INTERNAL          // IronScout dealer data only
+  EXTERNAL          // External market data (future)
+  MIXED             // Combination of both
+}
+
+enum BenchmarkConfidence {
+  HIGH              // ≥3 dealers, fresh data, no outliers
+  MEDIUM            // Limited data or slight staleness
+  NONE              // Insufficient data
+}
+
+enum InsightType {
+  OVERPRICED        // Dealer price above market
+  UNDERPRICED       // Dealer price below market (opportunity)
+  STOCK_OPPORTUNITY // High demand, dealer OOS
+  ATTRIBUTE_GAP     // Missing data preventing benchmarks
+}
+
+enum InsightConfidence {
+  HIGH
+  MEDIUM
+}
+
+// =============================================
 // NextAuth.js required models
+// =============================================
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
