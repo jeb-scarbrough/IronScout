@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { registerDealer } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -12,20 +13,48 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const reqLogger = logger.child({ requestId, endpoint: '/api/auth/register' });
+  
+  reqLogger.info('Registration request received');
+  
   try {
-    const body = await request.json();
+    let body: unknown;
+    
+    try {
+      body = await request.json();
+      reqLogger.debug('Request body parsed successfully');
+    } catch (parseError) {
+      reqLogger.warn('Failed to parse request body', {}, parseError);
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
 
     // Validate input
+    reqLogger.debug('Validating registration input');
     const validationResult = registerSchema.safeParse(body);
+    
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map((e) => e.message);
+      const errors = validationResult.error.errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message,
+      }));
+      reqLogger.warn('Validation failed', { errors });
       return NextResponse.json(
-        { error: errors[0] },
+        { error: errors[0].message },
         { status: 400 }
       );
     }
 
     const { email, password, businessName, contactName, websiteUrl, phone } = validationResult.data;
+    
+    reqLogger.info('Registration validation passed', { 
+      email, 
+      businessName,
+      hasPhone: !!phone 
+    });
 
     const result = await registerDealer({
       email,
@@ -37,11 +66,21 @@ export async function POST(request: Request) {
     });
 
     if (!result.success) {
+      reqLogger.warn('Registration rejected', { 
+        email, 
+        reason: result.error 
+      });
       return NextResponse.json(
         { error: result.error },
         { status: 400 }
       );
     }
+
+    reqLogger.info('Registration completed successfully', { 
+      dealerId: result.dealer?.id,
+      email,
+      businessName 
+    });
 
     // TODO: Send verification email
     // await sendVerificationEmail(result.dealer!.email, result.dealer!.verifyToken);
@@ -51,7 +90,7 @@ export async function POST(request: Request) {
       message: 'Registration successful. Please check your email to verify your account.',
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    reqLogger.error('Registration failed - unexpected error', {}, error);
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

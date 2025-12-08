@@ -1,21 +1,41 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { logger } from '@/lib/logger';
 
 /**
  * Test feed connection
  * This is a simplified test - in production, you'd actually fetch and parse the feed
  */
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID().slice(0, 8);
+  const reqLogger = logger.child({ requestId, endpoint: '/api/feed/test' });
+  
+  reqLogger.info('Feed test request received');
+  
   try {
     const session = await getSession();
     
     if (!session || session.type !== 'dealer') {
+      reqLogger.warn('Unauthorized feed test attempt');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { feedType, url, username, password } = await request.json();
+    reqLogger.debug('Session verified', { dealerId: session.dealerId });
+
+    let body: { feedType?: string; url?: string; username?: string; password?: string };
+    try {
+      body = await request.json();
+    } catch {
+      reqLogger.warn('Failed to parse request body');
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
+    const { feedType, url, username, password } = body;
+
+    reqLogger.debug('Testing feed connection', { feedType, hasUrl: !!url });
 
     if (!url && feedType !== 'UPLOAD') {
+      reqLogger.warn('Feed test failed - URL required');
       return NextResponse.json(
         { error: 'URL is required' },
         { status: 400 }
@@ -24,6 +44,7 @@ export async function POST(request: Request) {
 
     // For manual upload, just return success
     if (feedType === 'UPLOAD') {
+      reqLogger.info('Manual upload feed test - success');
       return NextResponse.json({ success: true, rowCount: 0, message: 'Manual upload ready' });
     }
 
@@ -35,12 +56,15 @@ export async function POST(request: Request) {
       if (feedType === 'AUTH_URL' && username && password) {
         const auth = Buffer.from(`${username}:${password}`).toString('base64');
         headers['Authorization'] = `Basic ${auth}`;
+        reqLogger.debug('Using basic auth for feed test');
       }
+
+      reqLogger.debug('Fetching feed URL', { url });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      const response = await fetch(url, {
+      const response = await fetch(url!, {
         method: 'GET',
         headers,
         signal: controller.signal,
@@ -49,6 +73,11 @@ export async function POST(request: Request) {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        reqLogger.warn('Feed test failed - server error', { 
+          url, 
+          status: response.status, 
+          statusText: response.statusText 
+        });
         return NextResponse.json(
           { error: `Server returned ${response.status}: ${response.statusText}` },
           { status: 400 }
@@ -61,6 +90,7 @@ export async function POST(request: Request) {
       const isValidType = validTypes.some(t => contentType.includes(t));
 
       if (!isValidType) {
+        reqLogger.warn('Feed test failed - invalid content type', { url, contentType });
         return NextResponse.json(
           { error: `Unexpected content type: ${contentType}. Expected CSV, JSON, or XML.` },
           { status: 400 }
@@ -79,6 +109,7 @@ export async function POST(request: Request) {
           const json = JSON.parse(text);
           rowCount = Array.isArray(json) ? json.length : (json.products?.length || json.items?.length || 0);
         } catch {
+          reqLogger.warn('Feed test failed - invalid JSON', { url });
           return NextResponse.json(
             { error: 'Invalid JSON format' },
             { status: 400 }
@@ -90,6 +121,12 @@ export async function POST(request: Request) {
         rowCount = productMatches?.length || 0;
       }
 
+      reqLogger.info('Feed test successful', { 
+        url, 
+        contentType, 
+        rowCount: Math.max(0, rowCount) 
+      });
+
       return NextResponse.json({
         success: true,
         rowCount: Math.max(0, rowCount),
@@ -97,6 +134,7 @@ export async function POST(request: Request) {
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
+        reqLogger.warn('Feed test failed - timeout', { url });
         return NextResponse.json(
           { error: 'Connection timed out after 10 seconds' },
           { status: 400 }
@@ -104,13 +142,14 @@ export async function POST(request: Request) {
       }
       
       const message = error instanceof Error ? error.message : 'Unknown error';
+      reqLogger.warn('Feed test failed - connection error', { url }, error);
       return NextResponse.json(
         { error: `Connection failed: ${message}` },
         { status: 400 }
       );
     }
   } catch (error) {
-    console.error('Test feed error:', error);
+    reqLogger.error('Feed test failed - unexpected error', {}, error);
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }
