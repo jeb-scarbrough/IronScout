@@ -47,12 +47,17 @@ export async function POST(request: Request) {
     }
 
     // Set session cookie
-    reqLogger.debug('Setting session cookie', { dealerId: result.dealer!.id });
+    reqLogger.debug('Setting session cookie', { 
+      dealerId: result.dealer!.id,
+      dealerUserId: result.dealerUser!.id
+    });
     await setSessionCookie(result.token!);
 
     reqLogger.info('Login successful', { 
       dealerId: result.dealer!.id,
-      email: result.dealer!.email,
+      dealerUserId: result.dealerUser!.id,
+      email: result.dealerUser!.email,
+      role: result.dealerUser!.role,
       status: result.dealer!.status 
     });
 
@@ -60,10 +65,15 @@ export async function POST(request: Request) {
       success: true,
       dealer: {
         id: result.dealer!.id,
-        email: result.dealer!.email,
         businessName: result.dealer!.businessName,
         status: result.dealer!.status,
         tier: result.dealer!.tier,
+      },
+      user: {
+        id: result.dealerUser!.id,
+        email: result.dealerUser!.email,
+        name: result.dealerUser!.name,
+        role: result.dealerUser!.role,
       },
     });
   } catch (error) {

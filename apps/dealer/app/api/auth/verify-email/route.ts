@@ -32,14 +32,15 @@ export async function POST(request: Request) {
       );
     }
 
-    reqLogger.debug('Looking up dealer by verify token');
+    reqLogger.debug('Looking up dealer user by verify token');
 
-    // Find dealer with this token
-    const dealer = await prisma.dealer.findFirst({
+    // Find dealer user with this token (include dealer info)
+    const dealerUser = await prisma.dealerUser.findFirst({
       where: { verifyToken: token },
+      include: { dealer: true },
     });
 
-    if (!dealer) {
+    if (!dealerUser) {
       reqLogger.warn('Invalid or expired verification token', { tokenPrefix: token.substring(0, 8) });
       return NextResponse.json(
         { error: 'Invalid or expired verification token' },
@@ -47,8 +48,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (dealer.emailVerified) {
-      reqLogger.info('Email already verified', { dealerId: dealer.id });
+    if (dealerUser.emailVerified) {
+      reqLogger.info('Email already verified', { dealerUserId: dealerUser.id });
       return NextResponse.json({
         success: true,
         message: 'Email already verified',
@@ -56,11 +57,15 @@ export async function POST(request: Request) {
       });
     }
 
-    reqLogger.info('Verifying email', { dealerId: dealer.id, email: dealer.email });
+    reqLogger.info('Verifying email', { 
+      dealerUserId: dealerUser.id, 
+      dealerId: dealerUser.dealerId,
+      email: dealerUser.email 
+    });
 
-    // Update dealer to verified
-    await prisma.dealer.update({
-      where: { id: dealer.id },
+    // Update dealer user to verified
+    await prisma.dealerUser.update({
+      where: { id: dealerUser.id },
       data: {
         emailVerified: true,
         verifyToken: null, // Clear the token
@@ -68,16 +73,17 @@ export async function POST(request: Request) {
     });
 
     reqLogger.info('Email verified successfully', { 
-      dealerId: dealer.id, 
-      businessName: dealer.businessName 
+      dealerUserId: dealerUser.id,
+      dealerId: dealerUser.dealerId, 
+      businessName: dealerUser.dealer.businessName 
     });
 
     // Send admin notification that a new dealer needs approval
     reqLogger.debug('Sending admin notification');
     const adminEmailResult = await sendAdminNewDealerNotification(
-      dealer.email,
-      dealer.businessName,
-      dealer.websiteUrl
+      dealerUser.email,
+      dealerUser.dealer.businessName,
+      dealerUser.dealer.websiteUrl
     );
 
     if (!adminEmailResult.success) {

@@ -30,6 +30,15 @@ export default async function AdminDealersPage() {
           feeds: true,
         },
       },
+      // Include owner user (first user with OWNER role)
+      users: {
+        where: { role: 'OWNER' },
+        take: 1,
+        select: {
+          email: true,
+          name: true,
+        },
+      },
     },
   });
   
@@ -121,59 +130,62 @@ export default async function AdminDealersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {dealers.map((dealer) => (
-                  <tr key={dealer.id} className={dealer.status === 'PENDING' ? 'bg-yellow-50' : ''}>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {dealer.businessName}
+                {dealers.map((dealer) => {
+                  const ownerUser = dealer.users[0];
+                  return (
+                    <tr key={dealer.id} className={dealer.status === 'PENDING' ? 'bg-yellow-50' : ''}>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {dealer.businessName}
+                          </div>
+                          <div className="text-sm text-gray-500 flex items-center gap-1">
+                            <a 
+                              href={dealer.websiteUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hover:underline flex items-center gap-1"
+                            >
+                              {dealer.websiteUrl.replace(/^https?:\/\//, '')}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-500 flex items-center gap-1">
-                          <a 
-                            href={dealer.websiteUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="hover:underline flex items-center gap-1"
-                          >
-                            {dealer.websiteUrl.replace(/^https?:\/\//, '')}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{dealer.contactName}</div>
-                      <div className="text-sm text-gray-500">{dealer.email}</div>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        dealer.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                        dealer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {dealer.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        dealer.tier === 'FOUNDING' ? 'bg-purple-100 text-purple-700' :
-                        dealer.tier === 'PRO' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {dealer.tier}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {dealer._count.skus.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(dealer.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <DealerActions dealer={dealer} />
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{dealer.contactName}</div>
+                        <div className="text-sm text-gray-500">{ownerUser?.email ?? 'No owner'}</div>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          dealer.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                          dealer.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {dealer.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          dealer.tier === 'FOUNDING' ? 'bg-purple-100 text-purple-700' :
+                          dealer.tier === 'PRO' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {dealer.tier}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {dealer._count.skus.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(dealer.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <DealerActions dealer={dealer} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

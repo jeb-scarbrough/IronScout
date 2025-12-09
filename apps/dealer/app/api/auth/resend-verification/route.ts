@@ -32,24 +32,25 @@ export async function POST(request: Request) {
       );
     }
 
-    reqLogger.debug('Looking up dealer by email', { email });
+    reqLogger.debug('Looking up dealer user by email', { email });
 
-    // Find dealer
-    const dealer = await prisma.dealer.findUnique({
+    // Find dealer user (include dealer for business name)
+    const dealerUser = await prisma.dealerUser.findFirst({
       where: { email: email.toLowerCase() },
+      include: { dealer: true },
     });
 
     // Always return success to prevent email enumeration
-    if (!dealer) {
-      reqLogger.warn('Dealer not found for resend', { email });
+    if (!dealerUser) {
+      reqLogger.warn('Dealer user not found for resend', { email });
       return NextResponse.json({
         success: true,
         message: 'If an account with that email exists, a verification email has been sent.',
       });
     }
 
-    if (dealer.emailVerified) {
-      reqLogger.info('Email already verified', { dealerId: dealer.id });
+    if (dealerUser.emailVerified) {
+      reqLogger.info('Email already verified', { dealerUserId: dealerUser.id });
       return NextResponse.json({
         success: true,
         message: 'If an account with that email exists, a verification email has been sent.',
@@ -57,27 +58,27 @@ export async function POST(request: Request) {
     }
 
     // Generate new token if needed
-    let verifyToken = dealer.verifyToken;
+    let verifyToken = dealerUser.verifyToken;
     if (!verifyToken) {
       verifyToken = crypto.randomUUID();
-      await prisma.dealer.update({
-        where: { id: dealer.id },
+      await prisma.dealerUser.update({
+        where: { id: dealerUser.id },
         data: { verifyToken },
       });
-      reqLogger.debug('Generated new verification token', { dealerId: dealer.id });
+      reqLogger.debug('Generated new verification token', { dealerUserId: dealerUser.id });
     }
 
     // Send verification email
-    reqLogger.debug('Sending verification email', { dealerId: dealer.id });
+    reqLogger.debug('Sending verification email', { dealerUserId: dealerUser.id });
     const emailResult = await sendVerificationEmail(
-      dealer.email,
-      dealer.businessName,
+      dealerUser.email,
+      dealerUser.dealer.businessName,
       verifyToken
     );
 
     if (!emailResult.success) {
       reqLogger.error('Failed to send verification email', { 
-        dealerId: dealer.id,
+        dealerUserId: dealerUser.id,
         error: emailResult.error 
       });
       return NextResponse.json(
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     reqLogger.info('Verification email resent', { 
-      dealerId: dealer.id,
+      dealerUserId: dealerUser.id,
       messageId: emailResult.messageId 
     });
 
