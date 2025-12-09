@@ -1,5 +1,10 @@
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Phone } from 'lucide-react'
+
+const DEALER_REGISTER_URL = process.env.NEXT_PUBLIC_DEALER_URL 
+  ? `${process.env.NEXT_PUBLIC_DEALER_URL}/register`
+  : 'https://dealer.ironscout.ai/register'
 
 export function DealerCTA() {
   return (
@@ -16,9 +21,11 @@ export function DealerCTA() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <Button size="lg" variant="secondary">
-              <ArrowRight className="mr-2 h-4 w-4" />
-              Get Started Now
+            <Button size="lg" variant="secondary" asChild>
+              <Link href={DEALER_REGISTER_URL}>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Get Started Now
+              </Link>
             </Button>
             <Button size="lg" variant="outline" className="border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10">
               <Phone className="mr-2 h-4 w-4" />

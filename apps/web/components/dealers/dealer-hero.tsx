@@ -1,5 +1,10 @@
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { TrendingUp, Users, Zap } from 'lucide-react'
+
+const DEALER_REGISTER_URL = process.env.NEXT_PUBLIC_DEALER_URL 
+  ? `${process.env.NEXT_PUBLIC_DEALER_URL}/register`
+  : 'https://dealer.ironscout.ai/register'
 
 export function DealerHero() {
   return (
@@ -49,8 +54,10 @@ export function DealerHero() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg">
-              Get Started Today
+            <Button size="lg" asChild>
+              <Link href={DEALER_REGISTER_URL}>
+                Get Started Today
+              </Link>
             </Button>
             <Button variant="outline" size="lg">
               Schedule Demo

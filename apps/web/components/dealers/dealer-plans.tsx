@@ -1,7 +1,12 @@
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Check, Crown, Zap } from 'lucide-react'
+
+const DEALER_REGISTER_URL = process.env.NEXT_PUBLIC_DEALER_URL 
+  ? `${process.env.NEXT_PUBLIC_DEALER_URL}/register`
+  : 'https://dealer.ironscout.ai/register'
 
 const plans = [
   {
@@ -16,6 +21,7 @@ const plans = [
       'Monthly performance reports'
     ],
     cta: 'Get Started',
+    href: DEALER_REGISTER_URL,
     popular: false,
     icon: Zap
   },
@@ -34,6 +40,7 @@ const plans = [
       'API access for inventory sync'
     ],
     cta: 'Upgrade to Premium',
+    href: DEALER_REGISTER_URL,
     popular: true,
     icon: Crown
   },
@@ -52,6 +59,7 @@ const plans = [
       'Volume discounts available'
     ],
     cta: 'Contact Sales',
+    href: 'mailto:sales@ironscout.ai',
     popular: false,
     icon: Crown
   }
@@ -111,8 +119,11 @@ export function DealerPlans() {
                 <Button 
                   className="w-full" 
                   variant={plan.popular ? "default" : "outline"}
+                  asChild
                 >
-                  {plan.cta}
+                  <Link href={plan.href}>
+                    {plan.cta}
+                  </Link>
                 </Button>
               </CardFooter>
             </Card>
