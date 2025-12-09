@@ -25,12 +25,20 @@ export async function POST(
 
     const dealer = await prisma.dealer.findUnique({
       where: { id: dealerId },
+      include: {
+        users: {
+          where: { role: 'OWNER' },
+          take: 1,
+        },
+      },
     });
 
     if (!dealer) {
       reqLogger.warn('Dealer not found', { dealerId });
       return NextResponse.json({ error: 'Dealer not found' }, { status: 404 });
     }
+
+    const ownerUser = dealer.users[0];
 
     if (dealer.status !== 'SUSPENDED') {
       reqLogger.warn('Dealer is not suspended', { dealerId, currentStatus: dealer.status });
@@ -57,18 +65,26 @@ export async function POST(
       userAgent: headersList.get('user-agent') || undefined,
     });
 
-    const emailResult = await sendApprovalEmail(dealer.email, dealer.businessName);
+    if (ownerUser) {
+      const emailResult = await sendApprovalEmail(ownerUser.email, dealer.businessName);
 
-    if (!emailResult.success) {
-      reqLogger.warn('Failed to send reactivation email', { dealerId, error: emailResult.error });
-    } else {
-      reqLogger.info('Reactivation email sent', { dealerId, messageId: emailResult.messageId });
+      if (!emailResult.success) {
+        reqLogger.warn('Failed to send reactivation email', { dealerId, error: emailResult.error });
+      } else {
+        reqLogger.info('Reactivation email sent', { dealerId, messageId: emailResult.messageId });
+      }
+
+      return NextResponse.json({
+        success: true,
+        dealer: { id: updatedDealer.id, status: updatedDealer.status },
+        emailSent: emailResult.success,
+      });
     }
 
     return NextResponse.json({
       success: true,
       dealer: { id: updatedDealer.id, status: updatedDealer.status },
-      emailSent: emailResult.success,
+      emailSent: false,
     });
   } catch (error) {
     reqLogger.error('Reactivate dealer error', {}, error);

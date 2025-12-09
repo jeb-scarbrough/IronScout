@@ -25,12 +25,20 @@ export async function POST(
 
     const dealer = await prisma.dealer.findUnique({
       where: { id: dealerId },
+      include: {
+        users: {
+          where: { role: 'OWNER' },
+          take: 1,
+        },
+      },
     });
 
     if (!dealer) {
       reqLogger.warn('Dealer not found', { dealerId });
       return NextResponse.json({ error: 'Dealer not found' }, { status: 404 });
     }
+
+    const ownerUser = dealer.users[0];
 
     if (dealer.status !== 'PENDING') {
       reqLogger.warn('Dealer is not pending', { dealerId, currentStatus: dealer.status });
@@ -43,9 +51,16 @@ export async function POST(
       where: { id: dealerId },
       data: {
         status: 'ACTIVE',
-        emailVerified: true,
       },
     });
+
+    // Also verify owner's email
+    if (ownerUser && !ownerUser.emailVerified) {
+      await prisma.dealerUser.update({
+        where: { id: ownerUser.id },
+        data: { emailVerified: true },
+      });
+    }
 
     reqLogger.info('Dealer approved successfully', { dealerId });
 
@@ -60,18 +75,26 @@ export async function POST(
       userAgent: headersList.get('user-agent') || undefined,
     });
 
-    const emailResult = await sendApprovalEmail(dealer.email, dealer.businessName);
+    if (ownerUser) {
+      const emailResult = await sendApprovalEmail(ownerUser.email, dealer.businessName);
 
-    if (!emailResult.success) {
-      reqLogger.warn('Failed to send approval email', { dealerId, error: emailResult.error });
-    } else {
-      reqLogger.info('Approval email sent', { dealerId, messageId: emailResult.messageId });
+      if (!emailResult.success) {
+        reqLogger.warn('Failed to send approval email', { dealerId, error: emailResult.error });
+      } else {
+        reqLogger.info('Approval email sent', { dealerId, messageId: emailResult.messageId });
+      }
+
+      return NextResponse.json({
+        success: true,
+        dealer: { id: updatedDealer.id, status: updatedDealer.status },
+        emailSent: emailResult.success,
+      });
     }
 
     return NextResponse.json({
       success: true,
       dealer: { id: updatedDealer.id, status: updatedDealer.status },
-      emailSent: emailResult.success,
+      emailSent: false,
     });
   } catch (error) {
     reqLogger.error('Approve dealer error', {}, error);

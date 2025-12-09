@@ -32,6 +32,10 @@ export default async function DealerDetailPage({
   const dealer = await prisma.dealer.findUnique({
     where: { id },
     include: {
+      users: {
+        where: { role: 'OWNER' },
+        take: 1,
+      },
       feeds: {
         orderBy: { createdAt: 'desc' },
         take: 5,
@@ -52,6 +56,7 @@ export default async function DealerDetailPage({
   }
 
   const status = statusConfig[dealer.status];
+  const ownerUser = dealer.users[0];
 
   return (
     <div className="space-y-6">
@@ -93,13 +98,19 @@ export default async function DealerDetailPage({
               <div>
                 <dt className="text-sm font-medium text-gray-500">Email</dt>
                 <dd className="text-sm text-gray-900">
-                  <a href={`mailto:${dealer.email}`} className="text-blue-600 hover:underline">
-                    {dealer.email}
-                  </a>
-                  {dealer.emailVerified && (
-                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                      Verified
-                    </span>
+                  {ownerUser ? (
+                    <>
+                      <a href={`mailto:${ownerUser.email}`} className="text-blue-600 hover:underline">
+                        {ownerUser.email}
+                      </a>
+                      {ownerUser.emailVerified && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                          Verified
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-500">No owner</span>
                   )}
                 </dd>
               </div>

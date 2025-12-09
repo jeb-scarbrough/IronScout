@@ -18,6 +18,10 @@ export default async function DealersPage() {
       { createdAt: 'desc' },
     ],
     include: {
+      users: {
+        where: { role: 'OWNER' },
+        take: 1,
+      },
       _count: {
         select: {
           skus: true,
@@ -139,6 +143,7 @@ export default async function DealersPage() {
             {dealers.map((dealer) => {
               const status = statusConfig[dealer.status];
               const StatusIcon = status.icon;
+              const ownerUser = dealer.users[0];
               
               return (
                 <tr key={dealer.id} className={dealer.status === 'PENDING' ? 'bg-yellow-50' : ''}>
@@ -160,7 +165,7 @@ export default async function DealersPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm text-gray-900">{dealer.contactName}</div>
-                      <div className="text-sm text-gray-500">{dealer.email}</div>
+                      <div className="text-sm text-gray-500">{ownerUser?.email || 'No owner'}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -168,7 +173,7 @@ export default async function DealersPage() {
                       <StatusIcon className="h-3 w-3" />
                       {status.label}
                     </span>
-                    {!dealer.emailVerified && (
+                    {ownerUser && !ownerUser.emailVerified && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                         Email not verified
                       </span>
