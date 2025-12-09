@@ -26,9 +26,15 @@ export async function POST(
     const { id: dealerId } = await params;
     reqLogger.info('Dealer reactivate request', { dealerId, adminEmail: session.email });
 
-    // Get current dealer state
+    // Get current dealer state with owner user
     const dealer = await prisma.dealer.findUnique({
       where: { id: dealerId },
+      include: {
+        users: {
+          where: { role: 'OWNER' },
+          take: 1,
+        },
+      },
     });
 
     if (!dealer) {
@@ -38,6 +44,8 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    const ownerUser = dealer.users[0];
 
     if (dealer.status !== 'SUSPENDED') {
       reqLogger.warn('Dealer is not suspended', { dealerId, currentStatus: dealer.status });
@@ -74,22 +82,33 @@ export async function POST(
       userAgent: headersList.get('user-agent') || undefined,
     });
 
-    // Send reactivation email (same as approval)
-    reqLogger.debug('Sending reactivation email');
-    const emailResult = await sendApprovalEmail(
-      dealer.email,
-      dealer.businessName
-    );
+    // Send reactivation email (same as approval) to owner
+    if (ownerUser) {
+      reqLogger.debug('Sending reactivation email');
+      const emailResult = await sendApprovalEmail(
+        ownerUser.email,
+        dealer.businessName
+      );
 
-    if (!emailResult.success) {
-      reqLogger.warn('Failed to send reactivation email', { 
-        dealerId, 
-        error: emailResult.error 
-      });
-    } else {
-      reqLogger.info('Reactivation email sent', { 
-        dealerId, 
-        messageId: emailResult.messageId 
+      if (!emailResult.success) {
+        reqLogger.warn('Failed to send reactivation email', { 
+          dealerId, 
+          error: emailResult.error 
+        });
+      } else {
+        reqLogger.info('Reactivation email sent', { 
+          dealerId, 
+          messageId: emailResult.messageId 
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        dealer: {
+          id: updatedDealer.id,
+          status: updatedDealer.status,
+        },
+        emailSent: emailResult.success,
       });
     }
 
@@ -99,7 +118,7 @@ export async function POST(
         id: updatedDealer.id,
         status: updatedDealer.status,
       },
-      emailSent: emailResult.success,
+      emailSent: false,
     });
   } catch (error) {
     reqLogger.error('Reactivate dealer error', {}, error);
