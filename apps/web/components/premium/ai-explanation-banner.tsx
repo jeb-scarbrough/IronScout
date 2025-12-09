@@ -3,6 +3,7 @@
 import { Sparkles, Info, Crown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
+import Link from 'next/link'
 import type { SearchIntent, PremiumSearchIntent } from '@/lib/api'
 
 interface AIExplanationBannerProps {
@@ -56,7 +57,10 @@ export function AIExplanationBanner({ intent, isPremium, processingTimeMs }: AIE
             <div className="mt-3 flex items-center gap-2">
               <Crown className="h-4 w-4 text-amber-500" />
               <span className="text-xs text-blue-700 dark:text-blue-300">
-                Upgrade to Premium for AI-powered recommendations based on your specific needs
+                <Link href="/pricing" className="font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 underline underline-offset-2">
+                  Upgrade to Premium
+                </Link>
+                {' '}for AI-powered recommendations based on your specific needs
               </span>
             </div>
           </div>
