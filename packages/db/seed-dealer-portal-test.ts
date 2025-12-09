@@ -287,6 +287,8 @@ async function seedDealerPortalTest() {
     await prisma.dealerFeed.deleteMany({})
     await prisma.dealerNotificationPref.deleteMany({})
     await prisma.adminAuditLog.deleteMany({})
+    await prisma.dealerInvite.deleteMany({})
+    await prisma.dealerUser.deleteMany({})
     await prisma.dealer.deleteMany({})
     await prisma.canonicalSku.deleteMany({})
     
@@ -375,10 +377,6 @@ async function seedDealerPortalTest() {
       // Create dealer
       const dealer = await prisma.dealer.create({
         data: {
-          email: dealerData.email,
-          passwordHash: DEALER_PASSWORD_HASH,
-          emailVerified: dealerData.emailVerified,
-          verifyToken: dealerData.emailVerified ? null : `verify_${Math.random().toString(36).substring(7)}`,
           businessName: dealerData.businessName,
           contactName: dealerData.contactName,
           websiteUrl: dealerData.websiteUrl,
@@ -391,6 +389,19 @@ async function seedDealerPortalTest() {
           shippingType: dealerData.shippingType,
           shippingFlat: dealerData.shippingFlat ? new Prisma.Decimal(dealerData.shippingFlat) : null,
           shippingPerUnit: dealerData.shippingPerUnit ? new Prisma.Decimal(dealerData.shippingPerUnit) : null,
+        },
+      })
+
+      // Create owner user for this dealer
+      const ownerUser = await prisma.dealerUser.create({
+        data: {
+          dealerId: dealer.id,
+          email: dealerData.email,
+          passwordHash: DEALER_PASSWORD_HASH,
+          name: dealerData.contactName,
+          role: 'OWNER',
+          emailVerified: dealerData.emailVerified,
+          verifyToken: dealerData.emailVerified ? null : `verify_${Math.random().toString(36).substring(7)}`,
         },
       })
 
@@ -693,6 +704,7 @@ async function seedDealerPortalTest() {
     // =============================================
     const summary = await Promise.all([
       prisma.dealer.count(),
+      prisma.dealerUser.count(),
       prisma.dealerFeed.count(),
       prisma.dealerFeedRun.count(),
       prisma.dealerSku.count(),
@@ -710,16 +722,17 @@ async function seedDealerPortalTest() {
     console.log('═══════════════════════════════════════════════════\n')
     console.log('📊 Summary:')
     console.log(`   Dealers:              ${summary[0]}`)
-    console.log(`   Dealer Feeds:         ${summary[1]}`)
-    console.log(`   Feed Runs:            ${summary[2]}`)
-    console.log(`   Dealer SKUs:          ${summary[3]}`)
-    console.log(`   Canonical SKUs:       ${summary[4]}`)
-    console.log(`   Benchmarks:           ${summary[5]}`)
-    console.log(`   Insights:             ${summary[6]}`)
-    console.log(`   Click Events:         ${summary[7]}`)
-    console.log(`   Pixel Events:         ${summary[8]}`)
-    console.log(`   Notification Prefs:   ${summary[9]}`)
-    console.log(`   Audit Logs:           ${summary[10]}`)
+    console.log(`   Dealer Users:         ${summary[1]}`)
+    console.log(`   Dealer Feeds:         ${summary[2]}`)
+    console.log(`   Feed Runs:            ${summary[3]}`)
+    console.log(`   Dealer SKUs:          ${summary[4]}`)
+    console.log(`   Canonical SKUs:       ${summary[5]}`)
+    console.log(`   Benchmarks:           ${summary[6]}`)
+    console.log(`   Insights:             ${summary[7]}`)
+    console.log(`   Click Events:         ${summary[8]}`)
+    console.log(`   Pixel Events:         ${summary[9]}`)
+    console.log(`   Notification Prefs:   ${summary[10]}`)
+    console.log(`   Audit Logs:           ${summary[11]}`)
     console.log('')
     console.log('═══════════════════════════════════════════════════')
     console.log('🔑 TEST CREDENTIALS:')
