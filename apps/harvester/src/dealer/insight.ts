@@ -59,7 +59,7 @@ async function analyzeDealerSku(
   sku: {
     id: string
     rawTitle: string
-    rawPrice: Decimal
+    rawPrice: number | { toNumber(): number } | any
     rawInStock: boolean
     canonicalSkuId: string | null
     needsReview: boolean
