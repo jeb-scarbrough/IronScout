@@ -10,7 +10,6 @@
 
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
-import { Decimal } from '@prisma/client/runtime/library'
 import { redisConnection } from '../config/redis'
 import { QUEUE_NAMES, DealerInsightJobData } from '../config/queues'
 
