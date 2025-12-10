@@ -5,7 +5,7 @@
  * and verifies the user is in the ADMIN_EMAILS list.
  */
 
-import { jwtVerify } from 'jose';
+import { decode } from '@auth/core/jwt';
 import { cookies, headers } from 'next/headers';
 import { prisma } from '@ironscout/db';
 import { logger } from './logger';
@@ -87,13 +87,19 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     }
     
     logger.debug('Secret configured', { secretLength: secret.length });
-
-    const secretKey = new TextEncoder().encode(secret);
     
     try {
-      const { payload } = await jwtVerify(token, secretKey, {
-        algorithms: ['HS256'],
+      // Use NextAuth's decode function (handles JWE encryption)
+      const payload = await decode({
+        token,
+        secret,
+        salt: SESSION_COOKIE_NAME,
       });
+      
+      if (!payload) {
+        logger.warn('JWT decode returned null');
+        return null;
+      }
 
       const email = (payload.email as string)?.toLowerCase();
       const userId = payload.sub as string;
@@ -127,11 +133,12 @@ export async function getAdminSession(): Promise<AdminSession | null> {
         name: payload.name as string | undefined,
         image: payload.picture as string | undefined,
       };
-    } catch (jwtError) {
-      logger.warn('JWT verification failed', {
-        errorType: jwtError instanceof Error ? jwtError.name : 'unknown',
+    } catch (decodeError) {
+      logger.warn('JWT decode failed', {
+        errorType: decodeError instanceof Error ? decodeError.name : 'unknown',
+        errorMessage: decodeError instanceof Error ? decodeError.message : 'unknown',
         hint: 'Check that NEXTAUTH_SECRET matches between web and admin apps',
-      }, jwtError);
+      }, decodeError);
       return null;
     }
   } catch (error) {
