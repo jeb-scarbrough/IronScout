@@ -13,7 +13,7 @@ import Link from 'next/link'
 function SignInForm() {
   const params = useSearchParams()
   const router = useRouter()
-  const callbackUrl = params.get('callbackUrl') || '/'
+  const callbackUrl = params.get('callbackUrl') || '/dashboard'
   const error = params.get('error')
 
   const [email, setEmail] = useState('')

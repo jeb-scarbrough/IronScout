@@ -45,6 +45,8 @@ services:
         sync: false  # Set manually in Render dashboard
       - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
+      - key: OPENAI_API_KEY
+        sync: false  # Set manually for embeddings
 
   # Next.js Web Frontend
   - type: web
@@ -100,12 +102,12 @@ services:
         sync: false  # Set manually after creating Redis instance
       - key: REDIS_PORT
         sync: false  # Set manually after creating Redis instance
-      - key: ANTHROPIC_API_KEY
-        sync: false  # Set manually in Render dashboard
       - key: RESEND_API_KEY
         sync: false  # Set manually in Render dashboard
       - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
+      - key: FRONTEND_URL
+        sync: false  # Set manually: https://ironscout.ai
 
   # Dealer Portal (B2B retailer interface)
   - type: web
