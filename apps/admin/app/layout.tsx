@@ -6,6 +6,9 @@ import { getAdminSession } from '@/lib/auth';
 import { Shield, Users, BarChart3, Settings, LogOut, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
+// Force dynamic rendering - required for cookie access
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {

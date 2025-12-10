@@ -6,7 +6,7 @@
  */
 
 import { jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { prisma } from '@ironscout/db';
 import { logger } from './logger';
 
@@ -34,6 +34,15 @@ export interface AdminSession {
 export async function getAdminSession(): Promise<AdminSession | null> {
   try {
     const cookieStore = await cookies();
+    const headerStore = await headers();
+    
+    // Debug: Log raw cookie header
+    const rawCookieHeader = headerStore.get('cookie');
+    logger.debug('Raw cookie header', { 
+      hasCookieHeader: !!rawCookieHeader,
+      cookieHeaderLength: rawCookieHeader?.length || 0,
+      cookieHeaderPreview: rawCookieHeader?.substring(0, 100) || 'none',
+    });
     
     // Debug: Log all available cookies (names only for security)
     const allCookies = cookieStore.getAll();
@@ -43,7 +52,18 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       nodeEnv: process.env.NODE_ENV,
     });
     
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    // Try getting token from cookie store first
+    let token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    
+    // Fallback: parse raw cookie header if cookieStore is empty
+    if (!token && rawCookieHeader) {
+      logger.debug('Trying to parse token from raw cookie header');
+      const cookieMatch = rawCookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+      if (cookieMatch) {
+        token = cookieMatch[1];
+        logger.debug('Found token in raw cookie header', { tokenLength: token.length });
+      }
+    }
 
     if (!token) {
       logger.warn('No session cookie found', { 
