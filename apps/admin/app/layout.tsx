@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { redirect } from 'next/navigation';
 import { getAdminSession } from '@/lib/auth';
-import { Shield, Users, BarChart3, Settings, LogOut } from 'lucide-react';
+import { Shield, Users, BarChart3, Settings, LogOut, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -78,8 +78,12 @@ export default async function RootLayout({
 }) {
   const session = await getAdminSession();
   
-  // If not logged in as admin, show login prompt
+  // If not logged in as admin, redirect to main site login
   if (!session) {
+    const webUrl = process.env.NEXT_PUBLIC_WEB_URL || 'https://ironscout.ai';
+    const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.ironscout.ai';
+    const loginUrl = `${webUrl}/auth/signin?callbackUrl=${encodeURIComponent(adminUrl)}`;
+    
     return (
       <html lang="en">
         <body className={inter.className}>
@@ -88,17 +92,24 @@ export default async function RootLayout({
               <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Access Required</h1>
               <p className="text-gray-600 mb-6">
-                Please log in at the main site with an admin account to access this portal.
+                Redirecting to login...
               </p>
               <a
-                href={`${process.env.NEXT_PUBLIC_WEB_URL || 'https://ironscout.ai'}/auth/signin`}
-                className="inline-block bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800"
+                href={loginUrl}
+                className="inline-flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800"
               >
-                Log In
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Log In with Google
               </a>
               <p className="mt-4 text-sm text-gray-500">
-                Only users in the admin email list can access this portal.
+                Only authorized admin accounts can access this portal.
               </p>
+              {/* Auto-redirect script */}
+              <script
+                dangerouslySetInnerHTML={{
+                  __html: `setTimeout(function() { window.location.href = "${loginUrl}"; }, 1500);`,
+                }}
+              />
             </div>
           </div>
         </body>

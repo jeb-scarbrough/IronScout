@@ -135,6 +135,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Allow redirects to admin subdomain
+      const adminUrl = process.env.ADMIN_URL || 'https://admin.ironscout.ai';
+      if (url.startsWith(adminUrl)) {
+        return url;
+      }
+      // Allow relative URLs
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`;
+      }
+      // Allow same origin
+      if (new URL(url).origin === baseUrl) {
+        return url;
+      }
+      return baseUrl;
+    },
     async session({ session, token, user }) {
       if (session?.user) {
         session.user.id = token.sub || user?.id || ''
