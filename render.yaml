@@ -36,7 +36,7 @@ services:
       - key: REDIS_PORT
         sync: false  # Set manually after creating Redis instance
       - key: FRONTEND_URL
-        sync: false  # Set manually: https://ironscout-web.onrender.com
+        sync: false  # Set manually: https://www.ironscout.ai
       - key: STRIPE_SECRET_KEY
         sync: false  # Set manually in Render dashboard
       - key: STRIPE_WEBHOOK_SECRET
@@ -61,7 +61,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
-        sync: false  # Set manually: https://ironscout-api.onrender.com
+        sync: false  # Set manually: https://api.ironscout.ai
       - key: NEXTAUTH_URL
         sync: false  # Set manually: https://ironscout.ai
       - key: NEXTAUTH_SECRET
@@ -107,7 +107,7 @@ services:
       - key: FROM_EMAIL
         sync: false  # Set manually in Render dashboard
       - key: FRONTEND_URL
-        sync: false  # Set manually: https://ironscout.ai
+        sync: false  # Set manually: https://www.ironscout.ai
 
   # Dealer Portal (B2B retailer interface)
   - type: web
