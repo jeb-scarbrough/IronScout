@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { createPrismaClient } from './client.js'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 async function main() {
   console.log('Starting database seed...')

@@ -393,7 +393,11 @@ apps/dealer/
 │   │   │   ├── page.tsx            # Account settings
 │   │   │   ├── feed/page.tsx       # Feed settings
 │   │   │   ├── pixel/page.tsx      # Pixel setup
-│   │   │   └── notifications/page.tsx
+│   │   │   ├── notifications/page.tsx
+│   │   │   └── contacts/           # Contact management
+│   │   │       ├── page.tsx
+│   │   │       ├── actions.ts
+│   │   │       └── contacts-list.tsx
 │   │   └── export/page.tsx         # Data export
 │   └── api/
 │       ├── auth/[...nextauth]/route.ts  # Or custom auth
@@ -820,13 +824,14 @@ async function calculateBenchmark(canonicalSkuId: string): Promise<Benchmark> {
 
 ```prisma
 model Dealer {
-  id              String        @id @default(uuid())
-  email           String        @unique
-  passwordHash    String        // bcrypt hash
-  businessName    String
-  website         String?
-  contactName     String?
-  contactPhone    String?
+  id                String        @id @default(uuid())
+  email             String        @unique
+  passwordHash      String        // bcrypt hash
+  businessName      String
+  website           String?
+  contactFirstName  String?       // Split from contactName
+  contactLastName   String?       // Split from contactName
+  contactPhone      String?
   
   // Approval workflow
   status          DealerStatus  @default(PENDING)  // PENDING → ACTIVE
@@ -853,11 +858,93 @@ model Dealer {
   insights        DealerInsight[]
   pixelEvents     PixelEvent[]
   clickEvents     ClickEvent[]
+  contacts        DealerContact[]
   
   @@index([status])
   @@index([email])
 }
+
+model DealerContact {
+  id                String              @id @default(cuid())
+  dealerId          String
+  firstName         String
+  lastName          String
+  email             String
+  phone             String?
+  role              DealerContactRole   @default(PRIMARY)
+  marketingOptIn    Boolean             @default(false)   // Promotional emails
+  communicationOptIn Boolean            @default(true)    // Operational emails
+  isPrimary         Boolean             @default(false)   // Main contact for dealer
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  dealer            Dealer              @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  
+  @@unique([dealerId, email])
+  @@index([dealerId])
+  @@index([isPrimary])
+  @@map("dealer_contacts")
+}
+
+enum DealerContactRole {
+  PRIMARY
+  BILLING
+  TECHNICAL
+  MARKETING
+  OTHER
+}
 ```
+
+---
+
+## 12.1 Contact Management
+
+### Overview
+
+Dealers can manage multiple contacts who receive communications from IronScout. Each dealer has a "main contact" (stored on Dealer model) plus additional contacts via the DealerContact model.
+
+### Features
+
+**Dealer Portal (`/settings/contacts`):**
+- Add/edit/delete contacts (OWNER and ADMIN roles only)
+- Set primary contact (receives all default communications)
+- Configure email preferences per contact:
+  - `communicationOptIn` - Operational emails (feed alerts, account updates)
+  - `marketingOptIn` - Promotional emails
+- Assign roles: PRIMARY, BILLING, TECHNICAL, MARKETING, OTHER
+
+**Admin Portal (`/dealers/[id]`):**
+- Full CRUD for dealer contacts
+- Same capabilities as dealers
+- All changes logged to AdminAuditLog
+
+### Contact Roles (Future Use)
+
+Roles are stubbed for future email routing:
+- **PRIMARY** - Default recipient for all communications
+- **BILLING** - Invoice and payment notifications
+- **TECHNICAL** - Feed errors, API issues
+- **MARKETING** - Promotional campaigns
+- **OTHER** - Custom contact
+
+### Email Opt-in System
+
+| Field | Default | Purpose |
+|-------|---------|----------|
+| `communicationOptIn` | `true` | Feed alerts, account updates, weekly reports |
+| `marketingOptIn` | `false` | Promotional emails, feature announcements |
+
+### Registration Flow
+
+When a dealer registers:
+1. Creates Dealer with `contactFirstName` and `contactLastName`
+2. Creates DealerUser (owner account)
+3. Auto-creates initial DealerContact:
+   - Sets as PRIMARY role
+   - Sets `isPrimary = true`
+   - Email matches owner user email
+   - `marketingOptIn = false`, `communicationOptIn = true`
 
 ---
 

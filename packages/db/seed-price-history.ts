@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { createPrismaClient } from './client.js'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 // Helper to generate realistic price variations
 function generatePriceHistory(basePrice: number, days: number = 90): Array<{ date: Date, price: number }> {

@@ -347,10 +347,12 @@ export async function sendAdminNewDealerNotification(
   dealerId: string,
   dealerEmail: string,
   businessName: string,
-  contactName: string,
+  contactFirstName: string,
+  contactLastName: string,
   websiteUrl: string,
   phone?: string | null
 ): Promise<SendEmailResult> {
+  const contactName = `${contactFirstName} ${contactLastName}`.trim();
   const emailLogger = logger.child({ 
     action: 'sendAdminNewDealerNotification', 
     dealerEmail,

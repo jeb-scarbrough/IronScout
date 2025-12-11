@@ -163,7 +163,9 @@ embedding          vector(1536)     // Semantic search vector
 
 ### Dealer Portal Models
 
-- **Dealer** - Dealer registration, auth, verification
+- **Dealer** - Dealer registration, auth, verification (uses `contactFirstName`/`contactLastName`)
+- **DealerUser** - Team members with roles (OWNER, ADMIN, MEMBER, VIEWER)
+- **DealerContact** - Multi-contact management with email preferences and roles
 - **DealerFeed** - Feed configuration and status
 - **DealerSku** - Individual SKU prices from feeds
 - **CanonicalSku** - Product matching bridge
@@ -361,6 +363,19 @@ NEXT_PUBLIC_WEB_URL=https://ironscout.ai
 NEXT_PUBLIC_ADMIN_URL=https://admin.ironscout.ai
 ```
 
+### Admin Actions
+
+**Resend Verification Email:**
+- Admins can resend verification emails for unverified dealers
+- Generates new token, sends via Resend API
+- Useful for email typos or lost emails
+
+**Dealer Impersonation:**
+- Admins can log in as a dealer for support
+- Creates 4-hour JWT session with impersonation metadata
+- Orange banner displays in dealer portal showing admin identity
+- All actions are audit logged
+
 See `docs/ADMIN_PORTAL.md` for full documentation.
 
 ## Deployment URLs
@@ -384,4 +399,27 @@ Planned architecture for centralized email handling:
 See chat history for detailed architecture design.
 
 ---
-*Last updated: December 10, 2025*
+## Dealer Portal Features
+
+### Contact Management (`/settings/contacts`)
+
+Dealers can manage multiple contacts who receive IronScout communications:
+
+- **CRUD operations** for contacts (OWNER/ADMIN roles only)
+- **Primary contact** designation for default communications
+- **Email preferences**: `communicationOptIn` (operational), `marketingOptIn` (promotional)
+- **Contact roles**: PRIMARY, BILLING, TECHNICAL, MARKETING, OTHER (future email routing)
+
+**Key files:**
+- `apps/dealer/app/(dashboard)/settings/contacts/` - Contact management UI
+- `apps/dealer/components/impersonation-banner.tsx` - Shows when admin is impersonating
+
+### Registration Flow
+
+When a dealer registers:
+1. Creates `Dealer` with split name fields (`contactFirstName`, `contactLastName`)
+2. Creates `DealerUser` (owner account)
+3. Auto-creates initial `DealerContact` (primary, communication opt-in only)
+
+---
+*Last updated: December 11, 2025*

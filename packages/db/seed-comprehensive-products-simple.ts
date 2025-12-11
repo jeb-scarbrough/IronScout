@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { createPrismaClient } from './client.js'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 // Helper to generate random price in range
 function randomPrice(min: number, max: number): number {

@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { createPrismaClient } from './client.js'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 // Comprehensive ammunition data across popular calibers
 const ammoData = [

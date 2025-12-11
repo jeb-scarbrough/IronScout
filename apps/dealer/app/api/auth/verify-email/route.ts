@@ -84,7 +84,8 @@ export async function POST(request: Request) {
       dealerUser.dealer.id,
       dealerUser.email,
       dealerUser.dealer.businessName,
-      dealerUser.dealer.contactName,
+      dealerUser.dealer.contactFirstName,
+      dealerUser.dealer.contactLastName,
       dealerUser.dealer.websiteUrl,
       dealerUser.dealer.phone
     );

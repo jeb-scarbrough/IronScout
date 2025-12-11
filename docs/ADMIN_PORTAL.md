@@ -186,12 +186,48 @@ Cloudflare proxy is ON. Turn it OFF (gray cloud) so Render can provision SSL.
 This is expected for different root domains (e.g., `ironscout.ai` vs `onrender.com`). 
 Cookie sharing only works on subdomains of the same root domain.
 
+## Admin Actions
+
+### Resend Verification Email
+
+Admins can resend verification emails to dealers who haven't verified their email:
+
+- Located on dealer detail page (`/dealers/[id]`)
+- Generates a new verification token
+- Sends email via Resend API
+- Useful when dealer email had a typo (after correction) or email was lost
+- Action is logged to `AdminAuditLog`
+
+### Dealer Impersonation
+
+Admins can log in as a dealer to provide support assistance:
+
+1. Click "Impersonate" button on dealer detail page
+2. Confirms action (logged to audit trail)
+3. Opens dealer portal in new tab with admin session
+4. Orange banner shows "Admin Impersonation Mode" with admin email
+5. Click "End Session" to terminate impersonation
+
+**Implementation details:**
+- Creates a 4-hour JWT session token with impersonation metadata
+- Sets `dealer-session` cookie (cross-domain for `.ironscout.ai`)
+- Sets `dealer-impersonation` cookie (client-readable) for banner display
+- Token includes: `isImpersonating`, `impersonatedBy`, `impersonatedAt`
+- All actions during impersonation are logged
+
+**Key files:**
+- `apps/admin/app/dealers/[id]/admin-actions.tsx` - UI component
+- `apps/admin/app/dealers/[id]/actions.ts` - Server actions (`resendVerificationEmail`, `impersonateDealer`)
+- `apps/dealer/components/impersonation-banner.tsx` - Banner component
+- `apps/dealer/lib/auth.ts` - Session includes impersonation metadata
+
 ## Security Considerations
 
 1. **Admin emails hardcoded** - Only accounts in `ADMIN_EMAILS` can access
 2. **OAuth required** - Admins must use Google OAuth (no password login)
 3. **JWT verification** - Cookie is cryptographically verified
 4. **Audit logging** - All admin actions logged to `AdminAuditLog` table
+5. **Impersonation logged** - All impersonation sessions are audit logged with admin email
 
 ## File Structure
 
@@ -222,4 +258,4 @@ apps/admin/
 - **Render config:** `render.yaml` (ironscout-admin service)
 
 ---
-*Last updated: December 10, 2025*
+*Last updated: December 11, 2025*

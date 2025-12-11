@@ -3,9 +3,12 @@ import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from './generated/prisma/client.js'
 
-const globalForPrisma = globalThis
-
-function createPrismaClient() {
+/**
+ * Creates a new PrismaClient with the PostgreSQL adapter.
+ * Use this for scripts that need their own client instance.
+ * For app code, import `prisma` from index.js instead.
+ */
+export function createPrismaClient(options?: { log?: boolean }) {
   const connectionString = process.env.DATABASE_URL
   
   if (!connectionString) {
@@ -17,15 +20,9 @@ function createPrismaClient() {
   
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+    log: options?.log ? ['query', 'info', 'warn', 'error'] : [],
   })
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma
-}
-
-// Re-export all types from the generated client
-export * from './generated/prisma/client.js'
+// Re-export PrismaClient type for type annotations
+export { PrismaClient } from './generated/prisma/client.js'
