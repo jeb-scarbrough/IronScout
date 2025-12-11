@@ -208,15 +208,15 @@ export function PremiumFilters({ isPremium, className }: PremiumFiltersProps) {
               Bullet Type
             </Label>
             <Select
-              value={filters.bulletType}
-              onValueChange={(value) => applyFilter('bulletType', value)}
+              value={filters.bulletType || '_all'}
+              onValueChange={(value) => applyFilter('bulletType', value === '_all' ? '' : value)}
               disabled={!isPremium}
             >
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="_all">All types</SelectItem>
                 {BULLET_TYPE_OPTIONS.map((group) => (
                   <div key={group.category}>
                     <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
@@ -241,15 +241,15 @@ export function PremiumFilters({ isPremium, className }: PremiumFiltersProps) {
               Pressure Rating
             </Label>
             <Select
-              value={filters.pressureRating}
-              onValueChange={(value) => applyFilter('pressureRating', value)}
+              value={filters.pressureRating || '_all'}
+              onValueChange={(value) => applyFilter('pressureRating', value === '_all' ? '' : value)}
               disabled={!isPremium}
             >
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="All pressures" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All pressures</SelectItem>
+                <SelectItem value="_all">All pressures</SelectItem>
                 {PRESSURE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}

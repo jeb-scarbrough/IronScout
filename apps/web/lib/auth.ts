@@ -133,6 +133,44 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Note: __Host- prefix requires no domain to be set
       },
     },
+    pkceCodeVerifier: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Secure-authjs.pkce.code_verifier'
+        : 'authjs.pkce.code_verifier',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 15, // 15 minutes
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    state: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Secure-authjs.state'
+        : 'authjs.state',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 15, // 15 minutes
+        domain: COOKIE_DOMAIN,
+      },
+    },
+    nonce: {
+      name: process.env.NODE_ENV === 'production'
+        ? '__Secure-authjs.nonce'
+        : 'authjs.nonce',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        domain: COOKIE_DOMAIN,
+      },
+    },
   },
   callbacks: {
     async redirect({ url, baseUrl }) {
