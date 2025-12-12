@@ -456,7 +456,7 @@ export async function registerDealer(input: RegisterInput): Promise<RegisterResu
           lastName: contactLastName,
           email: email.toLowerCase(),
           phone,
-          role: 'PRIMARY',
+          roles: ['PRIMARY'],
           isAccountOwner: true,
           marketingOptIn: false,
           communicationOptIn: true,
