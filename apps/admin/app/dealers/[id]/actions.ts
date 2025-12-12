@@ -130,7 +130,7 @@ export interface ContactData {
   lastName: string;
   email: string;
   phone?: string;
-  role?: 'PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING' | 'OTHER';
+  role?: 'PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING';
   marketingOptIn?: boolean;
   communicationOptIn?: boolean;
   isAccountOwner?: boolean;
@@ -283,6 +283,11 @@ export async function deleteDealerContact(contactId: string, dealerId: string) {
       return { success: false, error: 'Contact not found' };
     }
 
+    // Prevent deleting the account owner contact
+    if (contact.isAccountOwner) {
+      return { success: false, error: 'Cannot delete the account owner contact. Please transfer ownership first.' };
+    }
+
     await prisma.dealerContact.delete({
       where: { id: contactId },
     });
@@ -300,6 +305,81 @@ export async function deleteDealerContact(contactId: string, dealerId: string) {
   } catch (error) {
     console.error('Failed to delete dealer contact:', error);
     return { success: false, error: 'Failed to delete contact' };
+  }
+}
+
+// =============================================================================
+// Account Ownership Transfer
+// =============================================================================
+
+/**
+ * Transfer account ownership from one contact to another
+ * Admin-facing action for dealer management
+ */
+export async function transferAccountOwnership(dealerId: string, newOwnerId: string) {
+  const session = await getAdminSession();
+  
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Verify both contacts exist and belong to the dealer
+    const [currentOwner, newOwner] = await Promise.all([
+      prisma.dealerContact.findFirst({
+        where: { dealerId, isAccountOwner: true },
+      }),
+      prisma.dealerContact.findFirst({
+        where: { id: newOwnerId, dealerId },
+      }),
+    ]);
+
+    if (!newOwner) {
+      return { success: false, error: 'New account owner contact not found' };
+    }
+
+    if (!currentOwner) {
+      return { success: false, error: 'Current account owner not found' };
+    }
+
+    // Perform the transfer in a transaction
+    const [oldOwnerAfter, newOwnerAfter] = await Promise.all([
+      prisma.dealerContact.update({
+        where: { id: currentOwner.id },
+        data: { isAccountOwner: false },
+      }),
+      prisma.dealerContact.update({
+        where: { id: newOwnerId },
+        data: { isAccountOwner: true },
+      }),
+    ]);
+
+    // Log the action
+    await logAdminAction(session.userId, 'TRANSFER_ACCOUNT_OWNERSHIP', {
+      dealerId,
+      resource: 'DealerContact',
+      resourceId: newOwnerId,
+      oldValue: {
+        currentOwnerId: currentOwner.id,
+        currentOwnerEmail: currentOwner.email,
+      },
+      newValue: {
+        newOwnerId: newOwner.id,
+        newOwnerEmail: newOwner.email,
+      },
+    });
+
+    revalidatePath(`/dealers/${dealerId}`);
+
+    return {
+      success: true,
+      message: `Account ownership transferred from ${currentOwner.email} to ${newOwner.email}`,
+      oldOwner: oldOwnerAfter,
+      newOwner: newOwnerAfter,
+    };
+  } catch (error) {
+    console.error('Failed to transfer account ownership:', error);
+    return { success: false, error: 'Failed to transfer account ownership' };
   }
 }
 
