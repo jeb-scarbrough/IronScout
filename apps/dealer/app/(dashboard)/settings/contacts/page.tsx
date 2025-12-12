@@ -31,6 +31,20 @@ export default async function ContactsPage() {
 
   const canManage = session.role === 'OWNER' || session.role === 'ADMIN';
 
+  // Serialize contacts to plain objects for client component
+  const contacts = dealer.contacts.map(contact => ({
+    id: contact.id,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    phone: contact.phone,
+    roles: contact.roles,
+    marketingOptIn: contact.marketingOptIn,
+    communicationOptIn: contact.communicationOptIn,
+    isAccountOwner: contact.isAccountOwner,
+    isActive: contact.isActive,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -60,7 +74,7 @@ export default async function ContactsPage() {
 
       {/* Contacts List */}
       <ContactsList 
-        contacts={dealer.contacts} 
+        contacts={contacts} 
         canManage={canManage}
       />
 

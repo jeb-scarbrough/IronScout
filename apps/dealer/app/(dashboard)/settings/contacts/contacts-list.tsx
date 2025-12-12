@@ -22,13 +22,53 @@ import {
   ContactData 
 } from './actions';
 
+// =============================================================================
+// Phone Utilities
+// =============================================================================
+
+/**
+ * Format phone number to standard US format: (XXX) XXX-XXXX
+ */
+function formatPhoneNumber(value: string): string {
+  // Remove all non-numeric characters
+  const digits = value.replace(/\D/g, '');
+  
+  // Limit to 10 digits
+  const limited = digits.slice(0, 10);
+  
+  // Format based on length
+  if (limited.length === 0) return '';
+  if (limited.length <= 3) return `(${limited}`;
+  if (limited.length <= 6) return `(${limited.slice(0, 3)}) ${limited.slice(3)}`;
+  return `(${limited.slice(0, 3)}) ${limited.slice(3, 6)}-${limited.slice(6)}`;
+}
+
+/**
+ * Get raw digits from formatted phone number
+ */
+function getPhoneDigits(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
+/**
+ * Validate phone number has exactly 10 digits
+ */
+function isValidPhone(value: string): boolean {
+  const digits = getPhoneDigits(value);
+  return digits.length === 0 || digits.length === 10;
+}
+
+// =============================================================================
+// Types
+// =============================================================================
+
 interface Contact {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string | null;
-  role: string;
+  roles: string[];
   marketingOptIn: boolean;
   communicationOptIn: boolean;
   isAccountOwner: boolean;
@@ -40,12 +80,25 @@ interface ContactsListProps {
   canManage: boolean;
 }
 
+type RoleType = 'PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING';
+
+const roleOptions: { value: RoleType; label: string }[] = [
+  { value: 'PRIMARY', label: 'General' },
+  { value: 'BILLING', label: 'Billing' },
+  { value: 'TECHNICAL', label: 'Technical' },
+  { value: 'MARKETING', label: 'Marketing' },
+];
+
 const roleLabels: Record<string, string> = {
   PRIMARY: 'General',
   BILLING: 'Billing',
   TECHNICAL: 'Technical',
   MARKETING: 'Marketing',
 };
+
+// =============================================================================
+// Component
+// =============================================================================
 
 export function ContactsList({ contacts, canManage }: ContactsListProps) {
   const router = useRouter();
@@ -56,15 +109,15 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formData, setFormData] = useState<ContactData>({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    role: 'PRIMARY',
+    roles: [],
     marketingOptIn: false,
     communicationOptIn: true,
-    isAccountOwner: false,
   });
 
   const currentOwner = contacts.find(c => c.isAccountOwner);
@@ -76,12 +129,12 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
       lastName: '',
       email: '',
       phone: '',
-      role: 'PRIMARY',
+      roles: [],
       marketingOptIn: false,
       communicationOptIn: true,
-      isAccountOwner: contacts.length === 0,
     });
     setError(null);
+    setPhoneError(null);
     setIsModalOpen(true);
   };
 
@@ -91,13 +144,13 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
       firstName: contact.firstName,
       lastName: contact.lastName,
       email: contact.email,
-      phone: contact.phone || '',
-      role: contact.role as ContactData['role'],
+      phone: contact.phone ? formatPhoneNumber(contact.phone) : '',
+      roles: contact.roles as RoleType[],
       marketingOptIn: contact.marketingOptIn,
       communicationOptIn: contact.communicationOptIn,
-      isAccountOwner: contact.isAccountOwner,
     });
     setError(null);
+    setPhoneError(null);
     setIsModalOpen(true);
   };
 
@@ -112,6 +165,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
     setIsModalOpen(false);
     setEditingContact(null);
     setError(null);
+    setPhoneError(null);
   };
 
   const closeTransferModal = () => {
@@ -121,17 +175,51 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
     setSuccessMessage(null);
   };
 
+  const handlePhoneChange = (value: string) => {
+    const formatted = formatPhoneNumber(value);
+    setFormData({ ...formData, phone: formatted });
+    
+    const digits = getPhoneDigits(formatted);
+    if (digits.length > 0 && digits.length < 10) {
+      setPhoneError('Phone number must be 10 digits');
+    } else {
+      setPhoneError(null);
+    }
+  };
+
+  const toggleRole = (role: RoleType) => {
+    const currentRoles = formData.roles || [];
+    if (currentRoles.includes(role)) {
+      setFormData({ ...formData, roles: currentRoles.filter(r => r !== role) });
+    } else {
+      setFormData({ ...formData, roles: [...currentRoles, role] });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate phone before submit
+    if (formData.phone && !isValidPhone(formData.phone)) {
+      setPhoneError('Phone number must be 10 digits');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
+      // Clean phone number to just digits for storage
+      const cleanedData = {
+        ...formData,
+        phone: formData.phone ? getPhoneDigits(formData.phone) : undefined,
+      };
+
       let result;
       if (editingContact) {
-        result = await updateContact(editingContact.id, formData);
+        result = await updateContact(editingContact.id, cleanedData);
       } else {
-        result = await createContact(formData);
+        result = await createContact(cleanedData);
       }
 
       if (result.success) {
@@ -220,7 +308,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-gray-900">
                         {contact.firstName} {contact.lastName}
                       </span>
@@ -230,9 +318,14 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                           Account Owner
                         </span>
                       )}
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        {roleLabels[contact.role] || contact.role}
-                      </span>
+                      {contact.roles.map((role) => (
+                        <span 
+                          key={role}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700"
+                        >
+                          {roleLabels[role] || role}
+                        </span>
+                      ))}
                     </div>
                     <div className="mt-1 space-y-1">
                       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -244,7 +337,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                       {contact.phone && (
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Phone className="h-4 w-4 text-gray-400" />
-                          {contact.phone}
+                          {formatPhoneNumber(contact.phone)}
                         </div>
                       )}
                     </div>
@@ -370,26 +463,43 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                     type="tel"
                     id="phone"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    placeholder="(555) 555-5555"
+                    className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm border px-3 py-2 ${
+                      phoneError 
+                        ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                        : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                    }`}
                   />
+                  {phoneError && (
+                    <p className="mt-1 text-sm text-red-600">{phoneError}</p>
+                  )}
                 </div>
 
                 <div>
-                  <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                    Role
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Roles <span className="text-gray-400 font-normal">(optional)</span>
                   </label>
-                  <select
-                    id="role"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as ContactData['role'] })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"
-                  >
-                    <option value="PRIMARY">General</option>
-                    <option value="BILLING">Billing</option>
-                    <option value="TECHNICAL">Technical</option>
-                    <option value="MARKETING">Marketing</option>
-                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    {roleOptions.map((option) => {
+                      const isSelected = (formData.roles || []).includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => toggleRole(option.value)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                              : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                          }`}
+                        >
+                          {isSelected && <Check className="h-3 w-3 inline mr-1" />}
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -422,18 +532,6 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.isAccountOwner}
-                    onChange={(e) => setFormData({ ...formData, isAccountOwner: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">
-                    Set as account owner
-                  </span>
-                </label>
-
                 <div className="flex justify-end gap-3 pt-4 border-t">
                   <button
                     type="button"
@@ -445,7 +543,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                   </button>
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={isLoading || !!phoneError}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
                   >
                     {isLoading ? (
@@ -500,31 +598,30 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
 
               <div className="mb-6">
                 <p className="text-sm text-gray-600 mb-4">
-                  You are about to transfer account ownership from:
+                  Select a contact to transfer account ownership to:
                 </p>
                 
-                <div className="space-y-3">
-                  {/* Current Owner */}
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div>
-                      <p className="font-medium text-gray-900">{currentOwner?.firstName} {currentOwner?.lastName}</p>
-                      <p className="text-xs text-gray-500">{currentOwner?.email}</p>
-                    </div>
-                    <Crown className="h-5 w-5 text-blue-600" />
-                  </div>
-
-                  <div className="flex justify-center">
-                    <ArrowRight className="h-5 w-5 text-gray-400 rotate-90" />
-                  </div>
-
-                  {/* New Owner */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <div>
-                      <p className="font-medium text-gray-900">{selectedContactForTransfer.firstName} {selectedContactForTransfer.lastName}</p>
-                      <p className="text-xs text-gray-500">{selectedContactForTransfer.email}</p>
-                    </div>
-                    <Crown className="h-5 w-5 text-gray-300" />
-                  </div>
+                <div className="space-y-2">
+                  {contacts.filter(c => !c.isAccountOwner).map((contact) => (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      onClick={() => setSelectedContactForTransfer(contact)}
+                      className={`w-full flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
+                        selectedContactForTransfer?.id === contact.id
+                          ? 'border-blue-300 bg-blue-50'
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">{contact.firstName} {contact.lastName}</p>
+                        <p className="text-xs text-gray-500">{contact.email}</p>
+                      </div>
+                      {selectedContactForTransfer?.id === contact.id && (
+                        <Check className="h-5 w-5 text-blue-600" />
+                      )}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
@@ -547,7 +644,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                 <button
                   type="button"
                   onClick={handleTransferOwnership}
-                  disabled={isLoading}
+                  disabled={isLoading || !selectedContactForTransfer}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   {isLoading ? (

@@ -70,6 +70,20 @@ export default async function DealerDetailPage({
   const ownerUser = dealer.users[0];
   const mainContactName = `${dealer.contactFirstName} ${dealer.contactLastName}`.trim();
 
+  // Serialize contacts to plain objects for client component
+  const contacts = dealer.contacts.map(contact => ({
+    id: contact.id,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    email: contact.email,
+    phone: contact.phone,
+    roles: contact.roles,
+    marketingOptIn: contact.marketingOptIn,
+    communicationOptIn: contact.communicationOptIn,
+    isAccountOwner: contact.isAccountOwner,
+    isActive: contact.isActive,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -227,7 +241,7 @@ export default async function DealerDetailPage({
       {/* Contacts Section */}
       <ContactsSection 
         dealerId={dealer.id} 
-        contacts={dealer.contacts}
+        contacts={contacts}
       />
 
       {/* Account Details */}

@@ -130,10 +130,9 @@ export interface ContactData {
   lastName: string;
   email: string;
   phone?: string;
-  role?: 'PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING';
+  roles?: ('PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING')[];
   marketingOptIn?: boolean;
   communicationOptIn?: boolean;
-  isAccountOwner?: boolean;
 }
 
 export async function createDealerContact(dealerId: string, data: ContactData) {
@@ -158,14 +157,6 @@ export async function createDealerContact(dealerId: string, data: ContactData) {
       return { success: false, error: 'A contact with this email already exists for this dealer' };
     }
 
-    // If this is being set as account owner, unset other account owners
-    if (data.isAccountOwner) {
-      await prisma.dealerContact.updateMany({
-        where: { dealerId, isAccountOwner: true },
-        data: { isAccountOwner: false },
-      });
-    }
-
     const contact = await prisma.dealerContact.create({
       data: {
         dealerId,
@@ -173,10 +164,10 @@ export async function createDealerContact(dealerId: string, data: ContactData) {
         lastName: data.lastName,
         email: data.email,
         phone: data.phone || null,
-        role: data.role || 'PRIMARY',
+        roles: data.roles || [],
         marketingOptIn: data.marketingOptIn ?? false,
         communicationOptIn: data.communicationOptIn ?? true,
-        isAccountOwner: data.isAccountOwner ?? false,
+        isAccountOwner: false,
       },
     });
 
@@ -228,14 +219,6 @@ export async function updateDealerContact(contactId: string, dealerId: string, d
       }
     }
 
-    // If this is being set as account owner, unset other account owners
-    if (data.isAccountOwner && !oldContact.isAccountOwner) {
-      await prisma.dealerContact.updateMany({
-        where: { dealerId, isAccountOwner: true },
-        data: { isAccountOwner: false },
-      });
-    }
-
     const contact = await prisma.dealerContact.update({
       where: { id: contactId },
       data: {
@@ -243,10 +226,9 @@ export async function updateDealerContact(contactId: string, dealerId: string, d
         lastName: data.lastName,
         email: data.email,
         phone: data.phone,
-        role: data.role,
+        roles: data.roles,
         marketingOptIn: data.marketingOptIn,
         communicationOptIn: data.communicationOptIn,
-        isAccountOwner: data.isAccountOwner,
       },
     });
 
@@ -380,6 +362,74 @@ export async function transferAccountOwnership(dealerId: string, newOwnerId: str
   } catch (error) {
     console.error('Failed to transfer account ownership:', error);
     return { success: false, error: 'Failed to transfer account ownership' };
+  }
+}
+
+/**
+ * Set a contact as the account owner (used when there's no current owner or admin override)
+ * Admin-facing action for dealer management
+ */
+export async function setAccountOwner(dealerId: string, contactId: string) {
+  const session = await getAdminSession();
+  
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Verify the contact exists and belongs to the dealer
+    const contact = await prisma.dealerContact.findFirst({
+      where: { id: contactId, dealerId },
+    });
+
+    if (!contact) {
+      return { success: false, error: 'Contact not found' };
+    }
+
+    // Get current owner (if any)
+    const currentOwner = await prisma.dealerContact.findFirst({
+      where: { dealerId, isAccountOwner: true },
+    });
+
+    // Unset current owner if exists
+    if (currentOwner) {
+      await prisma.dealerContact.update({
+        where: { id: currentOwner.id },
+        data: { isAccountOwner: false },
+      });
+    }
+
+    // Set new owner
+    const newOwner = await prisma.dealerContact.update({
+      where: { id: contactId },
+      data: { isAccountOwner: true },
+    });
+
+    // Log the action
+    await logAdminAction(session.userId, 'SET_ACCOUNT_OWNER', {
+      dealerId,
+      resource: 'DealerContact',
+      resourceId: contactId,
+      oldValue: currentOwner ? {
+        previousOwnerId: currentOwner.id,
+        previousOwnerEmail: currentOwner.email,
+      } : null,
+      newValue: {
+        newOwnerId: contact.id,
+        newOwnerEmail: contact.email,
+      },
+    });
+
+    revalidatePath(`/dealers/${dealerId}`);
+
+    return {
+      success: true,
+      message: `${contact.firstName} ${contact.lastName} is now the account owner`,
+      newOwner,
+    };
+  } catch (error) {
+    console.error('Failed to set account owner:', error);
+    return { success: false, error: 'Failed to set account owner' };
   }
 }
 

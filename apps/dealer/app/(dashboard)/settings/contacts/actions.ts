@@ -9,10 +9,9 @@ export interface ContactData {
   lastName: string;
   email: string;
   phone?: string;
-  role?: 'PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING';
+  roles?: ('PRIMARY' | 'BILLING' | 'TECHNICAL' | 'MARKETING')[];
   marketingOptIn?: boolean;
   communicationOptIn?: boolean;
-  isAccountOwner?: boolean;
 }
 
 export async function createContact(data: ContactData) {
@@ -42,14 +41,6 @@ export async function createContact(data: ContactData) {
       return { success: false, error: 'A contact with this email already exists' };
     }
 
-    // If this is being set as account owner, unset other account owners
-    if (data.isAccountOwner) {
-      await prisma.dealerContact.updateMany({
-        where: { dealerId: session.dealerId, isAccountOwner: true },
-        data: { isAccountOwner: false },
-      });
-    }
-
     const contact = await prisma.dealerContact.create({
       data: {
         dealerId: session.dealerId,
@@ -57,10 +48,10 @@ export async function createContact(data: ContactData) {
         lastName: data.lastName,
         email: data.email.toLowerCase(),
         phone: data.phone || null,
-        role: data.role || 'PRIMARY',
+        roles: data.roles || [],
         marketingOptIn: data.marketingOptIn ?? false,
         communicationOptIn: data.communicationOptIn ?? true,
-        isAccountOwner: data.isAccountOwner ?? false,
+        isAccountOwner: false,
       },
     });
 
@@ -111,14 +102,6 @@ export async function updateContact(contactId: string, data: Partial<ContactData
       }
     }
 
-    // If this is being set as account owner, unset other account owners
-    if (data.isAccountOwner && !existingContact.isAccountOwner) {
-      await prisma.dealerContact.updateMany({
-        where: { dealerId: session.dealerId, isAccountOwner: true },
-        data: { isAccountOwner: false },
-      });
-    }
-
     const contact = await prisma.dealerContact.update({
       where: { id: contactId },
       data: {
@@ -126,10 +109,9 @@ export async function updateContact(contactId: string, data: Partial<ContactData
         lastName: data.lastName,
         email: data.email?.toLowerCase(),
         phone: data.phone,
-        role: data.role,
+        roles: data.roles,
         marketingOptIn: data.marketingOptIn,
         communicationOptIn: data.communicationOptIn,
-        isAccountOwner: data.isAccountOwner,
       },
     });
 
