@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#0f172a" rx="76.8"/>
+  
+  <!-- Outer circle -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#3b82f6" stroke-width="20"/>
+  
+  <!-- Inner circle (target center) -->
+  <circle cx="256" cy="256" r="54" fill="#3b82f6"/>
+  
+  <!-- Crosshair lines -->
+  <line x1="256" y1="51" x2="256" y2="176" stroke="#3b82f6" stroke-width="15" stroke-linecap="round"/>
+  <line x1="256" y1="336" x2="256" y2="461" stroke="#3b82f6" stroke-width="15" stroke-linecap="round"/>
+  <line x1="51" y1="256" x2="176" y2="256" stroke="#3b82f6" stroke-width="15" stroke-linecap="round"/>
+  <line x1="336" y1="256" x2="461" y2="256" stroke="#3b82f6" stroke-width="15" stroke-linecap="round"/>
+  
+  <!-- "AI" badge -->
+  <rect x="350" y="380" width="110" height="80" rx="16" fill="#10b981"/>
+  <text x="405" y="435" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white">AI</text>
+</svg>

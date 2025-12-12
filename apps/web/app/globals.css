@@ -101,3 +101,115 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ===========================================
+   PWA / Mobile Safe Area Support
+   =========================================== */
+
+/* Safe area insets for notched devices (iPhone X+, etc.) */
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Top header safe area (for fixed headers) */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Bottom navigation safe area (for fixed bottom navs) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Bottom nav with extra padding */
+.bottom-nav {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+/* Header with extra padding */
+.top-header {
+  padding-top: calc(0.5rem + env(safe-area-inset-top));
+}
+
+/* Standalone mode detection (PWA installed) */
+@media (display-mode: standalone) {
+  /* Adjust layout when running as PWA */
+  .pwa-only {
+    display: block;
+  }
+  
+  .browser-only {
+    display: none;
+  }
+  
+  /* Add extra padding at top for PWA status bar */
+  .safe-area-inset {
+    padding-top: max(env(safe-area-inset-top), 20px);
+  }
+}
+
+@media (display-mode: browser) {
+  .pwa-only {
+    display: none;
+  }
+  
+  .browser-only {
+    display: block;
+  }
+}
+
+/* Touch feedback for mobile */
+@layer utilities {
+  .touch-feedback {
+    @apply active:scale-[0.98] active:opacity-90 transition-transform duration-75;
+  }
+  
+  /* Disable text selection on interactive elements for mobile */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Smooth scrolling for iOS */
+  .scroll-smooth-ios {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Pull-to-refresh prevention for PWA */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Prevent double-tap zoom on buttons */
+button, a {
+  touch-action: manipulation;
+}
+
+/* iOS input zoom prevention */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}

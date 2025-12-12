@@ -95,3 +95,7 @@ Thumbs.db
 
 # Prisma generated client
 packages/db/generated/
+
+# Capacitor native projects (optional - some teams commit these)
+# apps/web/ios/
+# apps/web/android/
