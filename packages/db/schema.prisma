@@ -605,7 +605,7 @@ model DealerContact {
   communicationOptIn  Boolean         @default(true)   // Operational/transactional emails
   
   // Tracking
-  isPrimary       Boolean             @default(false)  // Is this the main contact?
+  isAccountOwner  Boolean             @default(false)  // Is this the account owner contact?
   isActive        Boolean             @default(true)
   
   createdAt       DateTime            @default(now())
