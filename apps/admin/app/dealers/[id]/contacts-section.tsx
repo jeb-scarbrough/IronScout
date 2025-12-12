@@ -156,7 +156,7 @@ export function ContactsSection({ dealerId, contacts }: ContactsSectionProps) {
     try {
       const result = await transferAccountOwnership(dealerId, selectedContactForTransfer.id);
       if (result.success) {
-        setSuccessMessage(result.message);
+        setSuccessMessage(result.message || 'Account ownership transferred successfully');
         setTimeout(() => {
           closeTransferModal();
           router.refresh();

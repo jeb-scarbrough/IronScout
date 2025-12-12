@@ -156,7 +156,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
     try {
       const result = await transferOwnership(selectedContactForTransfer.id);
       if (result.success) {
-        setSuccessMessage(result.message);
+        setSuccessMessage(result.message || 'Account ownership transferred successfully');
         setTimeout(() => {
           closeTransferModal();
           router.refresh();
