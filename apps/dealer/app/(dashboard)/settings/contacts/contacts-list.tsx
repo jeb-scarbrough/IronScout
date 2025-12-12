@@ -11,12 +11,14 @@ import {
   Loader2,
   Mail,
   Phone,
-  Star
+  Crown,
+  ArrowRight
 } from 'lucide-react';
 import { 
   createContact, 
   updateContact, 
   deleteContact,
+  transferOwnership,
   ContactData 
 } from './actions';
 
@@ -43,15 +45,17 @@ const roleLabels: Record<string, string> = {
   BILLING: 'Billing',
   TECHNICAL: 'Technical',
   MARKETING: 'Marketing',
-  OTHER: 'Other',
 };
 
 export function ContactsList({ contacts, canManage }: ContactsListProps) {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedContactForTransfer, setSelectedContactForTransfer] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState<ContactData>({
     firstName: '',
     lastName: '',
@@ -62,6 +66,8 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
     communicationOptIn: true,
     isAccountOwner: false,
   });
+
+  const currentOwner = contacts.find(c => c.isAccountOwner);
 
   const openCreateModal = () => {
     setEditingContact(null);
@@ -95,10 +101,24 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
     setIsModalOpen(true);
   };
 
+  const openTransferModal = (contact: Contact) => {
+    setSelectedContactForTransfer(contact);
+    setError(null);
+    setSuccessMessage(null);
+    setIsTransferModalOpen(true);
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingContact(null);
     setError(null);
+  };
+
+  const closeTransferModal = () => {
+    setIsTransferModalOpen(false);
+    setSelectedContactForTransfer(null);
+    setError(null);
+    setSuccessMessage(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,6 +139,30 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
         router.refresh();
       } else {
         setError(result.error || 'Failed to save contact');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTransferOwnership = async () => {
+    if (!selectedContactForTransfer) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await transferOwnership(selectedContactForTransfer.id);
+      if (result.success) {
+        setSuccessMessage(result.message);
+        setTimeout(() => {
+          closeTransferModal();
+          router.refresh();
+        }, 1500);
+      } else {
+        setError(result.error || 'Failed to transfer ownership');
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -182,7 +226,7 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                       </span>
                       {contact.isAccountOwner && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                          <Star className="h-3 w-3" />
+                          <Crown className="h-3 w-3" />
                           Account Owner
                         </span>
                       )}
@@ -215,6 +259,15 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-1">
+                      {contact.isAccountOwner && contacts.length > 1 && (
+                        <button
+                          onClick={() => openTransferModal(contact)}
+                          className="px-2.5 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-100 rounded"
+                          title="Transfer ownership to another contact"
+                        >
+                          Transfer
+                        </button>
+                      )}
                       <button
                         onClick={() => openEditModal(contact)}
                         className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
@@ -222,13 +275,15 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => handleDelete(contact)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 rounded"
-                        title="Delete contact"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {!contact.isAccountOwner && (
+                        <button
+                          onClick={() => handleDelete(contact)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                          title="Delete contact"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -334,7 +389,6 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                     <option value="BILLING">Billing</option>
                     <option value="TECHNICAL">Technical</option>
                     <option value="MARKETING">Marketing</option>
-                    <option value="OTHER">Other</option>
                   </select>
                 </div>
 
@@ -408,6 +462,107 @@ export function ContactsList({ contacts, canManage }: ContactsListProps) {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Ownership Modal */}
+      {isTransferModalOpen && selectedContactForTransfer && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+            onClick={closeTransferModal}
+          />
+          
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900">
+                  Transfer Account Ownership
+                </h2>
+                <button onClick={closeTransferModal} className="text-gray-400 hover:text-gray-500">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {successMessage && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm">
+                  {successMessage}
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-4">
+                  You are about to transfer account ownership from:
+                </p>
+                
+                <div className="space-y-3">
+                  {/* Current Owner */}
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div>
+                      <p className="font-medium text-gray-900">{currentOwner?.firstName} {currentOwner?.lastName}</p>
+                      <p className="text-xs text-gray-500">{currentOwner?.email}</p>
+                    </div>
+                    <Crown className="h-5 w-5 text-blue-600" />
+                  </div>
+
+                  <div className="flex justify-center">
+                    <ArrowRight className="h-5 w-5 text-gray-400 rotate-90" />
+                  </div>
+
+                  {/* New Owner */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div>
+                      <p className="font-medium text-gray-900">{selectedContactForTransfer.firstName} {selectedContactForTransfer.lastName}</p>
+                      <p className="text-xs text-gray-500">{selectedContactForTransfer.email}</p>
+                    </div>
+                    <Crown className="h-5 w-5 text-gray-300" />
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                  <p>
+                    <strong>Note:</strong> Account ownership determines who can manage contacts and team members. 
+                    The new owner will have full control of your dealer account.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeTransferModal}
+                  disabled={isLoading}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTransferOwnership}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="h-4 w-4" />
+                      Transfer Ownership
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
