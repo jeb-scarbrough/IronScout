@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { registerDealer } from '@/lib/auth';
 import { logger } from '@/lib/logger';
-import { sendVerificationEmail } from '@/lib/email';
+import { 
+  notifyNewDealerSignup, 
+  sendDealerVerificationEmail 
+} from '@ironscout/notifications';
 
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -86,9 +89,9 @@ export async function POST(request: Request) {
       businessName 
     });
 
-    // Send verification email (using dealerUser for email and token)
+    // Send verification email to dealer
     reqLogger.debug('Sending verification email');
-    const emailResult = await sendVerificationEmail(
+    const emailResult = await sendDealerVerificationEmail(
       result.dealerUser!.email,
       result.dealer!.businessName,
       result.dealerUser!.verifyToken!
@@ -100,14 +103,31 @@ export async function POST(request: Request) {
         dealerUserId: result.dealerUser?.id,
         error: emailResult.error 
       });
-      // Don't fail registration, but log the issue
-      // The user can request a resend later
     } else {
       reqLogger.info('Verification email sent', { 
         dealerId: result.dealer?.id,
         dealerUserId: result.dealerUser?.id,
         messageId: emailResult.messageId 
       });
+    }
+
+    // Notify admin about new dealer signup (email + Slack)
+    reqLogger.debug('Sending admin notification');
+    const notifyResult = await notifyNewDealerSignup({
+      id: result.dealer!.id,
+      email: result.dealerUser!.email,
+      businessName: result.dealer!.businessName,
+      contactFirstName,
+      contactLastName,
+      websiteUrl,
+      phone,
+    });
+
+    if (!notifyResult.email.success) {
+      reqLogger.warn('Failed to send admin email notification', { error: notifyResult.email.error });
+    }
+    if (!notifyResult.slack.success) {
+      reqLogger.warn('Failed to send Slack notification', { error: notifyResult.slack.error });
     }
 
     return NextResponse.json({
