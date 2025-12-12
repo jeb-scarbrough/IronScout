@@ -9,10 +9,19 @@ const DEALER_JWT_SECRET = new TextEncoder().encode(
 
 // Get the base URL for redirects
 function getBaseUrl(request: NextRequest): string {
-  // In production, use the configured URL or derive from request
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.NEXTAUTH_URL || process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai';
+  // Always prefer explicit configuration
+  const configuredUrl = process.env.NEXTAUTH_URL || process.env.DEALER_PORTAL_URL;
+  
+  if (configuredUrl) {
+    // Remove trailing slashes
+    return configuredUrl.replace(/\/+$/, '');
   }
+  
+  // In production without config, use the production URL
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://dealer.ironscout.ai';
+  }
+  
   // In development, use the request origin
   return request.nextUrl.origin;
 }
@@ -21,6 +30,15 @@ function getBaseUrl(request: NextRequest): string {
 // and exchanges it for a dealer session cookie
 export async function GET(request: NextRequest) {
   const baseUrl = getBaseUrl(request);
+  
+  console.log('[Impersonate Route] Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    DEALER_PORTAL_URL: process.env.DEALER_PORTAL_URL,
+    computedBaseUrl: baseUrl,
+    requestOrigin: request.nextUrl.origin,
+  });
+  
   const searchParams = request.nextUrl.searchParams;
   const token = searchParams.get('token');
 

@@ -5,6 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
 import { SignJWT } from 'jose';
 
+/**
+ * Get the dealer portal base URL with trailing slashes removed
+ */
+function getDealerPortalUrl(): string {
+  const rawUrl = process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai';
+  return rawUrl.replace(/\/+$/, '');
+}
+
 export interface UpdateDealerData {
   businessName?: string;
   contactFirstName?: string;
@@ -331,7 +339,7 @@ export async function resendVerificationEmail(dealerId: string) {
     });
 
     // Send verification email
-    const baseUrl = process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai';
+    const baseUrl = getDealerPortalUrl();
     const verifyUrl = `${baseUrl}/verify-email?token=${verifyToken}`;
 
     // Use Resend to send the email
@@ -446,8 +454,13 @@ export async function impersonateDealer(dealerId: string) {
 
     // Build the redirect URL with the token
     // The dealer portal will exchange this token for a session cookie
-    const baseUrl = (process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai').replace(/\/$/, '');
+    const baseUrl = getDealerPortalUrl();
     const redirectUrl = `${baseUrl}/api/auth/impersonate?token=${encodeURIComponent(token)}`;
+    
+    console.log('[Impersonate] URL construction:', {
+      baseUrl,
+      redirectUrlStart: redirectUrl.substring(0, 60) + '...',
+    });
 
     return { 
       success: true, 
