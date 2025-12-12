@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Check, X, Sparkles, Zap, Shield, Target, TrendingUp } from 'lucide-react'
+import { Check, X, Sparkles, Zap, Target } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { createCheckoutSession } from '@/lib/api'
@@ -21,49 +21,37 @@ const PRICING = {
 // Feature comparison data
 const featureComparison = [
   { 
-    category: 'Search & Filtering',
+    category: 'Search & Discovery',
     features: [
-      { name: 'Natural-language search', free: true, premium: true },
-      { name: 'Full filter control (caliber, grain, case, price)', free: true, premium: true },
+      { name: 'Search by caliber, brand, grain & more', free: true, premium: true },
       { name: 'Price-per-round breakdown', free: true, premium: true },
-      { name: 'Advanced filters (+P, subsonic, velocity)', free: false, premium: true },
+      { name: 'Purpose badges (range, defense, hunting)', free: true, premium: true },
+      { name: '"What should I buy?" — Personalized AI picks', free: false, premium: true },
+      { name: 'Performance filters (+P, subsonic, match-grade)', free: false, premium: true },
     ]
   },
   { 
-    category: 'AI Purpose Detection',
+    category: 'AI Intelligence',
     features: [
-      { name: 'Basic purpose detection', free: true, premium: true, freeNote: 'Primary purpose only' },
-      { name: 'Deep AI purpose interpretation', free: false, premium: true },
-      { name: 'Indoor/outdoor context awareness', free: false, premium: true },
+      { name: 'Basic AI search assistance', free: true, premium: true },
+      { name: 'Deep purpose interpretation (gun + use case)', free: false, premium: true },
+      { name: 'AI explanations — Understand why a round fits', free: false, premium: true },
       { name: 'Short-barrel & suppressor optimization', free: false, premium: true },
-      { name: 'Overpenetration & flash risk adjustment', free: false, premium: true },
     ]
   },
   { 
-    category: 'Results & Ranking',
+    category: 'Pricing & Value',
     features: [
-      { name: 'Standard relevance ranking', free: true, premium: true },
-      { name: 'Purpose-optimized ranking', free: false, premium: true },
-      { name: 'Performance-aware matching', free: false, premium: true },
-      { name: 'Best Value scoring', free: false, premium: true },
-      { name: 'Reliability insights', free: false, premium: true },
+      { name: 'See current prices across dealers', free: true, premium: true },
+      { name: 'Best Value scoring — The actual cheapest deal', free: false, premium: true },
+      { name: 'Full price history charts', free: false, premium: true },
     ]
   },
   { 
-    category: 'AI Insights',
+    category: 'Alerts',
     features: [
-      { name: 'Purpose summary badge', free: true, premium: true },
-      { name: 'AI explanation for results', free: false, premium: true },
-      { name: 'Performance badges on products', free: false, premium: true },
-    ]
-  },
-  { 
-    category: 'Alerts & History',
-    features: [
-      { name: 'Price drop alerts', free: true, premium: true, freeNote: 'Delayed 1 hour' },
-      { name: 'Real-time instant alerts', free: false, premium: true },
-      { name: 'Active alerts', free: '5 max', premium: 'Unlimited' },
-      { name: 'Price history charts', free: false, premium: true },
+      { name: 'Price drop alerts', free: 'Up to 3, daily digest', premium: 'Unlimited, instant' },
+      { name: 'Get notified before deals sell out', free: false, premium: true },
     ]
   },
 ]
@@ -73,48 +61,41 @@ const plans = [
   {
     id: 'free',
     name: 'Free',
-    tagline: 'Start Smart',
-    description: 'For shooters who want reliable search and basic AI-powered results.',
+    tagline: 'Find Ammo Fast',
+    description: 'Search, filter, and compare prices across hundreds of dealers.',
     monthlyPrice: 0,
     annualPrice: 0,
     highlights: [
-      'AI-assisted search (basic)',
-      'Full access to all filters',
+      'Search by caliber, brand, grain & more',
       'Price-per-round breakdown',
-      'Basic price alerts (delayed)',
-      'Purpose detection badges',
+      'Purpose badges (range, defense, hunting)',
+      'Daily price alerts (up to 3)',
+      'Basic AI search assistance',
     ],
-    limitations: [
-      'No deep AI understanding',
-      'No performance-based ranking',
-      'No AI explanations',
-      'No Best Value scoring',
-      'Delayed alerts (1 hour)',
-    ],
-    bestFor: 'Casual shooters, bargain hunters, or anyone who already knows exactly what they want.',
+    limitations: [],
+    bestFor: 'Shooters who know exactly what they want and just need to find the best price.',
     cta: 'Get Started Free',
     popular: false,
   },
   {
     id: 'premium',
     name: 'Premium',
-    tagline: 'Expert-Level Guidance',
-    description: 'For shooters who want precision recommendations and expert insight.',
+    tagline: 'Never Overpay Again',
+    description: 'AI-powered recommendations that match your gun, your purpose, and your budget.',
     monthlyPrice: PRICING.PREMIUM_MONTHLY,
     annualPrice: PRICING.PREMIUM_ANNUAL,
     highlights: [
       'Everything in Free, plus:',
-      'Advanced AI purpose interpretation',
-      'Purpose-optimized result ranking',
-      'AI explanations & insights',
-      'Best Value scoring',
-      'Performance badges & filters',
-      'Full price history charts',
-      'Real-time instant alerts',
-      'Unlimited active alerts',
+      '"What should I buy?" — Tell us your firearm & use case, get personalized picks',
+      'Best Value scoring — Instantly see which deal is actually cheapest',
+      'Price history charts — Know if now is a good time to buy',
+      'Instant alerts — Get notified before deals sell out',
+      'Unlimited alerts — Track as many calibers as you want',
+      'Performance filters — Low-recoil, subsonic, +P, match-grade & more',
+      'AI explanations — Understand why a round is right for you',
     ],
     limitations: [],
-    bestFor: 'Home defense buyers, competitive shooters, high-volume range shooters, and anyone who wants the best ammo decisions with the least effort.',
+    bestFor: 'Home defense buyers, competitive shooters, and anyone who wants the best ammo without the research.',
     cta: 'Upgrade to Premium',
     popular: true,
   },
@@ -251,19 +232,6 @@ export function PricingPlans() {
                 ))}
               </div>
 
-              {/* Limitations */}
-              {plan.limitations.length > 0 && (
-                <div className="pt-4 border-t space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">What's limited:</p>
-                  {plan.limitations.map((limitation, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <X className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-muted-foreground">{limitation}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* Best For */}
               <div className="pt-4 border-t">
                 <p className="text-xs font-medium text-muted-foreground mb-1">Best for:</p>
@@ -293,7 +261,7 @@ export function PricingPlans() {
       {/* Feature Comparison Table */}
       <div className="mt-16">
         <h2 className="text-2xl font-bold text-center mb-8">
-          Free vs Premium — What You Get
+          Full Feature Comparison
         </h2>
         
         <div className="max-w-4xl mx-auto overflow-hidden rounded-xl border">
@@ -324,12 +292,7 @@ export function PricingPlans() {
                   <div className="p-3 text-center">
                     {typeof feature.free === 'boolean' ? (
                       feature.free ? (
-                        <div className="flex flex-col items-center">
-                          <Check className="h-5 w-5 text-green-500" />
-                          {feature.freeNote && (
-                            <span className="text-xs text-muted-foreground mt-0.5">{feature.freeNote}</span>
-                          )}
-                        </div>
+                        <Check className="h-5 w-5 text-green-500 mx-auto" />
                       ) : (
                         <X className="h-5 w-5 text-gray-300 mx-auto" />
                       )
@@ -358,7 +321,7 @@ export function PricingPlans() {
       {/* Bottom CTA */}
       <div className="text-center pt-8 pb-4">
         <p className="text-muted-foreground mb-4">
-          Making important ammo decisions? Unlock Premium for deeper AI analysis and expert-level recommendations.
+          Stop guessing. Start knowing. Upgrade to Premium for AI-powered ammo decisions.
         </p>
         <Button 
           size="lg"
