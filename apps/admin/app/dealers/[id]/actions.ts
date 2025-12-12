@@ -2,7 +2,6 @@
 
 import { prisma } from '@ironscout/db';
 import { revalidatePath } from 'next/cache';
-import { cookies } from 'next/headers';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
 import { SignJWT } from 'jose';
 
@@ -413,6 +412,7 @@ export async function impersonateDealer(dealerId: string) {
     }
 
     // Create impersonation token with admin info embedded
+    // This token will be passed via URL to the dealer portal's impersonate endpoint
     const token = await new SignJWT({
       dealerUserId: dealerUser.id,
       dealerId: dealerUser.dealerId,
@@ -429,7 +429,7 @@ export async function impersonateDealer(dealerId: string) {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('4h') // Shorter expiry for impersonation
+      .setExpirationTime('5m') // Short expiry - only used for initial redirect
       .sign(DEALER_JWT_SECRET);
 
     // Log the impersonation action
@@ -444,34 +444,14 @@ export async function impersonateDealer(dealerId: string) {
       },
     });
 
-    // Set the session cookie for the dealer portal
-    const cookieStore = await cookies();
-    cookieStore.set('dealer-session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 4, // 4 hours
-      path: '/',
-      domain: process.env.NODE_ENV === 'production' ? '.ironscout.ai' : undefined,
-    });
-
-    // Also set impersonation indicator cookie (readable by client)
-    cookieStore.set('dealer-impersonation', JSON.stringify({
-      adminEmail: session.email,
-      dealerName: dealerUser.dealer.businessName,
-      startedAt: new Date().toISOString(),
-    }), {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 4,
-      path: '/',
-      domain: process.env.NODE_ENV === 'production' ? '.ironscout.ai' : undefined,
-    });
+    // Build the redirect URL with the token
+    // The dealer portal will exchange this token for a session cookie
+    const baseUrl = process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai';
+    const redirectUrl = `${baseUrl}/api/auth/impersonate?token=${encodeURIComponent(token)}`;
 
     return { 
       success: true, 
-      redirectUrl: process.env.DEALER_PORTAL_URL || 'https://dealer.ironscout.ai',
+      redirectUrl,
       businessName: dealerUser.dealer.businessName,
     };
   } catch (error) {
@@ -480,21 +460,6 @@ export async function impersonateDealer(dealerId: string) {
   }
 }
 
-export async function endImpersonation() {
-  const session = await getAdminSession();
-  
-  // Allow ending impersonation even without admin session (in case cookie is stale)
-  const cookieStore = await cookies();
-  
-  // Clear dealer session cookies
-  cookieStore.delete('dealer-session');
-  cookieStore.delete('dealer-impersonation');
-
-  if (session) {
-    await logAdminAction(session.userId, 'END_IMPERSONATION', {
-      resource: 'Dealer',
-    });
-  }
-
-  return { success: true };
-}
+// Note: endImpersonation should be called from the dealer portal,
+// not from admin, since cookies are domain-specific.
+// See apps/dealer/app/api/auth/logout/route.ts
