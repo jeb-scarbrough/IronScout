@@ -119,7 +119,7 @@ Need help? Contact support@ironscout.ai`,
       ),
       slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.webhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -183,7 +183,7 @@ View feed status: ${dealerPortalUrl}`,
       ),
       slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.webhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }

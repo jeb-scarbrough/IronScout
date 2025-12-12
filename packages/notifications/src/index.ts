@@ -20,8 +20,8 @@
  * - RESEND_API_KEY: Resend API key for email delivery
  * - EMAIL_FROM: From address for emails (default: IronScout <noreply@ironscout.ai>)
  * - ADMIN_NOTIFICATION_EMAIL: Admin email for notifications (default: operations@ironscout.ai)
- * - SLACK_WEBHOOK_URL: Slack webhook URL for notifications
- * - SLACK_WEBHOOK_URL_FEEDS: Optional separate webhook for feed alerts
+ * - SLACK_DEALER_OPS_WEBHOOK_URL: Slack webhook URL for dealer operations notifications
+ * - SLACK_FEEDS_WEBHOOK_URL: Optional separate webhook for feed alerts
  * - NEXT_PUBLIC_DEALER_URL: Dealer portal URL
  * - ADMIN_PORTAL_URL: Admin portal URL
  */
