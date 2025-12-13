@@ -89,7 +89,7 @@ services:
     runtime: node
     region: ohio
     plan: free  # Change to 'starter' for production
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/harvester build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
       - key: NODE_ENV

@@ -11,7 +11,7 @@ import {
   emailInfoBox,
   EMAIL_CONFIG,
   type EmailResult,
-} from '../channels/email';
+} from '../channels/email.js';
 import {
   sendSlackMessage,
   slackHeader,
@@ -21,7 +21,7 @@ import {
   slackButton,
   slackFieldsSection,
   type SlackResult,
-} from '../channels/slack';
+} from '../channels/slack.js';
 
 // =============================================================================
 // Types

@@ -11,7 +11,7 @@ import {
   emailInfoBox,
   EMAIL_CONFIG,
   type EmailResult,
-} from '../channels/email';
+} from '../channels/email.js';
 import {
   sendSlackMessage,
   slackHeader,
@@ -22,7 +22,7 @@ import {
   slackFieldsSection,
   SLACK_CONFIG,
   type SlackResult,
-} from '../channels/slack';
+} from '../channels/slack.js';
 
 // =============================================================================
 // Types
@@ -125,7 +125,7 @@ Need help? Contact support@ironscout.ai`,
       ),
       slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.webhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -189,7 +189,7 @@ View Feed Dashboard: ${feedsUrl}`,
       ),
       slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.webhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -259,7 +259,7 @@ View Feed Settings: ${feedsUrl}`,
       ),
       slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.webhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
