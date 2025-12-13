@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     reqLogger.debug('Session verified', { dealerId: session.dealerId });
 
-    let body: { feedType?: string; url?: string; username?: string; password?: string };
+    let body: { accessType?: string; url?: string; username?: string; password?: string };
     try {
       body = await request.json();
     } catch {
@@ -30,11 +30,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    const { feedType, url, username, password } = body;
+    const { accessType, url, username, password } = body;
 
-    reqLogger.debug('Testing feed connection', { feedType, hasUrl: !!url });
+    reqLogger.debug('Testing feed connection', { accessType, hasUrl: !!url });
 
-    if (!url && feedType !== 'UPLOAD') {
+    if (!url && accessType !== 'UPLOAD') {
       reqLogger.warn('Feed test failed - URL required');
       return NextResponse.json(
         { error: 'URL is required' },
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     // For manual upload, just return success
-    if (feedType === 'UPLOAD') {
+    if (accessType === 'UPLOAD') {
       reqLogger.info('Manual upload feed test - success');
       return NextResponse.json({ success: true, rowCount: 0, message: 'Manual upload ready' });
     }
@@ -51,9 +51,9 @@ export async function POST(request: Request) {
     // Test the URL is reachable
     try {
       const headers: Record<string, string> = {};
-      
+
       // Add basic auth if needed
-      if (feedType === 'AUTH_URL' && username && password) {
+      if (accessType === 'AUTH_URL' && username && password) {
         const auth = Buffer.from(`${username}:${password}`).toString('base64');
         headers['Authorization'] = `Basic ${auth}`;
         reqLogger.debug('Using basic auth for feed test');

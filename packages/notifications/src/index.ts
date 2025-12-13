@@ -85,6 +85,7 @@ export {
   // Feed Alerts
   notifyFeedFailed,
   notifyFeedRecovered,
+  notifyFeedWarning,
   type FeedAlertInfo,
 } from './notifications/feed-alerts';
 

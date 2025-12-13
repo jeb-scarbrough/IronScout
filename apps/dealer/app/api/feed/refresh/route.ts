@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       );
     }
 
-    reqLogger.debug('Feed found', { feedId, feedType: feed.feedType });
+    reqLogger.debug('Feed found', { feedId, accessType: feed.accessType });
 
     // Check dealer status
     const dealer = await prisma.dealer.findUnique({
@@ -144,7 +144,8 @@ export async function POST(request: Request) {
         dealerId,
         feedId: feed.id,
         feedRunId: run.id,
-        feedType: feed.feedType,
+        accessType: feed.accessType,
+        formatType: feed.formatType,
         url: feed.url || undefined,
         username: feed.username || undefined,
         password: feed.password || undefined,
@@ -156,10 +157,10 @@ export async function POST(request: Request) {
       }
     );
 
-    reqLogger.info('Feed refresh queued successfully', { 
-      feedId, 
+    reqLogger.info('Feed refresh queued successfully', {
+      feedId,
       runId: run.id,
-      feedType: feed.feedType 
+      accessType: feed.accessType
     });
 
     return NextResponse.json({

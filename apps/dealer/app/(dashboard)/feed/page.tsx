@@ -1,13 +1,15 @@
 import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@ironscout/db';
-import { 
-  Rss, 
-  CheckCircle, 
-  AlertTriangle, 
+import Link from 'next/link';
+import {
+  Rss,
+  CheckCircle,
+  AlertTriangle,
   XCircle,
   Clock,
-  RefreshCw
+  RefreshCw,
+  AlertOctagon
 } from 'lucide-react';
 import { FeedConfigForm } from './feed-config-form';
 import { FeedRunsTable } from './feed-runs-table';
@@ -15,15 +17,15 @@ import { RefreshFeedButton } from './refresh-feed-button';
 
 export default async function FeedPage() {
   const session = await getSession();
-  
+
   if (!session || session.type !== 'dealer') {
     redirect('/login');
   }
-  
+
   const dealerId = session.dealerId;
-  
-  // Get feed and recent runs
-  const [feed, recentRuns] = await Promise.all([
+
+  // Get feed, recent runs, and quarantine count
+  const [feed, recentRuns, quarantineCount] = await Promise.all([
     prisma.dealerFeed.findFirst({
       where: { dealerId },
     }),
@@ -31,6 +33,12 @@ export default async function FeedPage() {
       where: { dealerId },
       orderBy: { startedAt: 'desc' },
       take: 10,
+    }),
+    prisma.quarantinedRecord.count({
+      where: {
+        dealerId,
+        status: 'QUARANTINED',
+      },
     }),
   ]);
 
@@ -73,7 +81,7 @@ export default async function FeedPage() {
                   <p className="text-sm text-gray-500">{status.label}</p>
                 </div>
               </div>
-              
+
               <div className="text-right">
                 {feed.lastSuccessAt && (
                   <p className="text-sm text-gray-500">
@@ -91,6 +99,28 @@ export default async function FeedPage() {
         </div>
       )}
 
+      {/* Quarantine Alert */}
+      {quarantineCount > 0 && (
+        <Link
+          href="/feed/quarantine"
+          className="block rounded-lg bg-amber-50 border border-amber-200 p-4 hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <AlertOctagon className="h-5 w-5 text-amber-600" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-amber-800">
+                {quarantineCount} record{quarantineCount > 1 ? 's' : ''} in quarantine
+              </h4>
+              <p className="text-sm text-amber-600">
+                These products could not be indexed due to missing UPC or other issues.
+                Click to review and fix.
+              </p>
+            </div>
+            <span className="text-amber-600">&rarr;</span>
+          </div>
+        </Link>
+      )}
+
       {/* Configuration Form */}
       <div className="rounded-lg bg-white shadow">
         <div className="px-4 py-5 sm:p-6">
@@ -102,7 +132,8 @@ export default async function FeedPage() {
           <FeedConfigForm
             initialData={feed ? {
               id: feed.id,
-              feedType: feed.feedType,
+              accessType: feed.accessType,
+              formatType: feed.formatType,
               url: feed.url || '',
               username: feed.username || '',
               password: '', // Don't expose password

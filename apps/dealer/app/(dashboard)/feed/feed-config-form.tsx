@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { FeedType } from '@ironscout/db';
+import type { FeedAccessType, FeedFormatType } from '@ironscout/db';
 
 interface FeedFormData {
-  feedType: FeedType;
+  accessType: FeedAccessType;
+  formatType: FeedFormatType;
   url: string;
   username: string;
   password: string;
@@ -17,12 +18,18 @@ interface FeedConfigFormProps {
   onSuccess?: () => void;
 }
 
-const FEED_TYPE_OPTIONS: { value: FeedType; label: string; description: string }[] = [
+const ACCESS_TYPE_OPTIONS: { value: FeedAccessType; label: string; description: string }[] = [
   { value: 'URL', label: 'Public URL', description: 'HTTP/HTTPS feed URL accessible without authentication' },
   { value: 'AUTH_URL', label: 'Authenticated URL', description: 'URL requiring Basic Auth credentials' },
   { value: 'FTP', label: 'FTP', description: 'FTP server with credentials' },
   { value: 'SFTP', label: 'SFTP', description: 'Secure FTP server with credentials' },
   { value: 'UPLOAD', label: 'Manual Upload', description: 'Upload CSV/XML files manually' },
+];
+
+const FORMAT_TYPE_OPTIONS: { value: FeedFormatType; label: string; description: string }[] = [
+  { value: 'GENERIC', label: 'Auto-Detect', description: 'Automatically detect CSV, XML, or JSON format' },
+  { value: 'AMMOSEEK_V1', label: 'AmmoSeek Compatible', description: 'AmmoSeek-compatible feed format' },
+  { value: 'GUNENGINE_V2', label: 'GunEngine V2', description: 'GunEngine Offer Feed V2 format' },
 ];
 
 const SCHEDULE_OPTIONS = [
@@ -41,15 +48,16 @@ export function FeedConfigForm({ initialData, onSuccess }: FeedConfigFormProps) 
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<FeedFormData>({
-    feedType: initialData?.feedType || 'URL',
+    accessType: initialData?.accessType || 'URL',
+    formatType: initialData?.formatType || 'GENERIC',
     url: initialData?.url || '',
     username: initialData?.username || '',
     password: initialData?.password || '',
     scheduleMinutes: initialData?.scheduleMinutes || 60,
   });
 
-  const needsAuth = ['AUTH_URL', 'FTP', 'SFTP'].includes(formData.feedType);
-  const isManualUpload = formData.feedType === 'UPLOAD';
+  const needsAuth = ['AUTH_URL', 'FTP', 'SFTP'].includes(formData.accessType);
+  const isManualUpload = formData.accessType === 'UPLOAD';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -133,26 +141,62 @@ export function FeedConfigForm({ initialData, onSuccess }: FeedConfigFormProps) 
         </div>
       )}
 
-      {/* Feed Type */}
+      {/* Access Type */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Feed Type
+          Connection Type
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {FEED_TYPE_OPTIONS.map((option) => (
+          {ACCESS_TYPE_OPTIONS.map((option) => (
             <label
               key={option.value}
               className={`relative flex cursor-pointer rounded-lg border p-4 shadow-sm focus:outline-none ${
-                formData.feedType === option.value
+                formData.accessType === option.value
                   ? 'border-gray-900 ring-2 ring-gray-900'
                   : 'border-gray-300'
               }`}
             >
               <input
                 type="radio"
-                name="feedType"
+                name="accessType"
                 value={option.value}
-                checked={formData.feedType === option.value}
+                checked={formData.accessType === option.value}
+                onChange={handleChange}
+                className="sr-only"
+              />
+              <div className="flex flex-1 flex-col">
+                <span className="block text-sm font-medium text-gray-900">
+                  {option.label}
+                </span>
+                <span className="mt-1 text-xs text-gray-500">
+                  {option.description}
+                </span>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Format Type */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Feed Format
+        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {FORMAT_TYPE_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className={`relative flex cursor-pointer rounded-lg border p-4 shadow-sm focus:outline-none ${
+                formData.formatType === option.value
+                  ? 'border-gray-900 ring-2 ring-gray-900'
+                  : 'border-gray-300'
+              }`}
+            >
+              <input
+                type="radio"
+                name="formatType"
+                value={option.value}
+                checked={formData.formatType === option.value}
                 onChange={handleChange}
                 className="sr-only"
               />
@@ -183,7 +227,7 @@ export function FeedConfigForm({ initialData, onSuccess }: FeedConfigFormProps) 
             value={formData.url}
             onChange={handleChange}
             placeholder={
-              formData.feedType === 'FTP' || formData.feedType === 'SFTP'
+              formData.accessType === 'FTP' || formData.accessType === 'SFTP'
                 ? 'ftp://example.com/feeds/products.csv'
                 : 'https://example.com/feed.csv'
             }

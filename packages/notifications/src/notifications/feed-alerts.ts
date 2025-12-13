@@ -128,6 +128,93 @@ Need help? Contact support@ironscout.ai`,
 // Feed Recovered Notification
 // =============================================================================
 
+// =============================================================================
+// Feed Warning Notification (High Quarantine Rate)
+// =============================================================================
+
+export async function notifyFeedWarning(
+  feed: FeedAlertInfo,
+  stats: { quarantineCount: number; indexedCount: number; quarantineRate: number }
+): Promise<NotificationResult> {
+  const dealerPortalUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feed/quarantine`;
+  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+
+  const ratePercent = Math.round(stats.quarantineRate * 100);
+
+  // Send email to dealer
+  const emailResult = await sendEmail({
+    to: feed.dealerEmail,
+    subject: `⚠️ Feed Warning: ${ratePercent}% of records quarantined`,
+    html: wrapEmailTemplate(`
+      ${emailInfoBox(`
+        <h2 style="margin: 0 0 10px 0; font-size: 18px;">⚠️ High Quarantine Rate</h2>
+        <p style="margin: 0;">${ratePercent}% of your feed records need attention.</p>
+      `, 'warning')}
+
+      <div style="background: #f9fafb; border-radius: 8px; padding: 25px; margin: 20px 0;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 0; color: #666; width: 140px;">Feed Type:</td>
+            <td style="padding: 8px 0; color: #111;">${feed.feedType}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #666;">Indexed:</td>
+            <td style="padding: 8px 0; color: #059669; font-weight: 600;">${stats.indexedCount} records</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #666;">Quarantined:</td>
+            <td style="padding: 8px 0; color: #d97706; font-weight: 600;">${stats.quarantineCount} records</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="color: #666; font-size: 14px;">
+        Records are quarantined when they're missing a valid UPC code.
+        You can add corrections to fix these records.
+      </p>
+
+      ${emailButton('Review Quarantine Queue', dealerPortalUrl)}
+    `),
+    text: `Feed Warning - High Quarantine Rate
+
+${ratePercent}% of your feed records need attention.
+
+Feed Type: ${feed.feedType}
+Indexed: ${stats.indexedCount} records
+Quarantined: ${stats.quarantineCount} records
+
+Records are quarantined when they're missing a valid UPC code.
+You can add corrections to fix these records.
+
+Review quarantine queue: ${dealerPortalUrl}`,
+  });
+
+  // Send Slack notification
+  const slackResult = await sendSlackMessage({
+    text: `⚠️ High quarantine rate: ${feed.businessName} - ${ratePercent}%`,
+    blocks: [
+      slackHeader('⚠️ High Quarantine Rate'),
+      slackFieldsSection({
+        'Business': feed.businessName,
+        'Feed Type': feed.feedType,
+        'Indexed': `${stats.indexedCount} records`,
+        'Quarantined': `${stats.quarantineCount} records (${ratePercent}%)`,
+      }),
+      slackDivider(),
+      slackActions(
+        slackButton('View in Admin', adminDetailUrl, 'danger')
+      ),
+      slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
+    ],
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+
+  return { email: emailResult, slack: slackResult };
+}
+
+// =============================================================================
+// Feed Recovered Notification
+// =============================================================================
+
 export async function notifyFeedRecovered(feed: FeedAlertInfo): Promise<NotificationResult> {
   const dealerPortalUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
   const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
