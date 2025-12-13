@@ -57,7 +57,9 @@ if (-not $SkipPrisma) {
 }
 
 # Define apps to build (in dependency order)
+# Note: notifications must be built before admin, dealer, and harvester
 $apps = @(
+    @{ Name = "notifications"; Filter = "@ironscout/notifications"; Command = "build" },
     @{ Name = "api"; Filter = "@ironscout/api"; Command = "build" },
     @{ Name = "web"; Filter = "@ironscout/web"; Command = "build" },
     @{ Name = "admin"; Filter = "@ironscout/admin"; Command = "build" },

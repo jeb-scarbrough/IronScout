@@ -115,7 +115,7 @@ services:
     runtime: node
     region: ohio
     plan: free  # Change to 'starter' or 'standard' for production
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/dealer build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/dealer build
     startCommand: cd apps/dealer && pnpm start
     healthCheckPath: /
     envVars:
@@ -150,7 +150,7 @@ services:
     runtime: node
     region: ohio
     plan: free  # Change to 'starter' or 'standard' for production
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/admin build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
     envVars:
