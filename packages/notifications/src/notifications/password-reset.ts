@@ -8,7 +8,7 @@ import {
   emailButton,
   EMAIL_CONFIG,
   type EmailResult,
-} from '../channels/email';
+} from '../channels/email.js';
 
 // =============================================================================
 // Password Reset Email

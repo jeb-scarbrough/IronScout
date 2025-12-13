@@ -39,7 +39,7 @@ export {
   EMAIL_CONFIG,
   type EmailResult,
   type SendEmailOptions,
-} from './channels/email';
+} from './channels/email.js';
 
 export {
   // Slack
@@ -55,7 +55,7 @@ export {
   type SlackResult,
   type SlackMessage,
   type SlackBlock,
-} from './channels/slack';
+} from './channels/slack.js';
 
 // =============================================================================
 // Notification Exports (primary usage)
@@ -66,7 +66,7 @@ export {
   notifyNewDealerSignup,
   sendDealerVerificationEmail,
   type NewDealerInfo,
-} from './notifications/dealer-signup';
+} from './notifications/dealer-signup.js';
 
 export {
   // Dealer Status Changes
@@ -74,12 +74,12 @@ export {
   notifyDealerSuspended,
   notifyDealerReactivated,
   type DealerStatusInfo,
-} from './notifications/dealer-status';
+} from './notifications/dealer-status.js';
 
 export {
   // Password Reset
   sendPasswordResetEmail,
-} from './notifications/password-reset';
+} from './notifications/password-reset.js';
 
 export {
   // Feed Alerts
@@ -87,7 +87,7 @@ export {
   notifyFeedRecovered,
   notifyFeedWarning,
   type FeedAlertInfo,
-} from './notifications/feed-alerts';
+} from './notifications/feed-alerts.js';
 
 // =============================================================================
 // Common Types
