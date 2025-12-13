@@ -8,7 +8,7 @@
  */
 
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@ironscout/db'
+import { prisma, Prisma } from '@ironscout/db'
 import type { FeedFormatType } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import {
@@ -103,7 +103,7 @@ async function sendFeedNotifications(
       console.log(`[Dealer Feed] Sending warning notification to ${dealerEmail}`)
       await notifyFeedWarning(feedInfo, {
         indexedCount: stats.indexedCount,
-        quarantinedCount: stats.quarantinedCount,
+        quarantineCount: stats.quarantinedCount,
         quarantineRate: stats.quarantineRatio,
       })
     } else if (currentStatus === 'HEALTHY' && (previousStatus === 'FAILED' || previousStatus === 'WARNING')) {
@@ -401,11 +401,11 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
 
     // Determine error code
     const errorMessage = String(error)
-    let primaryErrorCode = ERROR_CODES.PARSE_ERROR
+    let primaryErrorCode: string = ERROR_CODES.PARSE_ERROR
     if (errorMessage.includes('fetch')) {
-      primaryErrorCode = 'FETCH_ERROR'
+      primaryErrorCode = ERROR_CODES.FETCH_ERROR
     } else if (errorMessage.includes('timeout')) {
-      primaryErrorCode = 'TIMEOUT_ERROR'
+      primaryErrorCode = ERROR_CODES.TIMEOUT_ERROR
     }
 
     // Update feed status
@@ -486,7 +486,7 @@ async function processIndexableRecord(
       rawInStock: record.inStock,
       rawUrl: record.productUrl,
       rawImageUrl: record.imageUrl,
-      coercionsApplied: coercions.length > 0 ? coercions : undefined,
+      coercionsApplied: coercions.length > 0 ? (coercions as unknown as Prisma.InputJsonValue) : undefined,
       isActive: true,
     },
     update: {
@@ -495,7 +495,7 @@ async function processIndexableRecord(
       rawInStock: record.inStock,
       rawDescription: record.description,
       rawImageUrl: record.imageUrl,
-      coercionsApplied: coercions.length > 0 ? coercions : undefined,
+      coercionsApplied: coercions.length > 0 ? (coercions as unknown as Prisma.InputJsonValue) : undefined,
       isActive: true,
       updatedAt: new Date(),
     },
@@ -538,7 +538,7 @@ async function processQuarantineRecord(
       feedId,
       runId: feedRunId,
       matchKey,
-      rawData: record.rawRow,
+      rawData: record.rawRow as Prisma.InputJsonValue,
       parsedFields: {
         title: record.title,
         price: record.price,
@@ -547,12 +547,12 @@ async function processQuarantineRecord(
         caliber: record.caliber,
         inStock: record.inStock,
       },
-      blockingErrors,
+      blockingErrors: blockingErrors as unknown as Prisma.InputJsonValue,
       status: 'QUARANTINED',
     },
     update: {
       runId: feedRunId,
-      rawData: record.rawRow,
+      rawData: record.rawRow as Prisma.InputJsonValue,
       parsedFields: {
         title: record.title,
         price: record.price,
@@ -561,7 +561,7 @@ async function processQuarantineRecord(
         caliber: record.caliber,
         inStock: record.inStock,
       },
-      blockingErrors,
+      blockingErrors: blockingErrors as unknown as Prisma.InputJsonValue,
       // Don't update status if already RESOLVED
       updatedAt: new Date(),
     },

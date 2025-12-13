@@ -8,6 +8,7 @@ interface FeedRunsTableProps {
 }
 
 const statusConfig = {
+  PENDING: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Pending', iconClass: '' },
   RUNNING: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Running', iconClass: 'animate-spin' },
   SUCCESS: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Success', iconClass: '' },
   WARNING: { icon: AlertTriangle, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Warning', iconClass: '' },
@@ -40,13 +41,13 @@ export function FeedRunsTable({ runs }: FeedRunsTableProps) {
               Rows
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Processed
+              Indexed
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Matched
+              Quarantined
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Failed
+              Rejected
             </th>
           </tr>
         </thead>
@@ -72,14 +73,14 @@ export function FeedRunsTable({ runs }: FeedRunsTableProps) {
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                   {run.rowCount.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                  {run.processedCount.toLocaleString()}
-                </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-green-600">
-                  {run.matchedCount.toLocaleString()}
+                  {run.indexedCount.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-yellow-600">
+                  {run.quarantinedCount > 0 ? run.quarantinedCount.toLocaleString() : '-'}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600">
-                  {run.failedCount > 0 ? run.failedCount.toLocaleString() : '-'}
+                  {run.rejectedCount > 0 ? run.rejectedCount.toLocaleString() : '-'}
                 </td>
               </tr>
             );

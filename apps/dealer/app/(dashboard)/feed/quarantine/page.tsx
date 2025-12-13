@@ -121,7 +121,7 @@ export default async function QuarantinePage() {
       </div>
 
       <QuarantineTable
-        initialRecords={records}
+        initialRecords={records as unknown as Parameters<typeof QuarantineTable>[0]['initialRecords']}
         initialTotal={total}
         counts={counts}
       />

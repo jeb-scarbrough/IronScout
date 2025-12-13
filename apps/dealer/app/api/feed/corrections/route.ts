@@ -29,12 +29,12 @@ export async function GET(request: Request) {
     const feedId = searchParams.get('feedId');
 
     // Get dealer's feed if not specified
-    let targetFeedId = feedId;
+    let targetFeedId: string | null = feedId;
     if (!targetFeedId) {
       const feed = await prisma.dealerFeed.findFirst({
         where: { dealerId: session.dealerId },
       });
-      targetFeedId = feed?.id;
+      targetFeedId = feed?.id ?? null;
     }
 
     if (!targetFeedId) {
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
         field,
         oldValue,
         newValue,
-        createdBy: session.userId || session.dealerId,
+        createdBy: session.dealerUserId || session.dealerId,
       },
     });
 

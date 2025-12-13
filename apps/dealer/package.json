@@ -11,6 +11,8 @@
   "dependencies": {
     "@ironscout/db": "workspace:*",
     "@ironscout/notifications": "workspace:*",
+    "csv-parse": "^6.1.0",
+    "fast-xml-parser": "^5.3.2",
     "next": "14.2.29",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

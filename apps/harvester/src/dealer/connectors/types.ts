@@ -168,6 +168,10 @@ export const ERROR_CODES = {
   // Format errors
   PARSE_ERROR: 'PARSE_ERROR',
   MALFORMED_ROW: 'MALFORMED_ROW',
+
+  // Network/fetch errors
+  FETCH_ERROR: 'FETCH_ERROR',
+  TIMEOUT_ERROR: 'TIMEOUT_ERROR',
 } as const
 
 export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES]

@@ -155,9 +155,9 @@ export default async function DashboardPage() {
               
               {recentRun && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Products Processed</span>
+                  <span className="text-sm text-gray-500">Products Indexed</span>
                   <span className="text-sm text-gray-900">
-                    {recentRun.processedCount.toLocaleString()} / {recentRun.rowCount.toLocaleString()}
+                    {recentRun.indexedCount.toLocaleString()} / {recentRun.rowCount.toLocaleString()}
                   </span>
                 </div>
               )}

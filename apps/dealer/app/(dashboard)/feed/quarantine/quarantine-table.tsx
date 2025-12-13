@@ -8,23 +8,23 @@ interface Correction {
   field: string;
   oldValue: string | null;
   newValue: string;
-  createdAt: string;
+  createdAt: string | Date;
 }
 
 interface QuarantinedRecord {
   id: string;
   matchKey: string;
-  rawData: Record<string, unknown>;
+  rawData: Record<string, unknown> | null;
   parsedFields: Record<string, unknown> | null;
   blockingErrors: Array<{
     field: string;
     code: string;
     message: string;
     rawValue?: unknown;
-  }>;
+  }> | null;
   status: 'QUARANTINED' | 'RESOLVED' | 'DISMISSED';
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
   corrections: Correction[];
 }
 
@@ -135,7 +135,8 @@ export function QuarantineTable({ initialRecords, initialTotal, counts }: Quaran
               const isExpanded = expandedId === record.id;
               const parsedFields = record.parsedFields || {};
               const title = parsedFields.title as string || 'Unknown Product';
-              const primaryError = record.blockingErrors[0];
+              const blockingErrors = record.blockingErrors || [];
+              const primaryError = blockingErrors[0];
               const hasCorrections = record.corrections.length > 0;
 
               return (
@@ -251,7 +252,7 @@ function RecordDetails({
       <div>
         <h4 className="text-sm font-medium text-gray-900 mb-2">Blocking Errors</h4>
         <div className="space-y-2">
-          {record.blockingErrors.map((error, idx) => (
+          {(record.blockingErrors || []).map((error, idx) => (
             <div key={idx} className="bg-red-50 rounded border border-red-100 p-3 text-xs">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-red-700">{error.code}</span>
