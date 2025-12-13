@@ -22,7 +22,16 @@
       "Bash(DATABASE_URL=\"postgresql://ironscout:X9yOiz5SVOUgN5ycNA1ArsPH6J0bs2yk@dpg-d4o9vui4d50c738n40dg-a.ohio-postgres.render.com/ironscout\" pnpm db:push:*)",
       "Bash(timeout 30 echo:*)",
       "Bash(timeout 60 echo:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm db:generate:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm exec prisma generate:*)",
+      "Bash(DATABASE_URL=\"postgresql://test:test@localhost:5432/test\" pnpm exec prisma:*)",
+      "Bash(DATABASE_URL=\"postgresql://ironscout:X9yOiz5SVOUgN5ycNA1ArsPH6J0bs2yk@dpg-d4o9vui4d50c738n40dg-a.ohio-postgres.render.com/ironscout\" pnpm exec prisma db push:*)",
+      "Bash(DATABASE_URL=\"postgresql://ironscout:X9yOiz5SVOUgN5ycNA1ArsPH6J0bs2yk@dpg-d4o9vui4d50c738n40dg-a.ohio-postgres.render.com/ironscout\" pnpm exec prisma generate:*)",
+      "Bash(git worktree:*)"
     ],
     "deny": [],
     "ask": []

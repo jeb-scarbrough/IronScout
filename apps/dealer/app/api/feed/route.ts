@@ -6,7 +6,8 @@ import { logger } from '@/lib/logger';
 
 const feedSchema = z.object({
   id: z.string().optional(),
-  feedType: z.enum(['URL', 'AUTH_URL', 'FTP', 'SFTP', 'UPLOAD']),
+  accessType: z.enum(['URL', 'AUTH_URL', 'FTP', 'SFTP', 'UPLOAD']),
+  formatType: z.enum(['GENERIC', 'AMMOSEEK_V1', 'GUNENGINE_V2']).optional().default('GENERIC'),
   url: z.string().url().optional().nullable(),
   username: z.string().optional().nullable(),
   password: z.string().optional().nullable(),
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { feedType, url, username, password, scheduleMinutes } = validation.data;
+    const { accessType, formatType, url, username, password, scheduleMinutes } = validation.data;
 
     reqLogger.debug('Checking for existing feed', { dealerId });
 
@@ -100,17 +101,19 @@ export async function POST(request: Request) {
       );
     }
 
-    reqLogger.info('Creating new feed', { 
-      dealerId, 
-      feedType, 
-      scheduleMinutes 
+    reqLogger.info('Creating new feed', {
+      dealerId,
+      accessType,
+      formatType,
+      scheduleMinutes
     });
 
     // Create feed
     const feed = await prisma.dealerFeed.create({
       data: {
         dealerId,
-        feedType,
+        accessType,
+        formatType,
         url: url || null,
         username: username || null,
         password: password || null, // TODO: Encrypt at app layer
@@ -119,10 +122,11 @@ export async function POST(request: Request) {
       },
     });
 
-    reqLogger.info('Feed created successfully', { 
-      feedId: feed.id, 
-      dealerId, 
-      feedType 
+    reqLogger.info('Feed created successfully', {
+      feedId: feed.id,
+      dealerId,
+      accessType,
+      formatType
     });
 
     return NextResponse.json({ success: true, feed });
@@ -171,7 +175,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const { id, feedType, url, username, password, scheduleMinutes } = validation.data;
+    const { id, accessType, formatType, url, username, password, scheduleMinutes } = validation.data;
 
     if (!id) {
       reqLogger.warn('Feed ID missing for update');
@@ -196,17 +200,19 @@ export async function PUT(request: Request) {
       );
     }
 
-    reqLogger.info('Updating feed', { 
-      feedId: id, 
-      feedType, 
-      scheduleMinutes 
+    reqLogger.info('Updating feed', {
+      feedId: id,
+      accessType,
+      formatType,
+      scheduleMinutes
     });
 
     // Update feed
     const feed = await prisma.dealerFeed.update({
       where: { id },
       data: {
-        feedType,
+        accessType,
+        formatType,
         url: url || null,
         username: username || null,
         // Only update password if provided (non-empty)

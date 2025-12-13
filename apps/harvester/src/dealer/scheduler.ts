@@ -1,10 +1,15 @@
 /**
  * Dealer Portal Job Scheduler
- * 
+ *
  * Schedules recurring dealer portal jobs:
  * - Feed ingestion (hourly by default, per-feed schedule)
  * - Benchmark calculation (every 2 hours)
  * - Insight generation (after benchmarks)
+ *
+ * Features:
+ * - Respects feed.enabled flag
+ * - Applies scheduling jitter to prevent thundering herd
+ * - Skips failed feeds until manually re-enabled
  */
 
 import { prisma } from '@ironscout/db'
@@ -14,16 +19,31 @@ import {
 } from '../config/queues'
 
 // ============================================================================
+// SCHEDULING UTILITIES
+// ============================================================================
+
+/**
+ * Generate a random jitter value in milliseconds
+ * @param maxJitterMinutes Maximum jitter in minutes (default: 2)
+ */
+function getSchedulingJitter(maxJitterMinutes: number = 2): number {
+  return Math.floor(Math.random() * maxJitterMinutes * 60 * 1000)
+}
+
+// ============================================================================
 // FEED SCHEDULING
 // ============================================================================
 
 /**
  * Schedule feed ingestion for all active dealer feeds
+ * - Only schedules enabled feeds
+ * - Applies random jitter to prevent thundering herd
  */
 export async function scheduleDealerFeeds(): Promise<number> {
-  // Get all active feeds that are due for refresh
+  // Get all enabled feeds from active dealers that are not failed
   const feeds = await prisma.dealerFeed.findMany({
     where: {
+      enabled: true, // Only enabled feeds
       dealer: {
         status: 'ACTIVE',
       },
@@ -35,36 +55,46 @@ export async function scheduleDealerFeeds(): Promise<number> {
       },
     },
   })
-  
+
   let scheduledCount = 0
   const now = new Date()
-  
+
   for (const feed of feeds) {
     // Check if feed is due for refresh
-    const lastRun = feed.lastSuccessAt || feed.createdAt
+    const lastRun = feed.lastRunAt || feed.lastSuccessAt || feed.createdAt
     const minutesSinceRun = (now.getTime() - lastRun.getTime()) / (1000 * 60)
-    
+
     if (minutesSinceRun < feed.scheduleMinutes) {
       continue // Not due yet
     }
-    
+
+    // Update lastRunAt to prevent duplicate scheduling
+    await prisma.dealerFeed.update({
+      where: { id: feed.id },
+      data: { lastRunAt: now },
+    })
+
     // Create feed run record
     const feedRun = await prisma.dealerFeedRun.create({
       data: {
         dealerId: feed.dealerId,
         feedId: feed.id,
-        status: 'RUNNING',
+        status: 'PENDING',
       },
     })
-    
-    // Queue the job
+
+    // Apply random jitter (0-2 minutes) to prevent thundering herd
+    const jitterMs = getSchedulingJitter(2)
+
+    // Queue the job with jitter delay
     await dealerFeedIngestQueue.add(
       'ingest',
       {
         dealerId: feed.dealerId,
         feedId: feed.id,
         feedRunId: feedRun.id,
-        feedType: feed.feedType,
+        accessType: feed.accessType,
+        formatType: feed.formatType,
         url: feed.url || undefined,
         username: feed.username || undefined,
         password: feed.password || undefined,
@@ -73,21 +103,24 @@ export async function scheduleDealerFeeds(): Promise<number> {
         attempts: 3,
         backoff: { type: 'exponential', delay: 30000 },
         jobId: `feed-${feed.id}-${now.getTime()}`,
+        delay: jitterMs, // Apply jitter
       }
     )
-    
+
     scheduledCount++
   }
-  
+
   if (scheduledCount > 0) {
     console.log(`[Dealer Scheduler] Scheduled ${scheduledCount} feed ingestion jobs`)
   }
-  
+
   return scheduledCount
 }
 
 /**
  * Schedule a single feed for immediate ingestion
+ * - Ignores enabled flag (manual trigger)
+ * - Resets feed status if previously failed
  */
 export async function scheduleImmediateFeedIngest(feedId: string): Promise<string> {
   const feed = await prisma.dealerFeed.findUnique({
@@ -98,32 +131,45 @@ export async function scheduleImmediateFeedIngest(feedId: string): Promise<strin
       },
     },
   })
-  
+
   if (!feed) {
     throw new Error('Feed not found')
   }
-  
+
   if (feed.dealer.status !== 'ACTIVE') {
     throw new Error('Dealer account is not active')
   }
-  
+
+  // Reset feed status if it was failed (manual trigger re-enables)
+  if (feed.status === 'FAILED') {
+    await prisma.dealerFeed.update({
+      where: { id: feedId },
+      data: {
+        status: 'PENDING',
+        lastError: null,
+        primaryErrorCode: null,
+      },
+    })
+  }
+
   // Create feed run record
   const feedRun = await prisma.dealerFeedRun.create({
     data: {
       dealerId: feed.dealerId,
       feedId: feed.id,
-      status: 'RUNNING',
+      status: 'PENDING',
     },
   })
-  
-  // Queue the job with high priority
+
+  // Queue the job with high priority (no jitter for manual triggers)
   await dealerFeedIngestQueue.add(
     'ingest-immediate',
     {
       dealerId: feed.dealerId,
       feedId: feed.id,
       feedRunId: feedRun.id,
-      feedType: feed.feedType,
+      accessType: feed.accessType,
+      formatType: feed.formatType,
       url: feed.url || undefined,
       username: feed.username || undefined,
       password: feed.password || undefined,
@@ -134,8 +180,28 @@ export async function scheduleImmediateFeedIngest(feedId: string): Promise<strin
       priority: 1, // High priority
     }
   )
-  
+
   return feedRun.id
+}
+
+/**
+ * Enable or disable a feed
+ */
+export async function setFeedEnabled(feedId: string, enabled: boolean): Promise<void> {
+  await prisma.dealerFeed.update({
+    where: { id: feedId },
+    data: {
+      enabled,
+      // Clear error state when re-enabling
+      ...(enabled && {
+        status: 'PENDING',
+        lastError: null,
+        primaryErrorCode: null,
+      }),
+    },
+  })
+
+  console.log(`[Dealer Scheduler] Feed ${feedId} ${enabled ? 'enabled' : 'disabled'}`)
 }
 
 // ============================================================================

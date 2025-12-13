@@ -350,43 +350,54 @@ model DealerContact {
 }
 
 model DealerFeed {
-  id              String          @id @default(cuid())
-  dealerId        String
-  name            String?
-  feedType        FeedType
-  url             String?
-  username        String?
-  password        String?
-  scheduleMinutes Int             @default(60)
-  status          FeedStatus      @default(PENDING)
-  feedHash        String?
-  lastSuccessAt   DateTime?
-  lastFailureAt   DateTime?
-  lastError       String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  runs            DealerFeedRun[]
-  dealer          Dealer          @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  skus            DealerSku[]
+  id               String             @id @default(cuid())
+  dealerId         String
+  name             String?
+  accessType       FeedAccessType     @default(URL)
+  formatType       FeedFormatType     @default(GENERIC)
+  url              String?
+  username         String?
+  password         String?
+  scheduleMinutes  Int                @default(60)
+  enabled          Boolean            @default(true)
+  status           FeedStatus         @default(PENDING)
+  feedHash         String?
+  lastRunAt        DateTime?
+  lastSuccessAt    DateTime?
+  lastFailureAt    DateTime?
+  lastError        String?
+  primaryErrorCode String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  runs             DealerFeedRun[]
+  testRuns         DealerFeedTestRun[]
+  quarantined      QuarantinedRecord[]
+  corrections      FeedCorrection[]
+  dealer           Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  skus             DealerSku[]
 
   @@index([dealerId])
+  @@index([enabled])
   @@map("dealer_feeds")
 }
 
 model DealerFeedRun {
-  id             String        @id @default(cuid())
-  dealerId       String
-  feedId         String
-  status         FeedRunStatus
-  errors         Json?
-  rowCount       Int           @default(0)
-  processedCount Int           @default(0)
-  matchedCount   Int           @default(0)
-  failedCount    Int           @default(0)
-  duration       Int?
-  startedAt      DateTime      @default(now())
-  completedAt    DateTime?
-  feed           DealerFeed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  id               String        @id @default(cuid())
+  dealerId         String
+  feedId           String
+  status           FeedRunStatus
+  errors           Json?
+  rowCount         Int           @default(0)
+  indexedCount     Int           @default(0)
+  quarantinedCount Int           @default(0)
+  rejectedCount    Int           @default(0)
+  coercionCount    Int           @default(0)
+  primaryErrorCode String?
+  errorCodes       Json?
+  duration         Int?
+  startedAt        DateTime      @default(now())
+  completedAt      DateTime?
+  feed             DealerFeed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@index([dealerId])
   @@index([feedId])
@@ -394,11 +405,81 @@ model DealerFeedRun {
   @@map("dealer_feed_runs")
 }
 
+model DealerFeedTestRun {
+  id               String        @id @default(cuid())
+  dealerId         String
+  feedId           String
+  sampleSize       Int           @default(50)
+  status           TestRunStatus
+  recordsParsed    Int           @default(0)
+  wouldIndex       Int           @default(0)
+  wouldQuarantine  Int           @default(0)
+  wouldReject      Int           @default(0)
+  warningCount     Int           @default(0)
+  errorCount       Int           @default(0)
+  primaryErrorCode String?
+  errorSamples     Json?
+  coercionSummary  Json?
+  duration         Int?
+  startedAt        DateTime      @default(now())
+  completedAt      DateTime?
+  feed             DealerFeed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
+
+  @@index([dealerId])
+  @@index([feedId])
+  @@index([startedAt])
+  @@map("dealer_feed_test_runs")
+}
+
+model QuarantinedRecord {
+  id             String           @id @default(cuid())
+  dealerId       String
+  feedId         String
+  runId          String?
+  productType    String?
+  matchKey       String
+  rawData        Json
+  parsedFields   Json?
+  blockingErrors Json
+  status         QuarantineStatus @default(QUARANTINED)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  feed           DealerFeed       @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  corrections    FeedCorrection[]
+
+  @@unique([feedId, matchKey])
+  @@index([dealerId])
+  @@index([feedId, status])
+  @@index([status])
+  @@map("quarantined_records")
+}
+
+model FeedCorrection {
+  id                  String             @id @default(cuid())
+  dealerId            String
+  feedId              String
+  quarantinedRecordId String?
+  recordRef           String
+  field               String
+  oldValue            String?
+  newValue            String
+  createdBy           String
+  createdAt           DateTime           @default(now())
+  feed                DealerFeed         @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  quarantinedRecord   QuarantinedRecord? @relation(fields: [quarantinedRecordId], references: [id], onDelete: SetNull)
+
+  @@index([dealerId])
+  @@index([feedId, recordRef])
+  @@index([quarantinedRecordId])
+  @@map("feed_corrections")
+}
+
 model DealerSku {
   id                String            @id @default(cuid())
   dealerId          String
   feedId            String?
   feedRunId         String?
+  productType       String?
   rawTitle          String
   rawDescription    String?
   rawPrice          Decimal           @db.Decimal(10, 2)
@@ -425,7 +506,10 @@ model DealerSku {
   parsedBrand       String?
   parseConfidence   Decimal?          @db.Decimal(3, 2)
   dealerSkuHash     String?
+  coercionsApplied  Json?
   isActive          Boolean           @default(true)
+  missingCount      Int               @default(0)
+  lastSeenAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   insights          DealerInsight[]
@@ -817,12 +901,30 @@ enum ShippingType {
   UNKNOWN
 }
 
-enum FeedType {
+enum FeedAccessType {
   URL
   AUTH_URL
   FTP
   SFTP
   UPLOAD
+}
+
+enum FeedFormatType {
+  GENERIC
+  AMMOSEEK_V1
+  GUNENGINE_V2
+}
+
+enum QuarantineStatus {
+  QUARANTINED
+  RESOLVED
+  DISMISSED
+}
+
+enum TestRunStatus {
+  PASS
+  WARN
+  FAIL
 }
 
 enum FeedStatus {

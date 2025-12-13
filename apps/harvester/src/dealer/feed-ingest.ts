@@ -1,87 +1,120 @@
 /**
  * Dealer Feed Ingestion Worker
- * 
- * Downloads and parses dealer product feeds, creating/updating DealerSku records.
- * Supports CSV, XML, and JSON formats.
+ *
+ * Downloads and parses dealer product feeds using format-specific connectors.
+ * Implements two-lane ingestion:
+ * - Indexable Lane: Records with valid UPC -> DealerSku
+ * - Quarantine Lane: Records without UPC -> QuarantinedRecord
  */
 
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
+import type { FeedFormatType } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
-import { 
-  QUEUE_NAMES, 
-  DealerFeedIngestJobData, 
-  dealerSkuMatchQueue 
+import {
+  QUEUE_NAMES,
+  DealerFeedIngestJobData,
+  dealerSkuMatchQueue,
 } from '../config/queues'
 import { createHash } from 'crypto'
-import { parse as csvParse } from 'csv-parse/sync'
-import { XMLParser } from 'fast-xml-parser'
+import {
+  getConnector,
+  detectConnector,
+  type FeedParseResult,
+  type ParsedRecordResult,
+  ERROR_CODES,
+} from './connectors'
+import {
+  notifyFeedFailed,
+  notifyFeedRecovered,
+  notifyFeedWarning,
+  type FeedAlertInfo,
+} from '@ironscout/notifications'
 
 // ============================================================================
-// TYPES
+// NOTIFICATION HELPERS
 // ============================================================================
 
-interface RawFeedItem {
-  title?: string
-  name?: string
-  product_name?: string
-  
-  price?: string | number
-  sale_price?: string | number
-  
-  description?: string
-  product_description?: string
-  
-  upc?: string
-  sku?: string
-  product_id?: string
-  
-  caliber?: string
-  grain?: string | number
-  grain_weight?: string | number
-  
-  case_type?: string
-  case_material?: string
-  casing?: string
-  
-  bullet_type?: string
-  projectile?: string
-  
-  brand?: string
-  manufacturer?: string
-  
-  pack_size?: string | number
-  quantity?: string | number
-  count?: string | number
-  
-  in_stock?: string | boolean | number
-  availability?: string
-  stock_status?: string
-  
-  url?: string
-  link?: string
-  product_url?: string
-  
-  image_url?: string
-  image?: string
-  image_link?: string
+interface NotificationStats {
+  indexedCount: number
+  quarantinedCount: number
+  quarantineRatio: number
+  errorMessage?: string
 }
 
-interface ParsedFeedItem {
-  rawTitle: string
-  rawDescription?: string
-  rawPrice: number
-  rawUpc?: string
-  rawSku?: string
-  rawCaliber?: string
-  rawGrain?: string
-  rawCase?: string
-  rawBulletType?: string
-  rawBrand?: string
-  rawPackSize?: number
-  rawInStock: boolean
-  rawUrl?: string
-  rawImageUrl?: string
+/**
+ * Send feed notifications based on status changes
+ * - FAILED: Send failure notification
+ * - WARNING: Send warning notification (high quarantine rate)
+ * - HEALTHY (from FAILED/WARNING): Send recovered notification
+ */
+async function sendFeedNotifications(
+  dealerId: string,
+  feedId: string,
+  currentStatus: 'HEALTHY' | 'WARNING' | 'FAILED',
+  previousStatus: string,
+  stats: NotificationStats
+): Promise<void> {
+  try {
+    // Get dealer and feed info for notification
+    const dealer = await prisma.dealer.findUnique({
+      where: { id: dealerId },
+      select: {
+        businessName: true,
+        contacts: {
+          where: { communicationOptIn: true },
+          select: { email: true },
+          take: 1,
+        },
+      },
+    })
+
+    const feed = await prisma.dealerFeed.findUnique({
+      where: { id: feedId },
+      select: { formatType: true },
+    })
+
+    if (!dealer || !feed) {
+      console.log('[Dealer Feed] Skipping notification - dealer or feed not found')
+      return
+    }
+
+    const dealerEmail = dealer.contacts[0]?.email
+    if (!dealerEmail) {
+      console.log('[Dealer Feed] Skipping notification - no opted-in contact email')
+      return
+    }
+
+    const feedInfo: FeedAlertInfo = {
+      feedId,
+      feedType: feed.formatType,
+      dealerId,
+      businessName: dealer.businessName,
+      dealerEmail,
+      errorMessage: stats.errorMessage,
+    }
+
+    // Send appropriate notification based on status transition
+    if (currentStatus === 'FAILED') {
+      console.log(`[Dealer Feed] Sending failure notification to ${dealerEmail}`)
+      await notifyFeedFailed(feedInfo)
+    } else if (currentStatus === 'WARNING' && previousStatus !== 'WARNING') {
+      // Only send warning on first transition to WARNING
+      console.log(`[Dealer Feed] Sending warning notification to ${dealerEmail}`)
+      await notifyFeedWarning(feedInfo, {
+        indexedCount: stats.indexedCount,
+        quarantinedCount: stats.quarantinedCount,
+        quarantineRate: stats.quarantineRatio,
+      })
+    } else if (currentStatus === 'HEALTHY' && (previousStatus === 'FAILED' || previousStatus === 'WARNING')) {
+      // Recovered from failed/warning state
+      console.log(`[Dealer Feed] Sending recovery notification to ${dealerEmail}`)
+      await notifyFeedRecovered(feedInfo)
+    }
+  } catch (error) {
+    // Don't let notification failures break the feed processing
+    console.error('[Dealer Feed] Failed to send notification:', error)
+  }
 }
 
 // ============================================================================
@@ -90,200 +123,56 @@ interface ParsedFeedItem {
 
 async function fetchFeed(
   url: string,
-  feedType: string,
+  accessType: string,
   username?: string,
   password?: string
 ): Promise<string> {
   const headers: Record<string, string> = {}
-  
-  if (feedType === 'AUTH_URL' && username && password) {
+
+  if (accessType === 'AUTH_URL' && username && password) {
     const auth = Buffer.from(`${username}:${password}`).toString('base64')
     headers['Authorization'] = `Basic ${auth}`
   }
-  
+
   const response = await fetch(url, { headers })
-  
+
   if (!response.ok) {
     throw new Error(`Feed fetch failed: ${response.status} ${response.statusText}`)
   }
-  
+
   return response.text()
-}
-
-// ============================================================================
-// FEED PARSING
-// ============================================================================
-
-function detectFormat(content: string): 'csv' | 'xml' | 'json' {
-  const trimmed = content.trim()
-  
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    return 'json'
-  }
-  
-  if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) {
-    return 'xml'
-  }
-  
-  return 'csv'
-}
-
-function parseCSV(content: string): RawFeedItem[] {
-  try {
-    return csvParse(content, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      relax_column_count: true,
-    })
-  } catch (error) {
-    console.error('CSV parse error:', error)
-    throw new Error('Failed to parse CSV feed')
-  }
-}
-
-function parseXML(content: string): RawFeedItem[] {
-  const parser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: '',
-  })
-  
-  try {
-    const result = parser.parse(content)
-    
-    // Try common XML structures
-    const items = 
-      result.products?.product ||
-      result.feed?.products?.product ||
-      result.rss?.channel?.item ||
-      result.items?.item ||
-      result.catalog?.product ||
-      []
-    
-    return Array.isArray(items) ? items : [items]
-  } catch (error) {
-    console.error('XML parse error:', error)
-    throw new Error('Failed to parse XML feed')
-  }
-}
-
-function parseJSON(content: string): RawFeedItem[] {
-  try {
-    const data = JSON.parse(content)
-    
-    // Handle various JSON structures
-    if (Array.isArray(data)) {
-      return data
-    }
-    
-    if (data.products && Array.isArray(data.products)) {
-      return data.products
-    }
-    
-    if (data.items && Array.isArray(data.items)) {
-      return data.items
-    }
-    
-    if (data.data && Array.isArray(data.data)) {
-      return data.data
-    }
-    
-    return [data]
-  } catch (error) {
-    console.error('JSON parse error:', error)
-    throw new Error('Failed to parse JSON feed')
-  }
-}
-
-function parseFeedContent(content: string): RawFeedItem[] {
-  const format = detectFormat(content)
-  
-  switch (format) {
-    case 'csv':
-      return parseCSV(content)
-    case 'xml':
-      return parseXML(content)
-    case 'json':
-      return parseJSON(content)
-    default:
-      throw new Error(`Unsupported feed format: ${format}`)
-  }
-}
-
-// ============================================================================
-// ITEM NORMALIZATION
-// ============================================================================
-
-function normalizeItem(raw: RawFeedItem): ParsedFeedItem | null {
-  // Extract title
-  const title = raw.title || raw.name || raw.product_name
-  if (!title) {
-    return null // Skip items without a title
-  }
-  
-  // Extract and validate price
-  const rawPrice = raw.sale_price || raw.price
-  const price = typeof rawPrice === 'number' 
-    ? rawPrice 
-    : parseFloat(String(rawPrice || '').replace(/[^0-9.]/g, ''))
-  
-  if (isNaN(price) || price <= 0) {
-    return null // Skip items without valid price
-  }
-  
-  // Extract stock status
-  const stockValue = raw.in_stock ?? raw.availability ?? raw.stock_status ?? true
-  const inStock = 
-    stockValue === true ||
-    stockValue === 1 ||
-    stockValue === '1' ||
-    String(stockValue).toLowerCase() === 'true' ||
-    String(stockValue).toLowerCase() === 'in stock' ||
-    String(stockValue).toLowerCase() === 'available'
-  
-  // Extract pack size
-  const packSizeRaw = raw.pack_size || raw.quantity || raw.count
-  const packSize = packSizeRaw ? parseInt(String(packSizeRaw), 10) : undefined
-  
-  // Extract grain
-  const grainRaw = raw.grain || raw.grain_weight
-  const grain = grainRaw ? String(grainRaw) : undefined
-  
-  return {
-    rawTitle: String(title).trim(),
-    rawDescription: raw.description || raw.product_description || undefined,
-    rawPrice: price,
-    rawUpc: raw.upc || undefined,
-    rawSku: raw.sku || raw.product_id || undefined,
-    rawCaliber: raw.caliber || undefined,
-    rawGrain: grain,
-    rawCase: raw.case_type || raw.case_material || raw.casing || undefined,
-    rawBulletType: raw.bullet_type || raw.projectile || undefined,
-    rawBrand: raw.brand || raw.manufacturer || undefined,
-    rawPackSize: packSize && packSize > 0 ? packSize : undefined,
-    rawInStock: inStock,
-    rawUrl: raw.url || raw.link || raw.product_url || undefined,
-    rawImageUrl: raw.image_url || raw.image || raw.image_link || undefined,
-  }
 }
 
 // ============================================================================
 // SKU HASH FOR DEDUPLICATION
 // ============================================================================
 
-function generateSkuHash(item: ParsedFeedItem): string {
-  // Create a hash based on key identifying attributes
+function generateSkuHash(title: string, upc?: string, sku?: string, price?: number): string {
   const components = [
-    item.rawTitle.toLowerCase().trim(),
-    item.rawUpc || '',
-    item.rawSku || '',
-    String(item.rawPrice),
+    title.toLowerCase().trim(),
+    upc || '',
+    sku || '',
+    price ? String(price) : '',
   ]
-  
+
   const hash = createHash('sha256')
     .update(components.join('|'))
     .digest('hex')
-  
+
+  return hash.substring(0, 32)
+}
+
+/**
+ * Generate a match key for quarantine deduplication
+ * Uses title + sku as fallback when no UPC
+ */
+function generateMatchKey(title: string, sku?: string): string {
+  const components = [title.toLowerCase().trim(), sku || '']
+
+  const hash = createHash('sha256')
+    .update(components.join('|'))
+    .digest('hex')
+
   return hash.substring(0, 32)
 }
 
@@ -292,38 +181,34 @@ function generateSkuHash(item: ParsedFeedItem): string {
 // ============================================================================
 
 async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
-  const { dealerId, feedId, feedRunId, feedType, url, username, password } = job.data
-  
+  const { dealerId, feedId, feedRunId, accessType, formatType, url, username, password } = job.data
+
   const startTime = Date.now()
-  const errors: Array<{ row: number; error: string }> = []
-  let rowCount = 0
-  let processedCount = 0
-  let matchedCount = 0
-  let failedCount = 0
-  
+  let parseResult: FeedParseResult | null = null
+
   try {
     // Update feed run status
     await prisma.dealerFeedRun.update({
       where: { id: feedRunId },
       data: { status: 'RUNNING' },
     })
-    
+
     // Fetch feed content
     if (!url) {
       throw new Error('Feed URL is required')
     }
-    
+
     console.log(`[Dealer Feed] Fetching feed for dealer ${dealerId}`)
-    const content = await fetchFeed(url, feedType, username, password)
-    
+    const content = await fetchFeed(url, accessType, username, password)
+
     // Calculate content hash for change detection
     const contentHash = createHash('sha256').update(content).digest('hex')
-    
+
     // Check if content has changed
     const feed = await prisma.dealerFeed.findUnique({
       where: { id: feedId },
     })
-    
+
     if (feed?.feedHash === contentHash) {
       console.log(`[Dealer Feed] No changes detected for dealer ${dealerId}`)
       await prisma.dealerFeedRun.update({
@@ -333,74 +218,76 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
           completedAt: new Date(),
           duration: Date.now() - startTime,
           rowCount: 0,
-          processedCount: 0,
+          indexedCount: 0,
+          quarantinedCount: 0,
+          rejectedCount: 0,
         },
       })
       return { skipped: true, reason: 'no_changes' }
     }
-    
-    // Parse feed
+
+    // Get the appropriate connector
+    const connector =
+      formatType === 'GENERIC'
+        ? detectConnector(content)
+        : getConnector(formatType as FeedFormatType)
+
+    console.log(`[Dealer Feed] Using connector: ${connector.name} for dealer ${dealerId}`)
+
+    // Parse feed using connector
     console.log(`[Dealer Feed] Parsing feed for dealer ${dealerId}`)
-    const rawItems = parseFeedContent(content)
-    rowCount = rawItems.length
-    
-    console.log(`[Dealer Feed] Found ${rowCount} items in feed`)
-    
-    // Process items
+    parseResult = await connector.parse(content)
+
+    console.log(
+      `[Dealer Feed] Parsed ${parseResult.totalRows} rows: ` +
+        `${parseResult.indexableCount} indexable, ` +
+        `${parseResult.quarantineCount} quarantine, ` +
+        `${parseResult.rejectCount} rejected`
+    )
+
+    // Process records
     const dealerSkuIds: string[] = []
-    
-    for (let i = 0; i < rawItems.length; i++) {
+    const quarantinedIds: string[] = []
+    const errors: Array<{ row: number; error: string; code?: string }> = []
+
+    for (const result of parseResult.parsedRecords) {
       try {
-        const normalized = normalizeItem(rawItems[i])
-        
-        if (!normalized) {
-          errors.push({ row: i + 1, error: 'Missing required fields (title or price)' })
-          failedCount++
-          continue
+        if (result.isIndexable) {
+          // Indexable Lane: Create/update DealerSku
+          const skuId = await processIndexableRecord(dealerId, feedId, feedRunId, result)
+          if (skuId) {
+            dealerSkuIds.push(skuId)
+          }
+        } else if (hasRequiredFields(result)) {
+          // Quarantine Lane: Record has data but missing UPC
+          const quarantineId = await processQuarantineRecord(dealerId, feedId, feedRunId, result)
+          if (quarantineId) {
+            quarantinedIds.push(quarantineId)
+          }
+        } else {
+          // Reject Lane: Missing required fields
+          const primaryError = result.errors[0]
+          errors.push({
+            row: result.record.rowIndex + 1,
+            error: primaryError?.message || 'Missing required fields',
+            code: primaryError?.code,
+          })
         }
-        
-        const skuHash = generateSkuHash(normalized)
-        
-        // Upsert DealerSku
-        const dealerSku = await prisma.dealerSku.upsert({
-          where: {
-            dealerId_dealerSkuHash: {
-              dealerId,
-              dealerSkuHash: skuHash,
-            },
-          },
-          create: {
-            dealerId,
-            feedId,
-            feedRunId,
-            dealerSkuHash: skuHash,
-            ...normalized,
-            isActive: true,
-          },
-          update: {
-            feedRunId,
-            rawPrice: normalized.rawPrice,
-            rawInStock: normalized.rawInStock,
-            rawDescription: normalized.rawDescription,
-            rawImageUrl: normalized.rawImageUrl,
-            isActive: true,
-            updatedAt: new Date(),
-          },
-        })
-        
-        dealerSkuIds.push(dealerSku.id)
-        processedCount++
-        
+
         // Log progress every 100 items
-        if (processedCount % 100 === 0) {
-          console.log(`[Dealer Feed] Processed ${processedCount}/${rowCount} items`)
+        const processed = dealerSkuIds.length + quarantinedIds.length + errors.length
+        if (processed % 100 === 0 && processed > 0) {
+          console.log(`[Dealer Feed] Processed ${processed}/${parseResult.totalRows} items`)
         }
       } catch (error) {
-        errors.push({ row: i + 1, error: String(error) })
-        failedCount++
+        errors.push({
+          row: result.record.rowIndex + 1,
+          error: String(error),
+          code: ERROR_CODES.PARSE_ERROR,
+        })
       }
     }
-    
+
     // Mark SKUs not in this feed run as inactive
     await prisma.dealerSku.updateMany({
       where: {
@@ -411,72 +298,127 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
       },
       data: { isActive: false },
     })
-    
-    // Update feed hash
+
+    // Determine feed health status
+    const totalProcessable = parseResult.indexableCount + parseResult.quarantineCount
+    const quarantineRatio = totalProcessable > 0 ? parseResult.quarantineCount / totalProcessable : 0
+    const rejectRatio = parseResult.totalRows > 0 ? parseResult.rejectCount / parseResult.totalRows : 0
+
+    let feedStatus: 'HEALTHY' | 'WARNING' | 'FAILED' = 'HEALTHY'
+    let primaryErrorCode: string | null = null
+
+    if (rejectRatio > 0.5) {
+      feedStatus = 'FAILED'
+      primaryErrorCode = getMostCommonErrorCode(parseResult.errorCodes)
+    } else if (quarantineRatio > 0.3 || rejectRatio > 0.1) {
+      feedStatus = 'WARNING'
+      primaryErrorCode = getMostCommonErrorCode(parseResult.errorCodes)
+    }
+
+    // Get previous feed status for notification logic
+    const previousStatus = feed?.status
+
+    // Update feed status
     await prisma.dealerFeed.update({
       where: { id: feedId },
       data: {
         feedHash: contentHash,
-        lastSuccessAt: new Date(),
-        lastError: null,
-        status: failedCount > rowCount * 0.1 ? 'WARNING' : 'HEALTHY',
+        lastSuccessAt: feedStatus !== 'FAILED' ? new Date() : undefined,
+        lastFailureAt: feedStatus === 'FAILED' ? new Date() : undefined,
+        lastError: feedStatus === 'FAILED' ? `High rejection rate: ${(rejectRatio * 100).toFixed(1)}%` : null,
+        primaryErrorCode,
+        status: feedStatus,
       },
     })
-    
-    // Update feed run
+
+    // Send notifications based on status changes
+    await sendFeedNotifications(
+      dealerId,
+      feedId,
+      feedStatus,
+      previousStatus || 'PENDING',
+      {
+        indexedCount: dealerSkuIds.length,
+        quarantinedCount: quarantinedIds.length,
+        quarantineRatio,
+        errorMessage: feedStatus === 'FAILED' ? `High rejection rate: ${(rejectRatio * 100).toFixed(1)}%` : undefined,
+      }
+    )
+
+    // Update feed run with detailed counts
     await prisma.dealerFeedRun.update({
       where: { id: feedRunId },
       data: {
-        status: failedCount > rowCount * 0.5 ? 'WARNING' : 'SUCCESS',
+        status: feedStatus === 'FAILED' ? 'FAILURE' : feedStatus === 'WARNING' ? 'WARNING' : 'SUCCESS',
         completedAt: new Date(),
         duration: Date.now() - startTime,
-        rowCount,
-        processedCount,
-        failedCount,
-        errors: errors.length > 0 ? errors.slice(0, 100) : undefined, // Limit stored errors
+        rowCount: parseResult.totalRows,
+        indexedCount: dealerSkuIds.length,
+        quarantinedCount: quarantinedIds.length,
+        rejectedCount: errors.length,
+        coercionCount: parseResult.parsedRecords.reduce((sum, r) => sum + r.coercions.length, 0),
+        primaryErrorCode,
+        errorCodes: parseResult.errorCodes,
+        errors: errors.length > 0 ? errors.slice(0, 100) : undefined,
       },
     })
-    
+
     // Queue SKU matching in batches
-    const BATCH_SIZE = 100
-    for (let i = 0; i < dealerSkuIds.length; i += BATCH_SIZE) {
-      const batch = dealerSkuIds.slice(i, i + BATCH_SIZE)
-      await dealerSkuMatchQueue.add(
-        'match-batch',
-        {
-          dealerId,
-          feedRunId,
-          dealerSkuIds: batch,
-        },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-        }
-      )
+    if (dealerSkuIds.length > 0) {
+      const BATCH_SIZE = 100
+      for (let i = 0; i < dealerSkuIds.length; i += BATCH_SIZE) {
+        const batch = dealerSkuIds.slice(i, i + BATCH_SIZE)
+        await dealerSkuMatchQueue.add(
+          'match-batch',
+          {
+            dealerId,
+            feedRunId,
+            dealerSkuIds: batch,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+          }
+        )
+      }
     }
-    
-    console.log(`[Dealer Feed] Completed: ${processedCount} processed, ${failedCount} failed`)
-    
+
+    console.log(
+      `[Dealer Feed] Completed: ${dealerSkuIds.length} indexed, ` +
+        `${quarantinedIds.length} quarantined, ${errors.length} rejected`
+    )
+
     return {
-      rowCount,
-      processedCount,
-      failedCount,
+      rowCount: parseResult.totalRows,
+      indexedCount: dealerSkuIds.length,
+      quarantinedCount: quarantinedIds.length,
+      rejectedCount: errors.length,
       duration: Date.now() - startTime,
+      status: feedStatus,
     }
-    
   } catch (error) {
     console.error(`[Dealer Feed] Error for dealer ${dealerId}:`, error)
-    
+
+    // Determine error code
+    const errorMessage = String(error)
+    let primaryErrorCode = ERROR_CODES.PARSE_ERROR
+    if (errorMessage.includes('fetch')) {
+      primaryErrorCode = 'FETCH_ERROR'
+    } else if (errorMessage.includes('timeout')) {
+      primaryErrorCode = 'TIMEOUT_ERROR'
+    }
+
     // Update feed status
     await prisma.dealerFeed.update({
       where: { id: feedId },
       data: {
         lastFailureAt: new Date(),
         lastError: String(error),
+        primaryErrorCode,
         status: 'FAILED',
       },
     })
-    
+
     // Update feed run
     await prisma.dealerFeedRun.update({
       where: { id: feedRunId },
@@ -484,26 +426,175 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
         status: 'FAILURE',
         completedAt: new Date(),
         duration: Date.now() - startTime,
-        errors: [{ row: 0, error: String(error) }],
+        primaryErrorCode,
+        errors: [{ row: 0, error: String(error), code: primaryErrorCode }],
       },
     })
-    
+
+    // Send failure notification
+    await sendFeedNotifications(dealerId, feedId, 'FAILED', 'HEALTHY', {
+      indexedCount: 0,
+      quarantinedCount: 0,
+      quarantineRatio: 0,
+      errorMessage: String(error),
+    })
+
     throw error
   }
+}
+
+// ============================================================================
+// RECORD PROCESSORS
+// ============================================================================
+
+/**
+ * Process an indexable record (has valid UPC)
+ */
+async function processIndexableRecord(
+  dealerId: string,
+  feedId: string,
+  feedRunId: string,
+  result: ParsedRecordResult
+): Promise<string | null> {
+  const { record, coercions } = result
+
+  const skuHash = generateSkuHash(record.title, record.upc, record.sku, record.price)
+
+  const dealerSku = await prisma.dealerSku.upsert({
+    where: {
+      dealerId_dealerSkuHash: {
+        dealerId,
+        dealerSkuHash: skuHash,
+      },
+    },
+    create: {
+      dealerId,
+      feedId,
+      feedRunId,
+      dealerSkuHash: skuHash,
+      rawTitle: record.title,
+      rawDescription: record.description,
+      rawPrice: record.price,
+      rawUpc: record.upc,
+      rawSku: record.sku,
+      rawCaliber: record.caliber,
+      rawGrain: record.grainWeight ? String(record.grainWeight) : undefined,
+      rawCase: record.caseType,
+      rawBulletType: record.bulletType,
+      rawBrand: record.brand,
+      rawPackSize: record.roundCount,
+      rawInStock: record.inStock,
+      rawUrl: record.productUrl,
+      rawImageUrl: record.imageUrl,
+      coercionsApplied: coercions.length > 0 ? coercions : undefined,
+      isActive: true,
+    },
+    update: {
+      feedRunId,
+      rawPrice: record.price,
+      rawInStock: record.inStock,
+      rawDescription: record.description,
+      rawImageUrl: record.imageUrl,
+      coercionsApplied: coercions.length > 0 ? coercions : undefined,
+      isActive: true,
+      updatedAt: new Date(),
+    },
+  })
+
+  return dealerSku.id
+}
+
+/**
+ * Process a quarantine record (missing UPC but has other data)
+ */
+async function processQuarantineRecord(
+  dealerId: string,
+  feedId: string,
+  feedRunId: string,
+  result: ParsedRecordResult
+): Promise<string | null> {
+  const { record, errors } = result
+
+  const matchKey = generateMatchKey(record.title, record.sku)
+
+  // Prepare blocking errors
+  const blockingErrors = errors.map((e) => ({
+    field: e.field,
+    code: e.code,
+    message: e.message,
+    rawValue: e.rawValue,
+  }))
+
+  // Upsert quarantine record
+  const quarantined = await prisma.quarantinedRecord.upsert({
+    where: {
+      feedId_matchKey: {
+        feedId,
+        matchKey,
+      },
+    },
+    create: {
+      dealerId,
+      feedId,
+      runId: feedRunId,
+      matchKey,
+      rawData: record.rawRow,
+      parsedFields: {
+        title: record.title,
+        price: record.price,
+        sku: record.sku,
+        brand: record.brand,
+        caliber: record.caliber,
+        inStock: record.inStock,
+      },
+      blockingErrors,
+      status: 'QUARANTINED',
+    },
+    update: {
+      runId: feedRunId,
+      rawData: record.rawRow,
+      parsedFields: {
+        title: record.title,
+        price: record.price,
+        sku: record.sku,
+        brand: record.brand,
+        caliber: record.caliber,
+        inStock: record.inStock,
+      },
+      blockingErrors,
+      // Don't update status if already RESOLVED
+      updatedAt: new Date(),
+    },
+  })
+
+  return quarantined.id
+}
+
+/**
+ * Check if a record has required fields (title and price)
+ */
+function hasRequiredFields(result: ParsedRecordResult): boolean {
+  return !!result.record.title && result.record.price > 0
+}
+
+/**
+ * Get the most common error code from error counts
+ */
+function getMostCommonErrorCode(errorCodes: Record<string, number>): string | null {
+  const entries = Object.entries(errorCodes)
+  if (entries.length === 0) return null
+
+  return entries.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
 }
 
 // ============================================================================
 // WORKER EXPORT
 // ============================================================================
 
-export const dealerFeedIngestWorker = new Worker(
-  QUEUE_NAMES.DEALER_FEED_INGEST,
-  processFeedIngest,
-  {
-    connection: redisConnection,
-    concurrency: 5,
-  }
-)
+export const dealerFeedIngestWorker = new Worker(QUEUE_NAMES.DEALER_FEED_INGEST, processFeedIngest, {
+  connection: redisConnection,
+  concurrency: 5,
+})
 
 dealerFeedIngestWorker.on('completed', (job) => {
   console.log(`[Dealer Feed] Job ${job.id} completed`)

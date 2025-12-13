@@ -290,7 +290,7 @@ export default async function DealerDetailPage({
               <tbody className="divide-y divide-gray-200">
                 {dealer.feeds.map((feed) => (
                   <tr key={feed.id}>
-                    <td className="px-4 py-3 text-sm text-gray-900">{feed.feedType}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{feed.accessType} / {feed.formatType}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                         feed.status === 'HEALTHY' ? 'bg-green-100 text-green-700' :
