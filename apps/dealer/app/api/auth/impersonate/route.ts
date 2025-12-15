@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify, SignJWT } from 'jose';
-import { cookies } from 'next/headers';
 import { prisma } from '@ironscout/db';
 
 const DEALER_JWT_SECRET = new TextEncoder().encode(
@@ -88,9 +87,14 @@ export async function GET(request: NextRequest) {
       .setExpirationTime('4h')
       .sign(DEALER_JWT_SECRET);
 
+    console.log('Impersonation: Success for', dealerUser.email, 'by', payload.impersonatedBy);
+
+    // Create redirect response and set cookies on it
+    // Note: cookies().set() doesn't work with redirects - must set on response directly
+    const response = NextResponse.redirect(`${baseUrl}/dashboard`);
+
     // Set the session cookie
-    const cookieStore = await cookies();
-    cookieStore.set('dealer-session', sessionToken, {
+    response.cookies.set('dealer-session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -99,7 +103,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Set impersonation indicator cookie (readable by client)
-    cookieStore.set('dealer-impersonation', JSON.stringify({
+    response.cookies.set('dealer-impersonation', JSON.stringify({
       adminEmail: payload.impersonatedBy,
       dealerName: dealerUser.dealer.businessName,
       startedAt: payload.impersonatedAt,
@@ -111,10 +115,7 @@ export async function GET(request: NextRequest) {
       path: '/',
     });
 
-    console.log('Impersonation: Success for', dealerUser.email, 'by', payload.impersonatedBy);
-    
-    // Redirect to dashboard
-    return NextResponse.redirect(`${baseUrl}/dashboard`);
+    return response;
   } catch (error) {
     console.error('Impersonation error:', error);
     // Log more details about the error

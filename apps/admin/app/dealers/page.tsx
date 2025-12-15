@@ -1,7 +1,6 @@
 import { prisma } from '@ironscout/db';
-import { formatDateTime } from '@/lib/utils';
 import { DealerActions } from './dealer-actions';
-import { Users, Clock, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertTriangle, XCircle, Rss } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +8,20 @@ const statusConfig = {
   PENDING: { label: 'Pending', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   ACTIVE: { label: 'Active', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   SUSPENDED: { label: 'Suspended', color: 'bg-red-100 text-red-700', icon: XCircle },
+};
+
+const tierConfig: Record<string, { label: string; color: string }> = {
+  FOUNDING: { label: 'Founding', color: 'bg-purple-100 text-purple-700' },
+  STANDARD: { label: 'Standard', color: 'bg-gray-100 text-gray-700' },
+  PRO: { label: 'Pro', color: 'bg-blue-100 text-blue-700' },
+  ENTERPRISE: { label: 'Enterprise', color: 'bg-indigo-100 text-indigo-700' },
+};
+
+const feedStatusConfig: Record<string, { label: string; color: string }> = {
+  PENDING: { label: 'Pending', color: 'text-gray-500' },
+  HEALTHY: { label: 'Healthy', color: 'text-green-600' },
+  WARNING: { label: 'Warning', color: 'text-yellow-600' },
+  FAILED: { label: 'Failed', color: 'text-red-600' },
 };
 
 export default async function DealersPage() {
@@ -21,6 +34,10 @@ export default async function DealersPage() {
       users: {
         where: { role: 'OWNER' },
         take: 1,
+      },
+      feeds: {
+        take: 1,
+        orderBy: { createdAt: 'desc' },
       },
       _count: {
         select: {
@@ -129,10 +146,16 @@ export default async function DealersPage() {
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                SKUs
+                Plan
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Registered
+                Expires
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Feed
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                SKUs
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
@@ -144,7 +167,31 @@ export default async function DealersPage() {
               const status = statusConfig[dealer.status];
               const StatusIcon = status.icon;
               const ownerUser = dealer.users[0];
-              
+              const tier = tierConfig[dealer.tier] || tierConfig.STANDARD;
+              const feed = dealer.feeds[0];
+              const feedStatus = feed ? feedStatusConfig[feed.status] : null;
+
+              // Calculate expiration display
+              const expiresAt = dealer.subscriptionExpiresAt;
+              let expiresDisplay = '—';
+              let expiresColor = 'text-gray-500';
+              if (expiresAt) {
+                const now = new Date();
+                const daysUntil = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysUntil < 0) {
+                  expiresDisplay = `${Math.abs(daysUntil)}d overdue`;
+                  expiresColor = 'text-red-600 font-medium';
+                } else if (daysUntil <= 7) {
+                  expiresDisplay = `${daysUntil}d`;
+                  expiresColor = 'text-yellow-600 font-medium';
+                } else if (daysUntil <= 30) {
+                  expiresDisplay = `${daysUntil}d`;
+                  expiresColor = 'text-gray-600';
+                } else {
+                  expiresDisplay = expiresAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+              }
+
               return (
                 <tr key={dealer.id} className={dealer.status === 'PENDING' ? 'bg-yellow-50' : ''}>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -175,15 +222,32 @@ export default async function DealersPage() {
                     </span>
                     {ownerUser && !ownerUser.emailVerified && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                        Email not verified
+                        Unverified
                       </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${tier.color}`}>
+                      {tier.label}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`text-sm ${expiresColor}`}>
+                      {expiresDisplay}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {feed ? (
+                      <span className={`inline-flex items-center gap-1 text-sm ${feedStatus?.color || 'text-gray-500'}`}>
+                        <Rss className="h-3.5 w-3.5" />
+                        {feedStatus?.label}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-400">No feed</span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {dealer._count.skus.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDateTime(dealer.createdAt)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <DealerActions dealer={dealer} />
@@ -194,7 +258,7 @@ export default async function DealersPage() {
             
             {dealers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                   No dealers registered yet.
                 </td>
               </tr>
