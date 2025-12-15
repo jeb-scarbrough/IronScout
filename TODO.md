@@ -8,10 +8,12 @@
 
 Implement subscription-based access control for dealers:
 
-1. **Portal Access Control** *(Not Started)*
-   - Enforce login restrictions based on dealer subscription status
-   - If subscription is inactive/expired, restrict access to dealer portal
-   - Show appropriate messaging for expired subscriptions (renewal prompt, contact support, etc.)
+1. **Portal Access Control** *(Complete)*
+   - ✅ Enforce login restrictions based on dealer subscription status
+   - ✅ If subscription is inactive/expired, restrict access to dealer portal
+   - ✅ Show appropriate messaging for expired subscriptions (renewal prompt, contact support, etc.)
+   - ✅ Grace period support with warning banners
+   - ✅ Dedicated pages for expired/suspended/cancelled states
 
 2. **Feed Ingestion Automation** *(Complete)*
    - ✅ Skip automatic feed ingestion for dealers with inactive/expired subscriptions
@@ -27,7 +29,6 @@ Implement subscription-based access control for dealers:
    - ✅ Visual indicator when subscription is expired in admin portal
 
 **Remaining Work:**
-- Portal access control (login restrictions for expired subscriptions)
 - Stripe integration for payment status sync
 
 ---
@@ -67,15 +68,7 @@ Implement subscription-based access control for end users (consumers):
 
 ## Medium Priority
 
-### Signout Redirect to Main Site
-**Status:** Not Started  
-**Target:** TBD
-
-On signout from any portal (dealer, admin), redirect user to https://www.ironscout.ai/ instead of staying on subdomain.
-
-- Update dealer portal signout to redirect to main site
-- Update admin portal signout to redirect to main site
-- Ensure session/cookies are properly cleared across subdomains
+*(No items currently)*
 
 ---
 
@@ -97,6 +90,19 @@ On signout from any portal (dealer, admin), redirect user to https://www.ironsco
 - Created FeedsSection component in admin portal with "Run (Override)" button
 - FOUNDING tier dealers have lifetime access (no expiration check)
 
+### Dealer Portal Access Control (December 15, 2025)
+- Created `apps/dealer/lib/subscription.ts` with full subscription status checking
+- Implemented grace period support with configurable days
+- Added subscription banner component for warning/error states
+- Created dedicated pages: `/subscription-expired`, `/subscription-suspended`, `/subscription-cancelled`
+- Dashboard layout checks subscription and redirects blocked users
+- Admin impersonation bypasses subscription checks
+
+### Signout Redirect to Main Site (December 15, 2025)
+- Updated dealer portal logout (`/api/auth/logout`) to redirect to `https://www.ironscout.ai`
+- Added GET handler for link-based logout with automatic redirect
+- Updated admin portal "Exit Admin" link to redirect to main site
+
 ---
 
-*Last updated: December 13, 2025*
+*Last updated: December 15, 2025*

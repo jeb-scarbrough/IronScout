@@ -79,11 +79,11 @@ export function Navigation({ admin }: NavigationProps) {
         </div>
         
         <a
-          href={process.env.NEXT_PUBLIC_WEB_URL || 'https://ironscout.ai'}
+          href="/api/auth/logout"
           className="mt-3 flex items-center gap-2 text-sm text-gray-400 hover:text-white"
         >
           <LogOut className="h-4 w-4" />
-          Exit Admin
+          Sign Out
         </a>
       </div>
     </div>
