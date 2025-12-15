@@ -11,13 +11,19 @@ For detailed documentation, see the `docs/` folder:
 - **Deployment**: `docs/deployment/` - Render setup, environments, Stripe, email
 - **Product**: `docs/product/` - Subscription management, product offerings, tiers
 - **Guides**: `docs/guides/` - How-to guides and troubleshooting
+- **Scripts**: `docs/scripts/` - Utility scripts for development, building, and seeding
 
 Key documents:
+
+- [Documentation Index](docs/README.md) - Full docs overview
 - [Architecture Overview](docs/architecture/overview.md)
 - [AI Search System](docs/architecture/ai-search.md)
 - [Database Schema](docs/architecture/database.md)
 - [Dealer Subscription Management](docs/product/subscription-management.md)
+- [Dealer Tier Offerings](docs/product/offerings.md)
 - [Feed Troubleshooting](docs/guides/feed-troubleshooting.md)
+- [Render Deployment](docs/deployment/render.md)
+- [Scripts README](docs/scripts/README.md)
 
 ## Project Overview
 
@@ -187,7 +193,10 @@ embedding          vector(1536)     // Semantic search vector
 
 ### Dealer Portal Models
 
-- **Dealer** - Dealer registration, auth, verification (uses `contactFirstName`/`contactLastName`)
+- **Dealer** - Dealer registration, auth, subscription management
+  - Uses `contactFirstName`/`contactLastName` for primary contact
+  - Subscription fields: `subscriptionStatus`, `subscriptionExpiresAt`, `subscriptionGraceDays`
+  - Payment tracking: `paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`
 - **DealerUser** - Team members with roles (OWNER, ADMIN, MEMBER, VIEWER)
 - **DealerContact** - Multi-contact management with email preferences and roles
 - **DealerFeed** - Feed configuration and status
@@ -196,6 +205,42 @@ embedding          vector(1536)     // Semantic search vector
 - **MarketBenchmark** - Price benchmarks by caliber
 - **DealerInsight** - Actionable insights
 - **PixelEvent/ClickEvent** - Attribution tracking
+
+### Key Enums
+
+```prisma
+enum DealerTier {
+  STANDARD    // $99/mo - basic features
+  PRO         // $299/mo - full features
+  FOUNDING    // PRO features free for 1 year
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PURCHASE_ORDER
+}
+
+enum DealerContactRole {
+  PRIMARY
+  BILLING
+  TECHNICAL
+  MARKETING
+}
+
+enum FeedStatus {
+  PENDING
+  HEALTHY
+  WARNING
+  FAILED
+}
+```
 
 ## API Routes (`apps/api/src/routes/`)
 
@@ -402,6 +447,19 @@ NEXT_PUBLIC_ADMIN_URL=https://admin.ironscout.ai
 
 See `docs/apps/admin.md` for full documentation.
 
+### Logout Routes
+
+Both dealer and admin portals have dedicated logout routes:
+
+| Portal | Route | Clears | Redirects To |
+|--------|-------|--------|--------------|
+| Dealer | `/api/auth/logout` | `dealer-session` cookie | `https://dealer.ironscout.ai` |
+| Admin | `/api/auth/logout` | `authjs.session-token` cookie | `https://admin.ironscout.ai` |
+
+**Key files:**
+- `apps/dealer/app/api/auth/logout/route.ts`
+- `apps/admin/app/api/auth/logout/route.ts`
+
 ## Deployment URLs
 
 | Service | Production URL | Render URL |
@@ -435,11 +493,13 @@ Dealers can manage multiple contacts who receive IronScout communications:
 - **Contact roles**: PRIMARY, BILLING, TECHNICAL, MARKETING (OTHER role removed)
 - **Account ownership transfer** - Only current owner can transfer to another contact
 
-**Database Constraint:**
-```prisma
-@@unique([dealerId, isAccountOwner])
-```
-This unique constraint enforces that only ONE contact per dealer can have `isAccountOwner: true`. When `isAccountOwner: false`, multiple contacts are allowed. At PostgreSQL level, this prevents race conditions and concurrent violations.
+**Account Owner Enforcement:**
+
+Only ONE contact per dealer can have `isAccountOwner: true`. This is enforced via:
+1. **Application logic** - Atomic `Promise.all()` updates in transfer functions
+2. **Migration cleanup** - `20251212_enforce_account_ownership.sql` ensures data integrity
+
+Note: A standard Prisma `@@unique([dealerId, isAccountOwner])` wouldn't work correctly (would block multiple `false` values). Enforcement is application-level.
 
 **Schema Changes:**
 - `DealerContact.isAccountOwner` - Boolean field (default: false)
@@ -515,4 +575,4 @@ When a dealer registers:
 4. Sets initial contact with `communicationOptIn: true` and `marketingOptIn: false`
 
 ---
-*Last updated: December 12, 2025*
+*Last updated: December 15, 2025*

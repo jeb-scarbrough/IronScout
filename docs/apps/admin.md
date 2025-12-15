@@ -229,12 +229,24 @@ Admins can log in as a dealer to provide support assistance:
 4. **Audit logging** - All admin actions logged to `AdminAuditLog` table
 5. **Impersonation logged** - All impersonation sessions are audit logged with admin email
 
+## Logout
+
+The admin portal has a dedicated logout route at `/api/auth/logout`:
+
+- Clears the NextAuth session cookie (`__Secure-authjs.session-token` in production)
+- Sets cookie domain to `.ironscout.ai` for cross-subdomain clearing
+- Redirects to `https://admin.ironscout.ai` (login page)
+
+**Key file:** `apps/admin/app/api/auth/logout/route.ts`
+
 ## File Structure
 
 ```
 apps/admin/
 ├── app/
 │   ├── api/
+│   │   ├── auth/
+│   │   │   └── logout/  # Logout route
 │   │   ├── dealers/     # Dealer management API
 │   │   └── debug/       # Debug endpoint
 │   ├── analytics/       # Analytics page
@@ -258,4 +270,4 @@ apps/admin/
 - **Render config:** `render.yaml` (ironscout-admin service)
 
 ---
-*Last updated: December 11, 2025*
+*Last updated: December 15, 2025*

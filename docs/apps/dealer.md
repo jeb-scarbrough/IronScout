@@ -464,7 +464,8 @@ apps/dealer/
 # Auth
 POST   /api/auth/register
 POST   /api/auth/login
-POST   /api/auth/logout
+GET    /api/auth/logout          # Clears session, redirects to dealer.ironscout.ai
+POST   /api/auth/logout          # Returns JSON with redirectTo URL
 POST   /api/auth/verify-email
 POST   /api/auth/reset-password/request
 POST   /api/auth/reset-password/complete
