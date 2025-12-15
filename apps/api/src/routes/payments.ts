@@ -10,6 +10,72 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null
 
 // =============================================================================
+// Logging Utilities
+// =============================================================================
+
+type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG'
+
+interface LogContext {
+  action: string
+  dealerId?: string
+  userId?: string
+  subscriptionId?: string
+  customerId?: string
+  sessionId?: string
+  eventType?: string
+  priceId?: string
+  amount?: number
+  status?: string
+  error?: string
+  duration?: number
+  [key: string]: unknown
+}
+
+function log(level: LogLevel, message: string, context: LogContext) {
+  const timestamp = new Date().toISOString()
+  const logEntry = {
+    timestamp,
+    level,
+    service: 'payments',
+    message,
+    ...context
+  }
+
+  const prefix = `[${timestamp}] [STRIPE] [${level}]`
+
+  if (level === 'ERROR') {
+    console.error(prefix, message, JSON.stringify(context))
+  } else if (level === 'WARN') {
+    console.warn(prefix, message, JSON.stringify(context))
+  } else {
+    console.log(prefix, message, JSON.stringify(context))
+  }
+
+  return logEntry
+}
+
+// Track webhook processing stats
+const webhookStats = {
+  received: 0,
+  processed: 0,
+  failed: 0,
+  lastEventAt: null as Date | null,
+  lastEventType: null as string | null,
+  eventCounts: {} as Record<string, number>,
+  errors: [] as Array<{ timestamp: Date; eventType: string; error: string }>
+}
+
+// Track endpoint call stats
+const endpointStats = {
+  checkoutCreated: 0,
+  checkoutFailed: 0,
+  portalCreated: 0,
+  portalFailed: 0,
+  lastCheckoutAt: null as Date | null,
+  lastPortalAt: null as Date | null
+}
+
+// =============================================================================
 // Schemas
 // =============================================================================
 
@@ -28,17 +94,169 @@ const createDealerCheckoutSchema = z.object({
 })
 
 // =============================================================================
+// Health Check Endpoint
+// =============================================================================
+
+router.get('/health', async (req: Request, res: Response) => {
+  const startTime = Date.now()
+
+  try {
+    // Check Stripe connectivity
+    let stripeStatus = 'not_configured'
+    let stripeAccountId = null
+
+    if (stripe) {
+      try {
+        const account = await stripe.accounts.retrieve()
+        stripeStatus = 'connected'
+        stripeAccountId = account.id
+      } catch (stripeError) {
+        stripeStatus = 'error'
+        log('ERROR', 'Stripe health check failed', {
+          action: 'health_check',
+          error: stripeError instanceof Error ? stripeError.message : 'Unknown error'
+        })
+      }
+    }
+
+    // Check database connectivity
+    let dbStatus = 'unknown'
+    let activeDealerSubscriptions = 0
+    let activeConsumerSubscriptions = 0
+
+    try {
+      // Count active dealer subscriptions
+      activeDealerSubscriptions = await prisma.dealer.count({
+        where: { subscriptionStatus: 'ACTIVE' }
+      })
+
+      // Count active consumer subscriptions (users with PREMIUM tier)
+      activeConsumerSubscriptions = await prisma.user.count({
+        where: { tier: 'PREMIUM' }
+      })
+
+      dbStatus = 'connected'
+    } catch (dbError) {
+      dbStatus = 'error'
+      log('ERROR', 'Database health check failed', {
+        action: 'health_check',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+      })
+    }
+
+    const duration = Date.now() - startTime
+
+    const health = {
+      status: stripeStatus === 'connected' && dbStatus === 'connected' ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      stripe: {
+        status: stripeStatus,
+        accountId: stripeAccountId,
+        configured: !!process.env.STRIPE_SECRET_KEY,
+        webhookConfigured: !!process.env.STRIPE_WEBHOOK_SECRET,
+        priceIds: {
+          premiumMonthly: !!process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY,
+          premiumAnnually: !!process.env.STRIPE_PRICE_ID_PREMIUM_ANNUALLY,
+          dealerStandard: !!process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY,
+          dealerPro: !!process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY
+        }
+      },
+      database: {
+        status: dbStatus,
+        activeDealerSubscriptions,
+        activeConsumerSubscriptions
+      },
+      webhooks: {
+        received: webhookStats.received,
+        processed: webhookStats.processed,
+        failed: webhookStats.failed,
+        lastEventAt: webhookStats.lastEventAt?.toISOString() || null,
+        lastEventType: webhookStats.lastEventType,
+        recentErrors: webhookStats.errors.slice(-5).map(e => ({
+          timestamp: e.timestamp.toISOString(),
+          eventType: e.eventType,
+          error: e.error
+        }))
+      },
+      endpoints: {
+        checkoutCreated: endpointStats.checkoutCreated,
+        checkoutFailed: endpointStats.checkoutFailed,
+        portalCreated: endpointStats.portalCreated,
+        portalFailed: endpointStats.portalFailed,
+        lastCheckoutAt: endpointStats.lastCheckoutAt?.toISOString() || null,
+        lastPortalAt: endpointStats.lastPortalAt?.toISOString() || null
+      }
+    }
+
+    log('INFO', 'Health check completed', {
+      action: 'health_check',
+      status: health.status,
+      duration
+    })
+
+    res.json(health)
+  } catch (error) {
+    const duration = Date.now() - startTime
+
+    log('ERROR', 'Health check failed', {
+      action: 'health_check',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration
+    })
+
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      duration: `${duration}ms`,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+// Debug endpoint for webhook event counts (protected by env check)
+router.get('/debug/webhook-stats', async (req: Request, res: Response) => {
+  // Only allow in development or with debug header
+  const isDebug = process.env.NODE_ENV === 'development' || req.headers['x-debug-key'] === process.env.DEBUG_API_KEY
+
+  if (!isDebug) {
+    return res.status(403).json({ error: 'Debug endpoint not available' })
+  }
+
+  res.json({
+    webhooks: webhookStats,
+    endpoints: endpointStats,
+    eventBreakdown: webhookStats.eventCounts
+  })
+})
+
+// =============================================================================
 // Consumer Checkout (existing)
 // =============================================================================
 
 router.post('/create-checkout', async (req: Request, res: Response) => {
+  const startTime = Date.now()
+
   try {
     const { priceId, userId, successUrl, cancelUrl } = createCheckoutSchema.parse(req.body)
 
+    log('INFO', 'Consumer checkout initiated', {
+      action: 'consumer_checkout_start',
+      userId,
+      priceId
+    })
+
     if (!stripe) {
+      const mockSessionId = `mock_session_${Date.now()}`
+      log('WARN', 'Stripe not configured - returning mock session', {
+        action: 'consumer_checkout_mock',
+        userId,
+        sessionId: mockSessionId
+      })
+
       return res.json({
-        url: `${successUrl}?session_id=mock_session_${Date.now()}`,
-        sessionId: `mock_session_${Date.now()}`
+        url: `${successUrl}?session_id=${mockSessionId}`,
+        sessionId: mockSessionId
       })
     }
 
@@ -60,12 +278,32 @@ router.post('/create-checkout', async (req: Request, res: Response) => {
       },
     })
 
+    const duration = Date.now() - startTime
+    endpointStats.checkoutCreated++
+    endpointStats.lastCheckoutAt = new Date()
+
+    log('INFO', 'Consumer checkout session created', {
+      action: 'consumer_checkout_success',
+      userId,
+      priceId,
+      sessionId: session.id,
+      duration
+    })
+
     res.json({
       url: session.url,
       sessionId: session.id
     })
   } catch (error) {
-    console.error('Checkout creation error:', error)
+    const duration = Date.now() - startTime
+    endpointStats.checkoutFailed++
+
+    log('ERROR', 'Consumer checkout failed', {
+      action: 'consumer_checkout_error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration
+    })
+
     res.status(500).json({ error: 'Failed to create checkout session' })
   }
 })
@@ -75,13 +313,28 @@ router.post('/create-checkout', async (req: Request, res: Response) => {
 // =============================================================================
 
 router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
+  const startTime = Date.now()
+
   try {
     const { priceId, dealerId, successUrl, cancelUrl } = createDealerCheckoutSchema.parse(req.body)
 
+    log('INFO', 'Dealer checkout initiated', {
+      action: 'dealer_checkout_start',
+      dealerId,
+      priceId
+    })
+
     if (!stripe) {
+      const mockSessionId = `mock_dealer_session_${Date.now()}`
+      log('WARN', 'Stripe not configured - returning mock session', {
+        action: 'dealer_checkout_mock',
+        dealerId,
+        sessionId: mockSessionId
+      })
+
       return res.json({
-        url: `${successUrl}?session_id=mock_dealer_session_${Date.now()}`,
-        sessionId: `mock_dealer_session_${Date.now()}`
+        url: `${successUrl}?session_id=${mockSessionId}`,
+        sessionId: mockSessionId
       })
     }
 
@@ -97,6 +350,10 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
     })
 
     if (!dealer) {
+      log('WARN', 'Dealer not found for checkout', {
+        action: 'dealer_checkout_not_found',
+        dealerId
+      })
       return res.status(404).json({ error: 'Dealer not found' })
     }
 
@@ -104,6 +361,7 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
 
     // Create or retrieve Stripe customer
     let customerId = dealer.stripeCustomerId
+    let customerCreated = false
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -115,11 +373,18 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
         },
       })
       customerId = customer.id
+      customerCreated = true
 
       // Save customer ID to dealer record
       await prisma.dealer.update({
         where: { id: dealerId },
         data: { stripeCustomerId: customerId },
+      })
+
+      log('INFO', 'Stripe customer created for dealer', {
+        action: 'dealer_customer_created',
+        dealerId,
+        customerId
       })
     }
 
@@ -148,12 +413,34 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
       },
     })
 
+    const duration = Date.now() - startTime
+    endpointStats.checkoutCreated++
+    endpointStats.lastCheckoutAt = new Date()
+
+    log('INFO', 'Dealer checkout session created', {
+      action: 'dealer_checkout_success',
+      dealerId,
+      priceId,
+      customerId,
+      sessionId: session.id,
+      customerCreated,
+      duration
+    })
+
     res.json({
       url: session.url,
       sessionId: session.id
     })
   } catch (error) {
-    console.error('Dealer checkout creation error:', error)
+    const duration = Date.now() - startTime
+    endpointStats.checkoutFailed++
+
+    log('ERROR', 'Dealer checkout failed', {
+      action: 'dealer_checkout_error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration
+    })
+
     res.status(500).json({ error: 'Failed to create dealer checkout session' })
   }
 })
@@ -163,10 +450,21 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
 // =============================================================================
 
 router.post('/dealer/create-portal-session', async (req: Request, res: Response) => {
+  const startTime = Date.now()
+
   try {
     const { dealerId, returnUrl } = req.body
 
+    log('INFO', 'Dealer portal session initiated', {
+      action: 'dealer_portal_start',
+      dealerId
+    })
+
     if (!stripe) {
+      log('WARN', 'Stripe not configured - returning to return URL', {
+        action: 'dealer_portal_mock',
+        dealerId
+      })
       return res.json({ url: returnUrl })
     }
 
@@ -175,6 +473,10 @@ router.post('/dealer/create-portal-session', async (req: Request, res: Response)
     })
 
     if (!dealer?.stripeCustomerId) {
+      log('WARN', 'No billing account found for dealer', {
+        action: 'dealer_portal_no_customer',
+        dealerId
+      })
       return res.status(400).json({ error: 'No billing account found' })
     }
 
@@ -183,9 +485,28 @@ router.post('/dealer/create-portal-session', async (req: Request, res: Response)
       return_url: returnUrl,
     })
 
+    const duration = Date.now() - startTime
+    endpointStats.portalCreated++
+    endpointStats.lastPortalAt = new Date()
+
+    log('INFO', 'Dealer portal session created', {
+      action: 'dealer_portal_success',
+      dealerId,
+      customerId: dealer.stripeCustomerId,
+      duration
+    })
+
     res.json({ url: session.url })
   } catch (error) {
-    console.error('Portal session error:', error)
+    const duration = Date.now() - startTime
+    endpointStats.portalFailed++
+
+    log('ERROR', 'Dealer portal session failed', {
+      action: 'dealer_portal_error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration
+    })
+
     res.status(500).json({ error: 'Failed to create portal session' })
   }
 })
@@ -195,11 +516,17 @@ router.post('/dealer/create-portal-session', async (req: Request, res: Response)
 // =============================================================================
 
 router.post('/webhook', async (req: Request, res: Response) => {
+  const startTime = Date.now()
+  webhookStats.received++
+
   try {
     const sig = req.headers['stripe-signature'] as string
 
     if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
-      console.log('Mock webhook received:', req.body)
+      log('WARN', 'Mock webhook received - Stripe not configured', {
+        action: 'webhook_mock',
+        eventType: req.body?.type || 'unknown'
+      })
       return res.json({ received: true })
     }
 
@@ -209,7 +536,16 @@ router.post('/webhook', async (req: Request, res: Response) => {
       process.env.STRIPE_WEBHOOK_SECRET
     )
 
-    console.log(`[Stripe Webhook] Received event: ${event.type}`)
+    // Track event stats
+    webhookStats.lastEventAt = new Date()
+    webhookStats.lastEventType = event.type
+    webhookStats.eventCounts[event.type] = (webhookStats.eventCounts[event.type] || 0) + 1
+
+    log('INFO', `Webhook received: ${event.type}`, {
+      action: 'webhook_received',
+      eventType: event.type,
+      eventId: event.id
+    })
 
     switch (event.type) {
       // =======================================================================
@@ -324,12 +660,46 @@ router.post('/webhook', async (req: Request, res: Response) => {
       }
 
       default:
-        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
+        log('DEBUG', `Unhandled webhook event type: ${event.type}`, {
+          action: 'webhook_unhandled',
+          eventType: event.type,
+          eventId: event.id
+        })
     }
+
+    const duration = Date.now() - startTime
+    webhookStats.processed++
+
+    log('INFO', `Webhook processed: ${event.type}`, {
+      action: 'webhook_processed',
+      eventType: event.type,
+      eventId: event.id,
+      duration
+    })
 
     res.json({ received: true })
   } catch (error) {
-    console.error('[Stripe Webhook] Error:', error)
+    const duration = Date.now() - startTime
+    webhookStats.failed++
+
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    // Keep last 10 errors for debugging
+    webhookStats.errors.push({
+      timestamp: new Date(),
+      eventType: 'unknown',
+      error: errorMessage
+    })
+    if (webhookStats.errors.length > 10) {
+      webhookStats.errors.shift()
+    }
+
+    log('ERROR', 'Webhook processing failed', {
+      action: 'webhook_error',
+      error: errorMessage,
+      duration
+    })
+
     res.status(400).json({ error: 'Webhook signature verification failed' })
   }
 })
@@ -341,13 +711,22 @@ router.post('/webhook', async (req: Request, res: Response) => {
 async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
   const dealerId = session.metadata?.dealerId || session.client_reference_id
   const subscriptionId = session.subscription as string
+  const customerId = session.customer as string
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in checkout session')
+    log('ERROR', 'No dealerId in checkout session', {
+      action: 'dealer_checkout_completed_error',
+      sessionId: session.id
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Checkout completed for dealer ${dealerId}`)
+  log('INFO', 'Processing dealer checkout completed', {
+    action: 'dealer_checkout_completed_start',
+    dealerId,
+    subscriptionId,
+    customerId
+  })
 
   // Get subscription details
   const subscription = await stripe!.subscriptions.retrieve(subscriptionId)
@@ -357,7 +736,7 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
     where: { id: dealerId },
     data: {
       stripeSubscriptionId: subscriptionId,
-      stripeCustomerId: session.customer as string,
+      stripeCustomerId: customerId,
       paymentMethod: 'STRIPE',
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd,
@@ -365,18 +744,37 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription activated until ${currentPeriodEnd}`)
+  log('INFO', 'Dealer subscription activated', {
+    action: 'dealer_checkout_completed_success',
+    dealerId,
+    subscriptionId,
+    customerId,
+    expiresAt: currentPeriodEnd.toISOString(),
+    status: 'ACTIVE'
+  })
 }
 
 async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
+  const invoiceId = invoice.id
+  const amount = invoice.amount_paid
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_invoice_paid_error',
+      subscriptionId: subscription.id,
+      invoiceId
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Invoice paid for dealer ${dealerId}`)
+  log('INFO', 'Processing dealer invoice paid', {
+    action: 'dealer_invoice_paid_start',
+    dealerId,
+    subscriptionId: subscription.id,
+    invoiceId,
+    amount
+  })
 
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
 
@@ -388,18 +786,37 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription renewed until ${currentPeriodEnd}`)
+  log('INFO', 'Dealer subscription renewed', {
+    action: 'dealer_invoice_paid_success',
+    dealerId,
+    subscriptionId: subscription.id,
+    invoiceId,
+    amount,
+    expiresAt: currentPeriodEnd.toISOString()
+  })
 }
 
 async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
+  const invoiceId = invoice.id
+  const attemptCount = invoice.attempt_count
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_payment_failed_error',
+      subscriptionId: subscription.id,
+      invoiceId
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Payment failed for dealer ${dealerId}`)
+  log('WARN', 'Dealer payment failed', {
+    action: 'dealer_payment_failed_start',
+    dealerId,
+    subscriptionId: subscription.id,
+    invoiceId,
+    attemptCount
+  })
 
   // Set to EXPIRED to trigger grace period
   await prisma.dealer.update({
@@ -410,18 +827,36 @@ async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: 
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription marked as EXPIRED (payment failed)`)
+  log('WARN', 'Dealer subscription marked as EXPIRED', {
+    action: 'dealer_payment_failed_processed',
+    dealerId,
+    subscriptionId: subscription.id,
+    invoiceId,
+    attemptCount,
+    status: 'EXPIRED'
+  })
 }
 
 async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
+  const stripeStatus = subscription.status
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_subscription_updated_error',
+      subscriptionId: subscription.id,
+      stripeStatus
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Subscription updated for dealer ${dealerId}, status: ${subscription.status}`)
+  log('INFO', 'Processing dealer subscription update', {
+    action: 'dealer_subscription_updated_start',
+    dealerId,
+    subscriptionId: subscription.id,
+    stripeStatus,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end
+  })
 
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
 
@@ -455,18 +890,33 @@ async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} updated: status=${subscriptionStatus}, expires=${currentPeriodEnd}`)
+  log('INFO', 'Dealer subscription updated', {
+    action: 'dealer_subscription_updated_success',
+    dealerId,
+    subscriptionId: subscription.id,
+    stripeStatus,
+    localStatus: subscriptionStatus,
+    expiresAt: currentPeriodEnd.toISOString(),
+    autoRenew: !subscription.cancel_at_period_end
+  })
 }
 
 async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_subscription_deleted_error',
+      subscriptionId: subscription.id
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Subscription deleted for dealer ${dealerId}`)
+  log('WARN', 'Processing dealer subscription deletion', {
+    action: 'dealer_subscription_deleted_start',
+    dealerId,
+    subscriptionId: subscription.id
+  })
 
   await prisma.dealer.update({
     where: { id: dealerId },
@@ -477,18 +927,30 @@ async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription cancelled`)
+  log('WARN', 'Dealer subscription cancelled', {
+    action: 'dealer_subscription_deleted_success',
+    dealerId,
+    subscriptionId: subscription.id,
+    status: 'CANCELLED'
+  })
 }
 
 async function handleDealerSubscriptionPaused(subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_subscription_paused_error',
+      subscriptionId: subscription.id
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Subscription paused for dealer ${dealerId}`)
+  log('WARN', 'Processing dealer subscription pause', {
+    action: 'dealer_subscription_paused_start',
+    dealerId,
+    subscriptionId: subscription.id
+  })
 
   await prisma.dealer.update({
     where: { id: dealerId },
@@ -497,18 +959,30 @@ async function handleDealerSubscriptionPaused(subscription: Stripe.Subscription)
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription suspended (paused)`)
+  log('WARN', 'Dealer subscription suspended', {
+    action: 'dealer_subscription_paused_success',
+    dealerId,
+    subscriptionId: subscription.id,
+    status: 'SUSPENDED'
+  })
 }
 
 async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription) {
   const dealerId = subscription.metadata?.dealerId
 
   if (!dealerId) {
-    console.error('[Dealer Webhook] No dealerId in subscription metadata')
+    log('ERROR', 'No dealerId in subscription metadata', {
+      action: 'dealer_subscription_resumed_error',
+      subscriptionId: subscription.id
+    })
     return
   }
 
-  console.log(`[Dealer Webhook] Subscription resumed for dealer ${dealerId}`)
+  log('INFO', 'Processing dealer subscription resume', {
+    action: 'dealer_subscription_resumed_start',
+    dealerId,
+    subscriptionId: subscription.id
+  })
 
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
 
@@ -520,7 +994,13 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
     },
   })
 
-  console.log(`[Dealer Webhook] Dealer ${dealerId} subscription resumed until ${currentPeriodEnd}`)
+  log('INFO', 'Dealer subscription resumed', {
+    action: 'dealer_subscription_resumed_success',
+    dealerId,
+    subscriptionId: subscription.id,
+    expiresAt: currentPeriodEnd.toISOString(),
+    status: 'ACTIVE'
+  })
 }
 
 // =============================================================================
@@ -529,27 +1009,52 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
 
 async function handleConsumerCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.client_reference_id
-  console.log(`[Consumer Webhook] Checkout completed for user ${userId}`)
+  const subscriptionId = session.subscription as string
+
+  log('INFO', 'Consumer checkout completed', {
+    action: 'consumer_checkout_completed',
+    userId: userId || 'unknown',
+    subscriptionId,
+    sessionId: session.id
+  })
   // TODO: Update user tier to PREMIUM
 }
 
 async function handleConsumerInvoicePaid(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
-  console.log(`[Consumer Webhook] Invoice paid for subscription ${subscription.id}`)
+  log('INFO', 'Consumer invoice paid', {
+    action: 'consumer_invoice_paid',
+    subscriptionId: subscription.id,
+    invoiceId: invoice.id,
+    amount: invoice.amount_paid
+  })
   // TODO: Update user subscription status
 }
 
 async function handleConsumerPaymentFailed(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
-  console.log(`[Consumer Webhook] Payment failed for subscription ${subscription.id}`)
+  log('WARN', 'Consumer payment failed', {
+    action: 'consumer_payment_failed',
+    subscriptionId: subscription.id,
+    invoiceId: invoice.id,
+    attemptCount: invoice.attempt_count
+  })
   // TODO: Handle consumer payment failure
 }
 
 async function handleConsumerSubscriptionUpdated(subscription: Stripe.Subscription) {
-  console.log(`[Consumer Webhook] Subscription updated: ${subscription.id}`)
+  log('INFO', 'Consumer subscription updated', {
+    action: 'consumer_subscription_updated',
+    subscriptionId: subscription.id,
+    stripeStatus: subscription.status,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end
+  })
   // TODO: Update user subscription status
 }
 
 async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscription) {
-  console.log(`[Consumer Webhook] Subscription deleted: ${subscription.id}`)
+  log('WARN', 'Consumer subscription deleted', {
+    action: 'consumer_subscription_deleted',
+    subscriptionId: subscription.id
+  })
   // TODO: Downgrade user to FREE tier
 }
 
