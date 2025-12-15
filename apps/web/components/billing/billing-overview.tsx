@@ -27,8 +27,8 @@ export function BillingOverview() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-4 border rounded-lg">
             <DollarSign className="h-6 w-6 mx-auto mb-2 text-primary" />
-            <div className="text-2xl font-bold">$9.99</div>
-            <div className="text-sm text-muted-foreground">per month</div>
+            <div className="text-2xl font-bold">$49.99</div>
+            <div className="text-sm text-muted-foreground">per year</div>
           </div>
           
           <div className="text-center p-4 border rounded-lg">

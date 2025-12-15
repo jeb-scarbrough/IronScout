@@ -2,14 +2,67 @@
 
 ## ✅ Current Status
 
-Your Stripe test API key has been configured in `apps/api/.env`.
+Stripe is configured with test (sandbox) products. Products are created in Stripe Dashboard.
 
 The system supports two types of subscriptions:
 
-- **Consumer subscriptions** - Premium tier for end users ($9.99/month)
-- **Dealer subscriptions** - Standard ($99/month) and Pro ($299/month) tiers for dealers
+- **Consumer subscriptions** - Premium tier for end users
+  - Annual: $49.99/year ($4.17/month equivalent, 17% savings) - **recommended**
+  - Monthly: $4.99/month
+- **Dealer subscriptions** - Standard ($99/month) and Pro ($299/month) tiers
 
-## 🔧 Next Steps to Complete Setup
+## 🔑 Price IDs
+
+### Sandbox (Test Mode)
+
+```env
+# Consumer Plans
+STRIPE_PRICE_ID_STANDARD_MONTHLY=price_1SeiY59eNznqMHoSlmP4KqUF      # Free tier placeholder
+STRIPE_PRICE_ID_PREMIUM_MONTHLY=price_1SeiaL9eNznqMHoS0GNxnleB       # $4.99/month
+STRIPE_PRICE_ID_PREMIUM_ANNUALLY=price_1SeiaL9eNznqMHoSYkwjqK5h      # $49.99/year
+
+# Dealer Plans
+STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY=price_1SeibR9eNznqMHoSC4G9fPMK  # $99/month
+STRIPE_PRICE_ID_DEALER_PRO_MONTHLY=price_1Seic99eNznqMHoSmDTuAcF5       # $299/month
+```
+
+### Production (Live Mode)
+
+Create matching products in Stripe live mode and update with live price IDs:
+
+```env
+# Consumer Plans
+STRIPE_PRICE_ID_STANDARD_MONTHLY=price_live_...
+STRIPE_PRICE_ID_PREMIUM_MONTHLY=price_live_...
+STRIPE_PRICE_ID_PREMIUM_ANNUALLY=price_live_...
+
+# Dealer Plans
+STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY=price_live_...
+STRIPE_PRICE_ID_DEALER_PRO_MONTHLY=price_live_...
+```
+
+## 🔄 Staging vs Production Strategy
+
+Stripe requires separate products for test and live modes. Here's how to manage:
+
+| Environment | Stripe Mode | API Keys | Price IDs |
+|-------------|-------------|----------|-----------|
+| Local dev | Test | `sk_test_...` | Sandbox price IDs |
+| Staging/Preview | Test | `sk_test_...` | Sandbox price IDs |
+| Production | Live | `sk_live_...` | Live price IDs |
+
+**Key points:**
+1. **Never mix test and live keys** - Test keys only work with test products
+2. **Same product structure** - Create identical products in live mode with same names
+3. **Environment-based config** - Use Render environment groups or separate env files
+4. **Webhooks** - Create separate webhook endpoints for test vs live
+
+**Render setup:**
+- Create env group `stripe-sandbox` for staging with test keys
+- Create env group `stripe-production` for production with live keys
+- Each service links to appropriate group based on environment
+
+## 🔧 Setup Steps
 
 ### 1. Get Your Stripe Publishable Key
 
@@ -24,19 +77,34 @@ The system supports two types of subscriptions:
 
 You need to create products and prices in Stripe:
 
-#### Consumer Premium Plan ($9.99/month)
+#### Consumer Premium Plan (Annual - Recommended)
 
 1. Go to [Stripe Products](https://dashboard.stripe.com/test/products)
 2. Click **+ Add product**
 3. Fill in:
-   - **Name**: IronScout.ai Premium
-   - **Description**: Premium subscription with unlimited alerts and price tracking
-   - **Pricing**: Recurring, $9.99/month
+   - **Name**: IronScout.ai Premium (Annual)
+   - **Description**: Premium subscription with personalized AI recommendations, Best Value scoring, price history, unlimited instant alerts, and performance filters
+   - **Pricing**: Recurring, $49.99/year
 4. Click **Save product**
 5. Copy the **Price ID** (starts with `price_...`)
 6. Update `apps/api/.env`:
    ```env
-   STRIPE_PRICE_ID_PREMIUM="price_YOUR_PRICE_ID_HERE"
+   STRIPE_PRICE_ID_PREMIUM_ANNUALLY="price_YOUR_PRICE_ID_HERE"
+   ```
+
+#### Consumer Premium Plan (Monthly)
+
+1. Go to [Stripe Products](https://dashboard.stripe.com/test/products)
+2. Click **+ Add product** (or add a price to existing product)
+3. Fill in:
+   - **Name**: IronScout.ai Premium (Monthly)
+   - **Description**: Premium subscription - monthly billing
+   - **Pricing**: Recurring, $4.99/month
+4. Click **Save product**
+5. Copy the **Price ID**
+6. Update `apps/api/.env`:
+   ```env
+   STRIPE_PRICE_ID_PREMIUM_MONTHLY="price_YOUR_PRICE_ID_HERE"
    ```
 
 #### Dealer Standard Plan ($99/month)
@@ -45,13 +113,13 @@ You need to create products and prices in Stripe:
 2. Click **+ Add product**
 3. Fill in:
    - **Name**: IronScout.ai Dealer Standard
-   - **Description**: Standard dealer subscription with feed ingestion and market insights
+   - **Description**: List your products on IronScout.ai with automated feed ingestion and market insights
    - **Pricing**: Recurring, $99/month
 4. Click **Save product**
 5. Copy the **Price ID** (starts with `price_...`)
 6. Update `apps/api/.env`:
    ```env
-   STRIPE_PRICE_ID_DEALER_STANDARD="price_YOUR_PRICE_ID_HERE"
+   STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY="price_YOUR_PRICE_ID_HERE"
    ```
 
 #### Dealer Pro Plan ($299/month)
@@ -60,13 +128,13 @@ You need to create products and prices in Stripe:
 2. Click **+ Add product**
 3. Fill in:
    - **Name**: IronScout.ai Dealer Pro
-   - **Description**: Pro dealer subscription with full features and API access
+   - **Description**: Full-featured dealer platform with competitive pricing intelligence and API access
    - **Pricing**: Recurring, $299/month
 4. Click **Save product**
 5. Copy the **Price ID** (starts with `price_...`)
 6. Update `apps/api/.env`:
    ```env
-   STRIPE_PRICE_ID_DEALER_PRO="price_YOUR_PRICE_ID_HERE"
+   STRIPE_PRICE_ID_DEALER_PRO_MONTHLY="price_YOUR_PRICE_ID_HERE"
    ```
 
 ### 3. Set Up Webhook for Local Development

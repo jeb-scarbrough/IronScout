@@ -559,7 +559,7 @@ async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscripti
 
 router.get('/plans', async (req: Request, res: Response) => {
   try {
-    const mockPlans = [
+    const plans = [
       {
         id: 'price_free',
         name: 'Free',
@@ -567,28 +567,51 @@ router.get('/plans', async (req: Request, res: Response) => {
         currency: 'USD',
         interval: 'month',
         features: [
-          'Basic product alerts (delayed)',
-          'Limited search results',
-          'Standard support'
+          'Search, filter, and compare prices across hundreds of dealers',
+          'Price-per-round breakdowns',
+          'Purpose badges (range, defense, hunting)',
+          'Up to 3 delayed price alerts',
+          'Basic AI assistance'
         ]
       },
       {
-        id: 'price_premium',
-        name: 'Premium',
-        price: 9.99,
+        id: process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY || 'price_premium_monthly',
+        name: 'Premium Monthly',
+        price: 4.99,
         currency: 'USD',
         interval: 'month',
         features: [
-          'Real-time alerts',
-          'Unlimited search results',
-          'Priority support',
-          'Advanced filtering',
-          'Price history charts'
+          'Everything in Free',
+          'Personalized AI recommendations based on firearm and use case',
+          'Best Value scoring',
+          'Price history charts',
+          'Unlimited instant alerts',
+          'Performance filters (low-recoil, subsonic, +P, match-grade)',
+          'AI explanations for recommendations'
+        ]
+      },
+      {
+        id: process.env.STRIPE_PRICE_ID_PREMIUM_ANNUALLY || 'price_premium_annual',
+        name: 'Premium Annual',
+        price: 49.99,
+        currency: 'USD',
+        interval: 'year',
+        monthlyEquivalent: 4.17,
+        savings: '17% savings',
+        recommended: true,
+        features: [
+          'Everything in Free',
+          'Personalized AI recommendations based on firearm and use case',
+          'Best Value scoring',
+          'Price history charts',
+          'Unlimited instant alerts',
+          'Performance filters (low-recoil, subsonic, +P, match-grade)',
+          'AI explanations for recommendations'
         ]
       }
     ]
 
-    res.json(mockPlans)
+    res.json(plans)
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch plans' })
   }
@@ -599,7 +622,7 @@ router.get('/dealer/plans', async (req: Request, res: Response) => {
   try {
     const dealerPlans = [
       {
-        id: process.env.STRIPE_PRICE_ID_DEALER_STANDARD || 'price_dealer_standard',
+        id: process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY || 'price_dealer_standard',
         name: 'Standard',
         tier: 'STANDARD',
         price: 99,
@@ -616,7 +639,7 @@ router.get('/dealer/plans', async (req: Request, res: Response) => {
         ]
       },
       {
-        id: process.env.STRIPE_PRICE_ID_DEALER_PRO || 'price_dealer_pro',
+        id: process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY || 'price_dealer_pro',
         name: 'Pro',
         tier: 'PRO',
         price: 299,
