@@ -28,8 +28,19 @@ Implement subscription-based access control for dealers:
    - ✅ Audit log the manual trigger with admin identity
    - ✅ Visual indicator when subscription is expired in admin portal
 
+4. **Stripe Integration for Payment Sync** *(Complete)*
+   - ✅ Added Stripe fields to Dealer model (`paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`)
+   - ✅ Created `DealerPaymentMethod` enum (STRIPE, PURCHASE_ORDER)
+   - ✅ Dealer checkout endpoint creates/retrieves Stripe customer
+   - ✅ Dealer customer portal endpoint for billing management
+   - ✅ Webhook handlers for all dealer subscription lifecycle events
+   - ✅ Status mapping: Stripe status → local SubscriptionStatus
+   - ✅ Migration: `20251215_add_dealer_stripe_fields.sql`
+
 **Remaining Work:**
-- Stripe integration for payment status sync
+- Dealer portal billing UI (checkout flow, plan selection)
+- Admin visibility for payment method and Stripe IDs
+- Stripe reconciliation report (email report comparing Stripe vs local subscription status, detect drift from missed webhooks)
 
 ---
 
@@ -99,9 +110,27 @@ Implement subscription-based access control for end users (consumers):
 - Admin impersonation bypasses subscription checks
 
 ### Signout Redirect to Main Site (December 15, 2025)
-- Updated dealer portal logout (`/api/auth/logout`) to redirect to `https://www.ironscout.ai`
+- Updated dealer portal logout (`/api/auth/logout`) to redirect to `https://dealer.ironscout.ai`
 - Added GET handler for link-based logout with automatic redirect
-- Updated admin portal "Exit Admin" link to redirect to main site
+- Created admin portal logout route (`/api/auth/logout`) redirecting to `https://admin.ironscout.ai`
+- Updated admin portal "Sign Out" link to use logout route
+
+### Dealer Stripe Integration (December 15, 2025)
+- Added Stripe payment fields to Dealer model: `paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`
+- Created `DealerPaymentMethod` enum: STRIPE (automated billing), PURCHASE_ORDER (manual invoicing)
+- Created migration: `packages/db/migrations/20251215_add_dealer_stripe_fields.sql`
+- Implemented dealer checkout endpoint: `POST /api/payments/dealer/create-checkout`
+- Implemented dealer portal endpoint: `POST /api/payments/dealer/create-portal-session`
+- Implemented dealer plans endpoint: `GET /api/payments/dealer/plans`
+- Added comprehensive webhook handlers in `apps/api/src/routes/payments.ts`:
+  - `checkout.session.completed` - Activates subscription, stores Stripe IDs
+  - `invoice.paid` - Updates expiration date on renewal
+  - `invoice.payment_failed` - Sets status to EXPIRED
+  - `customer.subscription.updated` - Syncs Stripe status changes
+  - `customer.subscription.deleted` - Sets status to CANCELLED
+  - `customer.subscription.paused` - Sets status to SUSPENDED
+  - `customer.subscription.resumed` - Reactivates subscription
+- Webhook routing based on metadata (`type: 'dealer'` vs `type: 'consumer'`)
 
 ---
 

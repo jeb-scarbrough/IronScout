@@ -278,6 +278,12 @@ model Dealer {
   subscriptionGraceDays    Int                      @default(7) // Grace period after expiration
   lastSubscriptionNotifyAt DateTime?                // Rate limit: one notification per day
 
+  // Payment/Stripe fields
+  paymentMethod         DealerPaymentMethod? // STRIPE or PURCHASE_ORDER
+  stripeCustomerId      String?              @unique // Stripe customer ID (cus_...)
+  stripeSubscriptionId  String?              @unique // Stripe subscription ID (sub_...)
+  autoRenew             Boolean              @default(true) // Auto-renew for Stripe subscriptions
+
   clickEvents      ClickEvent[]
   contacts         DealerContact[]
   feeds            DealerFeed[]
@@ -886,6 +892,11 @@ enum DealerSubscriptionStatus {
   EXPIRED          // Subscription has expired (within grace period)
   SUSPENDED        // Subscription suspended (past grace period or payment failed)
   CANCELLED        // Subscription cancelled by dealer
+}
+
+enum DealerPaymentMethod {
+  STRIPE           // Automated billing via Stripe
+  PURCHASE_ORDER   // Manual invoicing for enterprise customers
 }
 
 enum DealerUserRole {

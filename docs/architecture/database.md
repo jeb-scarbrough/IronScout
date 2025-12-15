@@ -50,18 +50,20 @@ Canonical product catalog with AI-enhanced fields.
 ```prisma
 model Product {
   id          String   @id @default(cuid())
-  title       String
+  name        String
+  category    String
   caliber     String?
   brand       String?
+  imageUrl    String?
   grainWeight Int?
   roundCount  Int?
-  caseType    String?  // brass, steel, aluminum
+  caseMaterial String?  // brass, steel, aluminum
   purpose     String?  // defense, range, hunting, match
   upc         String?
 
   // Premium AI fields
   bulletType            BulletType?
-  pressureRating        PressureRating?
+  pressureRating        PressureRating? @default(STANDARD)
   muzzleVelocityFps     Int?
   isSubsonic            Boolean?
   shortBarrelOptimized  Boolean?
@@ -72,7 +74,7 @@ model Product {
   matchGrade            Boolean?
 
   // Data quality
-  dataSource      DataSource?
+  dataSource      DataSource?    @default(UNKNOWN)
   dataConfidence  Decimal?    @db.Decimal(3, 2)
 
   // Semantic search
@@ -292,9 +294,11 @@ model DealerContact {
 
   dealer  Dealer @relation(...)
 
-  // Enforces single account owner per dealer
-  @@unique([dealerId, isAccountOwner])
+  @@unique([dealerId, email])
 }
+
+// Note: Account owner uniqueness is enforced via application logic,
+// not a Prisma unique constraint (which would block multiple false values)
 
 enum DealerContactRole {
   PRIMARY, BILLING, TECHNICAL, MARKETING
@@ -349,7 +353,7 @@ enum FeedFormatType {
 }
 
 enum FeedStatus {
-  HEALTHY, DEGRADED, UNHEALTHY, INACTIVE
+  PENDING, HEALTHY, WARNING, FAILED
 }
 ```
 
@@ -563,6 +567,9 @@ model AdminAuditLog {
 ## Key Indexes
 
 ```sql
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Product search
 CREATE INDEX idx_products_caliber ON products(caliber);
 CREATE INDEX idx_products_brand ON products(brand);
@@ -570,7 +577,7 @@ CREATE INDEX idx_products_purpose ON products(purpose);
 CREATE INDEX idx_products_bullet_type ON products(bullet_type);
 
 -- Vector search (pgvector HNSW)
-CREATE INDEX idx_products_embedding ON products
+CREATE INDEX idx_products_embedding_hnsw ON products
 USING hnsw (embedding vector_cosine_ops);
 
 -- Price lookups
@@ -637,3 +644,4 @@ const products = await prisma.product.findMany({
 ---
 
 *Last updated: December 14, 2024*
+

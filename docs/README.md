@@ -11,6 +11,7 @@ docs/
 ├── deployment/       # Setup, configuration, and deployment guides
 ├── product/          # Product requirements, features, and decisions
 ├── guides/           # How-to guides and tutorials
+├── scripts/          # Utility scripts (build, dev, seeding)
 └── old/              # Historical reference (archived, may be outdated)
 ```
 
@@ -84,6 +85,24 @@ How-to documentation for common tasks.
 
 ---
 
+## Scripts
+
+Utility scripts for development, building, and database operations.
+
+| Folder | Description |
+|--------|-------------|
+| [scripts/](scripts/README.md) | Scripts overview and usage |
+| [scripts/build/](scripts/build/) | Build and verification scripts (PowerShell, JS) |
+| [scripts/dev/](scripts/dev/) | Development environment scripts (shell, PowerShell) |
+| [scripts/seeding/](scripts/seeding/) | Production database seeding scripts |
+
+**Key scripts:**
+- `scripts/seeding/seed-production.sh` - Seed production database (retailers, products, price history)
+- `scripts/build/build-all.ps1` - Build all apps in correct dependency order
+- `scripts/dev/start-all.ps1` - Start all services for development
+
+---
+
 ## Old / Historical
 
 The `old/` folder contains archived documentation for historical reference only. These documents may be outdated and should not be used as current references.
@@ -133,4 +152,4 @@ When adding new documentation:
 
 ---
 
-*Last updated: December 14, 2024*
+*Last updated: December 15, 2025*

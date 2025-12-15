@@ -1,4 +1,4 @@
-# IronScout Premium Features - Implementation Status
+﻿# IronScout Premium Features - Implementation Status
 
 **Last Updated:** December 12, 2025
 
@@ -14,40 +14,40 @@
 
 ## Feature Implementation Status
 
-### ✅ IMPLEMENTED - Working in Production
+###  IMPLEMENTED - Working in Production
 
 | Feature | Free | Premium | Implementation Location |
 |---------|------|---------|------------------------|
-| **Search by caliber, brand, grain & more** | ✓ | ✓ | `apps/api/src/routes/search.ts` |
-| **Price-per-round breakdown** | ✓ | ✓ | `apps/web/components/product-card.tsx` |
-| **Purpose badges (range, defense, hunting)** | ✓ | ✓ | `apps/api/src/services/ai-search/intent-parser.ts` |
-| **Basic AI search assistance** | ✓ | ✓ | `apps/api/src/services/ai-search/search-service.ts` |
+| **Search by caliber, brand, grain & more** |  |  | `apps/api/src/routes/search.ts` |
+| **Price-per-round breakdown** |  |  | `apps/web/components/product-card.tsx` |
+| **Purpose badges (range, defense, hunting)** |  |  | `apps/api/src/services/ai-search/intent-parser.ts` |
+| **Basic AI search assistance** |  |  | `apps/api/src/services/ai-search/search-service.ts` |
 | **Alert limit enforcement** | 3 alerts | Unlimited | `apps/api/src/routes/alerts.ts`, `apps/api/src/config/tiers.ts` |
-| **Alert delay** | Daily digest | Instant | `apps/api/src/config/tiers.ts` (configured), `apps/harvester/src/alerter/` |
-| **Premium filters UI** | Locked | ✓ | `apps/web/components/premium/premium-filters.tsx` |
-| **Bullet type filter** | Locked | ✓ | `apps/api/src/routes/search.ts` |
-| **Pressure rating filter** | Locked | ✓ | `apps/api/src/routes/search.ts` |
-| **Subsonic filter** | Locked | ✓ | Premium filters |
-| **Short barrel optimized filter** | Locked | ✓ | Premium filters |
-| **Suppressor safe filter** | Locked | ✓ | Premium filters |
-| **Low flash filter** | Locked | ✓ | Premium filters |
-| **Low recoil filter** | Locked | ✓ | Premium filters |
-| **Match grade filter** | Locked | ✓ | Premium filters |
-| **Purpose-optimized ranking** | ✗ | ✓ | `apps/api/src/services/ai-search/premium-ranking.ts` |
-| **Best Value scoring** | ✗ | ✓ | `apps/api/src/services/ai-search/best-value-score.ts` |
-| **AI explanations** | ✗ | ✓ | `premium-ranking.ts` → `generateRankingExplanation()` |
-| **Performance badges** | ✗ | ✓ | `apps/api/src/types/product-metadata.ts` → `extractPerformanceBadges()` |
-| **Stripe subscription integration** | - | ✓ | `apps/api/src/routes/payments.ts`, `apps/web/lib/api.ts` |
+| **Alert delay** | 60-minute delay | Instant | `apps/api/src/config/tiers.ts` (configured), `apps/harvester/src/alerter/` |
+| **Premium filters UI** | Locked |  | `apps/web/components/premium/premium-filters.tsx` |
+| **Bullet type filter** | Locked |  | `apps/api/src/routes/search.ts` |
+| **Pressure rating filter** | Locked |  | `apps/api/src/routes/search.ts` |
+| **Subsonic filter** | Locked |  | Premium filters |
+| **Short barrel optimized filter** | Locked |  | Premium filters |
+| **Suppressor safe filter** | Locked |  | Premium filters |
+| **Low flash filter** | Locked |  | Premium filters |
+| **Low recoil filter** | Locked |  | Premium filters |
+| **Match grade filter** | Locked |  | Premium filters |
+| **Purpose-optimized ranking** |  |  | `apps/api/src/services/ai-search/premium-ranking.ts` |
+| **Best Value scoring** |  |  | `apps/api/src/services/ai-search/best-value-score.ts` |
+| **AI explanations** |  |  | `premium-ranking.ts`  `generateRankingExplanation()` |
+| **Performance badges** |  |  | `apps/api/src/types/product-metadata.ts`  `extractPerformanceBadges()` |
+| **Stripe subscription integration** | - |  | `apps/api/src/routes/payments.ts`, `apps/web/lib/api.ts` |
 
-### ⚠️ PARTIALLY IMPLEMENTED - Needs Work
+###  PARTIALLY IMPLEMENTED - Needs Work
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| **Price history charts** | ✅ Implemented | Backend + UI integrated, Premium-gated |
+| **Price history charts** |  Implemented | Backend + UI integrated, Premium-gated |
 | **"What should I buy?" personalization** | AI ranking works | Need explicit "recommendation mode" in UI |
 | **Instant alerts** | Config exists | Need to verify harvester/alerter respects tier delay |
 
-### ❌ NOT IMPLEMENTED - Marketing Claims Need Code
+###  NOT IMPLEMENTED - Marketing Claims Need Code
 
 | Feature | Priority | Effort | Notes |
 |---------|----------|--------|-------|
@@ -64,20 +64,16 @@
 ```typescript
 // apps/api/src/config/tiers.ts
 FREE: {
-  maxActiveAlerts: 5,      // Pricing says 3!
+  maxActiveAlerts: 3,      // Up to 3 alerts for Free
   alertDelayMinutes: 60,   // 1 hour delay
 }
 PREMIUM: {
-  maxActiveAlerts: -1,     // Unlimited ✓
-  alertDelayMinutes: 0,    // Real-time ✓
+  maxActiveAlerts: -1,     // Unlimited 
+  alertDelayMinutes: 0,    // Real-time 
 }
 ```
 
-**Issue Found:** Config says 5 alerts for Free, but pricing page says 3!
-
-**Action Required:**
-- [ ] Update `tiers.ts` to set `maxActiveAlerts: 3` for FREE tier
-- [ ] Verify alerter worker respects `alertDelayMinutes`
+**Note:** Pricing and code now align at 3 free alerts. A true daily digest is not implemented; Free users receive delayed notifications on a 60-minute timer.
 
 ### 2. Price History
 
@@ -174,3 +170,9 @@ Current `pricing-plans.tsx` is accurate:
 - [ ] Verify Best Value scores appear for Premium users
 - [ ] Test Stripe subscription flow
 - [ ] Verify subscription status updates user tier
+
+
+
+
+
+
