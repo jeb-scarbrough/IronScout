@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Documentation
+
+For detailed documentation, see the `docs/` folder:
+
+- **Architecture**: `docs/architecture/` - System design, AI search, database schema
+- **Apps**: `docs/apps/` - Per-application documentation (web, api, harvester, admin, dealer)
+- **Deployment**: `docs/deployment/` - Render setup, environments, Stripe, email
+- **Product**: `docs/product/` - Subscription management, product offerings, tiers
+- **Guides**: `docs/guides/` - How-to guides and troubleshooting
+
+Key documents:
+- [Architecture Overview](docs/architecture/overview.md)
+- [AI Search System](docs/architecture/ai-search.md)
+- [Database Schema](docs/architecture/database.md)
+- [Dealer Subscription Management](docs/product/subscription-management.md)
+- [Feed Troubleshooting](docs/guides/feed-troubleshooting.md)
+
 ## Project Overview
 
 IronScout.ai is an AI-powered ammunition search and price comparison platform that tracks and aggregates live product listings from multiple vendor sites. The platform provides proactive price monitoring, real-time alerts, AI-powered semantic search, and expert-level performance recommendations. Built as a pnpm monorepo with four main applications:
@@ -383,7 +400,7 @@ NEXT_PUBLIC_ADMIN_URL=https://admin.ironscout.ai
 - Orange banner displays in dealer portal showing admin identity
 - All actions are audit logged
 
-See `docs/ADMIN_PORTAL.md` for full documentation.
+See `docs/apps/admin.md` for full documentation.
 
 ## Deployment URLs
 

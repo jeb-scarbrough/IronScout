@@ -71,18 +71,8 @@ export async function checkDealerSubscription(
 
   const now = new Date()
 
-  // FOUNDING tier dealers have lifetime access (no expiration)
-  if (dealer.tier === 'FOUNDING') {
-    return {
-      isActive: true,
-      status: 'ACTIVE',
-      expiresAt: null,
-      isInGracePeriod: false,
-      daysUntilExpiry: null,
-      daysOverdue: null,
-      shouldNotify: false,
-    }
-  }
+  // FOUNDING tier dealers get 1 year free - still check expiration
+  // (No special bypass - they follow the same expiration logic as other tiers)
 
   // If no expiration date set, treat as active
   if (!dealer.subscriptionExpiresAt) {

@@ -4,7 +4,6 @@ import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  Building2,
   Mail,
   Phone,
   Globe,
@@ -13,12 +12,12 @@ import {
   Rss,
   MousePointerClick,
   User,
-  CreditCard
 } from 'lucide-react';
 import { EditDealerForm } from './edit-form';
 import { ContactsSection } from './contacts-section';
 import { AdminActions } from './admin-actions';
 import { FeedsSection } from './feeds-section';
+import { SubscriptionSection } from './subscription-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,9 +99,6 @@ export default async function DealerDetailPage({
     lastError: feed.lastError,
     createdAt: feed.createdAt,
   }));
-
-  // Get subscription status (with fallback for dealers without the new field)
-  const subscriptionStatus = (dealer as { subscriptionStatus?: string }).subscriptionStatus || 'ACTIVE';
 
   return (
     <div className="space-y-6">
@@ -251,11 +247,21 @@ export default async function DealerDetailPage({
       </div>
 
       {/* Admin Actions */}
-      <AdminActions 
+      <AdminActions
         dealerId={dealer.id}
         businessName={dealer.businessName}
         ownerEmail={ownerUser?.email || null}
         emailVerified={ownerUser?.emailVerified || false}
+      />
+
+      {/* Subscription Management */}
+      <SubscriptionSection
+        dealerId={dealer.id}
+        businessName={dealer.businessName}
+        tier={dealer.tier}
+        subscriptionStatus={dealer.subscriptionStatus}
+        subscriptionExpiresAt={dealer.subscriptionExpiresAt}
+        subscriptionGraceDays={dealer.subscriptionGraceDays}
       />
 
       {/* Contacts Section */}
@@ -297,7 +303,7 @@ export default async function DealerDetailPage({
       <FeedsSection
         dealerId={dealer.id}
         feeds={feeds}
-        subscriptionStatus={subscriptionStatus}
+        subscriptionStatus={dealer.subscriptionStatus}
       />
     </div>
   );

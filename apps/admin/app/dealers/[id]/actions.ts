@@ -692,6 +692,90 @@ export async function triggerManualFeedRun(dealerId: string, feedId: string) {
   }
 }
 
+// =============================================================================
+// Subscription Management
+// =============================================================================
+
+export interface UpdateSubscriptionData {
+  status: 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
+  expiresAt: Date | null;
+  graceDays: number;
+}
+
+/**
+ * Update dealer subscription settings
+ * Use case: Manual PO-based subscription management for dealers not using Stripe
+ */
+export async function updateSubscription(dealerId: string, data: UpdateSubscriptionData) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Get old values for audit log
+    const oldDealer = await prisma.dealer.findUnique({
+      where: { id: dealerId },
+      select: {
+        id: true,
+        businessName: true,
+        subscriptionStatus: true,
+        subscriptionExpiresAt: true,
+        subscriptionGraceDays: true,
+      },
+    });
+
+    if (!oldDealer) {
+      return { success: false, error: 'Dealer not found' };
+    }
+
+    // Validate grace days
+    if (data.graceDays < 0 || data.graceDays > 90) {
+      return { success: false, error: 'Grace days must be between 0 and 90' };
+    }
+
+    // Update subscription fields
+    const updatedDealer = await prisma.dealer.update({
+      where: { id: dealerId },
+      data: {
+        subscriptionStatus: data.status,
+        subscriptionExpiresAt: data.expiresAt,
+        subscriptionGraceDays: data.graceDays,
+      },
+    });
+
+    // Log the action
+    await logAdminAction(session.userId, 'UPDATE_SUBSCRIPTION', {
+      dealerId,
+      resource: 'Dealer',
+      resourceId: dealerId,
+      oldValue: {
+        subscriptionStatus: oldDealer.subscriptionStatus,
+        subscriptionExpiresAt: oldDealer.subscriptionExpiresAt,
+        subscriptionGraceDays: oldDealer.subscriptionGraceDays,
+      },
+      newValue: {
+        subscriptionStatus: data.status,
+        subscriptionExpiresAt: data.expiresAt,
+        subscriptionGraceDays: data.graceDays,
+      },
+    });
+
+    revalidatePath(`/dealers/${dealerId}`);
+    revalidatePath('/dealers');
+
+    return {
+      success: true,
+      message: `Subscription updated for ${oldDealer.businessName}`,
+      dealer: updatedDealer,
+    };
+  } catch (error) {
+    console.error('Failed to update subscription:', error);
+    return { success: false, error: 'Failed to update subscription' };
+  }
+}
+
 /**
  * Get feeds for a dealer with their status
  */
