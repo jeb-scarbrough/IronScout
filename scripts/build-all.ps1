@@ -25,6 +25,9 @@ $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pa
 Set-Location $projectRoot
 Write-Info "Project root: $projectRoot"
 
+# Set DATABASE_URL for Prisma (uses dummy URL for type generation)
+$env:DATABASE_URL = "postgresql://test:test@localhost:5432/test"
+
 # Step 1: Install dependencies
 if (-not $SkipInstall) {
     Write-Header "Installing Dependencies"
