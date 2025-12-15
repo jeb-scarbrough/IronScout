@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { useSession } from 'next-auth/react'
+import { ProductImage } from './product-image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,11 +48,12 @@ export function ProductDetails({ product }: ProductDetailsProps) {
         {/* Product Image */}
         <div className="space-y-4">
           <div className="aspect-square relative rounded-lg overflow-hidden bg-gray-100">
-            <Image
-              src={product.imageUrl || '/placeholder-product.jpg'}
+            <ProductImage
+              imageUrl={product.imageUrl}
+              caliber={product.caliber}
+              brand={product.brand}
               alt={product.name}
               fill
-              className="object-cover"
               priority
             />
           </div>

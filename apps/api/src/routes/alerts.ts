@@ -91,6 +91,7 @@ router.post('/', async (req: Request, res: Response) => {
             name: true,
             imageUrl: true,
             category: true,
+            caliber: true,
             brand: true
           }
         }
@@ -141,6 +142,7 @@ router.get('/:userId', async (req: Request, res: Response) => {
             name: true,
             imageUrl: true,
             category: true,
+            caliber: true,
             brand: true,
             prices: {
               take: 1,
@@ -228,6 +230,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             name: true,
             imageUrl: true,
             category: true,
+            caliber: true,
             brand: true
           }
         }

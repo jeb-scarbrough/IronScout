@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Bell, ExternalLink, Trash2, Edit2, Check, X, Filter } from 'lucide-react'
 import { getUserAlerts, updateAlert, deleteAlert, type Alert as AlertType } from '@/lib/api'
-import Image from 'next/image'
+import { ProductImage } from '@/components/products/product-image'
 
 export function AlertsManager() {
   const { data: session } = useSession()
@@ -250,16 +250,15 @@ export function AlertsManager() {
                     className="flex flex-col md:flex-row items-start md:items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
                   >
                     {/* Product Image */}
-                    {alert.product.imageUrl && (
-                      <div className="w-20 h-20 relative flex-shrink-0 rounded overflow-hidden bg-gray-100">
-                        <Image
-                          src={alert.product.imageUrl}
-                          alt={alert.product.name}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
+                    <div className="w-20 h-20 relative flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                      <ProductImage
+                        imageUrl={alert.product.imageUrl}
+                        caliber={alert.product.caliber}
+                        brand={alert.product.brand}
+                        alt={alert.product.name}
+                        fill
+                      />
+                    </div>
 
                     {/* Product Info */}
                     <div className="flex-1 min-w-0">

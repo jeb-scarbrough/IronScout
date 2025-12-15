@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
+import { ProductImage } from './product-image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatPrice } from '@/lib/utils'
@@ -73,11 +73,13 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
     <Card className="group hover:shadow-lg transition-all duration-200 overflow-hidden">
       <div className="relative">
         <div className="aspect-square relative overflow-hidden bg-gray-50 dark:bg-gray-900">
-          <Image
-            src={product.imageUrl || '/placeholder-product.jpg'}
+          <ProductImage
+            imageUrl={product.imageUrl}
+            caliber={product.caliber}
+            brand={product.brand}
             alt={product.name}
             fill
-            className="object-cover group-hover:scale-105 transition-transform duration-200"
+            className="group-hover:scale-105 transition-transform duration-200"
           />
         </div>
 

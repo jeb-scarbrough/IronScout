@@ -194,6 +194,7 @@ export interface Alert {
     name: string
     imageUrl?: string
     category: string
+    caliber?: string
     brand?: string
     currentPrice: number | null
     retailer: Retailer | null
