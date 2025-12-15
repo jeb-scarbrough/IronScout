@@ -254,33 +254,44 @@ model MarketReport {
 }
 
 model Dealer {
-  id               String                  @id @default(cuid())
-  businessName     String
-  websiteUrl       String
-  phone            String?
-  storeType        StoreType               @default(ONLINE_ONLY)
-  status           DealerStatus            @default(PENDING)
-  tier             DealerTier              @default(FOUNDING)
-  pixelApiKey      String?                 @unique
-  pixelEnabled     Boolean                 @default(false)
-  shippingType     ShippingType            @default(UNKNOWN)
-  shippingFlat     Decimal?                @db.Decimal(10, 2)
-  shippingPerUnit  Decimal?                @db.Decimal(10, 2)
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  retailerId       String?                 @unique
-  contactFirstName String
-  contactLastName  String
-  clickEvents      ClickEvent[]
-  contacts         DealerContact[]
-  feeds            DealerFeed[]
-  insights         DealerInsight[]
-  invites          DealerInvite[]
-  notificationPref DealerNotificationPref?
-  skus             DealerSku[]
-  users            DealerUser[]
-  retailer         Retailer?               @relation(fields: [retailerId], references: [id])
-  pixelEvents      PixelEvent[]
+  id                     String                  @id @default(cuid())
+  businessName           String
+  websiteUrl             String
+  phone                  String?
+  storeType              StoreType               @default(ONLINE_ONLY)
+  status                 DealerStatus            @default(PENDING)
+  tier                   DealerTier              @default(STANDARD)
+  pixelApiKey            String?                 @unique
+  pixelEnabled           Boolean                 @default(false)
+  shippingType           ShippingType            @default(UNKNOWN)
+  shippingFlat           Decimal?                @db.Decimal(10, 2)
+  shippingPerUnit        Decimal?                @db.Decimal(10, 2)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  retailerId             String?                 @unique
+  contactFirstName       String
+  contactLastName        String
+
+  // Subscription tracking
+  subscriptionStatus     SubscriptionStatus      @default(ACTIVE)
+  subscriptionExpiresAt  DateTime?
+  subscriptionGraceDays  Int                     @default(7)
+
+  // Payment tracking
+  paymentMethod          PaymentMethod?
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+
+  clickEvents            ClickEvent[]
+  contacts               DealerContact[]
+  feeds                  DealerFeed[]
+  insights               DealerInsight[]
+  invites                DealerInvite[]
+  notificationPref       DealerNotificationPref?
+  skus                   DealerSku[]
+  users                  DealerUser[]
+  retailer               Retailer?               @relation(fields: [retailerId], references: [id])
+  pixelEvents            PixelEvent[]
 
   @@map("dealers")
 }
@@ -755,8 +766,14 @@ enum SubscriptionType {
 
 enum SubscriptionStatus {
   ACTIVE
-  CANCELLED
   EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PURCHASE_ORDER
 }
 
 enum ExecutionStatus {
@@ -868,10 +885,9 @@ enum DealerStatus {
 }
 
 enum DealerTier {
-  FOUNDING
-  BASIC
+  STANDARD
   PRO
-  ENTERPRISE
+  FOUNDING
 }
 
 enum DealerUserRole {
@@ -886,7 +902,6 @@ enum DealerContactRole {
   BILLING
   TECHNICAL
   MARKETING
-  OTHER
 }
 
 enum StoreType {
