@@ -18,6 +18,19 @@ function log(level: 'INFO' | 'WARN' | 'ERROR', msg: string) {
   console.log(`[${ts}] [${level}] ${msg}`)
 }
 
+function printHelp() {
+  console.log(`Doc watcher head poller
+Usage:
+  pnpm doc:watch:head [intervalSeconds]
+
+Examples:
+  pnpm doc:watch:head          # default 120s
+  pnpm doc:watch:head 60       # 60s interval
+
+This polls git HEAD and runs "pnpm doc:watch" when it changes.
+Requires pnpm on PATH and to be run in the repo root (or a git worktree).`)
+}
+
 function run(cmd: string): string {
   return execSync(cmd, { encoding: 'utf-8' }).trim()
 }
@@ -27,7 +40,16 @@ function sleep(ms: number) {
 }
 
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printHelp()
+    return
+  }
+
   const intervalSec = parseInt(process.argv[2] || '120', 10)
+  if (isNaN(intervalSec) || intervalSec <= 0) {
+    printHelp()
+    return
+  }
   const repoRoot = run('git rev-parse --show-toplevel')
   // Basic checks
   try {

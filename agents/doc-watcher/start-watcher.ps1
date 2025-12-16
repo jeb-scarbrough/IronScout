@@ -7,8 +7,20 @@
 param(
   [string]$SlackWebhook,
   [int]$IntervalSeconds = 120,
-  [switch]$NoSlack
+  [switch]$NoSlack,
+  [switch]$Help
 )
+
+if ($Help) {
+  Write-Host "Doc watcher helper"
+  Write-Host "Usage: ./start-watcher.ps1 [-IntervalSeconds 90] [-SlackWebhook <url>] [-NoSlack]"
+  Write-Host "Examples:"
+  Write-Host "  ./start-watcher.ps1"
+  Write-Host "  ./start-watcher.ps1 -IntervalSeconds 60"
+  Write-Host "  ./start-watcher.ps1 -SlackWebhook <url>"
+  Write-Host "  ./start-watcher.ps1 -SlackWebhook <url> -IntervalSeconds 90"
+  exit 0
+}
 
 if ($NoSlack) {
   Write-Host "Slack disabled for this run (--no-slack)."
