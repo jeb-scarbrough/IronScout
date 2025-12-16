@@ -33,7 +33,7 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 // Types
 // =============================================
 
-export type SessionType = 'dealer' | 'admin';
+export type SessionType = 'dealer';
 
 export interface DealerSession {
   type: 'dealer';
@@ -57,7 +57,7 @@ export interface AdminSession {
   name?: string;
 }
 
-export type Session = DealerSession | AdminSession;
+export type Session = DealerSession;
 
 export type DealerUserWithDealer = DealerUser & { dealer: Dealer };
 
@@ -171,74 +171,6 @@ export async function getDealerSession(): Promise<DealerSession | null> {
   }
   
   return verifyDealerToken(token);
-}
-
-/**
- * Check if current user is an admin from the main IronScout site.
- * Looks for the NextAuth session cookie and verifies the email is in ADMIN_EMAILS.
- */
-export async function getAdminSession(): Promise<AdminSession | null> {
-  const cookieStore = await cookies();
-  
-  // Try to read NextAuth session cookie from main site
-  // This works if both apps share the same domain (ironscout.ai)
-  const nextAuthCookie = cookieStore.get('next-auth.session-token')?.value;
-  
-  if (!nextAuthCookie) {
-    logger.debug('No NextAuth session cookie found');
-    return null;
-  }
-  
-  try {
-    logger.debug('Verifying NextAuth token for admin session');
-    // Verify the NextAuth token
-    const NEXTAUTH_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET);
-    const { payload } = await jwtVerify(nextAuthCookie, NEXTAUTH_SECRET);
-    
-    const email = payload.email as string;
-    
-    if (email && ADMIN_EMAILS.includes(email)) {
-      logger.info('Admin session verified', { email });
-      return {
-        type: 'admin',
-        email,
-        name: payload.name as string | undefined,
-      };
-    }
-    
-    logger.debug('User is not in admin list', { email });
-  } catch (error) {
-    logger.warn('NextAuth token verification failed', {}, error);
-  }
-  
-  return null;
-}
-
-/**
- * Get the current session - either dealer or admin
- */
-export async function getSession(): Promise<Session | null> {
-  // Check for dealer session first
-  const dealerSession = await getDealerSession();
-  if (dealerSession) {
-    return dealerSession;
-  }
-  
-  // Check for admin session
-  const adminSession = await getAdminSession();
-  if (adminSession) {
-    return adminSession;
-  }
-  
-  return null;
-}
-
-/**
- * Check if current session has admin privileges
- */
-export async function isAdmin(): Promise<boolean> {
-  const session = await getSession();
-  return session?.type === 'admin';
 }
 
 /**

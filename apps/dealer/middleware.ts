@@ -6,8 +6,6 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.DEALER_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
 );
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean);
-
 // Routes that don't require authentication
 const publicPaths = [
   '/login',
@@ -16,11 +14,6 @@ const publicPaths = [
   '/reset-password',
   '/forgot-password',
   '/api/auth',
-];
-
-// Routes that require admin access
-const adminPaths = [
-  '/admin',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -55,37 +48,9 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-  // Check for admin session (from main site)
-  const nextAuthToken = request.cookies.get('next-auth.session-token')?.value;
-  let isAdminAuthenticated = false;
   
-  if (nextAuthToken && process.env.NEXTAUTH_SECRET) {
-    try {
-      const NEXTAUTH_SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET);
-      const { payload } = await jwtVerify(nextAuthToken, NEXTAUTH_SECRET);
-      const email = payload.email as string;
-      
-      if (email && ADMIN_EMAILS.includes(email)) {
-        isAdminAuthenticated = true;
-      }
-    } catch {
-      // Invalid token or not an admin
-    }
-  }
-  
-  // Admin routes require admin session
-  if (adminPaths.some(path => pathname.startsWith(path))) {
-    if (!isAdminAuthenticated) {
-      // Redirect to main site login or show unauthorized
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('error', 'admin_required');
-      return NextResponse.redirect(loginUrl);
-    }
-    return NextResponse.next();
-  }
-  
-  // All other routes require either dealer or admin session
-  if (!isDealerAuthenticated && !isAdminAuthenticated) {
+  // All routes require a dealer session (real or impersonated)
+  if (!isDealerAuthenticated) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);

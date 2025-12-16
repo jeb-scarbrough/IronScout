@@ -1,11 +1,28 @@
-#!/usr/bin/env bash
-# Prevent push if documentation drift is detected and not acknowledged.
-command -v pnpm >/dev/null 2>&1 || { echo "pnpm not found; skipping doc:watch"; exit 0; }
+#!/usr/bin/env pwsh
+# Windows-friendly pre-push hook
+# 1) Check doc watcher (blocks on unacknowledged drift)
+# 2) Run targeted tests (adjust command as needed)
 
+# Ensure pnpm exists
+if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+  Write-Host "pnpm not found; skipping checks."
+  exit 0
+}
+
+# Doc watcher (no Slack to avoid blocking on network)
 pnpm doc:watch --fail-on-drift --no-slack
-status=$?
-if [ $status -ne 0 ]; then
-  echo "Push blocked: doc watcher found unacknowledged documentation drift."
-  echo "Review and update docs, then acknowledge with: pnpm doc:watch --ack"
-fi
-exit $status
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Push blocked: doc watcher found unacknowledged documentation drift."
+  Write-Host "Review/update docs, then acknowledge with: pnpm doc:watch --ack"
+  exit $LASTEXITCODE
+}
+
+# Run tests (adjust command/filters as needed)
+Write-Host "Running harvester connector tests..."
+pnpm test --filter harvester
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Push blocked: tests failed."
+  exit $LASTEXITCODE
+}
+
+exit 0

@@ -46,14 +46,6 @@ function LoginForm() {
 
   return (
     <>
-      {error === 'admin_required' && (
-        <div className="mb-4 rounded-md bg-yellow-50 p-4">
-          <p className="text-sm text-yellow-700">
-            Admin access is required for that page.
-          </p>
-        </div>
-      )}
-
       {formError && (
         <div className="mb-4 rounded-md bg-red-50 p-4">
           <p className="text-sm text-red-700">{formError}</p>
