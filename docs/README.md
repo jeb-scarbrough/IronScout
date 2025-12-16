@@ -83,6 +83,7 @@ How-to documentation for common tasks.
 
 | Document | Description |
 |----------|-------------|
+| [testing.md](guides/testing.md) | Testing strategy, Vitest setup, writing tests |
 | [feed-troubleshooting.md](guides/feed-troubleshooting.md) | Diagnosing and fixing dealer feed issues |
 
 **Not yet documented:**
@@ -120,6 +121,7 @@ The `old/` folder contains archived documentation for historical reference only.
 ### For Developers
 
 - [Environment Setup](deployment/environments.md) - Get your local environment running
+- [Testing Guide](guides/testing.md) - Testing strategy and conventions
 - [Database Schema](architecture/database.md) - Understand the data model
 - [API Routes](apps/api.md) - API endpoint reference
 
@@ -158,4 +160,4 @@ When adding new documentation:
 
 ---
 
-*Last updated: December 15, 2025*
+*Last updated: December 16, 2025*
