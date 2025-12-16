@@ -72,9 +72,14 @@ function run(cmd: string): string {
   return execSync(cmd, { encoding: 'utf-8' }).trim()
 }
 
-function getLatestCommit(): { message: string; files: string[] } {
-  const message = run('git log -1 --pretty=%B')
-  const files = run('git log -1 --name-only --pretty=format:').split('\n').filter(Boolean)
+function log(level: 'INFO' | 'WARN' | 'ERROR', msg: string) {
+  const ts = new Date().toISOString()
+  console.log(`[${ts}] [${level}] ${msg}`)
+}
+
+function getLatestCommit(rev: string): { message: string; files: string[] } {
+  const message = run(`git log -1 --pretty=%B ${rev}`)
+  const files = run(`git log -1 --name-only --pretty=format: ${rev}`).split('\n').filter(Boolean)
   return { message, files }
 }
 
@@ -211,28 +216,30 @@ function main() {
     const ackOnly = args.includes('--ack')
     const noSlack = args.includes('--no-slack')
     const failOnDrift = args.includes('--fail-on-drift')
+    const branchIdx = args.findIndex((a) => a === '--branch')
+    const rev = branchIdx >= 0 && args[branchIdx + 1] ? args[branchIdx + 1] : 'HEAD'
 
-    const head = run('git rev-parse HEAD')
+    const head = run(`git rev-parse ${rev}`)
     const statePath = path.join(process.cwd(), '.doc-watcher-state.json')
     const state = readState(statePath)
 
     if (ackOnly) {
-      writeState(statePath, { lastHead: head, acknowledged: true })
-      console.log(`[doc-watcher] Acknowledged HEAD ${head}.`)
+      writeState(statePath, { lastHead: head, acknowledged: true, rev })
+      log('INFO', `Acknowledged ${rev} (${head}).`)
       return
     }
 
-    const { message, files } = getLatestCommit()
+    const { message, files } = getLatestCommit(rev)
     const { hits, docs } = analyze(files, message)
 
     if (!hits.length) {
-      console.log('Docs check: no obvious documentation impact detected.')
+      log('INFO', 'Docs check: no obvious documentation impact detected.')
       // Mark current head as acknowledged to avoid stale reminders
-      writeState(statePath, { lastHead: head, acknowledged: true })
+      writeState(statePath, { lastHead: head, acknowledged: true, rev })
       return
     }
 
-    console.log('Docs check: potential documentation updates needed.')
+    log('WARN', `Docs check: potential documentation updates needed on ${rev} (${head}).`)
     console.log('')
     console.log('Commit message:')
     console.log(message.trim())
@@ -253,21 +260,21 @@ function main() {
     console.log('Next: review the commit diff for these areas; if clear, update the corresponding doc(s).')
 
     // Mark this head as needing acknowledgement
-    writeState(statePath, { lastHead: head, acknowledged: false })
+    writeState(statePath, { lastHead: head, acknowledged: false, rev })
 
     const webhook = process.env.DOC_WATCHER_SLACK_WEBHOOK
-    const alreadySent = state.lastHead === head && state.acknowledged === false
+    const alreadySent = state.lastHead === head && state.acknowledged === false && state.rev === rev
     if (webhook && !noSlack && !alreadySent) {
       sendSlack(webhook, head, hits, docs)
     }
-    console.log('To acknowledge after updating docs, run: pnpm doc:watch --ack')
+    log('INFO', 'To acknowledge after updating docs, run: pnpm doc:watch --ack')
 
     if (failOnDrift) {
-      console.error('[doc-watcher] Doc drift detected and not acknowledged. Blocking (use pnpm doc:watch --ack after updating docs).')
+      log('ERROR', 'Doc drift detected and not acknowledged. Blocking (use pnpm doc:watch --ack after updating docs).')
       process.exit(1)
     }
   } catch (err) {
-    console.error('Doc watcher failed:', err)
+    log('ERROR', `Doc watcher failed: ${err}`)
     process.exit(1)
   }
 }
@@ -276,21 +283,21 @@ main()
 
 // ---------------- helpers ----------------
 
-function readState(statePath: string): { lastHead?: string; acknowledged: boolean } {
+function readState(statePath: string): { lastHead?: string; acknowledged: boolean; rev?: string } {
   try {
     const txt = fs.readFileSync(statePath, 'utf-8')
     const parsed = JSON.parse(txt)
-    return { lastHead: parsed.lastHead, acknowledged: !!parsed.acknowledged }
+    return { lastHead: parsed.lastHead, acknowledged: !!parsed.acknowledged, rev: parsed.rev }
   } catch {
     return { acknowledged: true }
   }
 }
 
-function writeState(statePath: string, state: { lastHead?: string; acknowledged: boolean }) {
+function writeState(statePath: string, state: { lastHead?: string; acknowledged: boolean; rev?: string }) {
   try {
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2))
   } catch (err) {
-    console.warn('[doc-watcher] Unable to write state file:', err)
+    log('WARN', `Unable to write state file: ${err}`)
   }
 }
 
@@ -320,14 +327,14 @@ function sendSlack(webhook: string, head: string, hits: HeuristicHit[], docs: Se
       },
       (res) => {
         if (res.statusCode && res.statusCode >= 300) {
-          console.warn(`[doc-watcher] Slack webhook responded with ${res.statusCode}`)
+          log('WARN', `Slack webhook responded with ${res.statusCode}`)
         }
       }
     )
-    req.on('error', (err) => console.warn('[doc-watcher] Slack webhook error:', err.message))
+    req.on('error', (err) => log('WARN', `Slack webhook error: ${err.message}`))
     req.write(payload)
     req.end()
   } catch (err) {
-    console.warn('[doc-watcher] Failed to send Slack notification:', err)
+    log('WARN', `Failed to send Slack notification: ${err}`)
   }
 }

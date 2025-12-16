@@ -10,6 +10,11 @@
 import { execSync, spawnSync } from 'child_process'
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
+function log(level: 'INFO' | 'WARN' | 'ERROR', msg: string) {
+  const ts = new Date().toISOString()
+  console.log(`[${ts}] [${level}] ${msg}`)
+}
+
 function run(cmd: string): string {
   return execSync(cmd, { encoding: 'utf-8' }).trim()
 }
@@ -20,13 +25,14 @@ function sleep(ms: number) {
 
 async function main() {
   const intervalSec = parseInt(process.argv[2] || '120', 10)
+  const repoRoot = run('git rev-parse --show-toplevel')
   let lastHead = ''
 
   try {
     lastHead = run('git rev-parse HEAD')
-    console.log(`[head-watcher] Starting at ${lastHead}, interval ${intervalSec}s`)
+    log('INFO', `[head-watcher] Starting at ${lastHead}, interval ${intervalSec}s`)
   } catch (err) {
-    console.error('[head-watcher] Failed to read HEAD:', err)
+    log('ERROR', `[head-watcher] Failed to read HEAD: ${err}`)
     process.exit(1)
   }
 
@@ -36,16 +42,16 @@ async function main() {
     try {
       current = run('git rev-parse HEAD')
     } catch (err) {
-      console.error('[head-watcher] Failed to read HEAD:', err)
+      log('WARN', `[head-watcher] Failed to read HEAD: ${err}`)
       continue
     }
     if (current !== lastHead) {
-      console.log(`[head-watcher] HEAD changed: ${lastHead} -> ${current}. Running doc watcher...`)
-      const res = spawnSync(pnpmCmd, ['doc:watch'], { stdio: 'inherit' })
+      log('INFO', `[head-watcher] HEAD changed: ${lastHead} -> ${current}. Running doc watcher...`)
+      const res = spawnSync(pnpmCmd, ['doc:watch'], { stdio: 'inherit', cwd: repoRoot })
       if (res.error) {
-        console.error('[head-watcher] Failed to run pnpm doc:watch:', res.error.message)
+        log('ERROR', `[head-watcher] Failed to run pnpm doc:watch: ${res.error.message}`)
       } else if (res.status !== 0) {
-        console.error('[head-watcher] doc:watch exited with', res.status ?? 'unknown status')
+        log('WARN', `[head-watcher] doc:watch exited with ${res.status ?? 'unknown status'}`)
       }
       lastHead = current
     }
