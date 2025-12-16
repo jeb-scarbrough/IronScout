@@ -11,8 +11,13 @@ docs/
 ├── deployment/       # Setup, configuration, and deployment guides
 ├── product/          # Product requirements, features, and decisions
 ├── guides/           # How-to guides and tutorials
-├── scripts/          # Utility scripts (build, dev, seeding)
 └── old/              # Historical reference (archived, may be outdated)
+
+scripts/              # Utility scripts (at project root)
+├── build/            # Build and verification scripts
+├── dev/              # Development environment scripts
+├── seeding/          # Database seeding scripts
+└── generate-icons.mjs
 ```
 
 ---
@@ -96,19 +101,20 @@ How-to documentation for common tasks.
 
 ## Scripts
 
-Utility scripts for development, building, and database operations.
+Utility scripts for development, building, and database operations. Located at project root (`/scripts/`).
 
 | Folder | Description |
 |--------|-------------|
-| [scripts/](scripts/README.md) | Scripts overview and usage |
-| [scripts/build/](scripts/build/) | Build and verification scripts (PowerShell, JS) |
-| [scripts/dev/](scripts/dev/) | Development environment scripts (shell, PowerShell) |
-| [scripts/seeding/](scripts/seeding/) | Production database seeding scripts |
+| [/scripts/](../scripts/README.md) | Scripts overview and usage |
+| [/scripts/build/](../scripts/build/) | Build and verification scripts (PowerShell, JS) |
+| [/scripts/dev/](../scripts/dev/) | Development environment scripts (shell, PowerShell) |
+| [/scripts/seeding/](../scripts/seeding/) | Production database seeding scripts |
 
 **Key scripts:**
 - `scripts/seeding/seed-production.sh` - Seed production database (retailers, products, price history)
 - `scripts/build/build-all.ps1` - Build all apps in correct dependency order
 - `scripts/dev/start-all.ps1` - Start all services for development
+- `scripts/generate-icons.mjs` - Generate PWA icons from SVG
 
 ---
 

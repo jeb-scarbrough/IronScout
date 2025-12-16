@@ -10,7 +10,6 @@
  */
 
 import { SignJWT, jwtVerify } from 'jose';
-import { decode } from '@auth/core/jwt';
 import bcrypt from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
 import { prisma } from '@ironscout/db';
@@ -35,6 +34,18 @@ const SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
 
 const SESSION_COOKIE = 'dealer-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+async function decodeAdminToken(token: string, secret: string) {
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
+      algorithms: ['HS256'],
+    });
+    return payload;
+  } catch (error) {
+    logger.warn('Admin token verification failed', {}, error);
+    return null;
+  }
+}
 
 // =============================================
 // Types
@@ -209,11 +220,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       return null;
     }
 
-    const payload = await decode({
-      token,
-      secret,
-      salt: SESSION_COOKIE_NAME,
-    });
+    const payload = await decodeAdminToken(token, secret);
 
     if (!payload) {
       logger.warn('Admin session decode returned null');

@@ -1,14 +1,21 @@
 /**
- * Dealer SKU Matching Worker
- * 
+ * Dealer SKU Matching Worker - Batch Optimized
+ *
  * Matches dealer SKUs to canonical SKUs using:
  * 1. UPC exact match (HIGH confidence)
  * 2. Attribute matching - caliber + grain + brand + pack size (MEDIUM confidence)
  * 3. Fuzzy matching with AI hints (LOW confidence, flagged for review)
+ *
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Batch fetches dealer SKUs in single query
+ * - Pre-loads canonical SKUs by UPC into Map for O(1) lookups
+ * - Pre-loads canonical SKUs by caliber-brand for attribute matching
+ * - Batch updates using Prisma transactions
+ * - Reduces O(n²) database queries to O(1) batch operations
  */
 
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@ironscout/db'
+import { prisma, DealerSku, CanonicalSku, MappingConfidence } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import { QUEUE_NAMES, DealerSkuMatchJobData } from '../config/queues'
 import {
@@ -35,26 +42,33 @@ interface ParsedAttributes {
 
 interface MatchResult {
   canonicalSkuId: string | null
-  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE'
+  confidence: MappingConfidence
   needsReview: boolean
 }
+
+interface SkuWithParsedAttrs {
+  sku: DealerSku
+  attrs: ParsedAttributes
+  matchResult: MatchResult
+}
+
+interface BatchStats {
+  matchedCount: number
+  createdCount: number
+  reviewCount: number
+}
+
+// Batch size for database operations
+const DB_BATCH_SIZE = 500
 
 // ============================================================================
 // ATTRIBUTE PARSING
 // ============================================================================
 
-function parseAttributes(sku: {
-  rawTitle: string
-  rawCaliber?: string | null
-  rawGrain?: string | null
-  rawBulletType?: string | null
-  rawBrand?: string | null
-  rawCase?: string | null
-  rawPackSize?: number | null
-}): ParsedAttributes {
+function parseAttributes(sku: DealerSku): ParsedAttributes {
   // Use raw values if provided, otherwise parse from title
   const caliber = sku.rawCaliber || extractCaliber(sku.rawTitle)
-  
+
   // Parse grain from raw value or title
   let grain: number | null = null
   if (sku.rawGrain) {
@@ -64,25 +78,25 @@ function parseAttributes(sku: {
   if (!grain) {
     grain = extractGrainWeight(sku.rawTitle)
   }
-  
+
   // Pack size
   let packSize = sku.rawPackSize || null
   if (!packSize) {
     packSize = extractRoundCount(sku.rawTitle)
   }
-  
+
   // Bullet type - try raw value first, then parse
   const bulletType = sku.rawBulletType || extractBulletType(sku.rawTitle)
-  
+
   // Brand - clean up if provided
   const brand = sku.rawBrand ? normalizeBrand(sku.rawBrand) : extractBrand(sku.rawTitle)
-  
+
   // Case material
   const caseMaterial = sku.rawCase || extractCaseMaterial(sku.rawTitle)
-  
+
   // Purpose
   const purpose = classifyPurpose(sku.rawTitle)
-  
+
   return {
     caliber,
     grain,
@@ -159,16 +173,17 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
 
 function normalizeBrand(brand: string): string {
   const cleaned = brand.trim()
-  
+
   for (const { pattern, normalized } of KNOWN_BRANDS) {
     if (pattern.test(cleaned)) {
       return normalized
     }
   }
-  
+
   // Title case the brand if not recognized
-  return cleaned.split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+  return cleaned
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
 }
 
@@ -182,14 +197,74 @@ function extractBrand(title: string): string | null {
 }
 
 // ============================================================================
-// MATCHING LOGIC
+// BATCH LOADING FUNCTIONS
 // ============================================================================
 
-async function matchByUPC(upc: string): Promise<MatchResult> {
-  const canonical = await prisma.canonicalSku.findUnique({
-    where: { upc },
+/**
+ * Build a Map of UPC -> CanonicalSku for O(1) lookups
+ */
+async function buildUpcLookupMap(upcs: string[]): Promise<Map<string, CanonicalSku>> {
+  if (upcs.length === 0) return new Map()
+
+  const canonicalSkus = await prisma.canonicalSku.findMany({
+    where: {
+      upc: { in: upcs },
+    },
   })
-  
+
+  const map = new Map<string, CanonicalSku>()
+  for (const canon of canonicalSkus) {
+    if (canon.upc) {
+      map.set(canon.upc, canon)
+    }
+  }
+  return map
+}
+
+/**
+ * Build a Map of "caliber|brand" -> CanonicalSku[] for attribute matching
+ */
+async function buildAttributeLookupMap(
+  calibers: string[],
+  brands: string[]
+): Promise<Map<string, CanonicalSku[]>> {
+  if (calibers.length === 0 || brands.length === 0) return new Map()
+
+  // Deduplicate
+  const uniqueCalibers = Array.from(new Set(calibers.filter(Boolean)))
+  const uniqueBrands = Array.from(new Set(brands.filter(Boolean)))
+
+  if (uniqueCalibers.length === 0 || uniqueBrands.length === 0) return new Map()
+
+  const canonicalSkus = await prisma.canonicalSku.findMany({
+    where: {
+      caliber: { in: uniqueCalibers },
+      brand: { in: uniqueBrands },
+    },
+  })
+
+  // Group by caliber|brand key
+  const map = new Map<string, CanonicalSku[]>()
+  for (const canon of canonicalSkus) {
+    const key = `${canon.caliber}|${canon.brand}`
+    if (!map.has(key)) {
+      map.set(key, [])
+    }
+    map.get(key)!.push(canon)
+  }
+  return map
+}
+
+// ============================================================================
+// MATCHING LOGIC (Using pre-loaded maps)
+// ============================================================================
+
+function matchByUPC(
+  upc: string,
+  upcMap: Map<string, CanonicalSku>
+): MatchResult {
+  const canonical = upcMap.get(upc)
+
   if (canonical) {
     return {
       canonicalSkuId: canonical.id,
@@ -197,35 +272,35 @@ async function matchByUPC(upc: string): Promise<MatchResult> {
       needsReview: false,
     }
   }
-  
+
   return { canonicalSkuId: null, confidence: 'NONE', needsReview: false }
 }
 
-async function matchByAttributes(attrs: ParsedAttributes): Promise<MatchResult> {
+function matchByAttributes(
+  attrs: ParsedAttributes,
+  attrMap: Map<string, CanonicalSku[]>
+): MatchResult {
   // Need at minimum caliber and brand for matching
   if (!attrs.caliber || !attrs.brand) {
     return { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
   }
-  
-  // Build query
-  const where: any = {
-    caliber: attrs.caliber,
-    brand: attrs.brand,
+
+  const key = `${attrs.caliber}|${attrs.brand}`
+  const candidates = attrMap.get(key) || []
+
+  if (candidates.length === 0) {
+    return { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
   }
-  
+
+  // Filter by grain and pack size if available
+  let matches = candidates
   if (attrs.grain) {
-    where.grain = attrs.grain
+    matches = matches.filter((c) => c.grain === attrs.grain)
   }
-  
   if (attrs.packSize) {
-    where.packSize = attrs.packSize
+    matches = matches.filter((c) => c.packSize === attrs.packSize)
   }
-  
-  const matches = await prisma.canonicalSku.findMany({
-    where,
-    take: 5,
-  })
-  
+
   if (matches.length === 1) {
     // Exact single match
     return {
@@ -234,15 +309,16 @@ async function matchByAttributes(attrs: ParsedAttributes): Promise<MatchResult> 
       needsReview: !attrs.grain || !attrs.packSize,
     }
   }
-  
+
   if (matches.length > 1) {
-    // Multiple matches - try to narrow down
-    const exactMatch = matches.find(m => 
-      m.grain === attrs.grain && 
-      m.packSize === attrs.packSize &&
-      m.bulletType === attrs.bulletType
+    // Multiple matches - try to narrow down by bullet type
+    const exactMatch = matches.find(
+      (m) =>
+        m.grain === attrs.grain &&
+        m.packSize === attrs.packSize &&
+        m.bulletType === attrs.bulletType
     )
-    
+
     if (exactMatch) {
       return {
         canonicalSkuId: exactMatch.id,
@@ -250,7 +326,7 @@ async function matchByAttributes(attrs: ParsedAttributes): Promise<MatchResult> 
         needsReview: false,
       }
     }
-    
+
     // Flag for review if multiple ambiguous matches
     return {
       canonicalSkuId: null,
@@ -258,151 +334,271 @@ async function matchByAttributes(attrs: ParsedAttributes): Promise<MatchResult> 
       needsReview: true,
     }
   }
-  
+
   // No match found
   return { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
 }
 
-async function findOrCreateCanonical(
-  attrs: ParsedAttributes,
+// ============================================================================
+// BATCH CREATE CANONICAL SKUS
+// ============================================================================
+
+interface PendingCanonical {
+  skuIndex: number
+  attrs: ParsedAttributes
   upc?: string
-): Promise<MatchResult> {
-  // Need minimum attributes to create a canonical SKU
-  if (!attrs.caliber || !attrs.brand || !attrs.grain || !attrs.packSize) {
-    return { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
+}
+
+async function batchCreateCanonicalSkus(
+  pending: PendingCanonical[]
+): Promise<Map<number, CanonicalSku>> {
+  const results = new Map<number, CanonicalSku>()
+  if (pending.length === 0) return results
+
+  // Create in batches to avoid overwhelming the database
+  for (let i = 0; i < pending.length; i += DB_BATCH_SIZE) {
+    const batch = pending.slice(i, i + DB_BATCH_SIZE)
+
+    const createData = batch
+      .filter(
+        (p) => p.attrs.caliber && p.attrs.brand && p.attrs.grain && p.attrs.packSize
+      )
+      .map((p) => {
+        const name = [
+          p.attrs.brand,
+          p.attrs.caliber,
+          `${p.attrs.grain}gr`,
+          p.attrs.bulletType || '',
+          `${p.attrs.packSize}rd`,
+        ]
+          .filter(Boolean)
+          .join(' ')
+
+        return {
+          skuIndex: p.skuIndex,
+          data: {
+            upc: p.upc || null,
+            caliber: p.attrs.caliber!,
+            grain: p.attrs.grain!,
+            caseType: p.attrs.caseMaterial,
+            bulletType: p.attrs.bulletType,
+            brand: p.attrs.brand!,
+            packSize: p.attrs.packSize!,
+            name,
+          },
+        }
+      })
+
+    // Create each one and track the result
+    // Note: Prisma doesn't support createMany with returning, so we use a transaction
+    const created = await prisma.$transaction(
+      createData.map((item) =>
+        prisma.canonicalSku.create({
+          data: item.data,
+        })
+      )
+    )
+
+    // Map back to sku indices
+    for (let j = 0; j < created.length; j++) {
+      results.set(createData[j].skuIndex, created[j])
+    }
   }
-  
-  // Create canonical SKU name
-  const name = [
-    attrs.brand,
-    attrs.caliber,
-    `${attrs.grain}gr`,
-    attrs.bulletType || '',
-    `${attrs.packSize}rd`,
-  ].filter(Boolean).join(' ')
-  
-  const canonical = await prisma.canonicalSku.create({
-    data: {
-      upc: upc || null,
-      caliber: attrs.caliber,
-      grain: attrs.grain,
-      caseType: attrs.caseMaterial,
-      bulletType: attrs.bulletType,
-      brand: attrs.brand,
-      packSize: attrs.packSize,
-      name,
-    },
-  })
-  
-  return {
-    canonicalSkuId: canonical.id,
-    confidence: upc ? 'HIGH' : 'MEDIUM',
-    needsReview: false,
+
+  return results
+}
+
+// ============================================================================
+// BATCH UPDATE DEALER SKUS
+// ============================================================================
+
+interface SkuUpdate {
+  id: string
+  parsedCaliber: string | null
+  parsedGrain: number | null
+  parsedPackSize: number | null
+  parsedBulletType: string | null
+  parsedBrand: string | null
+  canonicalSkuId: string | null
+  mappingConfidence: MappingConfidence
+  needsReview: boolean
+  mappedAt: Date | null
+  mappedBy: string | null
+}
+
+async function batchUpdateDealerSkus(updates: SkuUpdate[]): Promise<void> {
+  if (updates.length === 0) return
+
+  // Process in batches
+  for (let i = 0; i < updates.length; i += DB_BATCH_SIZE) {
+    const batch = updates.slice(i, i + DB_BATCH_SIZE)
+
+    // Use a transaction for atomic updates
+    await prisma.$transaction(
+      batch.map((update) =>
+        prisma.dealerSku.update({
+          where: { id: update.id },
+          data: {
+            parsedCaliber: update.parsedCaliber,
+            parsedGrain: update.parsedGrain,
+            parsedPackSize: update.parsedPackSize,
+            parsedBulletType: update.parsedBulletType,
+            parsedBrand: update.parsedBrand,
+            canonicalSkuId: update.canonicalSkuId,
+            mappingConfidence: update.mappingConfidence,
+            needsReview: update.needsReview,
+            mappedAt: update.mappedAt,
+            mappedBy: update.mappedBy,
+          },
+        })
+      )
+    )
   }
 }
 
 // ============================================================================
-// WORKER
+// MAIN PROCESSING FUNCTION (Batch Optimized)
 // ============================================================================
 
-async function processSkuMatch(job: Job<DealerSkuMatchJobData>) {
+async function processSkuMatch(job: Job<DealerSkuMatchJobData>): Promise<BatchStats> {
   const { dealerId, feedRunId, dealerSkuIds } = job.data
-  
-  let matchedCount = 0
-  let createdCount = 0
-  let reviewCount = 0
-  
+
   console.log(`[SKU Match] Processing ${dealerSkuIds.length} SKUs for dealer ${dealerId}`)
-  
-  for (const skuId of dealerSkuIds) {
-    try {
-      const sku = await prisma.dealerSku.findUnique({
-        where: { id: skuId },
+
+  // STEP 1: Batch fetch all dealer SKUs
+  const dealerSkus = await prisma.dealerSku.findMany({
+    where: {
+      id: { in: dealerSkuIds },
+    },
+  })
+
+  if (dealerSkus.length === 0) {
+    console.log(`[SKU Match] No SKUs found for IDs`)
+    return { matchedCount: 0, createdCount: 0, reviewCount: 0 }
+  }
+
+  // STEP 2: Parse attributes for all SKUs (CPU-bound, no DB)
+  const skusWithAttrs: SkuWithParsedAttrs[] = dealerSkus.map((sku) => ({
+    sku,
+    attrs: parseAttributes(sku),
+    matchResult: { canonicalSkuId: null, confidence: 'NONE' as MappingConfidence, needsReview: true },
+  }))
+
+  // STEP 3: Collect unique UPCs and attributes for batch loading
+  const upcs: string[] = []
+  const calibers: string[] = []
+  const brands: string[] = []
+
+  for (const { sku, attrs } of skusWithAttrs) {
+    if (sku.rawUpc) upcs.push(sku.rawUpc)
+    if (attrs.caliber) calibers.push(attrs.caliber)
+    if (attrs.brand) brands.push(attrs.brand)
+  }
+
+  // STEP 4: Batch load canonical SKUs into lookup maps
+  const [upcMap, attrMap] = await Promise.all([
+    buildUpcLookupMap(upcs),
+    buildAttributeLookupMap(calibers, brands),
+  ])
+
+  // STEP 5: Match all SKUs using pre-loaded maps (no DB queries)
+  const pendingCreates: PendingCanonical[] = []
+
+  for (let i = 0; i < skusWithAttrs.length; i++) {
+    const { sku, attrs } = skusWithAttrs[i]
+    let result: MatchResult = { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
+
+    // 1. Try UPC match first
+    if (sku.rawUpc) {
+      result = matchByUPC(sku.rawUpc, upcMap)
+    }
+
+    // 2. Try attribute match
+    if (!result.canonicalSkuId) {
+      result = matchByAttributes(attrs, attrMap)
+    }
+
+    // 3. Queue for canonical creation if we have enough data
+    if (
+      !result.canonicalSkuId &&
+      attrs.caliber &&
+      attrs.brand &&
+      attrs.grain &&
+      attrs.packSize
+    ) {
+      pendingCreates.push({
+        skuIndex: i,
+        attrs,
+        upc: sku.rawUpc || undefined,
       })
-      
-      if (!sku) continue
-      
-      // Parse attributes
-      const attrs = parseAttributes(sku)
-      
-      // Update parsed attributes on the SKU
-      await prisma.dealerSku.update({
-        where: { id: skuId },
-        data: {
-          parsedCaliber: attrs.caliber,
-          parsedGrain: attrs.grain,
-          parsedPackSize: attrs.packSize,
-          parsedBulletType: attrs.bulletType,
-          parsedBrand: attrs.brand,
-        },
-      })
-      
-      // Try matching strategies in order
-      let result: MatchResult = { canonicalSkuId: null, confidence: 'NONE', needsReview: true }
-      
-      // 1. Try UPC match first
-      if (sku.rawUpc) {
-        result = await matchByUPC(sku.rawUpc)
-      }
-      
-      // 2. Try attribute match
-      if (!result.canonicalSkuId) {
-        result = await matchByAttributes(attrs)
-      }
-      
-      // 3. Create new canonical if we have enough data and no match
-      if (!result.canonicalSkuId && attrs.caliber && attrs.brand && attrs.grain && attrs.packSize) {
-        result = await findOrCreateCanonical(attrs, sku.rawUpc || undefined)
-        if (result.canonicalSkuId) createdCount++
-      }
-      
-      // Update dealer SKU with match result
-      await prisma.dealerSku.update({
-        where: { id: skuId },
-        data: {
-          canonicalSkuId: result.canonicalSkuId,
-          mappingConfidence: result.confidence,
-          needsReview: result.needsReview,
-          mappedAt: result.canonicalSkuId ? new Date() : null,
-          mappedBy: result.canonicalSkuId ? 'auto' : null,
-        },
-      })
-      
-      if (result.canonicalSkuId) matchedCount++
-      if (result.needsReview) reviewCount++
-      
-    } catch (error) {
-      console.error(`[SKU Match] Error processing SKU ${skuId}:`, error)
+    }
+
+    skusWithAttrs[i].matchResult = result
+  }
+
+  // STEP 6: Batch create new canonical SKUs
+  const createdCanonicals = await batchCreateCanonicalSkus(pendingCreates)
+
+  // Update match results for newly created canonicals
+  for (const [skuIndex, canonical] of Array.from(createdCanonicals.entries())) {
+    const { sku } = skusWithAttrs[skuIndex]
+    skusWithAttrs[skuIndex].matchResult = {
+      canonicalSkuId: canonical.id,
+      confidence: sku.rawUpc ? 'HIGH' : 'MEDIUM',
+      needsReview: false,
     }
   }
-  
+
+  // STEP 7: Prepare batch updates
+  const updates: SkuUpdate[] = skusWithAttrs.map(({ sku, attrs, matchResult }) => ({
+    id: sku.id,
+    parsedCaliber: attrs.caliber,
+    parsedGrain: attrs.grain,
+    parsedPackSize: attrs.packSize,
+    parsedBulletType: attrs.bulletType,
+    parsedBrand: attrs.brand,
+    canonicalSkuId: matchResult.canonicalSkuId,
+    mappingConfidence: matchResult.confidence,
+    needsReview: matchResult.needsReview,
+    mappedAt: matchResult.canonicalSkuId ? new Date() : null,
+    mappedBy: matchResult.canonicalSkuId ? 'auto' : null,
+  }))
+
+  // STEP 8: Batch update all dealer SKUs
+  await batchUpdateDealerSkus(updates)
+
+  // Calculate stats
+  const stats: BatchStats = {
+    matchedCount: skusWithAttrs.filter((s) => s.matchResult.canonicalSkuId).length,
+    createdCount: createdCanonicals.size,
+    reviewCount: skusWithAttrs.filter((s) => s.matchResult.needsReview).length,
+  }
+
   // Update feed run with match stats
   await prisma.dealerFeedRun.update({
     where: { id: feedRunId },
     data: {
       matchedCount: {
-        increment: matchedCount,
+        increment: stats.matchedCount,
       },
     },
   })
-  
-  console.log(`[SKU Match] Completed: ${matchedCount} matched, ${createdCount} created, ${reviewCount} need review`)
-  
-  return { matchedCount, createdCount, reviewCount }
+
+  console.log(
+    `[SKU Match] Completed: ${stats.matchedCount} matched, ${stats.createdCount} created, ${stats.reviewCount} need review`
+  )
+
+  return stats
 }
 
 // ============================================================================
 // WORKER EXPORT
 // ============================================================================
 
-export const dealerSkuMatchWorker = new Worker(
-  QUEUE_NAMES.DEALER_SKU_MATCH,
-  processSkuMatch,
-  {
-    connection: redisConnection,
-    concurrency: 10,
-  }
-)
+export const dealerSkuMatchWorker = new Worker(QUEUE_NAMES.DEALER_SKU_MATCH, processSkuMatch, {
+  connection: redisConnection,
+  concurrency: 10,
+})
 
 dealerSkuMatchWorker.on('completed', (job) => {
   console.log(`[SKU Match] Job ${job.id} completed`)

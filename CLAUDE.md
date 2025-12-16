@@ -11,7 +11,7 @@ For detailed documentation, see the `docs/` folder:
 - **Deployment**: `docs/deployment/` - Render setup, environments, Stripe, email
 - **Product**: `docs/product/` - Subscription management, product offerings, tiers
 - **Guides**: `docs/guides/` - How-to guides and troubleshooting
-- **Scripts**: `docs/scripts/` - Utility scripts for development, building, and seeding
+- **Scripts**: `scripts/` - Utility scripts for development, building, and seeding (at project root)
 
 Key documents:
 
@@ -23,7 +23,7 @@ Key documents:
 - [Dealer Tier Offerings](docs/product/offerings.md)
 - [Feed Troubleshooting](docs/guides/feed-troubleshooting.md)
 - [Render Deployment](docs/deployment/render.md)
-- [Scripts README](docs/scripts/README.md)
+- [Scripts README](scripts/README.md)
 
 ## Project Overview
 

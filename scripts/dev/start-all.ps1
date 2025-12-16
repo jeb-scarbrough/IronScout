@@ -21,8 +21,10 @@ function Write-Failure { param($msg) Write-Host "[FAIL] $msg" -ForegroundColor R
 function Write-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Write-Header { param($msg) Write-Host "`n========== $msg ==========`n" -ForegroundColor Yellow }
 
-# Change to project root
-$projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+# Change to project root (scripts/dev -> scripts -> project root)
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptsDir = Split-Path -Parent $scriptDir
+$projectRoot = Split-Path -Parent $scriptsDir
 Set-Location $projectRoot
 Write-Info "Project root: $projectRoot"
 
