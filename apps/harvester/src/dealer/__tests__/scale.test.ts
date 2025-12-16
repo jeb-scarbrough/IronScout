@@ -12,6 +12,18 @@
  * - Performance benchmarks (time, memory)
  * - Data quality handling
  * - Error aggregation accuracy
+ *
+ * RUN INCREMENTALLY:
+ * - pnpm test -- --run scale.test.ts -t "Hobbyist"   # Run hobbyist first
+ * - pnpm test -- --run scale.test.ts -t "Serious"    # Then serious
+ * - pnpm test -- --run scale.test.ts -t "National"   # Then national
+ * - pnpm test -- --run scale.test.ts -t "Top-Tier"   # Finally top-tier
+ *
+ * Or run specific tiers with environment variables:
+ * - RUN_TIER=hobbyist pnpm test -- --run scale.test.ts
+ * - RUN_TIER=serious pnpm test -- --run scale.test.ts
+ * - RUN_TIER=national pnpm test -- --run scale.test.ts
+ * - RUN_TIER=top-tier pnpm test -- --run scale.test.ts
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
@@ -33,8 +45,16 @@ import { ERROR_CODES } from '../connectors/types'
 // TEST CONFIGURATION
 // ============================================================================
 
+// Environment-based tier selection for incremental testing
+const RUN_TIER = process.env.RUN_TIER as DealerTier | undefined
 const ENABLE_STRESS_TESTS = process.env.RUN_STRESS_TESTS === 'true'
 const ENABLE_MEMORY_TESTS = process.env.RUN_MEMORY_TESTS === 'true'
+
+// Skip tier tests based on environment variable
+const shouldRunTier = (tier: DealerTier): boolean => {
+  if (!RUN_TIER) return true // Run all if not specified
+  return RUN_TIER === tier
+}
 
 // Performance thresholds (in ms)
 const PERFORMANCE_THRESHOLDS = {
@@ -81,7 +101,7 @@ async function runParseTest(
 // HOBBYIST TIER TESTS (Under 300 SKUs)
 // ============================================================================
 
-describe('Hobbyist Dealer Scale (Under 300 SKUs)', () => {
+describe.skipIf(!shouldRunTier('hobbyist'))('Hobbyist Dealer Scale (Under 300 SKUs)', () => {
   const connector = new GenericConnector()
   const tier: DealerTier = 'hobbyist'
 
@@ -208,7 +228,7 @@ describe('Hobbyist Dealer Scale (Under 300 SKUs)', () => {
 // SERIOUS SELLER TESTS (300-1,500 SKUs)
 // ============================================================================
 
-describe('Serious Seller Scale (300-1,500 SKUs)', () => {
+describe.skipIf(!shouldRunTier('serious'))('Serious Seller Scale (300-1,500 SKUs)', () => {
   const connector = new GenericConnector()
   const tier: DealerTier = 'serious'
 
@@ -350,7 +370,7 @@ describe('Serious Seller Scale (300-1,500 SKUs)', () => {
 // NATIONAL OPERATION TESTS (1,500-5,000 SKUs)
 // ============================================================================
 
-describe('National Operation Scale (1,500-5,000 SKUs)', () => {
+describe.skipIf(!shouldRunTier('national'))('National Operation Scale (1,500-5,000 SKUs)', () => {
   const connector = new GenericConnector()
   const tier: DealerTier = 'national'
 
@@ -477,7 +497,7 @@ describe('National Operation Scale (1,500-5,000 SKUs)', () => {
 // TOP-TIER TESTS (5,000+ SKUs)
 // ============================================================================
 
-describe('Top-Tier Dealer Scale (5,000+ SKUs)', () => {
+describe.skipIf(!shouldRunTier('top-tier'))('Top-Tier Dealer Scale (5,000+ SKUs)', () => {
   const connector = new GenericConnector()
   const tier: DealerTier = 'top-tier'
 
@@ -618,7 +638,8 @@ describe('Top-Tier Dealer Scale (5,000+ SKUs)', () => {
 // CROSS-TIER COMPARISON TESTS
 // ============================================================================
 
-describe('Cross-Tier Performance Comparison', () => {
+// Skip cross-tier tests when running a specific tier
+describe.skipIf(!!RUN_TIER)('Cross-Tier Performance Comparison', () => {
   const connector = new GenericConnector()
 
   it('demonstrates linear scaling across tiers', async () => {
@@ -696,7 +717,8 @@ describe.skipIf(!ENABLE_MEMORY_TESTS)('Memory Usage Tests', () => {
 // EDGE CASES AT SCALE
 // ============================================================================
 
-describe('Edge Cases at Scale', () => {
+// Skip edge case tests when running a specific tier - these test across tiers
+describe.skipIf(!!RUN_TIER)('Edge Cases at Scale', () => {
   const connector = new GenericConnector()
 
   it('handles catalog with all records quarantined (missing UPCs)', async () => {
@@ -792,7 +814,8 @@ describe('Edge Cases at Scale', () => {
 // REGRESSION TESTS
 // ============================================================================
 
-describe('Regression Tests', () => {
+// Skip regression tests when running a specific tier
+describe.skipIf(!!RUN_TIER)('Regression Tests', () => {
   const connector = new GenericConnector()
 
   it('maintains consistent results with same seed', async () => {

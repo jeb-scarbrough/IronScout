@@ -10,8 +10,9 @@
  */
 
 import { SignJWT, jwtVerify } from 'jose';
+import { decode } from '@auth/core/jwt';
 import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { prisma } from '@ironscout/db';
 import type { Dealer, DealerUser, DealerStatus, DealerUserRole } from '@ironscout/db';
 import { logger } from './logger';
@@ -24,7 +25,13 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.DEALER_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
 );
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean);
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);
+const SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
+  ? '__Secure-authjs.session-token'
+  : 'authjs.session-token';
 
 const SESSION_COOKIE = 'dealer-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -33,7 +40,7 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 // Types
 // =============================================
 
-export type SessionType = 'dealer';
+export type SessionType = 'dealer' | 'admin';
 
 export interface DealerSession {
   type: 'dealer';
@@ -53,11 +60,12 @@ export interface DealerSession {
 
 export interface AdminSession {
   type: 'admin';
+  userId: string;
   email: string;
   name?: string;
 }
 
-export type Session = DealerSession;
+export type Session = DealerSession | AdminSession;
 
 export type DealerUserWithDealer = DealerUser & { dealer: Dealer };
 
@@ -174,11 +182,81 @@ export async function getDealerSession(): Promise<DealerSession | null> {
 }
 
 /**
- * Convenience wrapper used throughout the dealer app.
- * Returns the dealer session (real or impersonated) if present.
+ * Admin session from shared NextAuth cookie (main web app)
  */
-export async function getSession(): Promise<DealerSession | null> {
-  return getDealerSession();
+export async function getAdminSession(): Promise<AdminSession | null> {
+  try {
+    const cookieStore = await cookies();
+    const headerStore = await headers();
+
+    let token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+    // Fallback: parse raw cookie header if cookieStore misses it
+    if (!token) {
+      const rawCookieHeader = headerStore.get('cookie');
+      const match = rawCookieHeader?.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+      token = match?.[1];
+    }
+
+    if (!token) {
+      logger.debug('No admin session cookie found', { cookieName: SESSION_COOKIE_NAME });
+      return null;
+    }
+
+    const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+    if (!secret) {
+      logger.warn('Admin session unavailable - missing NEXTAUTH_SECRET/AUTH_SECRET');
+      return null;
+    }
+
+    const payload = await decode({
+      token,
+      secret,
+      salt: SESSION_COOKIE_NAME,
+    });
+
+    if (!payload) {
+      logger.warn('Admin session decode returned null');
+      return null;
+    }
+
+    const email = (payload.email as string | undefined)?.toLowerCase();
+    const userId = payload.sub as string | undefined;
+    const name = payload.name as string | undefined;
+
+    if (!email || !userId) {
+      logger.warn('Admin token missing email or sub');
+      return null;
+    }
+
+    if (!ADMIN_EMAILS.includes(email)) {
+      logger.warn('Admin email not authorized', { email });
+      return null;
+    }
+
+    return {
+      type: 'admin',
+      userId,
+      email,
+      name,
+    };
+  } catch (error) {
+    logger.error('Error verifying admin session', {}, error);
+    return null;
+  }
+}
+
+/**
+ * Convenience wrapper used throughout the dealer app.
+ * Returns dealer session (real or impersonated) or admin session if present.
+ */
+export async function getSession(): Promise<Session | null> {
+  const dealerSession = await getDealerSession();
+  if (dealerSession) {
+    return dealerSession;
+  }
+
+  return getAdminSession();
 }
 
 /**
