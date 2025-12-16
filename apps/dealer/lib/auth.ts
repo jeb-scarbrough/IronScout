@@ -174,6 +174,14 @@ export async function getDealerSession(): Promise<DealerSession | null> {
 }
 
 /**
+ * Convenience wrapper used throughout the dealer app.
+ * Returns the dealer session (real or impersonated) if present.
+ */
+export async function getSession(): Promise<DealerSession | null> {
+  return getDealerSession();
+}
+
+/**
  * Check if current dealer user can manage team (OWNER or ADMIN role)
  */
 export function canManageTeam(session: DealerSession): boolean {
