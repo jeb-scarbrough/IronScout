@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { createAlert, type Product } from '@/lib/api'
 import { X } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface CreateAlertDialogProps {
   product: Product
@@ -20,7 +21,6 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
   const [alertType, setAlertType] = useState<'PRICE_DROP' | 'BACK_IN_STOCK' | 'NEW_PRODUCT'>('PRICE_DROP')
   const [targetPrice, setTargetPrice] = useState(
     product.prices[0]?.price ? (product.prices[0].price * 0.9).toFixed(2) : ''
@@ -44,12 +44,16 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
         alertType
       })
 
-      setSuccess(true)
-      setTimeout(() => {
-        onOpenChange(false)
-        setSuccess(false)
-      }, 2000)
+      toast.success('Alert created!', {
+        description: `We'll notify you when the price drops${targetPrice ? ` to $${targetPrice}` : ''}.`,
+        action: {
+          label: 'View Alerts',
+          onClick: () => router.push('/dashboard/alerts')
+        }
+      })
+      onOpenChange(false)
     } catch (error: any) {
+      toast.error(error.message || 'Failed to create alert')
       setError(error.message || 'Failed to create alert')
     } finally {
       setLoading(false)
@@ -76,12 +80,6 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {success && (
-              <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
-                Alert created successfully!
-              </div>
-            )}
-
             {error && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
                 {error}

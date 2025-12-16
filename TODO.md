@@ -85,7 +85,27 @@ Implement subscription-based access control for end users (consumers):
 
 ## Low Priority / Nice-to-Have
 
-*(empty)*
+### Footer Pages (Removed Placeholder Links)
+**Status:** Not Started
+
+Create actual pages for footer links that were removed as placeholders:
+
+1. **Legal Pages**
+   - `/legal/privacy` - Privacy Policy
+   - `/legal/terms` - Terms of Service
+
+2. **Support Pages**
+   - `/help` or `/support` - Help Center / FAQ
+   - `/contact` - Contact Us form
+
+3. **Business Pages**
+   - `/api` - API Access documentation (if offering public API)
+   - `/enterprise` - Enterprise tier information
+
+4. **Social Links**
+   - Create Twitter/X account and link
+   - Create GitHub org/repo and link (if open source)
+   - Create LinkedIn company page and link
 
 ---
 

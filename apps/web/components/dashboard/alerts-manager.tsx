@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Bell, ExternalLink, Trash2, Edit2, Check, X, Filter } from 'lucide-react'
 import { getUserAlerts, updateAlert, deleteAlert, type Alert as AlertType } from '@/lib/api'
 import { ProductImage } from '@/components/products/product-image'
+import { toast } from 'sonner'
 
 export function AlertsManager() {
   const { data: session } = useSession()
@@ -69,9 +70,10 @@ export function AlertsManager() {
     try {
       await deleteAlert(alertId)
       setAlerts(alerts.filter(a => a.id !== alertId))
+      toast.success('Alert deleted')
     } catch (err) {
       console.error('Failed to delete alert:', err)
-      window.alert('Failed to delete alert')
+      toast.error('Failed to delete alert')
     }
   }
 
@@ -81,9 +83,10 @@ export function AlertsManager() {
       setAlerts(alerts.map(a =>
         a.id === alert.id ? { ...a, isActive: !a.isActive } : a
       ))
+      toast.success(alert.isActive ? 'Alert paused' : 'Alert activated')
     } catch (err) {
       console.error('Failed to toggle alert:', err)
-      window.alert('Failed to update alert')
+      toast.error('Failed to update alert')
     }
   }
 
@@ -101,7 +104,7 @@ export function AlertsManager() {
     try {
       const newPrice = parseFloat(editPrice)
       if (isNaN(newPrice) || newPrice <= 0) {
-        window.alert('Please enter a valid price')
+        toast.error('Please enter a valid price')
         return
       }
 
@@ -111,9 +114,10 @@ export function AlertsManager() {
       ))
       setEditingId(null)
       setEditPrice('')
+      toast.success('Target price updated')
     } catch (err) {
       console.error('Failed to update alert:', err)
-      window.alert('Failed to update alert')
+      toast.error('Failed to update alert')
     }
   }
 

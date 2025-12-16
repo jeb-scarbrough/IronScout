@@ -6,7 +6,7 @@ import { ProductImage } from './product-image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatPrice } from '@/lib/utils'
-import { Star, ExternalLink, Bell, Crown, Package, Sparkles, Info } from 'lucide-react'
+import { ExternalLink, Bell, Crown, Package, Sparkles } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 import { 
@@ -266,20 +266,6 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             )}
           </div>
 
-          {/* Mock Rating */}
-          <div className="flex items-center space-x-1">
-            <div className="flex">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className={`h-3 w-3 ${
-                    i < 4 ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300 dark:text-gray-600'
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="text-xs text-muted-foreground">(4.2)</span>
-          </div>
         </div>
       </CardContent>
 
