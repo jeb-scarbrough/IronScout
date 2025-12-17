@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { Menu, X, User, ShoppingBag, Bell, Settings, LayoutDashboard, ChevronDown } from 'lucide-react'
+import { Menu, X, User, Bell, Settings, LayoutDashboard, ChevronDown } from 'lucide-react'
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -18,7 +19,13 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <ShoppingBag className="h-6 w-6 text-primary" />
+            <Image
+              src="/logo-dark.svg"
+              alt="IronScout"
+              width={24}
+              height={24}
+              className="flex-shrink-0"
+            />
             <span className="text-xl font-bold">IronScout.ai</span>
           </Link>
 

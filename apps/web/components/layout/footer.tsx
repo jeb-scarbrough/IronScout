@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ShoppingBag } from 'lucide-react'
+import Image from 'next/image'
 
 export function Footer() {
   return (
@@ -9,7 +9,13 @@ export function Footer() {
           {/* Brand */}
           <div className="space-y-4">
             <Link href="/" className="flex items-center space-x-2">
-              <ShoppingBag className="h-6 w-6 text-primary" />
+              <Image
+                src="/logo-dark.svg"
+                alt="IronScout"
+                width={24}
+                height={24}
+                className="flex-shrink-0"
+              />
               <span className="text-xl font-bold">IronScout.ai</span>
             </Link>
             <p className="text-sm text-muted-foreground">
