@@ -776,6 +776,103 @@ export async function updateSubscription(dealerId: string, data: UpdateSubscript
   }
 }
 
+// =============================================================================
+// Payment Details Management
+// =============================================================================
+
+export interface UpdatePaymentDetailsData {
+  paymentMethod?: 'STRIPE' | 'PURCHASE_ORDER' | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  autoRenew?: boolean;
+}
+
+/**
+ * Update dealer payment details
+ * Use case: Admin management of payment information for dealers
+ */
+export async function updatePaymentDetails(dealerId: string, data: UpdatePaymentDetailsData) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Get old values for audit log
+    const oldDealer = await prisma.dealer.findUnique({
+      where: { id: dealerId },
+      select: {
+        id: true,
+        businessName: true,
+        paymentMethod: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        autoRenew: true,
+      },
+    });
+
+    if (!oldDealer) {
+      return { success: false, error: 'Dealer not found' };
+    }
+
+    // Validate Stripe IDs format if provided
+    if (data.stripeCustomerId && !data.stripeCustomerId.startsWith('cus_')) {
+      return { success: false, error: 'Stripe Customer ID must start with "cus_"' };
+    }
+
+    if (data.stripeSubscriptionId && !data.stripeSubscriptionId.startsWith('sub_')) {
+      return { success: false, error: 'Stripe Subscription ID must start with "sub_"' };
+    }
+
+    // Update payment details
+    const updatedDealer = await prisma.dealer.update({
+      where: { id: dealerId },
+      data: {
+        paymentMethod: data.paymentMethod,
+        stripeCustomerId: data.stripeCustomerId,
+        stripeSubscriptionId: data.stripeSubscriptionId,
+        autoRenew: data.autoRenew,
+      },
+    });
+
+    // Log the action
+    await logAdminAction(session.userId, 'UPDATE_PAYMENT_DETAILS', {
+      dealerId,
+      resource: 'Dealer',
+      resourceId: dealerId,
+      oldValue: {
+        paymentMethod: oldDealer.paymentMethod,
+        stripeCustomerId: oldDealer.stripeCustomerId,
+        stripeSubscriptionId: oldDealer.stripeSubscriptionId,
+        autoRenew: oldDealer.autoRenew,
+      },
+      newValue: {
+        paymentMethod: data.paymentMethod,
+        stripeCustomerId: data.stripeCustomerId,
+        stripeSubscriptionId: data.stripeSubscriptionId,
+        autoRenew: data.autoRenew,
+      },
+    });
+
+    revalidatePath(`/dealers/${dealerId}`);
+    revalidatePath('/dealers');
+
+    return {
+      success: true,
+      message: `Payment details updated for ${oldDealer.businessName}`,
+      dealer: updatedDealer,
+    };
+  } catch (error) {
+    console.error('Failed to update payment details:', error);
+    return { success: false, error: 'Failed to update payment details' };
+  }
+}
+
+// =============================================================================
+// Feed Management
+// =============================================================================
+
 /**
  * Get feeds for a dealer with their status
  */
