@@ -3,8 +3,9 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { redirect } from 'next/navigation';
 import { getAdminSession } from '@/lib/auth';
-import { Shield, Users, BarChart3, Settings, LogOut, Loader2 } from 'lucide-react';
+import { Users, BarChart3, Settings, LogOut, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Force dynamic rendering - required for cookie access
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,13 @@ async function AdminNav() {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-              <Shield className="h-6 w-6" />
+              <Image
+                src="/logo-dark.svg"
+                alt="IronScout"
+                width={24}
+                height={24}
+                className="flex-shrink-0"
+              />
               IronScout Admin
             </Link>
             
@@ -92,7 +99,14 @@ export default async function RootLayout({
         <body className={inter.className}>
           <div className="min-h-screen bg-gray-100 flex items-center justify-center">
             <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
-              <Shield className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <div className="flex justify-center mb-4">
+                <Image
+                  src="/logo-dark.svg"
+                  alt="IronScout"
+                  width={48}
+                  height={48}
+                />
+              </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Access Required</h1>
               <p className="text-gray-600 mb-6">
                 Redirecting to login...
