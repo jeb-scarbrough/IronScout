@@ -224,19 +224,33 @@ Admins can log in as a dealer to provide support assistance:
 
 ### Payment Details Section
 
-The dealer detail page (`/dealers/[id]`) includes a Payment Details section showing:
+The dealer detail page (`/dealers/[id]`) includes an editable Payment Details section for managing dealer payment information.
 
+**Display Mode** shows:
 - **Payment Method**: STRIPE (automated billing) or PURCHASE_ORDER (manual invoicing)
 - **Auto Renew**: Whether automatic renewal is enabled
-- **Stripe Customer ID**: Link to Stripe Dashboard customer page
-- **Stripe Subscription ID**: Link to Stripe Dashboard subscription page
+- **Stripe Customer ID**: Link to Stripe Dashboard customer page (clickable, opens in new tab)
+- **Stripe Subscription ID**: Link to Stripe Dashboard subscription page (clickable, opens in new tab)
 
-The section provides:
+**Edit Mode** allows admins to update:
+- **Payment Method** dropdown: Not set, Stripe, or Purchase Order
+- **Auto Renew** checkbox: Enable/disable automatic renewal
+- **Stripe Customer ID** text input: Must start with `cus_` (validated)
+- **Stripe Subscription ID** text input: Must start with `sub_` (validated)
+
+**Features:**
+- Click "Edit" button to enter edit mode
+- Inline validation of Stripe ID formats
+- Success/error messages displayed after updates
+- All changes logged to `AdminAuditLog` table with old/new values
+- Page auto-revalidates after successful update
 - Direct links to Stripe Dashboard for quick access
 - Info banners explaining Purchase Order billing
 - Warnings for dealers without payment methods
 
-**Key file:** `apps/admin/app/dealers/[id]/payment-section.tsx`
+**Key files:**
+- `apps/admin/app/dealers/[id]/payment-section.tsx` - UI component with edit form
+- `apps/admin/app/dealers/[id]/actions.ts` - `updatePaymentDetails()` server action
 
 ### Dealers List Payment Column
 
