@@ -407,8 +407,8 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
 
 When making visual (front-end, UI/UX) changes, always refer to design documentation:
 
-- **Design Checklist**: `/context/design-principles.md` - Comprehensive design guidelines
-- **Brand Style Guide**: `/context/style-guide.md` - Brand colors, typography, spacing
+- **Design Checklist**: `docs/design/design-principles.md` - Comprehensive design guidelines
+- **Brand Style Guide**: `docs/design/style-guide.md` - Brand colors, typography, spacing
 
 **IMPORTANT**: Check these files before implementing any UI/UX changes to ensure consistency.
 
@@ -418,7 +418,7 @@ When making visual (front-end, UI/UX) changes, always refer to design documentat
 
 1. **Identify what changed** - Review the modified components/pages
 2. **Navigate to affected pages** - Use `mcp__playwright__browser_navigate` to visit each changed view
-3. **Verify design compliance** - Compare against `/context/design-principles.md` and `/context/style-guide.md`
+3. **Verify design compliance** - Compare against `docs/design/design-principles.md` and `docs/design/style-guide.md`
 4. **Validate feature implementation** - Ensure the change fulfills the user's specific request
 5. **Check acceptance criteria** - Review any provided context files or requirements
 6. **Capture evidence** - Take full page screenshot at desktop viewport (1440px) of each changed view
