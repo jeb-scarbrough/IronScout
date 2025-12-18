@@ -921,9 +921,9 @@ export async function searchStripeCustomers(query: string) {
           success: true,
           customers: [{
             id: customer.id,
-            name: customer.name,
-            email: customer.email,
-            description: customer.description,
+            name: customer.name ?? null,
+            email: customer.email ?? null,
+            description: customer.description ?? null,
             metadata: customer.metadata,
           }],
         };
@@ -942,9 +942,9 @@ export async function searchStripeCustomers(query: string) {
       success: true,
       customers: customers.data.map(c => ({
         id: c.id,
-        name: c.name,
-        email: c.email,
-        description: c.description,
+        name: c.name ?? null,
+        email: c.email ?? null,
+        description: c.description ?? null,
         metadata: c.metadata,
       })),
     };
@@ -987,9 +987,9 @@ export async function validateStripeCustomer(customerId: string) {
       success: true,
       customer: {
         id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        description: customer.description,
+        name: customer.name ?? null,
+        email: customer.email ?? null,
+        description: customer.description ?? null,
         metadata: customer.metadata,
       },
     };
