@@ -4,22 +4,22 @@ import { Plus, Search, Settings, Bell } from 'lucide-react'
 
 const actions = [
   {
+    title: 'Search Products',
+    description: 'Find the best ammo deals',
+    icon: Search,
+    href: '/dashboard/search'
+  },
+  {
     title: 'Create Alert',
     description: 'Set up a new price alert',
     icon: Plus,
-    href: '/search'
+    href: '/dashboard/search'
   },
   {
     title: 'Manage Alerts',
     description: 'View and edit your alerts',
     icon: Bell,
     href: '/dashboard/alerts'
-  },
-  {
-    title: 'Browse Products',
-    description: 'Search for deals',
-    icon: Search,
-    href: '/search'
   },
   {
     title: 'Settings',

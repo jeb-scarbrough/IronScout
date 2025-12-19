@@ -45,7 +45,7 @@ model Product {
   metadata              Json?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
-  embedding             Unsupported("vector(1536)")?
+  embedding             Unsupported("vector")?
   barrelLengthReference Decimal?               @db.Decimal(4, 2)
   bulletType            BulletType?
   controlledExpansion   Boolean?
@@ -254,46 +254,41 @@ model MarketReport {
 }
 
 model Dealer {
-  id               String                  @id @default(cuid())
-  businessName     String
-  websiteUrl       String
-  phone            String?
-  storeType        StoreType               @default(ONLINE_ONLY)
-  status           DealerStatus            @default(PENDING)
-  tier             DealerTier              @default(FOUNDING)
-  pixelApiKey      String?                 @unique
-  pixelEnabled     Boolean                 @default(false)
-  shippingType     ShippingType            @default(UNKNOWN)
-  shippingFlat     Decimal?                @db.Decimal(10, 2)
-  shippingPerUnit  Decimal?                @db.Decimal(10, 2)
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  retailerId       String?                 @unique
-  contactFirstName String
-  contactLastName  String
-
-  // Subscription fields
+  id                       String                   @id @default(cuid())
+  businessName             String
+  websiteUrl               String
+  phone                    String?
+  storeType                StoreType                @default(ONLINE_ONLY)
+  status                   DealerStatus             @default(PENDING)
+  tier                     DealerTier               @default(FOUNDING)
+  pixelApiKey              String?                  @unique
+  pixelEnabled             Boolean                  @default(false)
+  shippingType             ShippingType             @default(UNKNOWN)
+  shippingFlat             Decimal?                 @db.Decimal(10, 2)
+  shippingPerUnit          Decimal?                 @db.Decimal(10, 2)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  retailerId               String?                  @unique
+  contactFirstName         String
+  contactLastName          String
+  lastSubscriptionNotifyAt DateTime?
+  subscriptionExpiresAt    DateTime?
+  subscriptionGraceDays    Int                      @default(7)
   subscriptionStatus       DealerSubscriptionStatus @default(ACTIVE)
-  subscriptionExpiresAt    DateTime?                // null = no expiration (lifetime/founding)
-  subscriptionGraceDays    Int                      @default(7) // Grace period after expiration
-  lastSubscriptionNotifyAt DateTime?                // Rate limit: one notification per day
-
-  // Payment/Stripe fields
-  paymentMethod         DealerPaymentMethod? // STRIPE or PURCHASE_ORDER
-  stripeCustomerId      String?              @unique // Stripe customer ID (cus_...)
-  stripeSubscriptionId  String?              @unique // Stripe subscription ID (sub_...)
-  autoRenew             Boolean              @default(true) // Auto-renew for Stripe subscriptions
-
-  clickEvents      ClickEvent[]
-  contacts         DealerContact[]
-  feeds            DealerFeed[]
-  insights         DealerInsight[]
-  invites          DealerInvite[]
-  notificationPref DealerNotificationPref?
-  skus             DealerSku[]
-  users            DealerUser[]
-  retailer         Retailer?               @relation(fields: [retailerId], references: [id])
-  pixelEvents      PixelEvent[]
+  autoRenew                Boolean                  @default(true)
+  paymentMethod            DealerPaymentMethod?
+  stripeCustomerId         String?                  @unique
+  stripeSubscriptionId     String?                  @unique
+  clickEvents              ClickEvent[]
+  contacts                 DealerContact[]
+  feeds                    DealerFeed[]
+  insights                 DealerInsight[]
+  invites                  DealerInvite[]
+  notificationPref         DealerNotificationPref?
+  skus                     DealerSku[]
+  users                    DealerUser[]
+  retailer                 Retailer?                @relation(fields: [retailerId], references: [id])
+  pixelEvents              PixelEvent[]
 
   @@map("dealers")
 }
@@ -363,31 +358,31 @@ model DealerContact {
 }
 
 model DealerFeed {
-  id               String             @id @default(cuid())
+  id               String              @id @default(cuid())
   dealerId         String
   name             String?
-  accessType       FeedAccessType     @default(URL)
-  formatType       FeedFormatType     @default(GENERIC)
   url              String?
   username         String?
   password         String?
-  scheduleMinutes  Int                @default(60)
-  enabled          Boolean            @default(true)
-  status           FeedStatus         @default(PENDING)
+  scheduleMinutes  Int                 @default(60)
+  status           FeedStatus          @default(PENDING)
   feedHash         String?
-  lastRunAt        DateTime?
   lastSuccessAt    DateTime?
   lastFailureAt    DateTime?
   lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  accessType       FeedAccessType      @default(URL)
+  enabled          Boolean             @default(true)
+  formatType       FeedFormatType      @default(GENERIC)
+  lastRunAt        DateTime?
   primaryErrorCode String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
   runs             DealerFeedRun[]
   testRuns         DealerFeedTestRun[]
-  quarantined      QuarantinedRecord[]
-  corrections      FeedCorrection[]
-  dealer           Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealer           Dealer              @relation(fields: [dealerId], references: [id], onDelete: Cascade)
   skus             DealerSku[]
+  corrections      FeedCorrection[]
+  quarantined      QuarantinedRecord[]
 
   @@index([dealerId])
   @@index([enabled])
@@ -401,16 +396,16 @@ model DealerFeedRun {
   status           FeedRunStatus
   errors           Json?
   rowCount         Int           @default(0)
-  indexedCount     Int           @default(0)
-  quarantinedCount Int           @default(0)
-  rejectedCount    Int           @default(0)
-  coercionCount    Int           @default(0)
-  matchedCount     Int           @default(0)
-  primaryErrorCode String?
-  errorCodes       Json?
   duration         Int?
   startedAt        DateTime      @default(now())
   completedAt      DateTime?
+  primaryErrorCode String?
+  quarantinedCount Int           @default(0)
+  coercionCount    Int           @default(0)
+  errorCodes       Json?
+  indexedCount     Int           @default(0)
+  rejectedCount    Int           @default(0)
+  matchedCount     Int           @default(0)
   feed             DealerFeed    @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@index([dealerId])
@@ -458,8 +453,8 @@ model QuarantinedRecord {
   status         QuarantineStatus @default(QUARANTINED)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
-  feed           DealerFeed       @relation(fields: [feedId], references: [id], onDelete: Cascade)
   corrections    FeedCorrection[]
+  feed           DealerFeed       @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@unique([feedId, matchKey])
   @@index([dealerId])
@@ -480,7 +475,7 @@ model FeedCorrection {
   createdBy           String
   createdAt           DateTime           @default(now())
   feed                DealerFeed         @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  quarantinedRecord   QuarantinedRecord? @relation(fields: [quarantinedRecordId], references: [id], onDelete: SetNull)
+  quarantinedRecord   QuarantinedRecord? @relation(fields: [quarantinedRecordId], references: [id])
 
   @@index([dealerId])
   @@index([feedId, recordRef])
@@ -493,7 +488,6 @@ model DealerSku {
   dealerId          String
   feedId            String?
   feedRunId         String?
-  productType       String?
   rawTitle          String
   rawDescription    String?
   rawPrice          Decimal           @db.Decimal(10, 2)
@@ -520,12 +514,13 @@ model DealerSku {
   parsedBrand       String?
   parseConfidence   Decimal?          @db.Decimal(3, 2)
   dealerSkuHash     String?
-  coercionsApplied  Json?
   isActive          Boolean           @default(true)
-  missingCount      Int               @default(0)
-  lastSeenAt        DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  lastSeenAt        DateTime?
+  missingCount      Int               @default(0)
+  productType       String?
+  coercionsApplied  Json?
   insights          DealerInsight[]
   canonicalSku      CanonicalSku?     @relation(fields: [canonicalSkuId], references: [id])
   dealer            Dealer            @relation(fields: [dealerId], references: [id], onDelete: Cascade)
@@ -888,15 +883,15 @@ enum DealerTier {
 }
 
 enum DealerSubscriptionStatus {
-  ACTIVE           // Subscription is active and valid
-  EXPIRED          // Subscription has expired (within grace period)
-  SUSPENDED        // Subscription suspended (past grace period or payment failed)
-  CANCELLED        // Subscription cancelled by dealer
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
 }
 
 enum DealerPaymentMethod {
-  STRIPE           // Automated billing via Stripe
-  PURCHASE_ORDER   // Manual invoicing for enterprise customers
+  STRIPE
+  PURCHASE_ORDER
 }
 
 enum DealerUserRole {
@@ -961,12 +956,12 @@ enum FeedStatus {
 }
 
 enum FeedRunStatus {
-  PENDING
   RUNNING
   SUCCESS
   WARNING
   FAILURE
-  SKIPPED   // Feed run skipped (e.g., subscription expired)
+  PENDING
+  SKIPPED
 }
 
 enum MappingConfidence {

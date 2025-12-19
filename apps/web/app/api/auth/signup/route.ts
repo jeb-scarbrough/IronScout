@@ -1,92 +1,34 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@ironscout/db'
-import bcrypt from 'bcryptjs'
+/**
+ * Signup Route - Proxies to API service
+ *
+ * This route forwards signup requests to the API service.
+ * The web app never directly accesses the database.
+ */
 
-// Admin emails cannot be registered via credentials (must use OAuth)
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+import { NextResponse } from 'next/server'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export async function POST(req: Request) {
   try {
-    const { email, password, name } = await req.json()
+    const body = await req.json()
 
-    // Validate input
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
-      )
-    }
-
-    // Block admin email registration via credentials
-    // Admins must use OAuth (Google, GitHub, etc.) which verifies email ownership
-    if (ADMIN_EMAILS.includes(email.toLowerCase())) {
-      return NextResponse.json(
-        { error: 'This email cannot be registered. Please use Google or GitHub sign-in.' },
-        { status: 403 }
-      )
-    }
-
-    // Password validation following modern security best practices
-    // Per NIST SP 800-63B and OWASP recommendations:
-    // - Minimum length: 8 characters (recommend 15+)
-    // - Maximum length: At least 64 characters (we allow 128)
-    // - No complexity requirements (no forced mix of character types)
-    // - Allow all printable ASCII and Unicode characters
-
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: 'Password must be at least 8 characters long (15+ recommended for better security)' },
-        { status: 400 }
-      )
-    }
-
-    if (password.length > 128) {
-      return NextResponse.json(
-        { error: 'Password must not exceed 128 characters' },
-        { status: 400 }
-      )
-    }
-
-    // No restrictions on character types - all printable characters allowed
-    // This includes uppercase, lowercase, numbers, symbols, and Unicode characters
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
+    // Forward to API
+    const response = await fetch(`${API_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'A user with this email already exists' },
-        { status: 400 }
-      )
+    const data = await response.json()
+
+    if (!response.ok) {
+      return NextResponse.json(data, { status: response.status })
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name: name || null,
-        password: hashedPassword,
-        tier: 'FREE',
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        tier: true,
-      }
-    })
-
-    return NextResponse.json(
-      { message: 'User created successfully', user },
-      { status: 201 }
-    )
+    return NextResponse.json(data, { status: 201 })
   } catch (error) {
-    console.error('Signup error:', error)
+    console.error('[Signup] Error:', error)
     return NextResponse.json(
       { error: 'An error occurred during signup' },
       { status: 500 }

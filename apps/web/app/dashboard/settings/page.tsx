@@ -1,19 +1,12 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
 import { UserSettings } from '@/components/dashboard/user-settings'
 
-export default async function SettingsPage() {
-  const session = await auth()
-
-  if (!session) {
-    redirect('/api/auth/signin')
-  }
-
+export default function SettingsPage() {
   return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
+    <div className="p-6 lg:p-8 max-w-4xl">
+      {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-muted-foreground mt-1">
           Manage your account settings and preferences
         </p>
       </div>

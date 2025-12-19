@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Externalize packages that shouldn't be bundled for server-side
+  serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'pg'],
   images: {
     remotePatterns: [
       {

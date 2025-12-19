@@ -1,58 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp, Bell, Eye, DollarSign } from 'lucide-react'
-import { getUserAlerts } from '@/lib/api'
+import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 
-export function DashboardOverview() {
-  const { data: session } = useSession()
-  const [stats, setStats] = useState({
-    activeAlerts: 0,
-    triggeredAlerts: 0,
-    totalProducts: 0,
-    potentialSavings: 0
-  })
-  const [loading, setLoading] = useState(true)
+interface DashboardOverviewProps {
+  variant?: 'grid' | 'compact'
+}
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchStats()
-    }
-  }, [session])
-
-  const fetchStats = async () => {
-    if (!session?.user?.id) return
-
-    try {
-      setLoading(true)
-      const alerts = await getUserAlerts(session.user.id, false)
-
-      const activeCount = alerts.filter(a => a.isActive).length
-      const triggeredCount = alerts.filter(a => {
-        if (!a.product.currentPrice || !a.targetPrice) return false
-        return a.product.currentPrice <= a.targetPrice
-      }).length
-
-      const savings = alerts.reduce((sum, alert) => {
-        if (!alert.product.currentPrice || !alert.targetPrice) return sum
-        const diff = alert.targetPrice - alert.product.currentPrice
-        return sum + (diff > 0 ? diff : 0)
-      }, 0)
-
-      setStats({
-        activeAlerts: activeCount,
-        triggeredAlerts: triggeredCount,
-        totalProducts: alerts.length,
-        potentialSavings: savings
-      })
-    } catch (err) {
-      console.error('Failed to fetch stats:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+export function DashboardOverview({ variant = 'grid' }: DashboardOverviewProps) {
+  const { stats, loading } = useDashboardStats()
 
   const statCards = [
     {
@@ -80,6 +37,24 @@ export function DashboardOverview() {
       icon: DollarSign
     }
   ]
+
+  if (variant === 'compact') {
+    return (
+      <div className="flex flex-wrap items-center gap-4 md:gap-6">
+        {statCards.map((stat, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted">
+              <stat.icon className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-lg font-semibold leading-none">{stat.value}</div>
+              <div className="text-xs text-muted-foreground">{stat.title}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

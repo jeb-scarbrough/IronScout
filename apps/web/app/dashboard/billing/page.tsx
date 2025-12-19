@@ -1,22 +1,15 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
 import { BillingOverview } from '@/components/billing/billing-overview'
 import { SubscriptionDetails } from '@/components/billing/subscription-details'
 import { PaymentHistory } from '@/components/billing/payment-history'
 
-export default async function BillingPage() {
-  const session = await auth()
-  
-  if (!session) {
-    redirect('/api/auth/signin')
-  }
-
+export default function BillingPage() {
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="p-6 lg:p-8">
+      {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage your subscription and view payment history.
+        <h1 className="text-2xl md:text-3xl font-bold">Billing</h1>
+        <p className="text-muted-foreground mt-1">
+          Manage your subscription and view payment history
         </p>
       </div>
 
