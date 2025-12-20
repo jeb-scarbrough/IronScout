@@ -7,7 +7,9 @@
  * - PREMIUM Monthly: $7.99/mo
  * - PREMIUM Annual: $69.99/yr (~$5.83/mo, 27% savings)
  *
- * Core Principle: "Free helps you find deals. Premium helps you win deals."
+ * Core Principle:
+ * "Free helps you find deals.
+ *  Premium gives you more context, faster signals, and fewer missed opportunities."
  */
 
 export const TIER_CONFIG = {
@@ -20,7 +22,7 @@ export const TIER_CONFIG = {
     maxSearchResults: 20,
 
     // Price History
-    priceHistoryDays: 0, // No history (locked teaser)
+    priceHistoryDays: 7, // Limited history (7 days) - teaser for Premium
 
     // Comparisons
     maxComparisons: 3,

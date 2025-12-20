@@ -1,90 +1,54 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { MessageSquare, Sparkles, ShoppingCart, Bell } from 'lucide-react'
+import { Search, Layers, Filter } from 'lucide-react'
 
-const steps = [
+const capabilities = [
   {
-    icon: MessageSquare,
-    title: 'Describe What You Need',
-    description: 'Type naturally like you\'re asking a friend. "Best ammo for home defense" or "cheap bulk 9mm for the range" — whatever you need.',
-    step: '01',
-    color: 'bg-blue-500',
+    icon: Search,
+    text: 'Search by caliber, grain, bullet type, and use case',
   },
   {
-    icon: Sparkles,
-    title: 'AI Finds Perfect Matches',
-    description: 'Our AI understands caliber, purpose, platform, and budget. It searches across dozens of retailers and ranks the best options for you.',
-    step: '02',
-    color: 'bg-purple-500',
+    icon: Layers,
+    text: 'See equivalent products grouped together',
   },
   {
-    icon: Bell,
-    title: 'Track & Get Alerts',
-    description: 'Found something but want a better price? Set an alert and we\'ll notify you the moment it drops to your target.',
-    step: '03',
-    color: 'bg-green-500',
-  },
-  {
-    icon: ShoppingCart,
-    title: 'Buy With Confidence',
-    description: 'See price history, read the specs, compare retailers. Click through to buy directly from trusted vendors at the best price.',
-    step: '04',
-    color: 'bg-orange-500',
+    icon: Filter,
+    text: 'Spend less time filtering noise and more time evaluating options',
   },
 ]
 
 export function HowItWorks() {
   return (
-    <section className="py-20 lg:py-32 bg-gray-50 dark:bg-gray-900/50">
+    <section className="py-20 lg:py-28">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            How It Works
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6 text-center">
+            AI-Powered Search (Built for Ammo)
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            From question to purchase in minutes — no expertise required.
-          </p>
-        </div>
 
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {steps.map((step, index) => (
-              <div key={index} className="relative">
-                <Card className="border-0 shadow-lg h-full bg-white dark:bg-gray-800">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className={`w-14 h-14 ${step.color} rounded-xl flex items-center justify-center shadow-lg flex-shrink-0`}>
-                        <step.icon className="h-7 w-7 text-white" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-muted-foreground mb-1">
-                          Step {step.step}
-                        </div>
-                        <CardTitle className="text-xl">{step.title}</CardTitle>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-base leading-relaxed">
-                      {step.description}
-                    </CardDescription>
-                  </CardContent>
-                </Card>
+          <p className="text-lg text-muted-foreground text-center mb-10">
+            Ammo listings are inconsistent. Specs are buried. Names don't match.
+            <br />
+            IronScout uses AI to normalize and understand listings so you can:
+          </p>
+
+          <div className="space-y-4 mb-10">
+            {capabilities.map((capability, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-gray-800/50"
+              >
+                <div className="flex-shrink-0 w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                  <capability.icon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <p className="text-lg text-foreground">
+                  {capability.text}
+                </p>
               </div>
             ))}
           </div>
 
-          {/* Visual flow arrow for desktop */}
-          <div className="hidden md:flex justify-center mt-12">
-            <div className="flex items-center gap-4 text-muted-foreground">
-              <span className="text-sm">Natural question</span>
-              <span>→</span>
-              <span className="text-sm">AI understanding</span>
-              <span>→</span>
-              <span className="text-sm">Best matches</span>
-              <span>→</span>
-              <span className="text-sm font-medium text-green-600">Perfect purchase</span>
-            </div>
-          </div>
+          <p className="text-center text-lg text-muted-foreground">
+            AI assists discovery and ranking. Final buying decisions are always yours.
+          </p>
         </div>
       </div>
     </section>

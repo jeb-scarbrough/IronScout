@@ -1,60 +1,69 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Sparkles, MessageSquare } from 'lucide-react'
+import { TrendingUp, BarChart3, Eye, ArrowRight } from 'lucide-react'
+
+const audiences = [
+  {
+    icon: TrendingUp,
+    text: 'Care about price trends, not just one-off deals',
+  },
+  {
+    icon: BarChart3,
+    text: 'Want to avoid overpaying when prices spike',
+  },
+  {
+    icon: Eye,
+    text: 'Prefer insight and context over hype',
+  },
+]
 
 export function CTA() {
   return (
-    <section className="py-20 lg:py-32 bg-gradient-to-br from-blue-600 via-purple-600 to-blue-700 text-white relative overflow-hidden">
-      {/* Decorative elements */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
-      
-      <div className="container mx-auto px-4 relative">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="flex justify-center mb-6">
-            <div className="flex items-center space-x-2 bg-white/10 backdrop-blur rounded-full px-4 py-2 border border-white/20">
-              <MessageSquare className="h-4 w-4" />
-              <span className="text-sm font-medium">Try it now — no signup required</span>
-            </div>
-          </div>
-          
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
-            Stop Browsing. Start Finding.
+    <section className="py-20 lg:py-28">
+      <div className="container mx-auto px-4">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6 text-center">
+            Built for How People Actually Buy Ammo
           </h2>
 
-          <p className="text-lg md:text-xl opacity-90 mb-8 max-w-2xl mx-auto">
-            Just type what you need. Our AI handles the rest.
-            No filters to figure out. No expertise required.
+          <p className="text-lg text-muted-foreground text-center mb-10">
+            IronScout is designed for shooters who:
           </p>
 
-          {/* Example search */}
-          <div className="max-w-xl mx-auto mb-8">
-            <div className="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-4">
-              <p className="text-white/80 text-sm mb-2">Try searching for:</p>
-              <p className="text-xl font-medium italic">
-                "affordable 5.56 for my first AR build"
-              </p>
-            </div>
+          <div className="space-y-4 mb-10">
+            {audiences.map((audience, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-4 p-4 rounded-lg bg-slate-50 dark:bg-gray-800/50"
+              >
+                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                  <audience.icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <p className="text-lg text-foreground">
+                  {audience.text}
+                </p>
+              </div>
+            ))}
           </div>
 
+          <p className="text-center text-lg text-muted-foreground mb-10">
+            Whether you buy occasionally or track the market closely, IronScout helps you stay informed.
+          </p>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" asChild className="bg-white text-blue-600 hover:bg-gray-100">
-              <Link href="/search" className="flex items-center">
-                <Sparkles className="mr-2 h-4 w-4" />
-                Try AI Search Free
+            <Button size="lg" asChild>
+              <Link href="/dashboard">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                Start Tracking Prices
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link href="/search">
+                Explore Current Deals
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild className="border-white/30 text-white hover:bg-white/10">
-              <Link href="/pricing">
-                View Pricing
-              </Link>
-            </Button>
           </div>
-
-          <p className="text-sm opacity-75 mt-6">
-            Free tier available • No credit card required • Unlimited searches
-          </p>
         </div>
       </div>
     </section>

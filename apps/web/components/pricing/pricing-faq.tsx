@@ -10,43 +10,43 @@ import {
 const faqs = [
   {
     question: 'What does "AI-powered search" mean?',
-    answer: 'IronScout uses artificial intelligence to understand what you\'re looking for, not just match keywords. When you search "best 9mm for home defense," our AI understands you need hollow points optimized for short-barrel reliability, reduced overpenetration, and trusted defensive brands—not just any 9mm ammo.'
+    answer: 'IronScout uses AI to understand ammo listings and normalize messy product data across retailers. This helps you search by intent (like "9mm for home defense" or "bulk .223 brass case") rather than relying solely on exact keywords or filters.'
   },
   {
-    question: 'What\'s the difference between Free and Premium AI?',
-    answer: 'Free users get basic purpose detection (e.g., "Training" or "Defense"). Premium users get deep AI interpretation that considers indoor vs outdoor use, barrel length, suppressor compatibility, overpenetration concerns, flash reduction, and more. Premium also includes AI-generated explanations for why specific products match your needs.'
+    question: 'What\'s the difference between Free and Premium?',
+    answer: 'Free gives you full AI-powered search, current prices, and basic alerts. Premium adds historical price charts, faster alerts, advanced filters, AI-assisted explanations for why deals stand out, and expanded watchlist limits. Premium provides more context — not guarantees.'
   },
   {
-    question: 'What is "Best Value Score"?',
-    answer: 'Best Value Score is a Premium feature that combines multiple factors: current price vs 30-day average for that caliber, shipping costs, retailer reliability, brand reputation, and how well the product matches your stated purpose. It helps you find ammo that\'s truly a good deal, not just cheap.'
+    question: 'What do price history charts show?',
+    answer: 'Premium price history shows how a product\'s price has changed over 30, 90, or 365 days. This context helps you understand whether today\'s price looks typical, higher than usual, or lower than recent averages. It does not predict future prices.'
   },
   {
-    question: 'Why are Free alerts delayed?',
-    answer: 'Free price alerts are delayed by 1 hour to give Premium subscribers first access to deals. In the ammo market, popular deals can sell out in minutes. Premium users get real-time instant notifications so they never miss a price drop or restock.'
+    question: 'How are Free alerts different from Premium alerts?',
+    answer: 'Free alerts are delayed and have lower limits. Premium alerts are faster, support product-level tracking (not just caliber-level), and allow more active alerts. Premium alerts help you act sooner when prices or availability change.'
   },
   {
     question: 'Can I still use filters with AI search?',
-    answer: 'Absolutely. Our system is designed for both AI-assisted and filter-driven searches. You can type natural language queries, use specific filters, or combine both. When you set filters manually, the AI respects your choices and optimizes within your constraints.'
+    answer: 'Yes. You can type natural language queries, use specific filters, or combine both. The AI respects your filters and works within your constraints.'
   },
   {
     question: 'What payment methods do you accept?',
-    answer: 'We accept all major credit cards (Visa, Mastercard, American Express, Discover) through our secure payment processor, Stripe. Your payment information is never stored on our servers.'
+    answer: 'We accept major credit cards (Visa, Mastercard, American Express, Discover) through Stripe. Your payment information is never stored on our servers.'
   },
   {
     question: 'Can I cancel my subscription anytime?',
-    answer: 'Yes. You can cancel your Premium subscription at any time from your account settings. You\'ll continue to have Premium access until the end of your billing period. No questions asked, no cancellation fees.'
+    answer: 'Yes. You can cancel Premium anytime from your account settings. You\'ll keep Premium access until the end of your billing period. No cancellation fees.'
   },
   {
     question: 'Is there a free trial?',
-    answer: 'We don\'t offer a traditional free trial, but our Free tier gives you full access to basic search and filtering forever. This lets you try IronScout before deciding if Premium features are worth it for your needs.'
+    answer: 'We don\'t offer a traditional trial, but the Free tier is always available. You can use Free indefinitely and upgrade when the added context feels valuable.'
   },
   {
     question: 'What happens to my alerts if I downgrade?',
-    answer: 'If you downgrade from Premium to Free, your alerts will continue to work but with a 1-hour delay. If you have more than 5 active alerts, they\'ll remain active but you won\'t be able to create new ones until you\'re under the limit.'
+    answer: 'If you downgrade from Premium to Free, your alerts will continue but with delays and lower limits. Alerts over the Free limit will remain but you won\'t be able to create new ones until you\'re under the limit.'
   },
   {
     question: 'Do you sell ammunition?',
-    answer: 'No. IronScout is a search and comparison tool only. We help you find the best prices and products across multiple retailers, but all purchases are made directly from those retailers. We earn affiliate commissions on some purchases, which helps keep the Free tier free.'
+    answer: 'No. IronScout is a search and comparison tool only. All purchases happen directly with retailers. We may earn affiliate commissions on some purchases, which helps keep the Free tier free.'
   },
 ]
 
@@ -56,7 +56,7 @@ export function PricingFAQ() {
       <h2 className="text-2xl font-bold text-center mb-8">
         Frequently Asked Questions
       </h2>
-      
+
       <Accordion type="single" collapsible className="w-full">
         {faqs.map((faq, index) => (
           <AccordionItem key={index} value={`item-${index}`}>

@@ -87,6 +87,10 @@ jspm_packages/
 *.db
 *.sqlite
 
+# Database backups (may contain secrets)
+backups/
+*.sql
+
 # IDE
 .vscode/
 .idea/

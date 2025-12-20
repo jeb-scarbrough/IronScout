@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import { TIER_CONFIG, getMaxSearchResults, hasPriceHistoryAccess } from '../config/tiers'
+import { TIER_CONFIG, getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays } from '../config/tiers'
 
 const router: any = Router()
 
@@ -439,7 +439,10 @@ router.get('/:id/history', async (req: Request, res: Response) => {
       })
     }
 
-    const daysNum = parseInt(days as string)
+    // Enforce tier-based day limit
+    const maxDays = getPriceHistoryDays(userTier)
+    const requestedDays = parseInt(days as string)
+    const daysNum = Math.min(requestedDays, maxDays)
     const startDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
 
     // Build where clause
@@ -503,15 +506,27 @@ router.get('/:id/history', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Product not found' })
     }
 
+    const isLimited = requestedDays > maxDays
+
     res.json({
       product,
       history,
       summary: {
         days: daysNum,
+        requestedDays,
+        maxDays,
         dataPoints: prices.length,
         lowestPrice: history.length > 0 ? Math.min(...history.map((h: any) => h.minPrice)) : null,
         highestPrice: history.length > 0 ? Math.max(...history.map((h: any) => h.maxPrice)) : null,
         currentPrice: history.length > 0 ? history[history.length - 1].avgPrice : null
+      },
+      _meta: {
+        tier: userTier,
+        historyLimited: isLimited,
+        ...(isLimited && {
+          upgradeMessage: `Upgrade to Premium for up to 365 days of price history`,
+          upgradeUrl: '/pricing'
+        })
       }
     })
   } catch (error) {
