@@ -83,11 +83,23 @@ export function SubscriptionSection({
   }
 
   // Quick action: Extend by 1 year
+  // IMPORTANT: Extends from current expiry date (if in future) or from today (if expired)
+  // This prevents accidental "stacking" and handles grace period correctly
   async function handleExtendOneYear() {
+    // Prevent double-click
+    if (isSaving) return;
+
     setIsSaving(true);
     setMessage(null);
 
-    const newExpiry = new Date();
+    // Determine base date for extension
+    // If subscription is still valid (expires in future), extend from that date
+    // If expired, extend from today
+    const now = new Date();
+    const currentExpiry = subscriptionExpiresAt ? new Date(subscriptionExpiresAt) : null;
+    const baseDate = currentExpiry && currentExpiry > now ? currentExpiry : now;
+
+    const newExpiry = new Date(baseDate);
     newExpiry.setFullYear(newExpiry.getFullYear() + 1);
 
     try {
@@ -98,7 +110,13 @@ export function SubscriptionSection({
       });
 
       if (result.success) {
-        setMessage({ type: 'success', text: 'Extended subscription by 1 year.' });
+        const extendedFrom = currentExpiry && currentExpiry > now
+          ? 'current expiry'
+          : 'today';
+        setMessage({
+          type: 'success',
+          text: `Extended subscription by 1 year from ${extendedFrom}. New expiry: ${newExpiry.toLocaleDateString()}.`
+        });
         setExpiresAt(newExpiry.toISOString().split('T')[0]);
         setStatus('ACTIVE');
       } else {
