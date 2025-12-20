@@ -81,25 +81,39 @@ function removeOutliers(values: number[]): number[] {
 // ============================================================================
 
 async function collectDealerPrices(canonicalSkuId: string): Promise<PriceDataPoint[]> {
-  // Get recent pricing snapshots (last 7 days)
+  // Get recent pricing snapshots (last 7 days) from active dealers only
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  
+
+  // First, get dealer IDs with active subscriptions
+  const activeDealers = await prisma.dealer.findMany({
+    where: {
+      subscriptionStatus: { in: ['ACTIVE', 'EXPIRED'] }, // EXPIRED still in grace period
+    },
+    select: { id: true },
+  })
+  const activeDealerIds = activeDealers.map(d => d.id)
+
+  // PricingSnapshot doesn't have a dealer relation, so filter by dealerId list
   const snapshots = await prisma.pricingSnapshot.findMany({
     where: {
       canonicalSkuId,
       createdAt: { gte: sevenDaysAgo },
       inStock: true,
+      dealerId: { in: activeDealerIds },
     },
     orderBy: { createdAt: 'desc' },
   })
-  
-  // Also get current prices from active dealer SKUs
+
+  // DealerSku has a dealer relation, so we can use it directly
   const dealerSkus = await prisma.dealerSku.findMany({
     where: {
       canonicalSkuId,
       isActive: true,
       rawInStock: true,
+      dealer: {
+        subscriptionStatus: { in: ['ACTIVE', 'EXPIRED'] }, // EXPIRED still in grace period
+      },
     },
     select: {
       rawPrice: true,
@@ -301,12 +315,16 @@ async function processBenchmark(job: Job<DealerBenchmarkJobData>) {
         },
       })
       
-      // Capture pricing snapshot for history
+      // Capture pricing snapshot for history (only from active subscriptions)
       const dealerSkus = await prisma.dealerSku.findMany({
         where: {
           canonicalSkuId: skuId,
           isActive: true,
           rawInStock: true,
+          // Only create snapshots for dealers with active subscriptions
+          dealer: {
+            subscriptionStatus: { in: ['ACTIVE', 'EXPIRED'] }, // EXPIRED still in grace period
+          },
         },
         select: {
           dealerId: true,

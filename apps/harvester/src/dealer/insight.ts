@@ -363,8 +363,25 @@ function truncate(str: string, maxLength: number): string {
 
 async function processInsightGeneration(job: Job<DealerInsightJobData>) {
   const { dealerId, dealerSkuIds } = job.data
-  
+
   console.log(`[Insight] Generating insights for dealer ${dealerId}`)
+
+  // Check dealer subscription status before generating insights
+  const dealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: { subscriptionStatus: true },
+  })
+
+  if (!dealer) {
+    console.log(`[Insight] Dealer ${dealerId} not found, skipping`)
+    return { skipped: true, reason: 'dealer_not_found' }
+  }
+
+  // Only generate insights for ACTIVE or EXPIRED (grace period) subscriptions
+  if (dealer.subscriptionStatus !== 'ACTIVE' && dealer.subscriptionStatus !== 'EXPIRED') {
+    console.log(`[Insight] Dealer ${dealerId} subscription ${dealer.subscriptionStatus}, skipping insights`)
+    return { skipped: true, reason: 'subscription_inactive', status: dealer.subscriptionStatus }
+  }
   
   // Get dealer SKUs to analyze
   let skus
