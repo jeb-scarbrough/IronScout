@@ -215,15 +215,18 @@ export async function aiSearch(
   
   // 10. Format products (with Premium data if applicable)
   const formattedProducts = rankedProducts.map(p => formatProduct(p, isPremium))
-  
+
   // 11. Build facets (with Premium facets if applicable)
   const facets = await buildFacets(where, isPremium)
-  
+
   const processingTimeMs = Date.now() - startTime
-  
+
+  // 12. Strip premium explanation fields for FREE users
+  const sanitizedIntent = stripPremiumExplanations(intent, isPremium)
+
   return {
     products: formattedProducts,
-    intent,
+    intent: sanitizedIntent,
     facets,
     pagination: {
       page,
@@ -792,6 +795,35 @@ function reRankProducts(products: any[], intent: SearchIntent): any[] {
     
     return { ...product, _relevanceScore: score }
   }).sort((a, b) => b._relevanceScore - a._relevanceScore)
+}
+
+/**
+ * Strip premium explanation fields from intent for FREE users.
+ * Premium intent contains AI-generated explanations and reasoning
+ * that should only be shown to Premium subscribers.
+ */
+function stripPremiumExplanations(intent: SearchIntent, isPremium: boolean): SearchIntent {
+  if (isPremium) {
+    // Premium users get the full intent with explanations
+    return intent
+  }
+
+  // FREE users: strip explanation and reasoning from premiumIntent
+  if (!intent.premiumIntent) {
+    return intent
+  }
+
+  const { explanation, reasoning, ...restPremiumIntent } = intent.premiumIntent
+
+  return {
+    ...intent,
+    premiumIntent: {
+      ...restPremiumIntent,
+      // Remove explanation and reasoning for FREE users
+      explanation: undefined as any,
+      reasoning: undefined,
+    },
+  }
 }
 
 /**
