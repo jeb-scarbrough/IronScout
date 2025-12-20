@@ -5,6 +5,47 @@ import { prisma } from '@ironscout/db'
 
 const router: any = Router()
 
+// System user ID for Stripe webhook-initiated changes
+const STRIPE_SYSTEM_USER = 'STRIPE_WEBHOOK'
+
+/**
+ * Log a subscription change from Stripe webhook to admin audit log.
+ * Uses STRIPE_WEBHOOK as adminUserId to distinguish from manual admin actions.
+ */
+async function logStripeSubscriptionChange(
+  dealerId: string,
+  action: string,
+  oldValue: Record<string, unknown>,
+  newValue: Record<string, unknown>,
+  stripeEventId?: string
+): Promise<void> {
+  try {
+    await prisma.adminAuditLog.create({
+      data: {
+        adminUserId: STRIPE_SYSTEM_USER,
+        dealerId,
+        action,
+        resource: 'Dealer',
+        resourceId: dealerId,
+        oldValue: oldValue ? JSON.parse(JSON.stringify(oldValue)) : null,
+        newValue: JSON.parse(JSON.stringify({ ...newValue, stripeEventId })),
+      },
+    })
+    log('DEBUG', 'Subscription audit log created', {
+      action: 'audit_log_created',
+      dealerId,
+      auditAction: action
+    })
+  } catch (error) {
+    log('ERROR', 'Failed to create subscription audit log', {
+      action: 'audit_log_error',
+      dealerId,
+      auditAction: action,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+}
+
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2023-08-16' })
   : null
@@ -728,6 +769,19 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
     customerId
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      subscriptionExpiresAt: true,
+      stripeSubscriptionId: true,
+      stripeCustomerId: true,
+      paymentMethod: true,
+      autoRenew: true,
+    },
+  })
+
   // Get subscription details
   const subscription = await stripe!.subscriptions.retrieve(subscriptionId)
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
@@ -743,6 +797,21 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
       autoRenew: true,
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_CHECKOUT_COMPLETED',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'ACTIVE',
+      subscriptionExpiresAt: currentPeriodEnd.toISOString(),
+      stripeSubscriptionId: subscriptionId,
+      stripeCustomerId: customerId,
+      paymentMethod: 'STRIPE',
+      autoRenew: true,
+    }
+  )
 
   log('INFO', 'Dealer subscription activated', {
     action: 'dealer_checkout_completed_success',
@@ -776,6 +845,15 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
     amount
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      subscriptionExpiresAt: true,
+    },
+  })
+
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
 
   await prisma.dealer.update({
@@ -785,6 +863,19 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
       subscriptionExpiresAt: currentPeriodEnd,
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_INVOICE_PAID',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'ACTIVE',
+      subscriptionExpiresAt: currentPeriodEnd.toISOString(),
+      invoiceId,
+      amountPaid: amount,
+    }
+  )
 
   log('INFO', 'Dealer subscription renewed', {
     action: 'dealer_invoice_paid_success',
@@ -818,6 +909,15 @@ async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: 
     attemptCount
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      subscriptionExpiresAt: true,
+    },
+  })
+
   // Set to EXPIRED to trigger grace period
   await prisma.dealer.update({
     where: { id: dealerId },
@@ -826,6 +926,19 @@ async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: 
       // Keep existing expiration date - grace period calculated from there
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_PAYMENT_FAILED',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'EXPIRED',
+      invoiceId,
+      attemptCount,
+      reason: 'Payment failed - entering grace period',
+    }
+  )
 
   log('WARN', 'Dealer subscription marked as EXPIRED', {
     action: 'dealer_payment_failed_processed',
@@ -856,6 +969,16 @@ async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription
     subscriptionId: subscription.id,
     stripeStatus,
     cancelAtPeriodEnd: subscription.cancel_at_period_end
+  })
+
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      subscriptionExpiresAt: true,
+      autoRenew: true,
+    },
   })
 
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
@@ -890,6 +1013,19 @@ async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription
     },
   })
 
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_SUBSCRIPTION_UPDATED',
+    oldDealer || {},
+    {
+      subscriptionStatus,
+      subscriptionExpiresAt: currentPeriodEnd.toISOString(),
+      autoRenew: !subscription.cancel_at_period_end,
+      stripeStatus,
+    }
+  )
+
   log('INFO', 'Dealer subscription updated', {
     action: 'dealer_subscription_updated_success',
     dealerId,
@@ -918,6 +1054,16 @@ async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription
     subscriptionId: subscription.id
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      stripeSubscriptionId: true,
+      autoRenew: true,
+    },
+  })
+
   await prisma.dealer.update({
     where: { id: dealerId },
     data: {
@@ -926,6 +1072,19 @@ async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription
       autoRenew: false,
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_SUBSCRIPTION_DELETED',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'CANCELLED',
+      stripeSubscriptionId: null,
+      autoRenew: false,
+      reason: 'Subscription cancelled in Stripe',
+    }
+  )
 
   log('WARN', 'Dealer subscription cancelled', {
     action: 'dealer_subscription_deleted_success',
@@ -952,12 +1111,31 @@ async function handleDealerSubscriptionPaused(subscription: Stripe.Subscription)
     subscriptionId: subscription.id
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+    },
+  })
+
   await prisma.dealer.update({
     where: { id: dealerId },
     data: {
       subscriptionStatus: 'SUSPENDED',
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_SUBSCRIPTION_PAUSED',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'SUSPENDED',
+      reason: 'Subscription paused in Stripe',
+    }
+  )
 
   log('WARN', 'Dealer subscription suspended', {
     action: 'dealer_subscription_paused_success',
@@ -984,6 +1162,15 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
     subscriptionId: subscription.id
   })
 
+  // Get current dealer state for audit log
+  const oldDealer = await prisma.dealer.findUnique({
+    where: { id: dealerId },
+    select: {
+      subscriptionStatus: true,
+      subscriptionExpiresAt: true,
+    },
+  })
+
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
 
   await prisma.dealer.update({
@@ -993,6 +1180,18 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
       subscriptionExpiresAt: currentPeriodEnd,
     },
   })
+
+  // Audit log
+  await logStripeSubscriptionChange(
+    dealerId,
+    'STRIPE_SUBSCRIPTION_RESUMED',
+    oldDealer || {},
+    {
+      subscriptionStatus: 'ACTIVE',
+      subscriptionExpiresAt: currentPeriodEnd.toISOString(),
+      reason: 'Subscription resumed in Stripe',
+    }
+  )
 
   log('INFO', 'Dealer subscription resumed', {
     action: 'dealer_subscription_resumed_success',
