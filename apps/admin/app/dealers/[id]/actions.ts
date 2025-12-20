@@ -831,6 +831,34 @@ export async function updatePaymentDetails(dealerId: string, data: UpdatePayment
       return { success: false, error: 'Stripe Subscription ID must start with "sub_"' };
     }
 
+    // Enforce payment method exclusivity
+    // PO dealers cannot have Stripe IDs, and Stripe dealers must have Stripe IDs
+    const effectiveMethod = data.paymentMethod ?? oldDealer.paymentMethod;
+    const effectiveCustomerId = data.stripeCustomerId !== undefined
+      ? data.stripeCustomerId
+      : oldDealer.stripeCustomerId;
+    const effectiveSubscriptionId = data.stripeSubscriptionId !== undefined
+      ? data.stripeSubscriptionId
+      : oldDealer.stripeSubscriptionId;
+
+    if (effectiveMethod === 'PURCHASE_ORDER') {
+      if (effectiveCustomerId || effectiveSubscriptionId) {
+        return {
+          success: false,
+          error: 'Purchase Order dealers cannot have Stripe IDs. Clear Stripe IDs first or choose Stripe payment method.',
+        };
+      }
+    }
+
+    if (effectiveMethod === 'STRIPE') {
+      if (!effectiveCustomerId) {
+        return {
+          success: false,
+          error: 'Stripe payment method requires a Stripe Customer ID.',
+        };
+      }
+    }
+
     // Update payment details
     const updatedDealer = await prisma.dealer.update({
       where: { id: dealerId },
