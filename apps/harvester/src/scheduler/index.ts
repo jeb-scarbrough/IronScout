@@ -86,15 +86,42 @@ export const schedulerWorker = new Worker<CrawlJobData>(
   { connection: redisConnection }
 )
 
-// Function to schedule crawls for all enabled sources
+/**
+ * Get the current hourly scheduling window
+ * Used for idempotency: only one crawl job per source per hour
+ */
+function getHourlyWindow(): string {
+  const now = new Date()
+  now.setMinutes(0, 0, 0)
+  return now.toISOString()
+}
+
+/**
+ * Schedule crawls for all enabled sources
+ * Idempotent: uses jobId based on (sourceId, hourlyWindow)
+ */
 export async function scheduleAllCrawls() {
+  const schedulingWindow = getHourlyWindow()
   const sources = await prisma.source.findMany({
     where: { enabled: true },
   })
 
-  console.log(`[Scheduler] Scheduling ${sources.length} enabled sources`)
+  console.log(`[Scheduler] Scheduling ${sources.length} enabled sources for window ${schedulingWindow}`)
+
+  let scheduledCount = 0
+  let skippedCount = 0
 
   for (const source of sources) {
+    // Idempotent job ID: only one crawl per source per hourly window
+    const jobId = `crawl-${source.id}-${schedulingWindow}`
+
+    // Check if job already exists (idempotency check)
+    const existingJob = await crawlQueue.getJob(jobId)
+    if (existingJob) {
+      skippedCount++
+      continue // Already scheduled in this window
+    }
+
     // Create execution record
     const execution = await prisma.execution.create({
       data: {
@@ -103,10 +130,12 @@ export async function scheduleAllCrawls() {
       },
     })
 
-    // Add job to queue
+    // Add job to queue with idempotent jobId
     await crawlQueue.add('crawl', {
       sourceId: source.id,
       executionId: execution.id,
+    }, {
+      jobId, // Idempotent job ID
     })
 
     // Update lastRunAt
@@ -115,8 +144,11 @@ export async function scheduleAllCrawls() {
       data: { lastRunAt: new Date() },
     })
 
+    scheduledCount++
     console.log(`[Scheduler] Queued crawl for source ${source.name}`)
   }
+
+  console.log(`[Scheduler] Crawl scheduling: ${scheduledCount} new, ${skippedCount} already scheduled`)
 }
 
 schedulerWorker.on('completed', (job) => {

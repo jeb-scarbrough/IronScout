@@ -7,16 +7,46 @@
  * - Insight generation (after benchmarks)
  *
  * Features:
+ * - Uses BullMQ repeatable jobs (safe for multiple replicas)
+ * - Idempotent job creation per (feedId, scheduledWindow)
  * - Respects feed.enabled flag
  * - Applies scheduling jitter to prevent thundering herd
  * - Skips failed feeds until manually re-enabled
  */
 
 import { prisma } from '@ironscout/db'
+import { Worker, Job, Queue } from 'bullmq'
+import { redisConnection } from '../config/redis'
 import {
   dealerFeedIngestQueue,
   dealerBenchmarkQueue,
+  QUEUE_NAMES,
 } from '../config/queues'
+
+// ============================================================================
+// SCHEDULING QUEUE (for repeatable scheduler jobs)
+// ============================================================================
+
+/**
+ * Get the current scheduling window (5-minute bucket)
+ * Used for idempotency: only one job per feed per window
+ */
+function getSchedulingWindow(): string {
+  const now = new Date()
+  // Round down to 5-minute boundary
+  const minutes = Math.floor(now.getMinutes() / 5) * 5
+  now.setMinutes(minutes, 0, 0)
+  return now.toISOString()
+}
+
+/**
+ * Get the current hourly window (for crawl scheduling)
+ */
+function getHourlyWindow(): string {
+  const now = new Date()
+  now.setMinutes(0, 0, 0)
+  return now.toISOString()
+}
 
 // ============================================================================
 // SCHEDULING UTILITIES
@@ -38,8 +68,11 @@ function getSchedulingJitter(maxJitterMinutes: number = 2): number {
  * Schedule feed ingestion for all active dealer feeds
  * - Only schedules enabled feeds
  * - Applies random jitter to prevent thundering herd
+ * - Idempotent: uses jobId based on (feedId, schedulingWindow)
  */
 export async function scheduleDealerFeeds(): Promise<number> {
+  const schedulingWindow = getSchedulingWindow()
+
   // Get all enabled feeds from active dealers that are not failed
   const feeds = await prisma.dealerFeed.findMany({
     where: {
@@ -57,6 +90,7 @@ export async function scheduleDealerFeeds(): Promise<number> {
   })
 
   let scheduledCount = 0
+  let skippedCount = 0
   const now = new Date()
 
   for (const feed of feeds) {
@@ -66,6 +100,16 @@ export async function scheduleDealerFeeds(): Promise<number> {
 
     if (minutesSinceRun < feed.scheduleMinutes) {
       continue // Not due yet
+    }
+
+    // Idempotent job ID: only one job per feed per scheduling window
+    const jobId = `feed-${feed.id}-${schedulingWindow}`
+
+    // Check if job already exists (idempotency check)
+    const existingJob = await dealerFeedIngestQueue.getJob(jobId)
+    if (existingJob) {
+      skippedCount++
+      continue // Already scheduled in this window
     }
 
     // Update lastRunAt to prevent duplicate scheduling
@@ -86,7 +130,7 @@ export async function scheduleDealerFeeds(): Promise<number> {
     // Apply random jitter (0-2 minutes) to prevent thundering herd
     const jitterMs = getSchedulingJitter(2)
 
-    // Queue the job with jitter delay
+    // Queue the job with idempotent jobId
     await dealerFeedIngestQueue.add(
       'ingest',
       {
@@ -102,7 +146,7 @@ export async function scheduleDealerFeeds(): Promise<number> {
       {
         attempts: 3,
         backoff: { type: 'exponential', delay: 30000 },
-        jobId: `feed-${feed.id}-${now.getTime()}`,
+        jobId, // Idempotent job ID
         delay: jitterMs, // Apply jitter
       }
     )
@@ -110,8 +154,8 @@ export async function scheduleDealerFeeds(): Promise<number> {
     scheduledCount++
   }
 
-  if (scheduledCount > 0) {
-    console.log(`[Dealer Scheduler] Scheduled ${scheduledCount} feed ingestion jobs`)
+  if (scheduledCount > 0 || skippedCount > 0) {
+    console.log(`[Dealer Scheduler] Feed scheduling: ${scheduledCount} new, ${skippedCount} already scheduled`)
   }
 
   return scheduledCount
@@ -232,20 +276,43 @@ export async function setFeedEnabled(feedId: string, enabled: boolean): Promise<
 // ============================================================================
 
 /**
- * Schedule benchmark recalculation for all canonical SKUs
+ * Get the current 2-hour window (for benchmark scheduling)
  */
-export async function scheduleBenchmarkRecalc(fullRecalc: boolean = false): Promise<void> {
+function getBenchmarkWindow(): string {
+  const now = new Date()
+  // Round down to 2-hour boundary
+  const hours = Math.floor(now.getHours() / 2) * 2
+  now.setHours(hours, 0, 0, 0)
+  return now.toISOString()
+}
+
+/**
+ * Schedule benchmark recalculation for all canonical SKUs
+ * Idempotent: only one benchmark job per 2-hour window
+ */
+export async function scheduleBenchmarkRecalc(fullRecalc: boolean = false): Promise<boolean> {
+  const benchmarkWindow = getBenchmarkWindow()
+  const jobId = `benchmark-${fullRecalc ? 'full' : 'incremental'}-${benchmarkWindow}`
+
+  // Check if job already exists (idempotency check)
+  const existingJob = await dealerBenchmarkQueue.getJob(jobId)
+  if (existingJob) {
+    console.log(`[Dealer Scheduler] Benchmark already scheduled for window ${benchmarkWindow}`)
+    return false
+  }
+
   await dealerBenchmarkQueue.add(
     'recalc',
     { fullRecalc },
     {
       attempts: 3,
       backoff: { type: 'exponential', delay: 30000 },
-      jobId: `benchmark-${fullRecalc ? 'full' : 'incremental'}-${Date.now()}`,
+      jobId,
     }
   )
-  
+
   console.log(`[Dealer Scheduler] Scheduled ${fullRecalc ? 'full' : 'incremental'} benchmark recalculation`)
+  return true
 }
 
 // ============================================================================
@@ -302,43 +369,100 @@ async function withRetry<T>(
 }
 
 // ============================================================================
-// SCHEDULED RUNNER
+// BULLMQ REPEATABLE SCHEDULER
 // ============================================================================
 
-let feedSchedulerInterval: NodeJS.Timeout | null = null
-let benchmarkSchedulerInterval: NodeJS.Timeout | null = null
+// Scheduler queue for repeatable jobs
+const DEALER_SCHEDULER_QUEUE = 'dealer-scheduler'
+
+export interface DealerSchedulerJobData {
+  type: 'feeds' | 'benchmarks'
+}
+
+// Create the scheduler queue
+export const dealerSchedulerQueue = new Queue<DealerSchedulerJobData>(
+  DEALER_SCHEDULER_QUEUE,
+  { connection: redisConnection }
+)
+
+// Scheduler worker - processes repeatable scheduler jobs
+let schedulerWorker: Worker<DealerSchedulerJobData> | null = null
 
 /**
- * Start the dealer job scheduler
+ * Start the dealer job scheduler using BullMQ repeatable jobs
+ * Safe for multiple replicas - BullMQ ensures only one instance processes each job
  */
-export function startDealerScheduler(): void {
-  console.log('[Dealer Scheduler] Starting...')
+export async function startDealerScheduler(): Promise<void> {
+  console.log('[Dealer Scheduler] Starting with BullMQ repeatable jobs...')
 
-  // Schedule feed ingestion every 5 minutes (jobs will check individual feed schedules)
-  feedSchedulerInterval = setInterval(async () => {
-    try {
-      await withRetry(() => scheduleDealerFeeds(), {
-        label: 'Feed scheduling',
-        maxAttempts: 3,
-      })
-    } catch (error) {
-      console.error('[Dealer Scheduler] Feed scheduling error:', error)
+  // Create the worker to process scheduler jobs
+  schedulerWorker = new Worker<DealerSchedulerJobData>(
+    DEALER_SCHEDULER_QUEUE,
+    async (job: Job<DealerSchedulerJobData>) => {
+      const { type } = job.data
+
+      try {
+        if (type === 'feeds') {
+          await withRetry(() => scheduleDealerFeeds(), {
+            label: 'Feed scheduling',
+            maxAttempts: 3,
+          })
+        } else if (type === 'benchmarks') {
+          await withRetry(() => scheduleBenchmarkRecalc(false), {
+            label: 'Benchmark scheduling',
+            maxAttempts: 3,
+          })
+        }
+      } catch (error) {
+        console.error(`[Dealer Scheduler] ${type} scheduling error:`, error)
+        throw error // Let BullMQ handle retry
+      }
+    },
+    {
+      connection: redisConnection,
+      concurrency: 1, // Process one scheduler job at a time
     }
-  }, 5 * 60 * 1000) // 5 minutes
+  )
 
-  // Schedule benchmark recalculation every 2 hours
-  benchmarkSchedulerInterval = setInterval(async () => {
-    try {
-      await withRetry(() => scheduleBenchmarkRecalc(false), {
-        label: 'Benchmark scheduling',
-        maxAttempts: 3,
-      })
-    } catch (error) {
-      console.error('[Dealer Scheduler] Benchmark scheduling error:', error)
+  schedulerWorker.on('completed', (job) => {
+    console.log(`[Dealer Scheduler] ${job.data.type} job completed`)
+  })
+
+  schedulerWorker.on('failed', (job, err) => {
+    console.error(`[Dealer Scheduler] ${job?.data?.type} job failed:`, err.message)
+  })
+
+  // Remove any existing repeatable jobs before adding new ones
+  const existingRepeatableJobs = await dealerSchedulerQueue.getRepeatableJobs()
+  for (const job of existingRepeatableJobs) {
+    await dealerSchedulerQueue.removeRepeatableByKey(job.key)
+  }
+
+  // Add repeatable job for feed scheduling (every 5 minutes)
+  await dealerSchedulerQueue.add(
+    'schedule-feeds',
+    { type: 'feeds' },
+    {
+      repeat: {
+        every: 5 * 60 * 1000, // 5 minutes
+      },
+      jobId: 'repeatable-feeds', // Stable ID for deduplication
     }
-  }, 2 * 60 * 60 * 1000) // 2 hours
+  )
 
-  // Run initial scheduling with retry (connection may not be ready immediately)
+  // Add repeatable job for benchmark scheduling (every 2 hours)
+  await dealerSchedulerQueue.add(
+    'schedule-benchmarks',
+    { type: 'benchmarks' },
+    {
+      repeat: {
+        every: 2 * 60 * 60 * 1000, // 2 hours
+      },
+      jobId: 'repeatable-benchmarks', // Stable ID for deduplication
+    }
+  )
+
+  // Run initial scheduling after startup delay
   setTimeout(async () => {
     try {
       await withRetry(() => scheduleDealerFeeds(), {
@@ -356,22 +480,19 @@ export function startDealerScheduler(): void {
     }
   }, 10000) // 10 seconds after startup
 
-  console.log('[Dealer Scheduler] Started')
+  console.log('[Dealer Scheduler] Started with repeatable jobs')
+  console.log('  - Feed scheduling: every 5 minutes')
+  console.log('  - Benchmark scheduling: every 2 hours')
 }
 
 /**
  * Stop the dealer job scheduler
  */
-export function stopDealerScheduler(): void {
-  if (feedSchedulerInterval) {
-    clearInterval(feedSchedulerInterval)
-    feedSchedulerInterval = null
+export async function stopDealerScheduler(): Promise<void> {
+  if (schedulerWorker) {
+    await schedulerWorker.close()
+    schedulerWorker = null
   }
-  
-  if (benchmarkSchedulerInterval) {
-    clearInterval(benchmarkSchedulerInterval)
-    benchmarkSchedulerInterval = null
-  }
-  
+
   console.log('[Dealer Scheduler] Stopped')
 }

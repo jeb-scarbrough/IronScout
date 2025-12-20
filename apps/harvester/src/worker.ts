@@ -73,13 +73,13 @@ console.log('  - DealerInsight (insight generation)')
 console.log('---')
 
 // Warm up database connection before starting scheduler
-warmupDatabase().then((connected) => {
+warmupDatabase().then(async (connected) => {
   if (connected) {
     // Start dealer scheduler only after database is ready
-    startDealerScheduler()
+    await startDealerScheduler()
   } else {
     console.error('[Worker] Starting scheduler anyway, but expect database errors...')
-    startDealerScheduler()
+    await startDealerScheduler()
   }
 })
 
