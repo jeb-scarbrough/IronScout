@@ -79,7 +79,7 @@ export interface PremiumRankedProduct extends ProductForRanking {
     breakdown: {
       baseRelevance: number       // From basic search (0-40)
       performanceMatch: number    // From Premium fields (0-30)
-      bestValueScore: number      // Best Value contribution (0-20)
+      relativeValueScore: number  // Relative value contribution (0-20)
       safetyBonus: number         // Safety constraint bonus (0-10)
     }
     
@@ -181,7 +181,7 @@ function calculateProductRanking(
   const breakdown = {
     baseRelevance: 0,
     performanceMatch: 0,
-    bestValueScore: 0,
+    relativeValueScore: 0,
     safetyBonus: 0
   }
   
@@ -211,11 +211,11 @@ function calculateProductRanking(
   }
   
   // =============================================
-  // 3. Best Value Score (0-20 points)
+  // 3. Relative Value Score (0-20 points)
   // =============================================
   if (bestValue && bestValue.score > 0) {
-    // Convert 0-100 Best Value to 0-20 contribution
-    breakdown.bestValueScore = (bestValue.score / 100) * 20
+    // Convert 0-100 relative value to 0-20 contribution
+    breakdown.relativeValueScore = (bestValue.score / 100) * 20
   }
   
   // =============================================
@@ -229,9 +229,9 @@ function calculateProductRanking(
   // Calculate Final Score
   // =============================================
   const finalScore = Math.round(
-    breakdown.baseRelevance + 
-    breakdown.performanceMatch + 
-    breakdown.bestValueScore + 
+    breakdown.baseRelevance +
+    breakdown.performanceMatch +
+    breakdown.relativeValueScore +
     breakdown.safetyBonus
   )
   
@@ -464,7 +464,7 @@ function generateRankingExplanation(
   }
   
   // Add value context
-  if (breakdown.bestValueScore > 15) {
+  if (breakdown.relativeValueScore > 15) {
     parts.push('Strong value compared to similar ammunition.')
   }
   

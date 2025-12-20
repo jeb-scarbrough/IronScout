@@ -67,8 +67,8 @@ export interface BrandQuality {
  * Computed scores (cached, updated periodically)
  */
 export interface ComputedScores {
-  // Best Value Score (0-100) - Premium feature
-  bestValueScore?: number
+  // Relative Value Score (0-100) - Premium feature
+  relativeValueScore?: number
   bestValueFactors?: {
     priceVsCaliberAvg: number     // How price compares to caliber average
     shippingValue: number          // Shipping cost impact

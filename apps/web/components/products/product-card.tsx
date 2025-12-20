@@ -140,7 +140,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
                         </div>
                         <div className="flex justify-between">
                           <span>Value score:</span>
-                          <span>{Math.round(premium.premiumRanking.breakdown.bestValueScore)}</span>
+                          <span>{Math.round(premium.premiumRanking.breakdown.relativeValueScore)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Safety bonus:</span>

@@ -14,19 +14,19 @@ const VERDICT_CONFIG: Record<
   { label: string; className: string; tooltip: string }
 > = {
   BUY: {
-    label: 'BUY NOW',
+    label: 'FAVORABLE',
     className: 'bg-status-buy text-white',
-    tooltip: 'Historically strong price relative to last 90 days',
+    tooltip: 'Price is below recent average relative to last 90 days',
   },
   WAIT: {
-    label: 'WAIT',
+    label: 'ELEVATED',
     className: 'bg-status-wait text-white',
-    tooltip: 'Prices trending higher - consider waiting for a dip',
+    tooltip: 'Price is above recent average',
   },
   STABLE: {
-    label: 'STABLE',
+    label: 'TYPICAL',
     className: 'bg-status-stable text-white',
-    tooltip: 'Prices are consistent with recent averages',
+    tooltip: 'Price is consistent with recent averages',
   },
 }
 
@@ -37,10 +37,10 @@ const SIZE_CLASSES = {
 }
 
 /**
- * VerdictChip - Trading terminal-style buy/wait indicator
+ * VerdictChip - Trading terminal-style price status indicator
  *
- * Displays market verdict as a colored chip with optional tooltip.
- * Color-coded: Green (BUY NOW), Amber (WAIT), Gray (STABLE)
+ * Displays price context as a colored chip with optional tooltip.
+ * Color-coded: Green (FAVORABLE), Amber (ELEVATED), Gray (TYPICAL)
  */
 export function VerdictChip({
   verdict,

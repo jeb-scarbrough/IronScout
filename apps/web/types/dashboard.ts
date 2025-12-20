@@ -35,8 +35,8 @@ export interface MarketPulseItem {
   trend: Trend
   /** Percentage change over period */
   trendPercent: number
-  /** Buy/Wait score 0-100 (Premium only) */
-  buyWaitScore?: number
+  /** Price timing signal 0-100 (Premium only) */
+  priceTimingSignal?: number
   /** Calculated verdict based on score or trend */
   verdict: Verdict
 }
@@ -48,7 +48,7 @@ export interface MarketPulseResponse {
     tier: UserTier
     calibersShown: number
     calibersLimit: number
-    hasBuyWaitScore: boolean
+    hasPriceTimingSignal: boolean
   }
 }
 
@@ -84,8 +84,8 @@ export interface DealItem {
   inStock: boolean
   /** Whether user has this product in watchlist */
   isWatched: boolean
-  /** Composite value score 0-100 (Premium only) */
-  bestValueScore?: number
+  /** Relative value score 0-100 (Premium only) */
+  relativeValueScore?: number
   /** Why this deal was recommended (Premium only) */
   explanation?: string
 }
@@ -137,7 +137,6 @@ export interface SavingsResponse {
   savings: SavingsData
   _meta: {
     tier: UserTier
-    hasVerifiedSavings: boolean
   }
 }
 

@@ -31,7 +31,7 @@ export function DealCard({
 
   // Determine deal tag based on score or position
   const getDealLabel = (): DealLabel | null => {
-    if (deal.bestValueScore && deal.bestValueScore >= 85) return 'HOT_DEAL'
+    if (deal.relativeValueScore && deal.relativeValueScore >= 85) return 'HOT_DEAL'
     if (deal.pricePerRound && deal.product.roundCount && deal.product.roundCount >= 500)
       return 'BULK_VALUE'
     // Could also detect NEW_LOW from price history
@@ -99,11 +99,11 @@ export function DealCard({
             )}
           </div>
 
-          {/* Best value score badge (Premium) */}
-          {isPremium && deal.bestValueScore && (
+          {/* Relative value score badge (Premium) */}
+          {isPremium && deal.relativeValueScore && (
             <div className="text-right">
               <div className="text-sm font-semibold text-primary">
-                {deal.bestValueScore}
+                {deal.relativeValueScore}
               </div>
               <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
                 Value Score

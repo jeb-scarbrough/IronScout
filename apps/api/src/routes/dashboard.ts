@@ -32,7 +32,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
 
     const userTier = await getUserTier(req)
     const maxCalibers = getMaxMarketPulseCalibers(userTier)
-    const showBuyWaitScore = hasFeature(userTier, 'buyWaitScore')
+    const showPriceTimingSignal = hasFeature(userTier, 'priceTimingSignal')
 
     // Get user's calibers from alerts and watchlist
     const [alerts, watchlistItems] = await Promise.all([
@@ -85,7 +85,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
             currentAvg: null,
             trend: 'STABLE' as const,
             trendPercent: 0,
-            buyWaitScore: showBuyWaitScore ? null : undefined,
+            priceTimingSignal: showPriceTimingSignal ? null : undefined,
             verdict: 'STABLE' as const
           }
         }
@@ -110,7 +110,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
 
         let trend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE'
         let trendPercent = 0
-        let buyWaitScore: number | null = null
+        let priceTimingSignal: number | null = null
 
         if (historicalPrices.length > 0) {
           const historicalAvg =
@@ -125,20 +125,20 @@ router.get('/pulse', async (req: Request, res: Response) => {
             trend = 'UP'
           }
 
-          // Calculate Buy/Wait score (Premium only)
-          if (showBuyWaitScore) {
-            // Score: 100 = best time to buy, 0 = wait
+          // Calculate price timing signal (Premium only)
+          if (showPriceTimingSignal) {
+            // Score: 100 = favorable pricing, 0 = unfavorable
             // Based on how current price compares to historical
             const ratio = currentAvg / historicalAvg
-            buyWaitScore = Math.max(0, Math.min(100, Math.round((1.5 - ratio) * 100)))
+            priceTimingSignal = Math.max(0, Math.min(100, Math.round((1.5 - ratio) * 100)))
           }
         }
 
         // Determine verdict
         let verdict: 'BUY' | 'WAIT' | 'STABLE' = 'STABLE'
-        if (buyWaitScore !== null) {
-          if (buyWaitScore >= 70) verdict = 'BUY'
-          else if (buyWaitScore <= 30) verdict = 'WAIT'
+        if (priceTimingSignal !== null) {
+          if (priceTimingSignal >= 70) verdict = 'BUY'
+          else if (priceTimingSignal <= 30) verdict = 'WAIT'
         } else {
           // Free tier: use simple trend
           if (trend === 'DOWN') verdict = 'BUY'
@@ -150,7 +150,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
           currentAvg: Math.round(currentAvg * 100) / 100,
           trend,
           trendPercent: Math.round(trendPercent * 10) / 10,
-          ...(showBuyWaitScore && { buyWaitScore }),
+          ...(showPriceTimingSignal && { priceTimingSignal }),
           verdict
         }
       })
@@ -162,7 +162,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
         tier: userTier,
         calibersShown: calibers.length,
         calibersLimit: maxCalibers,
-        hasBuyWaitScore: showBuyWaitScore
+        hasPriceTimingSignal: showPriceTimingSignal
       }
     })
   } catch (error) {
@@ -188,7 +188,7 @@ router.get('/deals', async (req: Request, res: Response) => {
 
     const userTier = await getUserTier(req)
     const maxDeals = getMaxDealsForYou(userTier)
-    const showBestValue = hasFeature(userTier, 'bestValueScore')
+    const showRelativeValue = hasFeature(userTier, 'relativeValueScore')
     const showStockIndicators = hasFeature(userTier, 'stockIndicators')
     const showExplanations = hasFeature(userTier, 'aiExplanations')
 
@@ -284,9 +284,9 @@ router.get('/deals', async (req: Request, res: Response) => {
         }
 
         // Premium features
-        if (showBestValue) {
-          // Simplified Best Value score (in production, use ai-search service)
-          deal.bestValueScore = Math.floor(Math.random() * 30) + 70 // Placeholder
+        if (showRelativeValue) {
+          // Simplified relative value score (in production, use ai-search service)
+          deal.relativeValueScore = Math.floor(Math.random() * 30) + 70 // Placeholder
         }
 
         if (showExplanations && deal.isWatched) {
@@ -392,8 +392,7 @@ router.get('/savings', async (req: Request, res: Response) => {
     res.json({
       savings: response,
       _meta: {
-        tier: userTier,
-        hasVerifiedSavings: showVerifiedSavings
+        tier: userTier
       }
     })
   } catch (error) {

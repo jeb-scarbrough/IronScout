@@ -65,7 +65,7 @@ export interface PremiumProductData {
     breakdown: {
       baseRelevance: number
       performanceMatch: number
-      bestValueScore: number
+      relativeValueScore: number
       safetyBonus: number
     }
     badges: PerformanceBadge[]

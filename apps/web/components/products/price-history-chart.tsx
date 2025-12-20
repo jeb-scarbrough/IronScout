@@ -322,17 +322,17 @@ export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
           </ResponsiveContainer>
         </div>
 
-        {/* Buy recommendation */}
+        {/* Price context */}
         {data.summary.currentPrice && data.summary.lowestPrice && (
           <div className="mt-4 p-3 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground">
               {data.summary.currentPrice <= data.summary.lowestPrice * 1.05 ? (
                 <span className="text-green-600 font-medium">
-                  ✓ Current price is near the {days}-day low — good time to buy!
+                  ✓ Current price is near the {days}-day low
                 </span>
               ) : data.summary.currentPrice >= data.summary.highestPrice! * 0.95 ? (
                 <span className="text-amber-600 font-medium">
-                  ⚠ Current price is near the {days}-day high — consider waiting
+                  ⚠ Current price is near the {days}-day high
                 </span>
               ) : (
                 <span>
