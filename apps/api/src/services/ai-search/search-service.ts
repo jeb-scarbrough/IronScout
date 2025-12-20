@@ -2,13 +2,14 @@ import { prisma, Prisma } from '@ironscout/db'
 import { parseSearchIntent, SearchIntent, ParseOptions } from './intent-parser'
 import { QUALITY_INDICATORS, CASE_MATERIAL_BY_PURPOSE } from './ammo-knowledge'
 import { generateEmbedding, buildProductText } from './embedding-service'
-import { 
-  applyPremiumRanking, 
-  applyFreeRanking, 
+import {
+  applyPremiumRanking,
+  applyFreeRanking,
   ProductForRanking,
-  PremiumRankedProduct 
+  PremiumRankedProduct
 } from './premium-ranking'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
+import { visibleDealerPriceWhere } from '../../config/tiers'
 
 /**
  * Explicit filters that can override AI intent
@@ -523,6 +524,7 @@ async function standardSearch(where: any, skip: number, take: number, includePre
         metadata: true,
       } : {}),
       prices: {
+        where: visibleDealerPriceWhere(),
         include: {
           retailer: true
         },
@@ -662,6 +664,7 @@ async function vectorEnhancedSearch(
         metadata: true,
       } : {}),
       prices: {
+        where: visibleDealerPriceWhere(),
         include: {
           retailer: true
         },
@@ -672,7 +675,7 @@ async function vectorEnhancedSearch(
       }
     }
   })
-  
+
   // Create similarity map and sort by similarity
   const similarityMap = new Map(productIds.map(p => [p.id, p.similarity]))
   

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import { TIER_CONFIG, hasReachedAlertLimit } from '../config/tiers'
+import { TIER_CONFIG, hasReachedAlertLimit, visibleDealerPriceWhere } from '../config/tiers'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 
 const router: any = Router()
@@ -138,6 +138,7 @@ router.get('/', async (req: Request, res: Response) => {
             caliber: true,
             brand: true,
             prices: {
+              where: visibleDealerPriceWhere(),
               take: 1,
               orderBy: [
                 { retailer: { tier: 'desc' } },

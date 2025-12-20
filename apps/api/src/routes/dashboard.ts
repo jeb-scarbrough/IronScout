@@ -8,7 +8,8 @@ import {
   hasFeature,
   hasPriceHistoryAccess,
   getPriceHistoryDays,
-  shapePriceHistory
+  shapePriceHistory,
+  visibleDealerPriceWhere
 } from '../config/tiers'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 
@@ -70,7 +71,8 @@ router.get('/pulse', async (req: Request, res: Response) => {
         const currentPrices = await prisma.price.findMany({
           where: {
             product: { caliber },
-            inStock: true
+            inStock: true,
+            ...visibleDealerPriceWhere(),
           },
           select: { price: true },
           orderBy: { createdAt: 'desc' },
@@ -99,7 +101,8 @@ router.get('/pulse', async (req: Request, res: Response) => {
         const historicalPrices = await prisma.price.findMany({
           where: {
             product: { caliber },
-            createdAt: { lt: sevenDaysAgo }
+            createdAt: { lt: sevenDaysAgo },
+            ...visibleDealerPriceWhere(),
           },
           select: { price: true },
           take: 50
@@ -218,7 +221,8 @@ router.get('/deals', async (req: Request, res: Response) => {
 
     // Build where clause - prioritize user's calibers if they have any
     const whereClause: any = {
-      inStock: true
+      inStock: true,
+      ...visibleDealerPriceWhere(),
     }
 
     if (calibers.length > 0) {
@@ -333,7 +337,10 @@ router.get('/savings', async (req: Request, res: Response) => {
         product: {
           include: {
             prices: {
-              where: { inStock: true },
+              where: {
+                inStock: true,
+                ...visibleDealerPriceWhere(),
+              },
               orderBy: { price: 'asc' },
               take: 1
             }
@@ -440,7 +447,8 @@ router.get('/price-history/:caliber', async (req: Request, res: Response) => {
     const prices = await prisma.price.findMany({
       where: {
         product: { caliber: decodeURIComponent(caliber) },
-        createdAt: { gte: startDate }
+        createdAt: { gte: startDate },
+        ...visibleDealerPriceWhere(),
       },
       select: {
         price: true,

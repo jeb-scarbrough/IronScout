@@ -5,7 +5,7 @@ import {
   getMaxWatchlistItems,
   hasReachedWatchlistLimit,
   hasFeature,
-  UserTier
+  visibleDealerPriceWhere
 } from '../config/tiers'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 
@@ -61,7 +61,10 @@ router.get('/', async (req: Request, res: Response) => {
             roundCount: true,
             grainWeight: true,
             prices: {
-              where: { inStock: true },
+              where: {
+                inStock: true,
+                ...visibleDealerPriceWhere(),
+              },
               orderBy: [{ retailer: { tier: 'desc' } }, { price: 'asc' }],
               take: 1,
               include: {
@@ -226,7 +229,11 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Get current lowest price for initialization
     const currentPrice = await prisma.price.findFirst({
-      where: { productId: data.productId, inStock: true },
+      where: {
+        productId: data.productId,
+        inStock: true,
+        ...visibleDealerPriceWhere(),
+      },
       orderBy: { price: 'asc' },
       select: { price: true }
     })

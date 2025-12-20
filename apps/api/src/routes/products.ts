@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory } from '../config/tiers'
+import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory, visibleDealerPriceWhere } from '../config/tiers'
 import { getUserTier } from '../middleware/auth'
 
 const router: any = Router()
@@ -131,6 +131,7 @@ router.get('/search', async (req: Request, res: Response) => {
       take: limitNum,
       include: {
         prices: {
+          where: visibleDealerPriceWhere(),
           include: {
             retailer: true
           },
@@ -259,6 +260,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       where: { id },
       include: {
         prices: {
+          where: visibleDealerPriceWhere(),
           include: {
             retailer: true
           },
@@ -319,7 +321,8 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
             createdAt: {
               // Get latest price from each retailer (within last 7 days)
               gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-            }
+            },
+            ...visibleDealerPriceWhere(),
           },
           include: {
             retailer: true
@@ -423,10 +426,11 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     const daysNum = Math.min(requestedDays, maxDays)
     const startDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
 
-    // Build where clause
+    // Build where clause with dealer visibility filter
     const where: any = {
       productId: id,
-      createdAt: { gte: startDate }
+      createdAt: { gte: startDate },
+      ...visibleDealerPriceWhere(),
     }
 
     if (retailerId) {

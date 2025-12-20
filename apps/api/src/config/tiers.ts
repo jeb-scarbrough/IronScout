@@ -1,3 +1,5 @@
+import { Prisma } from '@ironscout/db'
+
 /**
  * Tier-based feature configuration
  * Defines limits and features for each user tier
@@ -319,4 +321,63 @@ export function shapePriceHistory(
 
   // PREMIUM tier: full history (already trimmed to maxDays)
   return { history: trimmedHistory }
+}
+
+// ============================================================================
+// DEALER VISIBILITY FILTERS
+// ============================================================================
+
+/**
+ * Prisma where clause to filter prices by visible dealer subscription status.
+ *
+ * Dealers are visible to consumers if their subscriptionStatus is:
+ * - ACTIVE: Paying and in good standing
+ * - EXPIRED: Recently expired, within grace period (still shows but may be stale)
+ *
+ * Dealers are hidden if their subscriptionStatus is:
+ * - SUSPENDED: Blocked for policy violations
+ * - CANCELLED: No longer a dealer
+ *
+ * IMPORTANT: Apply this filter to ALL consumer-facing queries that include prices.
+ * This prevents blocked/cancelled dealers from appearing in search, alerts, watchlist, etc.
+ *
+ * Usage in Prisma queries:
+ * ```ts
+ * prices: {
+ *   where: visibleDealerPriceWhere(),
+ *   ...
+ * }
+ * ```
+ *
+ * Or for standalone price queries:
+ * ```ts
+ * prisma.price.findMany({
+ *   where: {
+ *     ...otherConditions,
+ *     ...visibleDealerPriceWhere(),
+ *   }
+ * })
+ * ```
+ */
+export function visibleDealerPriceWhere(): Prisma.PriceWhereInput {
+  return {
+    retailer: {
+      is: {
+        OR: [
+          // Retailer has no dealer (direct retailer, not a dealer-linked retailer)
+          { dealer: { is: null } },
+          // Retailer's dealer is in a visible status
+          {
+            dealer: {
+              is: {
+                subscriptionStatus: {
+                  in: ['ACTIVE', 'EXPIRED'],
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  }
 }
