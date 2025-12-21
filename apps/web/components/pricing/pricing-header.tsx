@@ -8,7 +8,7 @@ export function PricingHeader() {
       </h1>
 
       <p className="text-xl font-medium text-foreground mb-4">
-        More context. Faster signals. Fewer missed deals.
+        More context. Faster signals. Better information.
       </p>
 
       <p className="text-lg text-muted-foreground max-w-2xl mx-auto">

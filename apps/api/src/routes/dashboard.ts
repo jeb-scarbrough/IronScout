@@ -17,9 +17,9 @@ const router: any = Router()
 
 // ============================================================================
 // MARKET PULSE ENDPOINT
-// Returns Buy/Wait indicators for user's top calibers
-// Free: 2 calibers max, current price + 7-day arrow
-// Premium: All calibers, Buy/Wait score (1-100), charts
+// Returns price context indicators for user's top calibers
+// Free: 2 calibers max, current price + 7-day trend
+// Premium: All calibers, price timing signal (1-100), charts
 // ============================================================================
 
 router.get('/pulse', async (req: Request, res: Response) => {
@@ -86,7 +86,12 @@ router.get('/pulse', async (req: Request, res: Response) => {
             trend: 'STABLE' as const,
             trendPercent: 0,
             priceTimingSignal: showPriceTimingSignal ? null : undefined,
-            verdict: 'STABLE' as const
+            priceContext: 'INSUFFICIENT_DATA' as const,
+            contextMeta: {
+              windowDays: 7,
+              sampleCount: 0,
+              asOf: new Date().toISOString()
+            }
           }
         }
 
@@ -180,10 +185,10 @@ router.get('/pulse', async (req: Request, res: Response) => {
 })
 
 // ============================================================================
-// DEALS FOR YOU ENDPOINT
-// Returns personalized deal feed based on alerts/watchlist
-// Free: 5 deals max, basic ranking
-// Premium: 20 deals, flash deals, stock indicators, better ranking
+// PERSONALIZED FEED ENDPOINT
+// Returns personalized items based on alerts/watchlist
+// Free: 5 items max, basic ranking
+// Premium: 20 items, stock indicators, relative value context
 // ============================================================================
 
 router.get('/deals', async (req: Request, res: Response) => {
@@ -196,7 +201,7 @@ router.get('/deals', async (req: Request, res: Response) => {
 
     const userTier = await getUserTier(req)
     const maxDeals = getMaxDealsForYou(userTier)
-    const showRelativeValue = hasFeature(userTier, 'relativeValueScore')
+    const showPricePosition = hasFeature(userTier, 'pricePositionIndex')
     const showStockIndicators = hasFeature(userTier, 'stockIndicators')
     const showExplanations = hasFeature(userTier, 'aiExplanations')
 
@@ -291,10 +296,21 @@ router.get('/deals', async (req: Request, res: Response) => {
           isWatched: watchedProductIds.has(price.productId)
         }
 
-        // Premium features
-        if (showRelativeValue) {
-          // Simplified relative value score (in production, use ai-search service)
-          deal.relativeValueScore = Math.floor(Math.random() * 30) + 70 // Placeholder
+        // Premium features: Price Position Index
+        // Normalized price position vs. reference set (0-100 scale)
+        // 0 = at or above 90th percentile of reference prices
+        // 100 = at or below 10th percentile of reference prices
+        // This is a descriptive position, not a value judgment
+        if (showPricePosition) {
+          // TODO: Implement actual calculation using reference set
+          // Formula: 100 - ((currentPrice - minRef) / (maxRef - minRef) * 100)
+          // For now, return null to indicate not yet calculated
+          deal.pricePosition = {
+            index: null, // number 0-100 when calculated
+            basis: 'SKU_MARKET_7D' as const, // Reference: same SKU across retailers, last 7 days
+            referenceSampleSize: 0, // Number of price observations in reference set
+            calculatedAt: null // ISO timestamp when last calculated
+          }
         }
 
         if (showExplanations && deal.isWatched) {
@@ -321,10 +337,10 @@ router.get('/deals', async (req: Request, res: Response) => {
 })
 
 // ============================================================================
-// SAVINGS ENDPOINT
-// Returns savings tracking data
-// Free: Potential savings only
-// Premium: Verified savings with attribution
+// PRICE DELTA ENDPOINT
+// Returns price differences vs user's target prices (from alerts)
+// This is purely arithmetic comparison - not a claim of actual savings
+// Both tiers get the same data; no "verified savings" claims
 // ============================================================================
 
 router.get('/savings', async (req: Request, res: Response) => {
@@ -336,7 +352,6 @@ router.get('/savings', async (req: Request, res: Response) => {
     }
 
     const userTier = await getUserTier(req)
-    const showVerifiedSavings = hasFeature(userTier, 'verifiedSavings')
 
     // Get user's alerts with target prices
     const alerts = await prisma.alert.findMany({
@@ -357,48 +372,61 @@ router.get('/savings', async (req: Request, res: Response) => {
       }
     })
 
-    // Calculate potential savings
-    let potentialSavings = 0
-    const savingsBreakdown: any[] = []
+    // Calculate price deltas vs target prices
+    // This is purely arithmetic comparison - not a claim of actual savings
+    let totalDeltaAmount = 0
+    const deltaBreakdown: Array<{
+      productId: string
+      productName: string
+      baselinePrice: number      // User's target price
+      baselineType: 'USER_TARGET'
+      currentPrice: number
+      deltaAmount: number        // Positive = below baseline
+      deltaPercent: number
+    }> = []
 
     for (const alert of alerts) {
       if (alert.targetPrice && alert.product.prices.length > 0) {
         const currentPrice = parseFloat(alert.product.prices[0].price.toString())
-        const targetPrice = parseFloat(alert.targetPrice.toString())
+        const baselinePrice = parseFloat(alert.targetPrice.toString())
 
-        if (currentPrice < targetPrice) {
-          const savings = targetPrice - currentPrice
-          potentialSavings += savings
-          savingsBreakdown.push({
+        if (currentPrice < baselinePrice) {
+          const deltaAmount = baselinePrice - currentPrice
+          const deltaPercent = (deltaAmount / baselinePrice) * 100
+          totalDeltaAmount += deltaAmount
+          deltaBreakdown.push({
             productId: alert.productId,
             productName: alert.product.name,
-            targetPrice,
+            baselinePrice,
+            baselineType: 'USER_TARGET',
             currentPrice,
-            savings: Math.round(savings * 100) / 100
+            deltaAmount: Math.round(deltaAmount * 100) / 100,
+            deltaPercent: Math.round(deltaPercent * 10) / 10
           })
         }
       }
     }
 
-    const response: any = {
-      potentialSavings: Math.round(potentialSavings * 100) / 100,
-      breakdown: savingsBreakdown,
-      alertsWithSavings: savingsBreakdown.length,
-      totalAlerts: alerts.length
-    }
-
-    // Premium: Add verified savings (placeholder - needs purchase tracking)
-    if (showVerifiedSavings) {
-      response.verifiedSavings = {
-        thisMonth: 0,
-        allTime: 0,
-        purchaseCount: 0,
-        message: 'Purchase tracking coming soon'
-      }
-    }
-
     res.json({
-      savings: response,
+      priceDelta: {
+        totalDeltaAmount: Math.round(totalDeltaAmount * 100) / 100,
+        breakdown: deltaBreakdown,
+        alertsBelowTarget: deltaBreakdown.length,
+        totalAlerts: alerts.length
+      },
+      // Legacy field names for backwards compatibility during migration
+      savings: {
+        potentialSavings: Math.round(totalDeltaAmount * 100) / 100,
+        breakdown: deltaBreakdown.map(d => ({
+          productId: d.productId,
+          productName: d.productName,
+          targetPrice: d.baselinePrice,
+          currentPrice: d.currentPrice,
+          savings: d.deltaAmount
+        })),
+        alertsWithSavings: deltaBreakdown.length,
+        totalAlerts: alerts.length
+      },
       _meta: {
         tier: userTier
       }

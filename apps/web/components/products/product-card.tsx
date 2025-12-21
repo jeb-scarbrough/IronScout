@@ -9,11 +9,10 @@ import { formatPrice } from '@/lib/utils'
 import { ExternalLink, Bell, Crown, Package, Sparkles } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
-import { 
-  PerformanceBadges, 
-  BulletTypeBadge, 
-  PressureRatingBadge,
-  BestValueBadge 
+import {
+  PerformanceBadges,
+  BulletTypeBadge,
+  PressureRatingBadge
 } from '@/components/premium/performance-badges'
 import {
   Tooltip,
@@ -64,7 +63,6 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
 
   // Premium data shortcuts
   const premium = product.premium
-  const bestValue = premium?.premiumRanking?.bestValue
   const badges = premium?.premiumRanking?.badges || []
   const explanation = premium?.premiumRanking?.explanation
   const finalScore = premium?.premiumRanking?.finalScore
@@ -93,15 +91,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             </Badge>
           )}
           
-          {/* Best Value Badge */}
-          {bestValue && (
-            <BestValueBadge 
-              score={bestValue.score} 
-              grade={bestValue.grade} 
-              summary={bestValue.summary}
-              size="sm"
-            />
-          )}
+          {/* Note: BestValueBadge removed per ADR-006 - no value judgments */}
         </div>
 
         {/* Bottom-left: Relevance or Premium Score */}
@@ -139,8 +129,8 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
                           <span>{Math.round(premium.premiumRanking.breakdown.performanceMatch)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Value score:</span>
-                          <span>{Math.round(premium.premiumRanking.breakdown.relativeValueScore)}</span>
+                          <span>Price context:</span>
+                          <span>{Math.round(premium.premiumRanking.breakdown.priceContextBonus)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Safety bonus:</span>

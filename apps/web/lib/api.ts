@@ -63,18 +63,13 @@ export interface PremiumProductData {
   premiumRanking?: {
     finalScore: number
     breakdown: {
-      baseRelevance: number
-      performanceMatch: number
-      relativeValueScore: number
-      safetyBonus: number
+      baseRelevance: number      // From basic search (0-40)
+      performanceMatch: number   // From Premium fields (0-30)
+      priceContextBonus: number  // From price positioning (0-20), descriptive only
+      safetyBonus: number        // Safety constraint bonus (0-10)
     }
     badges: PerformanceBadge[]
     explanation?: string
-    bestValue?: {
-      score: number
-      grade: 'A' | 'B' | 'C' | 'D' | 'F'
-      summary: string
-    }
   }
 }
 

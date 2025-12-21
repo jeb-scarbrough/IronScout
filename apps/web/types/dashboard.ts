@@ -123,10 +123,30 @@ export type DealItem = ProductFeedItem
 export type DealsResponse = ProductFeedResponse
 
 // ============================================================================
-// Savings Tracker Types
+// Price Delta Types (formerly "Savings Tracker")
+// Purely arithmetic comparison vs user's target prices - not a claim of savings
 // ============================================================================
 
-/** Single savings breakdown item */
+/** Single price delta breakdown item */
+export interface PriceDeltaItem {
+  productId: string
+  productName: string
+  baselinePrice: number           // User's target price
+  baselineType: 'USER_TARGET'     // Enum for future extension (AVG_7D, MSRP, etc.)
+  currentPrice: number
+  deltaAmount: number             // Positive = below baseline
+  deltaPercent: number
+}
+
+/** Price delta data from API */
+export interface PriceDeltaData {
+  totalDeltaAmount: number
+  breakdown: PriceDeltaItem[]
+  alertsBelowTarget: number
+  totalAlerts: number
+}
+
+/** Legacy savings breakdown item (for backwards compatibility) */
 export interface SavingsBreakdownItem {
   productId: string
   productName: string
@@ -135,30 +155,25 @@ export interface SavingsBreakdownItem {
   savings: number
 }
 
-/** Verified savings data (Premium only) */
-export interface VerifiedSavings {
-  thisMonth: number
-  allTime: number
-  purchaseCount: number
-  message?: string
-}
-
-/** Savings data from API */
+/** Legacy savings data (for backwards compatibility during migration) */
 export interface SavingsData {
   potentialSavings: number
   breakdown: SavingsBreakdownItem[]
   alertsWithSavings: number
   totalAlerts: number
-  verifiedSavings?: VerifiedSavings
 }
 
-/** Savings API response */
-export interface SavingsResponse {
-  savings: SavingsData
+/** Price Delta API response */
+export interface PriceDeltaResponse {
+  priceDelta: PriceDeltaData
+  savings: SavingsData  // Legacy field for backwards compatibility
   _meta: {
     tier: UserTier
   }
 }
+
+/** @deprecated Use PriceDeltaResponse instead */
+export type SavingsResponse = PriceDeltaResponse
 
 // ============================================================================
 // Watchlist Types

@@ -52,7 +52,7 @@ export const TIER_CONFIG = {
 
       // AI Insights
       aiExplanations: false,            // "These loads are optimized for..."
-      relativeValueScore: false,        // Composite value scoring
+      pricePositionIndex: false,        // Normalized price position vs. reference set
       reliabilityInsights: false,       // Brand/product reliability data
 
       // Advanced Features
@@ -66,7 +66,6 @@ export const TIER_CONFIG = {
 
       // Dashboard
       priceTimingSignal: false,         // Premium only
-      verifiedSavings: false,           // Premium only (shows potential only)
       flashDeals: false,                // Premium only
       stockIndicators: false,           // Premium only
       collections: false,               // Premium only
@@ -109,7 +108,7 @@ export const TIER_CONFIG = {
 
       // AI Insights
       aiExplanations: true,             // "These loads are optimized for..."
-      relativeValueScore: true,         // Composite value scoring
+      pricePositionIndex: true,         // Normalized price position vs. reference set
       reliabilityInsights: true,        // Brand/product reliability data
 
       // Advanced Features
@@ -123,7 +122,6 @@ export const TIER_CONFIG = {
 
       // Dashboard
       priceTimingSignal: true,          // 1-100 score
-      verifiedSavings: true,            // With purchase attribution
       flashDeals: true,                 // Time-sensitive deals
       stockIndicators: true,            // "Only X left"
       collections: true,                // Organize watchlist into loadouts
