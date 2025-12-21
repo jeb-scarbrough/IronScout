@@ -30,6 +30,17 @@ import { dealerInsightWorker } from './dealer/insight'
 import { startDealerScheduler, stopDealerScheduler } from './dealer/scheduler'
 
 /**
+ * Check if scheduler is enabled via environment variable.
+ *
+ * IMPORTANT (ADR-001): Only ONE harvester instance should run schedulers.
+ * Set HARVESTER_SCHEDULER_ENABLED=true on exactly one instance in production.
+ * All other instances should omit this variable or set it to false.
+ *
+ * Running multiple schedulers causes duplicate ingestion and data corruption.
+ */
+const SCHEDULER_ENABLED = process.env.HARVESTER_SCHEDULER_ENABLED === 'true'
+
+/**
  * Warm up database connection with retries
  */
 async function warmupDatabase(maxAttempts = 5): Promise<boolean> {
@@ -57,6 +68,8 @@ async function warmupDatabase(maxAttempts = 5): Promise<boolean> {
 
 console.log('Starting IronScout.ai Harvester Workers...')
 console.log('---')
+console.log(`Scheduler: ${SCHEDULER_ENABLED ? 'ENABLED' : 'DISABLED (set HARVESTER_SCHEDULER_ENABLED=true to enable)'}`)
+console.log('---')
 console.log('Active Workers:')
 console.log('  - Scheduler (crawl jobs)')
 console.log('  - Fetcher (HTTP requests)')
@@ -72,14 +85,20 @@ console.log('  - DealerBenchmark (price benchmarks)')
 console.log('  - DealerInsight (insight generation)')
 console.log('---')
 
-// Warm up database connection before starting scheduler
+// Warm up database connection before starting scheduler (if enabled)
 warmupDatabase().then(async (connected) => {
+  if (!SCHEDULER_ENABLED) {
+    console.log('[Worker] Scheduler disabled - this instance will only process jobs, not create them')
+    return
+  }
+
   if (connected) {
     // Start dealer scheduler only after database is ready
+    console.log('[Worker] Starting dealer scheduler...')
     await startDealerScheduler()
   } else {
-    console.error('[Worker] Starting scheduler anyway, but expect database errors...')
-    await startDealerScheduler()
+    console.error('[Worker] Database not ready - scheduler will not start')
+    console.error('[Worker] Fix database connection and restart to enable scheduling')
   }
 })
 
@@ -98,9 +117,11 @@ const shutdown = async (signal: string) => {
   const shutdownStart = Date.now()
 
   try {
-    // 1. Stop scheduling new jobs
-    console.log('[Shutdown] Stopping scheduler...')
-    stopDealerScheduler()
+    // 1. Stop scheduling new jobs (if scheduler was enabled)
+    if (SCHEDULER_ENABLED) {
+      console.log('[Shutdown] Stopping scheduler...')
+      stopDealerScheduler()
+    }
 
     // 2. Close workers (waits for current jobs to complete)
     console.log('[Shutdown] Waiting for workers to finish current jobs...')

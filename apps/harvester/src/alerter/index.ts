@@ -10,6 +10,43 @@ const TIER_ALERT_DELAY_MS = {
   PREMIUM: 0, // Real-time
 }
 
+/**
+ * Check if a product has any visible (eligible) dealer prices.
+ *
+ * ADR-005: Dealer visibility must be checked at query time.
+ * Alerts must not fire from ineligible dealer inventory.
+ *
+ * A price is visible if:
+ * - It comes from a retailer with no linked dealer (direct retailer), OR
+ * - It comes from a dealer with subscriptionStatus in ['ACTIVE', 'EXPIRED']
+ *
+ * Dealers with SUSPENDED or CANCELLED status are hidden.
+ */
+async function hasVisibleDealerPrice(productId: string): Promise<boolean> {
+  const visiblePrice = await prisma.price.findFirst({
+    where: {
+      productId,
+      retailer: {
+        OR: [
+          // Direct retailer (no dealer linked)
+          { dealer: null },
+          // Dealer in visible status
+          {
+            dealer: {
+              subscriptionStatus: {
+                in: ['ACTIVE', 'EXPIRED'],
+              },
+            },
+          },
+        ],
+      },
+    },
+    select: { id: true },
+  })
+
+  return visiblePrice !== null
+}
+
 // Initialize Resend only if API key is provided
 let resend: Resend | null = null
 try {
@@ -38,6 +75,26 @@ export const alerterWorker = new Worker<AlertJobData>(
     console.log(`[Alerter] Evaluating alerts for product ${productId}`)
 
     try {
+      // ADR-005: Check dealer visibility before evaluating alerts
+      // Alerts must not fire from ineligible dealer inventory
+      const hasVisiblePrice = await hasVisibleDealerPrice(productId)
+
+      if (!hasVisiblePrice) {
+        console.log(`[Alerter] Product ${productId} has no visible dealer prices, skipping alerts`)
+
+        await prisma.executionLog.create({
+          data: {
+            executionId,
+            level: 'INFO',
+            event: 'ALERT_SKIPPED_NO_VISIBLE_DEALER',
+            message: `Skipped alert evaluation - no visible dealer prices for product ${productId}`,
+            metadata: { productId, oldPrice, newPrice, inStock },
+          },
+        })
+
+        return { success: true, triggeredCount: 0, delayedCount: 0, skipped: 'no_visible_dealer' }
+      }
+
       await prisma.executionLog.create({
         data: {
           executionId,
@@ -295,9 +352,18 @@ async function sendNotification(alert: any, reason: string) {
   console.log(`  User Tier: ${alert.user.tier}`)
 
   try {
-    // Get the latest price for the product
+    // Get the latest price for the product from a visible dealer
+    // ADR-005: Only show prices from eligible dealers
     const latestPrice = await prisma.price.findFirst({
-      where: { productId: alert.productId },
+      where: {
+        productId: alert.productId,
+        retailer: {
+          OR: [
+            { dealer: null },
+            { dealer: { subscriptionStatus: { in: ['ACTIVE', 'EXPIRED'] } } },
+          ],
+        },
+      },
       include: { retailer: true },
       orderBy: { createdAt: 'desc' }
     })
