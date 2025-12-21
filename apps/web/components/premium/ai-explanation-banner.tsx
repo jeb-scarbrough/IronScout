@@ -60,7 +60,7 @@ export function AIExplanationBanner({ intent, isPremium, processingTimeMs }: AIE
                 <Link href="/pricing" className="font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 underline underline-offset-2">
                   Upgrade to Premium
                 </Link>
-                {' '}for AI-powered recommendations based on your specific needs
+                {' '}for detailed context and product insights
               </span>
             </div>
           </div>
@@ -149,7 +149,7 @@ export function AIExplanationBanner({ intent, isPremium, processingTimeMs }: AIE
           {/* Preferred bullet types */}
           {premiumIntent.preferredBulletTypes && premiumIntent.preferredBulletTypes.length > 0 && (
             <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              <span className="opacity-70">Recommended types: </span>
+              <span className="opacity-70">Matching types: </span>
               <span className="font-medium">{premiumIntent.preferredBulletTypes.join(', ')}</span>
             </div>
           )}

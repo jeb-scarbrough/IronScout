@@ -1,18 +1,23 @@
 /**
  * Premium Ranking Service
- * 
+ *
  * Applies performance-aware ranking for Premium users based on:
  * - Intent-derived ranking boosts (from PremiumSearchIntent)
  * - Structured product fields (bulletType, pressureRating, isSubsonic, etc.)
- * - Best Value Scores
+ * - Price context signals (descriptive, not prescriptive)
  * - Purpose optimization
- * 
+ *
  * FREE users get basic relevance ranking (caliber/purpose/grain match)
  * PREMIUM users get deep ranking considering performance characteristics
+ *
+ * IMPORTANT (ADR-006): This service provides CONTEXT, not recommendations.
+ * - No grades, scores presented as verdicts
+ * - No "deal", "value", "buy" language to users
+ * - Price signals are descriptive only
  */
 
 import { PremiumSearchIntent, SafetyConstraint } from './intent-parser'
-import { calculateBestValueScore, BestValueScore } from './best-value-score'
+import { calculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
 import { 
   extractPerformanceBadges, 
   PerformanceBadge,
@@ -72,23 +77,23 @@ export interface ProductForRanking {
  */
 export interface PremiumRankedProduct extends ProductForRanking {
   premiumRanking: {
-    // Final composite score (0-100)
+    // Final composite score (0-100) - internal ranking only
     finalScore: number
-    
-    // Score breakdown
+
+    // Score breakdown - internal use
     breakdown: {
       baseRelevance: number       // From basic search (0-40)
       performanceMatch: number    // From Premium fields (0-30)
-      relativeValueScore: number  // Relative value contribution (0-20)
+      priceContextBonus: number   // From price positioning (0-20)
       safetyBonus: number         // Safety constraint bonus (0-10)
     }
-    
-    // Best Value data (if calculated)
-    bestValue?: BestValueScore
-    
+
+    // Price context signal (descriptive, not prescriptive)
+    priceSignal?: PriceSignalIndex
+
     // Performance badges to display
     badges: PerformanceBadge[]
-    
+
     // AI-generated ranking explanation
     explanation?: string
   }
@@ -104,8 +109,8 @@ export interface PremiumRankingOptions {
   // User's stated purpose (if any)
   userPurpose?: string
   
-  // Whether to calculate Best Value scores (expensive)
-  includeBestValue?: boolean
+  // Whether to calculate price signal index (expensive)
+  includePriceSignal?: boolean
   
   // Maximum products to process
   limit?: number
@@ -122,36 +127,36 @@ export async function applyPremiumRanking(
   products: ProductForRanking[],
   options: PremiumRankingOptions = {}
 ): Promise<PremiumRankedProduct[]> {
-  const { 
-    premiumIntent, 
+  const {
+    premiumIntent,
     userPurpose,
-    includeBestValue = true,
+    includePriceSignal = true,
     limit = 50
   } = options
-  
+
   // Process up to limit products
   const toProcess = products.slice(0, limit)
-  
-  // Calculate Best Value scores in parallel if requested
-  const bestValueMap = new Map<string, BestValueScore>()
-  if (includeBestValue) {
-    const scores = await Promise.all(
-      toProcess.map(p => calculateBestValueScore(p, userPurpose))
+
+  // Calculate price signal indices in parallel if requested
+  const priceSignalMap = new Map<string, PriceSignalIndex>()
+  if (includePriceSignal) {
+    const signals = await Promise.all(
+      toProcess.map(p => calculatePriceSignalIndex(p))
     )
     toProcess.forEach((product, index) => {
-      bestValueMap.set(product.id, scores[index])
+      priceSignalMap.set(product.id, signals[index])
     })
   }
-  
+
   // Apply Premium ranking to each product
   const rankedProducts = toProcess.map(product => {
-    const bestValue = bestValueMap.get(product.id)
+    const priceSignal = priceSignalMap.get(product.id)
     const ranking = calculateProductRanking(product, {
       premiumIntent,
       userPurpose,
-      bestValue
+      priceSignal
     })
-    
+
     return {
       ...product,
       premiumRanking: ranking
@@ -172,16 +177,16 @@ function calculateProductRanking(
   context: {
     premiumIntent?: PremiumSearchIntent
     userPurpose?: string
-    bestValue?: BestValueScore
+    priceSignal?: PriceSignalIndex
   }
 ): PremiumRankedProduct['premiumRanking'] {
-  const { premiumIntent, userPurpose, bestValue } = context
-  
+  const { premiumIntent, userPurpose, priceSignal } = context
+
   // Initialize breakdown
   const breakdown = {
     baseRelevance: 0,
     performanceMatch: 0,
-    relativeValueScore: 0,
+    priceContextBonus: 0,
     safetyBonus: 0
   }
   
@@ -211,11 +216,15 @@ function calculateProductRanking(
   }
   
   // =============================================
-  // 3. Relative Value Score (0-20 points)
+  // 3. Price Context Bonus (0-20 points)
   // =============================================
-  if (bestValue && bestValue.score > 0) {
-    // Convert 0-100 relative value to 0-20 contribution
-    breakdown.relativeValueScore = (bestValue.score / 100) * 20
+  // Use price signal to influence ranking (lower prices get bonus)
+  // This is internal ranking logic - NOT exposed as a recommendation
+  if (priceSignal && priceSignal.contextBand !== 'INSUFFICIENT_DATA') {
+    // Position in range: 0 = lowest observed, 1 = highest observed
+    // Invert so lower prices get higher bonus
+    const invertedPosition = 1 - priceSignal.positionInRange
+    breakdown.priceContextBonus = invertedPosition * 20
   }
   
   // =============================================
@@ -231,7 +240,7 @@ function calculateProductRanking(
   const finalScore = Math.round(
     breakdown.baseRelevance +
     breakdown.performanceMatch +
-    breakdown.relativeValueScore +
+    breakdown.priceContextBonus +
     breakdown.safetyBonus
   )
   
@@ -248,7 +257,7 @@ function calculateProductRanking(
   return {
     finalScore: Math.min(100, finalScore),
     breakdown,
-    bestValue,
+    priceSignal,
     badges,
     explanation
   }
@@ -441,15 +450,15 @@ function generateRankingExplanation(
     }
   }
   
-  // Add bullet type context
+  // Add bullet type context (ADR-006 compliant: descriptive, not endorsing)
   if (product.bulletType) {
     if (BULLET_TYPE_CATEGORIES.defensive.includes(product.bulletType as BulletType)) {
       if (product.bulletType === 'BJHP') {
-        parts.push('Bonded jacket ensures reliable expansion through barriers.')
+        parts.push('Bonded jacket construction for barrier performance.')
       } else if (product.bulletType === 'HST') {
-        parts.push('Federal HST is a proven defensive load.')
+        parts.push('Federal HST is commonly used for defensive applications.')
       } else if (product.bulletType === 'GDHP') {
-        parts.push('Gold Dot is trusted by law enforcement.')
+        parts.push('Gold Dot is widely used by law enforcement agencies.')
       }
     }
   }
@@ -463,9 +472,9 @@ function generateRankingExplanation(
     }
   }
   
-  // Add value context
-  if (breakdown.relativeValueScore > 15) {
-    parts.push('Strong value compared to similar ammunition.')
+  // Add price context (descriptive, not prescriptive)
+  if (breakdown.priceContextBonus > 15) {
+    parts.push('Priced below recent observations for similar ammunition.')
   }
   
   // Add safety context
@@ -473,12 +482,12 @@ function generateRankingExplanation(
     parts.push('Designed to minimize overpenetration risk.')
   }
   
-  // Default explanation if nothing specific
+  // Default explanation if nothing specific (ADR-006 compliant)
   if (parts.length === 0) {
     if (product.bulletType && BULLET_TYPE_CATEGORIES.training.includes(product.bulletType as BulletType)) {
-      parts.push('Reliable FMJ for training and practice.')
+      parts.push('Standard FMJ for training and practice.')
     } else {
-      parts.push('Good match for your search criteria.')
+      parts.push('Matches your search criteria.')
     }
   }
   
@@ -567,4 +576,4 @@ export function applyFreeRanking(
 }
 
 // Export types
-export type { BestValueScore }
+export type { PriceSignalIndex }

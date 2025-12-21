@@ -1,21 +1,20 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { VerdictChip } from '../atoms/verdict-chip'
+import { ContextChip } from '../atoms/context-chip'
 import { Sparkline, generateSparklineFromTrend } from '../atoms/sparkline'
 import { PriceDelta } from '../atoms/price-delta'
 import { Lock } from 'lucide-react'
 import type { PulseRowProps } from '@/types/dashboard'
-import { UPGRADE_COPY } from '@/types/dashboard'
 
 /**
- * PulseRow - Market status row for a caliber
+ * PulseRow - Market status row for a caliber (ADR-006 compliant)
  *
  * Trading terminal-style row showing:
  * - Caliber name
  * - Current avg price
  * - Sparkline trend chart
- * - Verdict chip (BUY/WAIT/STABLE)
+ * - Price context chip (descriptive, not prescriptive)
  * - Premium: Click for full chart
  */
 export function PulseRow({ pulse, isPremium = false, onClick }: PulseRowProps) {
@@ -65,9 +64,9 @@ export function PulseRow({ pulse, isPremium = false, onClick }: PulseRowProps) {
         <PriceDelta percent={pulse.trendPercent} size="sm" showArrow={false} />
       </div>
 
-      {/* Verdict chip */}
+      {/* Price context chip (ADR-006 compliant) */}
       <div className="flex-shrink-0">
-        <VerdictChip verdict={pulse.verdict} size="sm" showTooltip={isPremium} />
+        <ContextChip context={pulse.priceContext} size="sm" showTooltip={isPremium} />
       </div>
 
       {/* Premium indicator */}

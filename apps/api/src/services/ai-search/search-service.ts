@@ -75,7 +75,7 @@ export interface AISearchResult {
 export interface AISearchOptions {
   page?: number
   limit?: number
-  sortBy?: 'relevance' | 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'best_value'
+  sortBy?: 'relevance' | 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'price_context'
   useVectorSearch?: boolean
   explicitFilters?: ExplicitFilters
   userTier?: 'FREE' | 'PREMIUM'
@@ -125,7 +125,7 @@ export async function aiSearch(
   if (explicitFilters.isSubsonic !== undefined) premiumFeaturesUsed.push('subsonic filter')
   if (explicitFilters.shortBarrelOptimized) premiumFeaturesUsed.push('shortBarrel filter')
   if (explicitFilters.suppressorSafe) premiumFeaturesUsed.push('suppressorSafe filter')
-  if (sortBy === 'best_value') premiumFeaturesUsed.push('best_value sort')
+  if (sortBy === 'price_context') premiumFeaturesUsed.push('price_context sort')
   
   // 1. Parse the natural language query into structured intent
   const parseOptions: ParseOptions = { userTier }
@@ -152,7 +152,7 @@ export async function aiSearch(
   let vectorSearchUsed = false
   const hasExplicitFilters = Object.keys(explicitFilters).length > 0
   
-  if (useVectorSearch && (sortBy === 'relevance' || sortBy === 'best_value') && !hasExplicitFilters) {
+  if (useVectorSearch && (sortBy === 'relevance' || sortBy === 'price_context') && !hasExplicitFilters) {
     try {
       // Try vector-enhanced search (only when no explicit filters)
       products = await vectorEnhancedSearch(query, mergedIntent, explicitFilters, { skip, limit: limit * 2 }, isPremium)
@@ -172,26 +172,27 @@ export async function aiSearch(
   // 7. Apply tier-appropriate ranking
   let rankedProducts: any[]
   
-  if (isPremium && (sortBy === 'relevance' || sortBy === 'best_value')) {
-    // PREMIUM: Apply performance-aware ranking with Best Value
+  if (isPremium && (sortBy === 'relevance' || sortBy === 'price_context')) {
+    // PREMIUM: Apply performance-aware ranking with price context
     premiumFeaturesUsed.push('premium_ranking')
-    
+
     const premiumRanked = await applyPremiumRanking(products as ProductForRanking[], {
       premiumIntent: intent.premiumIntent,
       userPurpose: mergedIntent.purpose,
-      includeBestValue: sortBy === 'best_value' || sortBy === 'relevance',
+      includePriceSignal: sortBy === 'price_context' || sortBy === 'relevance',
       limit: limit * 2
     })
-    
-    // Sort by best_value score specifically if requested
-    if (sortBy === 'best_value') {
+
+    // Sort by price context (lower prices first) if requested
+    if (sortBy === 'price_context') {
       premiumRanked.sort((a, b) => {
-        const aValue = a.premiumRanking.bestValue?.score || 0
-        const bValue = b.premiumRanking.bestValue?.score || 0
-        return bValue - aValue
+        // Sort by position in range (lower = better price context)
+        const aPos = a.premiumRanking.priceSignal?.positionInRange ?? 0.5
+        const bPos = b.premiumRanking.priceSignal?.positionInRange ?? 0.5
+        return aPos - bPos
       })
     }
-    
+
     rankedProducts = premiumRanked
   } else if (!isPremium && sortBy === 'relevance' && mergedIntent.confidence > 0.5 && !vectorSearchUsed) {
     // FREE: Basic re-ranking
@@ -889,10 +890,12 @@ function formatProduct(product: any, isPremium: boolean): any {
         breakdown: product.premiumRanking.breakdown,
         badges: product.premiumRanking.badges,
         explanation: product.premiumRanking.explanation,
-        bestValue: product.premiumRanking.bestValue ? {
-          score: product.premiumRanking.bestValue.score,
-          grade: product.premiumRanking.bestValue.grade,
-          summary: product.premiumRanking.bestValue.summary
+        // Price signal: descriptive context only (ADR-006 compliant)
+        priceSignal: product.premiumRanking.priceSignal ? {
+          relativePricePct: product.premiumRanking.priceSignal.relativePricePct,
+          positionInRange: product.premiumRanking.priceSignal.positionInRange,
+          contextBand: product.premiumRanking.priceSignal.contextBand,
+          meta: product.premiumRanking.priceSignal.meta
         } : undefined
       }
     }

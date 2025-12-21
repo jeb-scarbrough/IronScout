@@ -36,7 +36,7 @@ const semanticSearchSchema = z.object({
   query: z.string().min(1).max(500),
   page: z.number().int().positive().default(1),
   limit: z.number().int().min(1).max(100).default(20),
-  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc', 'best_value']).default('relevance'),
+  sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc', 'price_context']).default('relevance'),
   // Explicit filters that override AI intent
   filters: z.object({
     // Basic filters (FREE + PREMIUM)
@@ -99,8 +99,8 @@ router.post('/semantic', async (req: Request, res: Response) => {
     // Apply tier-based limit
     const tierLimitedLimit = Math.min(limit, maxResults)
     
-    // Prevent FREE users from using best_value sort
-    const effectiveSortBy = (!isPremium && sortBy === 'best_value') ? 'relevance' : sortBy
+    // Prevent FREE users from using price_context sort
+    const effectiveSortBy = (!isPremium && sortBy === 'price_context') ? 'relevance' : sortBy
     
     const result = await aiSearch(query, { 
       page, 
@@ -127,9 +127,9 @@ router.post('/semantic', async (req: Request, res: Response) => {
     // Add Premium feature hints for FREE users
     if (!isPremium) {
       metaResponse.premiumFeatures = {
-        bestValueSort: 'Upgrade to Premium to sort by Best Value score',
+        priceContextSort: 'Upgrade to Premium to sort by price context',
         advancedFilters: 'Upgrade to Premium for bullet type, pressure rating, and performance filters',
-        performanceBadges: 'Upgrade to Premium to see performance badges and AI-powered recommendations'
+        performanceBadges: 'Upgrade to Premium to see performance badges and detailed explanations'
       }
     }
     

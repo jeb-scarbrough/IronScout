@@ -3,47 +3,46 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { VerdictChip } from '../atoms/verdict-chip'
+import { ContextChip } from '../atoms/context-chip'
 import { PriceDelta } from '../atoms/price-delta'
 import { ExternalLink, Sparkles } from 'lucide-react'
 import { useDealsForYou } from '@/hooks/use-deals-for-you'
 import { useMarketPulse } from '@/hooks/use-market-pulse'
 import { UPGRADE_COPY } from '@/types/dashboard'
-import type { DealItem, Verdict } from '@/types/dashboard'
+import type { ProductFeedItem, PriceContext } from '@/types/dashboard'
 
-interface TodaysBestMovesProps {
+interface TopMatchProps {
   isPremium?: boolean
 }
 
 /**
- * TodaysBestMoves - Hero section with top recommendation
+ * TopMatch - Hero section showing top personalized match (ADR-006 compliant)
  *
- * Trading terminal-style hero showing the single best
- * recommendation for the user right now.
+ * Trading terminal-style hero showing a product that matches
+ * the user's tracked calibers and preferences.
  *
- * Uses top deal + market pulse verdict to create
- * actionable guidance.
+ * Uses price context (descriptive) instead of verdicts (prescriptive).
  */
-export function TodaysBestMoves({ isPremium = false }: TodaysBestMovesProps) {
-  const { data: dealsData, loading: dealsLoading } = useDealsForYou()
+export function TopMatch({ isPremium = false }: TopMatchProps) {
+  const { data: itemsData, loading: itemsLoading } = useDealsForYou()
   const { data: pulseData, loading: pulseLoading } = useMarketPulse()
 
-  const loading = dealsLoading || pulseLoading
+  const loading = itemsLoading || pulseLoading
 
-  // Get top deal
-  const topDeal = dealsData?.deals?.[0]
+  // Get top item from personalized feed
+  const topItem = itemsData?.items?.[0]
 
-  // Find market pulse verdict for the top deal's caliber
-  const getVerdictForDeal = (deal: DealItem): Verdict => {
-    if (!pulseData?.pulse) return 'STABLE'
-    const caliber = deal.product.caliber
+  // Find market pulse context for the top item's caliber
+  const getPriceContextForItem = (item: ProductFeedItem): PriceContext => {
+    if (!pulseData?.pulse) return 'INSUFFICIENT_DATA'
+    const caliber = item.product.caliber
     const pulse = pulseData.pulse.find((p) => p.caliber === caliber)
-    return pulse?.verdict || 'STABLE'
+    return pulse?.priceContext || 'INSUFFICIENT_DATA'
   }
 
-  const verdict = topDeal ? getVerdictForDeal(topDeal) : 'STABLE'
-  const pulse = topDeal
-    ? pulseData?.pulse?.find((p) => p.caliber === topDeal.product.caliber)
+  const priceContext = topItem ? getPriceContextForItem(topItem) : 'INSUFFICIENT_DATA'
+  const pulse = topItem
+    ? pulseData?.pulse?.find((p) => p.caliber === topItem.product.caliber)
     : null
 
   if (loading) {
@@ -69,51 +68,51 @@ export function TodaysBestMoves({ isPremium = false }: TodaysBestMovesProps) {
     )
   }
 
-  if (!topDeal) {
+  if (!topItem) {
     return (
       <Card className="bg-gradient-to-br from-card to-card/80 border-border overflow-hidden">
         <CardContent className="p-6 md:p-8 text-center">
           <Sparkles className="h-8 w-8 text-primary mx-auto mb-3" />
-          <h2 className="text-lg font-semibold">No Recommendations Yet</h2>
+          <h2 className="text-lg font-semibold">No Matches Yet</h2>
           <p className="text-sm text-muted-foreground mt-2">
-            Set up alerts and track products to get personalized recommendations.
+            Set up alerts and track products to see personalized matches.
           </p>
         </CardContent>
       </Card>
     )
   }
 
-  const handleBuyClick = () => {
-    window.open(topDeal.url, '_blank', 'noopener,noreferrer')
+  const handleViewClick = () => {
+    window.open(topItem.url, '_blank', 'noopener,noreferrer')
   }
 
   return (
     <Card className="bg-gradient-to-br from-card to-card/80 border-border overflow-hidden">
       <CardContent className="p-6 md:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-          {/* Left side: Verdict + Product info */}
+          {/* Left side: Context + Product info */}
           <div className="flex-1 min-w-0 space-y-4">
-            {/* Verdict chip */}
-            <VerdictChip verdict={verdict} size="lg" />
+            {/* Price context chip */}
+            <ContextChip context={priceContext} size="lg" />
 
             {/* Product name */}
             <div>
               <h2 className="text-xl md:text-2xl font-bold text-foreground leading-tight">
-                {topDeal.product.name}
+                {topItem.product.name}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                {topDeal.product.caliber}
-                {topDeal.product.grainWeight && ` • ${topDeal.product.grainWeight}gr`}
+                {topItem.product.caliber}
+                {topItem.product.grainWeight && ` • ${topItem.product.grainWeight}gr`}
                 {' • '}
-                {topDeal.retailer.name}
+                {topItem.retailer.name}
               </p>
             </div>
 
             {/* Price info */}
             <div className="flex flex-wrap items-center gap-4">
-              {topDeal.pricePerRound !== null && (
+              {topItem.pricePerRound !== null && (
                 <div className="text-2xl md:text-3xl font-bold text-foreground">
-                  ${topDeal.pricePerRound.toFixed(3)}
+                  ${topItem.pricePerRound.toFixed(3)}
                   <span className="text-sm font-normal text-muted-foreground ml-1">
                     /rd
                   </span>
@@ -140,14 +139,14 @@ export function TodaysBestMoves({ isPremium = false }: TodaysBestMovesProps) {
           {/* Right side: CTA */}
           <div className="flex-shrink-0 lg:text-right">
             <Button
-              onClick={handleBuyClick}
+              onClick={handleViewClick}
               size="lg"
               className="w-full lg:w-auto bg-primary hover:bg-primary/90 text-primary-foreground px-8"
             >
-              Buy Now
+              View at Retailer
               <ExternalLink className="ml-2 h-4 w-4" />
             </Button>
-            {topDeal.inStock && (
+            {topItem.inStock && (
               <p className="mt-2 text-xs text-status-buy">In Stock</p>
             )}
           </div>
@@ -156,3 +155,6 @@ export function TodaysBestMoves({ isPremium = false }: TodaysBestMovesProps) {
     </Card>
   )
 }
+
+// Export with old name for backwards compatibility during migration
+export { TopMatch as TodaysBestMoves }

@@ -1,29 +1,29 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DealCard } from '../molecules/deal-card'
+import { ProductCard } from '../molecules/deal-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Zap, ChevronRight, Lock } from 'lucide-react'
+import { Search, ChevronRight, Lock } from 'lucide-react'
 import { useDealsForYou } from '@/hooks/use-deals-for-you'
 import { UPGRADE_COPY } from '@/types/dashboard'
 import Link from 'next/link'
 
-interface DealsForYouProps {
+interface PersonalizedFeedProps {
   isPremium?: boolean
   onAddToWatchlist?: (productId: string) => void
 }
 
 /**
- * DealsForYou - Personalized deals feed
+ * PersonalizedFeed - Personalized product feed (ADR-006 compliant)
  *
- * Trading terminal-style deal feed showing best deals
- * for user's tracked calibers.
+ * Trading terminal-style feed showing products matching
+ * user's tracked calibers.
  *
- * Free: 5 deals max, basic info
- * Premium: 20 deals, explanations, flash deals
+ * Free: 5 items max, basic info
+ * Premium: 20 items, context explanations
  */
-export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYouProps) {
+export function PersonalizedFeed({ isPremium = false, onAddToWatchlist }: PersonalizedFeedProps) {
   const { data, loading, error } = useDealsForYou()
 
   return (
@@ -31,8 +31,8 @@ export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYou
       {/* Section Header */}
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <Zap className="h-5 w-5 text-status-hot" />
-          Deals For You
+          <Search className="h-5 w-5 text-primary" />
+          For You
         </h2>
         <Link href="/dashboard/search">
           <Button variant="ghost" size="sm" className="text-xs h-7">
@@ -66,18 +66,18 @@ export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYou
       {error && (
         <Card className="bg-card border-border">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Failed to load deals. Please try again.
+            Failed to load products. Please try again.
           </CardContent>
         </Card>
       )}
 
-      {/* Deals grid */}
+      {/* Products grid */}
       {data && (
         <>
-          {data.deals.length === 0 ? (
+          {data.items.length === 0 ? (
             <Card className="bg-card border-border">
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                <p>No deals found for your tracked calibers.</p>
+                <p>No products found for your tracked calibers.</p>
                 <p className="mt-2">
                   <Link href="/dashboard/alerts" className="text-primary hover:underline">
                     Set up alerts
@@ -88,14 +88,14 @@ export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYou
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data.deals.map((deal) => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
+              {data.items.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  item={item}
                   isPremium={isPremium}
                   onWatchlistClick={
-                    onAddToWatchlist && !deal.isWatched
-                      ? () => onAddToWatchlist(deal.product.id)
+                    onAddToWatchlist && !item.isWatched
+                      ? () => onAddToWatchlist(item.product.id)
                       : undefined
                   }
                 />
@@ -104,19 +104,19 @@ export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYou
           )}
 
           {/* Free tier limit message */}
-          {!isPremium && data._meta.dealsLimit !== -1 && data.deals.length >= data._meta.dealsLimit && (
+          {!isPremium && data._meta.itemsLimit !== -1 && data.items.length >= data._meta.itemsLimit && (
             <div className="p-4 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-start gap-3">
                 <Lock className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div className="text-sm">
                   <p className="text-muted-foreground">
-                    Showing {data._meta.dealsShown} of {data._meta.dealsLimit} deals
+                    Showing {data._meta.itemsShown} of {data._meta.itemsLimit} products
                   </p>
                   <p className="mt-1">
                     <Link href="/pricing" className="text-primary hover:underline">
                       Upgrade to Premium
                     </Link>{' '}
-                    for 20+ deals with AI explanations
+                    for more products with price context
                   </p>
                 </div>
               </div>
@@ -134,3 +134,6 @@ export function DealsForYou({ isPremium = false, onAddToWatchlist }: DealsForYou
     </div>
   )
 }
+
+// Export with old name for backwards compatibility during migration
+export { PersonalizedFeed as DealsForYou }

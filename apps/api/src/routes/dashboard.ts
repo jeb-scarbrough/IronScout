@@ -134,15 +134,17 @@ router.get('/pulse', async (req: Request, res: Response) => {
           }
         }
 
-        // Determine verdict
-        let verdict: 'BUY' | 'WAIT' | 'STABLE' = 'STABLE'
+        // Determine price context (ADR-006: descriptive, not prescriptive)
+        // Uses 30th/70th percentile thresholds
+        let priceContext: 'LOWER_THAN_RECENT' | 'WITHIN_RECENT_RANGE' | 'HIGHER_THAN_RECENT' = 'WITHIN_RECENT_RANGE'
         if (priceTimingSignal !== null) {
-          if (priceTimingSignal >= 70) verdict = 'BUY'
-          else if (priceTimingSignal <= 30) verdict = 'WAIT'
+          // priceTimingSignal: 100 = low price, 0 = high price
+          if (priceTimingSignal >= 70) priceContext = 'LOWER_THAN_RECENT'
+          else if (priceTimingSignal <= 30) priceContext = 'HIGHER_THAN_RECENT'
         } else {
           // Free tier: use simple trend
-          if (trend === 'DOWN') verdict = 'BUY'
-          else if (trend === 'UP') verdict = 'WAIT'
+          if (trend === 'DOWN') priceContext = 'LOWER_THAN_RECENT'
+          else if (trend === 'UP') priceContext = 'HIGHER_THAN_RECENT'
         }
 
         return {
@@ -151,7 +153,13 @@ router.get('/pulse', async (req: Request, res: Response) => {
           trend,
           trendPercent: Math.round(trendPercent * 10) / 10,
           ...(showPriceTimingSignal && { priceTimingSignal }),
-          verdict
+          priceContext,
+          // Context metadata for transparency
+          contextMeta: {
+            windowDays: 7,
+            sampleCount: currentPrices.length,
+            asOf: new Date().toISOString()
+          }
         }
       })
     )

@@ -47,37 +47,33 @@ export interface TerminalPerformance {
 }
 
 /**
- * Brand/manufacturer quality indicators
+ * Brand/manufacturer metadata
+ *
+ * NOTE: This is descriptive metadata about the brand, NOT a numeric score.
+ * For internal scoring hints, see price-signal-index.ts.
  */
-export interface BrandQuality {
+export interface BrandMetadata {
   // Quality tier (can be used for ranking)
   tier?: 'budget' | 'mid-tier' | 'premium' | 'match-grade'
-  
+
   // Consistency rating based on reviews/tests
   consistencyRating?: 'excellent' | 'good' | 'fair' | 'variable'
-  
+
   // Country of manufacture
   manufacturerCountry?: string
-  
+
   // Parent company (for brand grouping)
   parentCompany?: string
 }
 
 /**
  * Computed scores (cached, updated periodically)
+ *
+ * NOTE: retailerConfidenceHint and brandDataCompletenessHint are INTERNAL ONLY.
+ * They must never be exposed to consumer UI. See price-signal-index.ts for
+ * the consumer-safe PriceSignalIndex type.
  */
 export interface ComputedScores {
-  // Relative Value Score (0-100) - Premium feature
-  relativeValueScore?: number
-  bestValueFactors?: {
-    priceVsCaliberAvg: number     // How price compares to caliber average
-    shippingValue: number          // Shipping cost impact
-    retailerTrust: number          // Retailer tier score
-    brandQuality: number           // Brand tier score
-    purposeFit: number             // How well it fits common purposes
-  }
-  bestValueReason?: string         // Human-readable explanation
-  
   // Purpose match scores (0-100) for each purpose
   purposeScores?: {
     defense?: number
@@ -86,7 +82,7 @@ export interface ComputedScores {
     competition?: number
     training?: number
   }
-  
+
   // Last computed timestamp
   scoresComputedAt?: string        // ISO date string
 }
@@ -137,9 +133,9 @@ export interface SourceInfo {
 export interface ProductMetadata {
   // Terminal performance (gel test data, etc.)
   terminal?: TerminalPerformance
-  
-  // Brand quality indicators
-  brandQuality?: BrandQuality
+
+  // Brand/manufacturer metadata (descriptive, not a score)
+  brand?: BrandMetadata
   
   // Cached computed scores
   scores?: ComputedScores

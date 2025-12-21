@@ -27,14 +27,16 @@ export {
   PremiumRankingOptions
 } from './premium-ranking'
 
-// Best Value Score
+// Price Signal Index (descriptive context, not recommendations)
 export {
-  calculateBestValueScore,
-  batchCalculateBestValueScores,
-  BestValueScore,
-  clearPriceCache,
-  warmPriceCache
-} from './best-value-score'
+  calculatePriceSignalIndex,
+  batchCalculatePriceSignalIndex,
+  PriceSignalIndex,
+  ContextBand,
+  PriceContextMeta,
+  clearPriceStatsCache,
+  warmPriceStatsCache
+} from './price-signal-index'
 
 // Domain knowledge
 export * from './ammo-knowledge'

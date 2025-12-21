@@ -4,63 +4,47 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DealTag } from '../atoms/deal-tag'
-import { VerdictChip } from '../atoms/verdict-chip'
+import { ContextChip } from '../atoms/context-chip'
 import { ExternalLink, Eye, ChevronDown, ChevronUp } from 'lucide-react'
-import type { DealCardProps, DealLabel } from '@/types/dashboard'
+import type { ProductCardProps } from '@/types/dashboard'
 import { UPGRADE_COPY } from '@/types/dashboard'
 
 /**
- * DealCard - Product deal card with verdict and CTA
+ * ProductCard - Product card with price context (ADR-006 compliant)
  *
  * Trading terminal-style card displaying:
- * - Deal tag (HOT_DEAL, NEW_LOW, BULK_VALUE)
  * - Product name + caliber
  * - Price per round (prominent)
- * - Urgency signals (max 2)
- * - Buy Now CTA
- * - Premium: "Why you're seeing this" expandable
+ * - Price context indicator (descriptive, not prescriptive)
+ * - Stock status
+ * - View at Retailer CTA
+ * - Premium: Context explanation expandable
  */
-export function DealCard({
-  deal,
+export function ProductCard({
+  item,
   isPremium = false,
-  onBuyClick,
+  onViewClick,
   onWatchlistClick,
-}: DealCardProps) {
+}: ProductCardProps) {
   const [expanded, setExpanded] = useState(false)
 
-  // Determine deal tag based on score or position
-  const getDealLabel = (): DealLabel | null => {
-    if (deal.relativeValueScore && deal.relativeValueScore >= 85) return 'HOT_DEAL'
-    if (deal.pricePerRound && deal.product.roundCount && deal.product.roundCount >= 500)
-      return 'BULK_VALUE'
-    // Could also detect NEW_LOW from price history
-    return null
-  }
-
-  const dealLabel = getDealLabel()
-
-  const handleBuyClick = () => {
-    if (onBuyClick) {
-      onBuyClick()
+  const handleViewClick = () => {
+    if (onViewClick) {
+      onViewClick()
     } else {
-      window.open(deal.url, '_blank', 'noopener,noreferrer')
+      window.open(item.url, '_blank', 'noopener,noreferrer')
     }
   }
 
   return (
     <Card className="bg-card hover:bg-card/80 transition-colors duration-200 border-border overflow-hidden">
       <CardContent className="p-4 space-y-3">
-        {/* Top row: Deal tag + Watchlist indicator */}
+        {/* Top row: Retailer + Watchlist indicator */}
         <div className="flex items-center justify-between">
-          {dealLabel ? (
-            <DealTag label={dealLabel} size="sm" />
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {deal.retailer.name}
-            </span>
-          )}
-          {deal.isWatched && (
+          <span className="text-xs text-muted-foreground">
+            {item.retailer.name}
+          </span>
+          {item.isWatched && (
             <span className="text-xs text-primary flex items-center gap-1">
               <Eye className="h-3 w-3" />
               Watching
@@ -71,65 +55,59 @@ export function DealCard({
         {/* Product info */}
         <div>
           <h4 className="font-medium text-foreground leading-tight line-clamp-2">
-            {deal.product.name}
+            {item.product.name}
           </h4>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {deal.product.caliber}
-            {deal.product.grainWeight && ` • ${deal.product.grainWeight}gr`}
+            {item.product.caliber}
+            {item.product.grainWeight && ` • ${item.product.grainWeight}gr`}
           </p>
         </div>
 
         {/* Price section - emphasized */}
         <div className="flex items-end justify-between">
           <div>
-            {deal.pricePerRound !== null ? (
+            {item.pricePerRound !== null ? (
               <>
                 <div className="text-2xl font-bold text-foreground">
-                  ${deal.pricePerRound.toFixed(3)}
+                  ${item.pricePerRound.toFixed(3)}
                 </div>
                 <div className="text-xs text-muted-foreground">per round</div>
               </>
             ) : (
               <>
                 <div className="text-xl font-bold text-foreground">
-                  ${deal.price.toFixed(2)}
+                  ${item.price.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">total price</div>
               </>
             )}
           </div>
 
-          {/* Relative value score badge (Premium) */}
-          {isPremium && deal.relativeValueScore && (
-            <div className="text-right">
-              <div className="text-sm font-semibold text-primary">
-                {deal.relativeValueScore}
-              </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                Value Score
-              </div>
-            </div>
+          {/* Price context indicator (Premium) */}
+          {isPremium && item.priceSignal && (
+            <ContextChip
+              context={item.priceSignal.contextBand}
+              size="sm"
+              showTooltip
+            />
           )}
         </div>
 
-        {/* Urgency signals - max 2 */}
-        {deal.inStock && (
+        {/* Stock status */}
+        {item.inStock && (
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="text-status-buy">In Stock</span>
-            {deal.retailer.tier === 'PREMIUM' && (
-              <span>Trusted Retailer</span>
-            )}
           </div>
         )}
 
-        {/* Premium: Explanation expandable */}
-        {isPremium && deal.explanation && (
+        {/* Premium: Context explanation expandable */}
+        {isPremium && item.explanation && (
           <div>
             <button
               onClick={() => setExpanded(!expanded)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              Why this deal?
+              Why this match?
               {expanded ? (
                 <ChevronUp className="h-3 w-3" />
               ) : (
@@ -138,7 +116,7 @@ export function DealCard({
             </button>
             {expanded && (
               <p className="mt-2 text-xs text-muted-foreground animate-in slide-in-from-top-2">
-                {deal.explanation}
+                {item.explanation}
               </p>
             )}
           </div>
@@ -147,20 +125,20 @@ export function DealCard({
         {/* Free tier: Upgrade teaser */}
         {!isPremium && (
           <p className="text-xs text-muted-foreground italic">
-            {UPGRADE_COPY.DEAL_EXPLANATION}
+            {UPGRADE_COPY.PRICE_CONTEXT}
           </p>
         )}
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
           <Button
-            onClick={handleBuyClick}
+            onClick={handleViewClick}
             className="flex-1 h-10 bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            Buy Now
+            View at Retailer
             <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
           </Button>
-          {onWatchlistClick && !deal.isWatched && (
+          {onWatchlistClick && !item.isWatched && (
             <Button
               variant="outline"
               onClick={onWatchlistClick}

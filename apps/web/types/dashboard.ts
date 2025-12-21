@@ -1,25 +1,33 @@
 /**
  * Dashboard TypeScript Types
  *
- * Types for the trading terminal-style dashboard components.
+ * Types for the dashboard components.
  * Aligned with API responses from /api/dashboard/* endpoints.
+ *
+ * IMPORTANT (ADR-006): All types must be descriptive, not prescriptive.
+ * - No "verdict", "recommendation", "deal" terminology
+ * - Price context is comparative only
  */
 
 // ============================================================================
-// Verdict & Status Types
+// Price Context Types (ADR-006 Compliant)
 // ============================================================================
 
-/** Market verdict indicating buy/wait recommendation */
-export type Verdict = 'BUY' | 'WAIT' | 'STABLE'
-
-/** Deal label indicating deal type */
-export type DealLabel = 'HOT_DEAL' | 'NEW_LOW' | 'BULK_VALUE'
+/** Price context relative to recent observations - descriptive only */
+export type PriceContext = 'LOWER_THAN_RECENT' | 'WITHIN_RECENT_RANGE' | 'HIGHER_THAN_RECENT' | 'INSUFFICIENT_DATA'
 
 /** Price trend direction */
 export type Trend = 'UP' | 'DOWN' | 'STABLE'
 
 /** User subscription tier */
 export type UserTier = 'FREE' | 'PREMIUM'
+
+/** Context metadata for transparency */
+export interface PriceContextMeta {
+  windowDays: number
+  sampleCount: number
+  asOf: string
+}
 
 // ============================================================================
 // Market Pulse Types
@@ -37,8 +45,10 @@ export interface MarketPulseItem {
   trendPercent: number
   /** Price timing signal 0-100 (Premium only) */
   priceTimingSignal?: number
-  /** Calculated verdict based on score or trend */
-  verdict: Verdict
+  /** Descriptive price context (not a recommendation) */
+  priceContext: PriceContext
+  /** Context metadata for transparency */
+  contextMeta?: PriceContextMeta
 }
 
 /** Market Pulse API response */
@@ -56,8 +66,8 @@ export interface MarketPulseResponse {
 // Deals For You Types
 // ============================================================================
 
-/** Single deal item from personalized feed */
-export interface DealItem {
+/** Single product item from personalized feed */
+export interface ProductFeedItem {
   id: string
   product: {
     id: string
@@ -84,23 +94,33 @@ export interface DealItem {
   inStock: boolean
   /** Whether user has this product in watchlist */
   isWatched: boolean
-  /** Relative value score 0-100 (Premium only) */
-  relativeValueScore?: number
-  /** Why this deal was recommended (Premium only) */
+  /** Price context signal (Premium only) */
+  priceSignal?: {
+    relativePricePct: number
+    positionInRange: number
+    contextBand: PriceContext
+  }
+  /** AI-generated context explanation (Premium only) */
   explanation?: string
 }
 
-/** Deals For You API response */
-export interface DealsResponse {
-  deals: DealItem[]
+/** Product feed API response */
+export interface ProductFeedResponse {
+  items: ProductFeedItem[]
   _meta: {
     tier: UserTier
-    dealsShown: number
-    dealsLimit: number
+    itemsShown: number
+    itemsLimit: number
     personalized: boolean
     calibersUsed: string[]
   }
 }
+
+// Legacy type alias for backwards compatibility during migration
+/** @deprecated Use ProductFeedItem instead */
+export type DealItem = ProductFeedItem
+/** @deprecated Use ProductFeedResponse instead */
+export type DealsResponse = ProductFeedResponse
 
 // ============================================================================
 // Savings Tracker Types
@@ -227,20 +247,13 @@ export interface PriceHistoryResponse {
 // Component Props Types
 // ============================================================================
 
-/** Props for VerdictChip component */
-export interface VerdictChipProps {
-  verdict: Verdict
-  /** Show tooltip on hover explaining verdict */
+/** Props for ContextChip component (ADR-006 compliant) */
+export interface ContextChipProps {
+  context: PriceContext
+  /** Show tooltip on hover explaining context */
   showTooltip?: boolean
   /** Size variant */
   size?: 'sm' | 'md' | 'lg'
-}
-
-/** Props for DealTag component */
-export interface DealTagProps {
-  label: DealLabel
-  /** Size variant */
-  size?: 'sm' | 'md'
 }
 
 /** Props for PriceDelta component */
@@ -265,13 +278,13 @@ export interface SparklineProps {
   height?: number
 }
 
-/** Props for DealCard component */
-export interface DealCardProps {
-  deal: DealItem
+/** Props for ProductCard component (ADR-006 compliant) */
+export interface ProductCardProps {
+  item: ProductFeedItem
   /** Show premium features like explanation */
   isPremium?: boolean
-  /** Callback when Buy Now clicked */
-  onBuyClick?: () => void
+  /** Callback when View clicked */
+  onViewClick?: () => void
   /** Callback when Add to Watchlist clicked */
   onWatchlistClick?: () => void
 }
@@ -317,12 +330,11 @@ export type UseWatchlistResult = BaseHookResult<WatchlistResponse> & {
 // Upgrade Copy Constants
 // ============================================================================
 
-/** Centralized upgrade copy for A/B testing */
+/** Centralized upgrade copy for A/B testing (ADR-006 compliant) */
 export const UPGRADE_COPY = {
-  MARKET_PULSE_EXPAND: 'Unlock price timing and savings context →',
+  MARKET_PULSE_EXPAND: 'Unlock price timing and historical context →',
   PRICE_HISTORY: 'See full price history with Premium',
-  DEAL_EXPLANATION: 'Premium users see why this deal is recommended',
-  SAVINGS_VERIFIED: 'Premium paid for itself this month.',
+  PRICE_CONTEXT: 'Premium users see detailed price context',
   WATCHLIST_LIMIT: 'Upgrade to Premium for unlimited tracking.',
   COLLECTIONS: 'Organize into collections with Premium',
 } as const
