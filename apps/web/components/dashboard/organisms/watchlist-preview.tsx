@@ -30,7 +30,7 @@ export function SavedItemsPreview({ isPremium = false, maxItems = 5 }: SavedItem
   const { data, loading, error } = useWatchlist()
 
   // Limit to maxItems
-  const previewItems = data?.items.slice(0, maxItems) || []
+  const previewItems = data?.items?.slice(0, maxItems) ?? []
 
   return (
     <Card className="bg-card border-border">
@@ -85,7 +85,7 @@ export function SavedItemsPreview({ isPremium = false, maxItems = 5 }: SavedItem
             )}
 
             {/* Free tier limit message */}
-            {!isPremium && data._meta.itemLimit !== -1 && data._meta.itemCount >= data._meta.itemLimit && (
+            {!isPremium && data._meta && data._meta.itemLimit !== -1 && data._meta.itemCount >= data._meta.itemLimit && (
               <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
                 <div className="flex items-start gap-2">
                   <Lock className="h-4 w-4 text-muted-foreground mt-0.5" />

@@ -16,10 +16,10 @@ const actions = [
     href: '/dashboard/search'
   },
   {
-    title: 'Manage Alerts',
-    description: 'View and edit your alerts',
+    title: 'Saved Items',
+    description: 'View and manage your saved items',
     icon: Bell,
-    href: '/dashboard/alerts'
+    href: '/dashboard/saved'
   },
   {
     title: 'Settings',

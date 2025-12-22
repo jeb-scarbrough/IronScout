@@ -37,8 +37,8 @@ const navItems = [
     icon: Search,
   },
   {
-    title: 'Alerts',
-    href: '/dashboard/alerts',
+    title: 'Saved Items',
+    href: '/dashboard/saved',
     icon: Bell,
   },
   {

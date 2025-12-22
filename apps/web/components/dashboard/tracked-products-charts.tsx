@@ -231,7 +231,7 @@ export function TrackedProductsCharts() {
           {alerts.length > 0 && (
             <div className="text-center pt-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href="/dashboard/alerts">View All Alerts</Link>
+                <Link href="/dashboard/saved">View All Saved Items</Link>
               </Button>
             </div>
           )}
