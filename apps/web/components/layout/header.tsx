@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { Menu, X, User, Bell, Settings, LayoutDashboard, ChevronDown } from 'lucide-react'
+import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown } from 'lucide-react'
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -68,12 +68,12 @@ export function Header() {
                           Dashboard
                         </Link>
                         <Link
-                          href="/dashboard/alerts"
+                          href="/dashboard/saved"
                           className="flex items-center px-4 py-2 text-sm hover:bg-accent"
                           onClick={() => setIsUserMenuOpen(false)}
                         >
-                          <Bell className="h-4 w-4 mr-3" />
-                          My Alerts
+                          <Bookmark className="h-4 w-4 mr-3" />
+                          Saved Items
                         </Link>
                         <Link
                           href="/dashboard/settings"
@@ -150,12 +150,12 @@ export function Header() {
                     Dashboard
                   </Link>
                   <Link
-                    href="/dashboard/alerts"
+                    href="/dashboard/saved"
                     className="flex items-center text-sm font-medium hover:text-primary transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <Bell className="h-4 w-4 mr-2" />
-                    My Alerts
+                    <Bookmark className="h-4 w-4 mr-2" />
+                    Saved Items
                   </Link>
                   <Link
                     href="/dashboard/settings"

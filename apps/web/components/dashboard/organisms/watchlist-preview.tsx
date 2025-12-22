@@ -5,28 +5,28 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PriceDelta } from '../atoms/price-delta'
 import { Sparkline, generateSparklineFromTrend } from '../atoms/sparkline'
-import { Eye, ChevronRight, Lock, TrendingDown } from 'lucide-react'
+import { Bookmark, ChevronRight, Lock, TrendingDown } from 'lucide-react'
 import { useWatchlist } from '@/hooks/use-watchlist'
 import { UPGRADE_COPY } from '@/types/dashboard'
 import type { WatchlistItem } from '@/types/dashboard'
 import Link from 'next/link'
 
-interface WatchlistPreviewProps {
+interface SavedItemsPreviewProps {
   isPremium?: boolean
   /** Max items to show in preview */
   maxItems?: number
 }
 
 /**
- * WatchlistPreview - Watchlist teaser section
+ * SavedItemsPreview - Saved items teaser section
  *
- * Shows 3-5 items from user's watchlist with price change indicators.
- * Links to full watchlist page.
+ * Shows 3-5 saved items with price change indicators.
+ * Links to full saved items page.
  *
  * Free: Current price only
  * Premium: "Lowest in X days" + inline sparkline
  */
-export function WatchlistPreview({ isPremium = false, maxItems = 5 }: WatchlistPreviewProps) {
+export function SavedItemsPreview({ isPremium = false, maxItems = 5 }: SavedItemsPreviewProps) {
   const { data, loading, error } = useWatchlist()
 
   // Limit to maxItems
@@ -37,10 +37,10 @@ export function WatchlistPreview({ isPremium = false, maxItems = 5 }: WatchlistP
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-            <Eye className="h-5 w-5 text-primary" />
-            Your Watchlist
+            <Bookmark className="h-5 w-5 text-primary" />
+            Saved Items
           </CardTitle>
-          <Link href="/dashboard/watchlist">
+          <Link href="/dashboard/saved">
             <Button variant="ghost" size="sm" className="text-xs h-7">
               View All
               <ChevronRight className="ml-1 h-3 w-3" />
@@ -67,8 +67,8 @@ export function WatchlistPreview({ isPremium = false, maxItems = 5 }: WatchlistP
           <>
             {previewItems.length === 0 ? (
               <div className="py-6 text-center">
-                <Eye className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-50" />
-                <p className="text-sm text-muted-foreground">No items in your watchlist</p>
+                <Bookmark className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-50" />
+                <p className="text-sm text-muted-foreground">No saved items yet</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   <Link href="/dashboard/search" className="text-primary hover:underline">
                     Search products

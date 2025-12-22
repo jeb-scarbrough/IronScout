@@ -6,7 +6,7 @@ import { ProductImage } from './product-image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatPrice } from '@/lib/utils'
-import { ExternalLink, Bell, Crown, Package, Sparkles } from 'lucide-react'
+import { ExternalLink, Bookmark, Crown, Package, Sparkles } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 import {
@@ -152,8 +152,9 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             variant="secondary"
             className="h-8 w-8 p-0"
             onClick={() => setShowAlertDialog(true)}
+            aria-label="Save item"
           >
-            <Bell className="h-4 w-4" />
+            <Bookmark className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -278,8 +279,8 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             className="flex-1"
             onClick={() => setShowAlertDialog(true)}
           >
-            <Bell className="h-3 w-3 mr-1" />
-            Alert
+            <Bookmark className="h-3 w-3 mr-1" />
+            Save
           </Button>
         </div>
 

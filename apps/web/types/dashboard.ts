@@ -176,10 +176,67 @@ export interface PriceDeltaResponse {
 export type SavingsResponse = PriceDeltaResponse
 
 // ============================================================================
-// Watchlist Types
+// Saved Items Types (ADR-011: Unified Watchlist + Alerts)
 // ============================================================================
 
-/** Single watchlist item */
+/** Notification rule types for saved items */
+export type SavedItemRuleType = 'PRICE_DROP' | 'BACK_IN_STOCK' | 'NEW_PRODUCT'
+
+/**
+ * SavedItemDTO - Unified UI contract for saved items
+ *
+ * This is the ONLY type the UI should use for saved items.
+ * It abstracts over the underlying WatchlistItem and Alert tables.
+ *
+ * @see ADR-011: Unified Saved Items
+ */
+export interface SavedItemDTO {
+  /** Unique identifier (from watchlist or alert) */
+  id: string
+  /** Product ID */
+  productId: string
+  /** Product name */
+  name: string
+  /** Current price in dollars, null if unavailable */
+  price: number | null
+  /** Stock availability */
+  inStock: boolean
+  /** Product image URL */
+  imageUrl: string | null
+  /** Caliber/category */
+  caliber: string
+  /** Brand name */
+  brand: string
+  /** When the item was saved */
+  savedAt: string
+  /** Whether notifications are enabled for this item */
+  notificationsEnabled: boolean
+  /** Active notification rules */
+  activeRules: SavedItemRuleType[]
+  /** User's target price, if set */
+  targetPrice: number | null
+  /** Lowest price seen (Premium) */
+  lowestPriceSeen: number | null
+  /** Whether current price is the lowest seen (Premium) */
+  isLowestSeen: boolean
+}
+
+/** Saved Items API response */
+export interface SavedItemsResponse {
+  items: SavedItemDTO[]
+  _meta: {
+    tier: UserTier
+    itemCount: number
+    itemLimit: number
+    canAddMore: boolean
+  }
+}
+
+// ============================================================================
+// Watchlist Types (Legacy - migrate to SavedItemDTO)
+// ============================================================================
+
+/** @deprecated Use SavedItemDTO instead */
 export interface WatchlistItem {
   id: string
   productId: string
@@ -300,7 +357,7 @@ export interface ProductCardProps {
   isPremium?: boolean
   /** Callback when View clicked */
   onViewClick?: () => void
-  /** Callback when Add to Watchlist clicked */
+  /** Callback when Save clicked (ADR-011: unified saved items) */
   onWatchlistClick?: () => void
 }
 

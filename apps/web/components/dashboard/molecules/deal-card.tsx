@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ContextChip } from '../atoms/context-chip'
-import { ExternalLink, Eye, ChevronDown, ChevronUp } from 'lucide-react'
+import { ExternalLink, Bookmark, ChevronDown, ChevronUp } from 'lucide-react'
 import type { ProductCardProps } from '@/types/dashboard'
 import { UPGRADE_COPY } from '@/types/dashboard'
 
@@ -46,8 +46,8 @@ export function ProductCard({
           </span>
           {item.isWatched && (
             <span className="text-xs text-primary flex items-center gap-1">
-              <Eye className="h-3 w-3" />
-              Watching
+              <Bookmark className="h-3 w-3" />
+              Saved
             </span>
           )}
         </div>
@@ -143,9 +143,9 @@ export function ProductCard({
               variant="outline"
               onClick={onWatchlistClick}
               className="h-10 px-3"
-              aria-label="Add to watchlist"
+              aria-label="Save item"
             >
-              <Eye className="h-4 w-4" />
+              <Bookmark className="h-4 w-4" />
             </Button>
           )}
         </div>

@@ -45,17 +45,17 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
         alertType
       })
 
-      toast.success('Alert created!', {
+      toast.success('Item saved!', {
         description: `We'll notify you when the price drops${targetPrice ? ` to $${targetPrice}` : ''}.`,
         action: {
-          label: 'View Alerts',
-          onClick: () => router.push('/dashboard/alerts')
+          label: 'View Saved Items',
+          onClick: () => router.push('/dashboard/saved')
         }
       })
       onOpenChange(false)
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create alert')
-      setError(error.message || 'Failed to create alert')
+      toast.error(error.message || 'Failed to save item')
+      setError(error.message || 'Failed to save item')
     } finally {
       setLoading(false)
     }
@@ -73,9 +73,9 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
           >
             <X className="h-4 w-4" />
           </button>
-          <CardTitle>Create Price Alert</CardTitle>
+          <CardTitle>Save Item</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Get notified when {product.name} meets your criteria
+            Track {product.name} and get notified when it meets your criteria
           </p>
         </CardHeader>
 
@@ -88,18 +88,18 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
             )}
 
             <div className="space-y-2">
-              <label htmlFor="alert-type" className="text-sm font-medium">
-                Alert Type
+              <label htmlFor="notification-type" className="text-sm font-medium">
+                Notify me when
               </label>
               <select
-                id="alert-type"
+                id="notification-type"
                 value={alertType}
                 onChange={(e) => setAlertType(e.target.value as any)}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
-                <option value="PRICE_DROP">Price Drop</option>
-                <option value="BACK_IN_STOCK">Back in Stock</option>
-                <option value="NEW_PRODUCT">New Product</option>
+                <option value="PRICE_DROP">Price drops</option>
+                <option value="BACK_IN_STOCK">Back in stock</option>
+                <option value="NEW_PRODUCT">New products available</option>
               </select>
             </div>
 
@@ -133,7 +133,7 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
               Cancel
             </Button>
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Creating...' : 'Create Alert'}
+              {loading ? 'Saving...' : 'Save Item'}
             </Button>
           </CardFooter>
         </form>
