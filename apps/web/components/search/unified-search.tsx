@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Crown } from 'lucide-react'
+import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Crown, TrendingUp, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
 import { PremiumFilters } from '@/components/premium'
@@ -29,12 +29,29 @@ const GRAIN_RANGES = [
   { label: 'Very Heavy (180+gr)', min: 180, max: 999 },
 ]
 
-const exampleQueries = [
-  "best 9mm for home defense",
-  "cheap bulk .223 for the range",
-  "match grade .308 long range",
-  "AR15 ammo for beginners",
-  "subsonic 300 blackout",
+// Rotating placeholder examples - outcome-driven
+const ROTATING_PLACEHOLDERS = [
+  "Find the best 9mm deals for range practice",
+  "Cheap .223 for target shooting",
+  "Home defense 9mm hollow points",
+  "Bulk 5.56 NATO for training",
+  ".308 match grade for long range",
+]
+
+// Quick-start example chips
+const EXAMPLE_CHIPS = [
+  { label: '9mm bulk', query: '9mm bulk for range' },
+  { label: '.223 range ammo', query: '.223 cheap target practice' },
+  { label: 'home defense', query: '9mm hollow point home defense' },
+  { label: '.22 LR', query: '.22 LR bulk cheap' },
+  { label: '5.56 NATO', query: '5.56 NATO M855 bulk' },
+]
+
+// Popular searches for social proof
+const TRENDING_SEARCHES = [
+  '9mm bulk',
+  '.223 range ammo',
+  '5.56 green tip',
 ]
 
 const premiumExampleQueries = [
@@ -51,18 +68,34 @@ interface UnifiedSearchProps {
 export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedSearchProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   // Search state
   const [query, setQuery] = useState(initialQuery)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
-  // Filter state
+  // Filter state - collapsed by default
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [premiumFiltersOpen, setPremiumFiltersOpen] = useState(false)
+
+  // Rotate placeholder text
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % ROTATING_PLACEHOLDERS.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Autofocus on mount
+  useEffect(() => {
+    if (!initialQuery && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [])
   
   // Get current filter values from URL
   const getFiltersFromUrl = () => ({
@@ -230,13 +263,16 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
 
   return (
     <div className="w-full">
-      {/* AI Search Bar */}
-      <div className="max-w-3xl mx-auto">
+      {/* Hero Search Bar */}
+      <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="relative">
           <div className="relative">
-            {/* AI indicator */}
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-blue-500" />
+            {/* AI indicator with label */}
+            <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-xs font-medium text-primary hidden sm:inline">AI</span>
+              </div>
             </div>
 
             <input
@@ -248,8 +284,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
                 setShowSuggestions(true)
               }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="Describe what you're looking for..."
-              className="w-full pl-12 pr-28 py-4 text-lg border-2 border-gray-200 dark:border-gray-700 rounded-2xl focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all bg-white dark:bg-gray-800 shadow-sm"
+              placeholder={ROTATING_PLACEHOLDERS[placeholderIndex]}
+              className="w-full pl-20 sm:pl-24 pr-32 py-5 text-lg border-2 border-border rounded-2xl focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all bg-background shadow-lg hover:shadow-xl"
             />
 
             {/* Clear button */}
@@ -260,7 +296,7 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
                   setQuery('')
                   inputRef.current?.focus()
                 }}
-                className="absolute right-24 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                className="absolute right-28 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -269,24 +305,31 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
             <Button
               type="submit"
               disabled={isLoading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-xl"
+              size="lg"
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary hover:bg-primary/90 rounded-xl px-6"
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
                 <>
-                  <Search className="h-4 w-4 mr-2" />
+                  <Search className="h-5 w-5 mr-2" />
                   Search
                 </>
               )}
             </Button>
           </div>
 
+          {/* Helper text */}
+          <p className="mt-2 text-xs text-muted-foreground text-center">
+            <Zap className="h-3 w-3 inline mr-1" />
+            Use natural language. AI understands intent. Filters optional.
+          </p>
+
           {/* Suggestions dropdown */}
           {showSuggestions && suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+              className="absolute z-10 w-full mt-2 bg-background rounded-xl shadow-lg border border-border overflow-hidden"
             >
               {suggestions.map((suggestion, index) => (
                 <button
@@ -296,9 +339,9 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
                     setQuery(suggestion)
                     handleSearch(suggestion)
                   }}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-3 transition-colors"
+                  className="w-full px-4 py-3 text-left hover:bg-muted flex items-center gap-3 transition-colors"
                 >
-                  <Search className="h-4 w-4 text-gray-400" />
+                  <Search className="h-4 w-4 text-muted-foreground" />
                   <span>{suggestion}</span>
                 </button>
               ))}
@@ -306,31 +349,49 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
           )}
         </form>
 
-        {/* Example queries - shown when no query */}
-        {!query && !filtersOpen && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-muted-foreground mb-3">Try asking:</p>
+        {/* Quick-start chips - shown when no query */}
+        {!query && (
+          <div className="mt-6 space-y-4">
+            {/* Clickable example chips */}
             <div className="flex flex-wrap justify-center gap-2">
-              {exampleQueries.map((example, i) => (
+              {EXAMPLE_CHIPS.map((chip, i) => (
                 <button
                   key={i}
                   onClick={() => {
-                    setQuery(example)
-                    handleSearch(example)
+                    setQuery(chip.query)
+                    handleSearch(chip.query)
                   }}
-                  className="text-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-gray-600 dark:text-gray-400 hover:text-blue-600"
+                  className="px-4 py-2 rounded-full border border-border bg-background hover:border-primary hover:bg-primary/5 transition-all text-sm font-medium text-foreground shadow-sm hover:shadow"
                 >
-                  "{example}"
+                  {chip.label}
                 </button>
               ))}
             </div>
-            
-            {/* Premium example queries */}
+
+            {/* Social proof - trending searches */}
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <TrendingUp className="h-3 w-3" />
+              <span>Trending:</span>
+              {TRENDING_SEARCHES.map((term, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setQuery(term)
+                    handleSearch(term)
+                  }}
+                  className="hover:text-primary transition-colors underline-offset-2 hover:underline"
+                >
+                  {term}{i < TRENDING_SEARCHES.length - 1 ? ',' : ''}
+                </button>
+              ))}
+            </div>
+
+            {/* Premium examples */}
             {isPremium && (
-              <div className="mt-4">
+              <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-center gap-2 mb-2">
-                  <Crown className="h-4 w-4 text-amber-500" />
-                  <p className="text-sm text-amber-600 dark:text-amber-400">Premium AI examples:</p>
+                  <Crown className="h-3 w-3 text-amber-500" />
+                  <p className="text-xs text-amber-600 dark:text-amber-400">Advanced searches:</p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-2">
                   {premiumExampleQueries.map((example, i) => (
@@ -340,9 +401,9 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
                         setQuery(example)
                         handleSearch(example)
                       }}
-                      className="text-sm px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-700 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors text-amber-600 dark:text-amber-400"
+                      className="text-xs px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors text-amber-700 dark:text-amber-400"
                     >
-                      "{example}"
+                      {example}
                     </button>
                   ))}
                 </div>
@@ -352,67 +413,44 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
         )}
       </div>
 
-      {/* Filter Toggles */}
-      <div className="max-w-3xl mx-auto mt-4 flex items-center justify-center gap-3">
-        {/* Basic Filters Toggle */}
+      {/* Filter Toggle - Minimal */}
+      <div className="max-w-4xl mx-auto mt-6 flex items-center justify-center">
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-            filtersOpen 
-              ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-foreground' 
-              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm ${
+            filtersOpen || activeFilterCount > 0
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
           <SlidersHorizontal className="h-4 w-4" />
-          <span className="font-medium text-sm">Filters</span>
-          {activeFilterCount > 0 && (
-            <span className="px-2 py-0.5 bg-blue-500 text-white rounded-full text-xs font-semibold min-w-[20px] text-center">
-              {activeFilterCount}
-            </span>
-          )}
+          <span>
+            {activeFilterCount > 0 ? `${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active` : 'More filters'}
+          </span>
           <ChevronDown className={`h-4 w-4 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
-        </button>
-
-        {/* Premium Filters Toggle */}
-        <button
-          onClick={() => setPremiumFiltersOpen(!premiumFiltersOpen)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-            premiumFiltersOpen 
-              ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200' 
-              : 'bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:border-amber-300 dark:hover:border-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20'
-          }`}
-        >
-          <Crown className="h-4 w-4" />
-          <span className="font-medium text-sm">Premium Filters</span>
-          {premiumFiltersActive > 0 && (
-            <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-xs font-semibold min-w-[20px] text-center">
-              {premiumFiltersActive}
-            </span>
-          )}
-          <ChevronDown className={`h-4 w-4 transition-transform ${premiumFiltersOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
       {/* Basic Filters Panel */}
       {filtersOpen && (
-        <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 animate-in slide-in-from-top-2 duration-200">
+        <div className="max-w-4xl mx-auto mt-4 p-5 bg-muted/30 rounded-xl border border-border animate-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium">Refine Your Search</h3>
+            <h3 className="text-sm font-medium text-foreground">Quick Filters</h3>
             {activeFilterCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={clearFilters}
-                className="text-muted-foreground hover:text-foreground h-8"
+                className="text-muted-foreground hover:text-foreground h-7 text-xs"
               >
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                Clear all
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Clear
               </Button>
             )}
           </div>
-          
-          {/* Filter Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+
+          {/* Core 3 filters - always visible */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Caliber */}
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">
@@ -421,7 +459,7 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
               <select
                 value={filters.caliber}
                 onChange={(e) => handleSelectChange('caliber', e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                className="w-full px-3 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               >
                 <option value="">All calibers</option>
                 {CALIBERS.map(cal => (
@@ -430,142 +468,160 @@ export function UnifiedSearch({ initialQuery = '', isPremium = false }: UnifiedS
               </select>
             </div>
 
-            {/* Purpose */}
+            {/* Price Range */}
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Purpose
+                Price Range
               </label>
-              <select
-                value={filters.purpose}
-                onChange={(e) => handleSelectChange('purpose', e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              >
-                <option value="">All purposes</option>
-                {PURPOSES.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Case Material */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Case Material
-              </label>
-              <select
-                value={filters.caseMaterial}
-                onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              >
-                <option value="">All materials</option>
-                {CASE_MATERIALS.map(mat => (
-                  <option key={mat} value={mat}>{mat}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Min Price */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Min Price
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                <input
-                  type="number"
-                  value={filters.minPrice}
-                  onChange={(e) => handlePriceChange('minPrice', e.target.value)}
-                  placeholder="0"
-                  min="0"
-                  step="0.01"
-                  className="w-full pl-7 pr-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <input
+                    type="number"
+                    value={filters.minPrice}
+                    onChange={(e) => handlePriceChange('minPrice', e.target.value)}
+                    placeholder="Min"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-6 pr-2 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                  />
+                </div>
+                <span className="text-muted-foreground">–</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                  <input
+                    type="number"
+                    value={filters.maxPrice}
+                    onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
+                    placeholder="Max"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-6 pr-2 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Max Price */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Max Price
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                <input
-                  type="number"
-                  value={filters.maxPrice}
-                  onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
-                  placeholder="Any"
-                  min="0"
-                  step="0.01"
-                  className="w-full pl-7 pr-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            {/* In Stock Only */}
-            <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+            {/* In Stock Toggle */}
+            <div className="flex items-end">
+              <label className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
                 <input
                   type="checkbox"
                   checked={filters.inStock}
                   onChange={(e) => handleCheckboxChange(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-medium">In Stock Only</span>
+                <span className="text-sm">In stock only</span>
               </label>
             </div>
           </div>
 
-          {/* Grain Weight Quick Selects */}
-          <div className="mt-4">
-            <label className="block text-xs font-medium text-muted-foreground mb-2">
-              Grain Weight
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => {
-                  const newFilters = { ...filters, minGrain: '', maxGrain: '' }
-                  setFilters(newFilters)
-                  applyFilters(newFilters)
-                }}
-                className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                  !filters.minGrain && !filters.maxGrain
-                    ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/50 dark:border-blue-700 dark:text-blue-300'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                }`}
-              >
-                Any weight
-              </button>
-              {GRAIN_RANGES.map(range => {
-                const isActive = filters.minGrain === String(range.min) && filters.maxGrain === String(range.max)
-                return (
+          {/* Expandable advanced filters */}
+          <details className="mt-4 group">
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors list-none flex items-center gap-1">
+              <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+              More options
+            </summary>
+
+            <div className="mt-4 pt-4 border-t border-border space-y-4">
+              {/* Purpose & Casing */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Purpose
+                  </label>
+                  <select
+                    value={filters.purpose}
+                    onChange={(e) => handleSelectChange('purpose', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                  >
+                    <option value="">Any purpose</option>
+                    {PURPOSES.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Brass or Steel
+                    <span className="ml-1 text-[10px] text-muted-foreground/70">(case material)</span>
+                  </label>
+                  <select
+                    value={filters.caseMaterial}
+                    onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                  >
+                    <option value="">Any material</option>
+                    {CASE_MATERIALS.map(mat => (
+                      <option key={mat} value={mat}>{mat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Bullet Weight */}
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-2">
+                  Bullet weight
+                  <span className="ml-1 text-[10px] text-muted-foreground/70">(heavier = more stopping power)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
                   <button
-                    key={range.label}
-                    onClick={() => handleGrainRange(range.min, range.max)}
+                    onClick={() => {
+                      const newFilters = { ...filters, minGrain: '', maxGrain: '' }
+                      setFilters(newFilters)
+                      applyFilters(newFilters)
+                    }}
                     className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                      isActive
-                        ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/50 dark:border-blue-700 dark:text-blue-300'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                      !filters.minGrain && !filters.maxGrain
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'border-border hover:border-primary hover:bg-primary/5'
                     }`}
                   >
-                    {range.label}
+                    Any
                   </button>
-                )
-              })}
+                  {GRAIN_RANGES.map(range => {
+                    const isActive = filters.minGrain === String(range.min) && filters.maxGrain === String(range.max)
+                    return (
+                      <button
+                        key={range.label}
+                        onClick={() => handleGrainRange(range.min, range.max)}
+                        className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                          isActive
+                            ? 'bg-primary/10 border-primary text-primary'
+                            : 'border-border hover:border-primary hover:bg-primary/5'
+                        }`}
+                      >
+                        {range.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Premium Filters - Aspirational framing */}
+              <div className="pt-4 border-t border-border">
+                <button
+                  onClick={() => setPremiumFiltersOpen(!premiumFiltersOpen)}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  <span>Advanced filters used by serious buyers</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${premiumFiltersOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Subsonic, match grade, suppressor-safe, low flash
+                </p>
+
+                {premiumFiltersOpen && (
+                  <div className="mt-4">
+                    <PremiumFilters isPremium={isPremium} />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-
-          {/* Helper text */}
-          <p className="mt-4 text-xs text-muted-foreground">
-            Filters work alongside AI search to narrow your results. The AI will still understand your intent while respecting your explicit criteria.
-          </p>
-        </div>
-      )}
-
-      {/* Premium Filters Panel */}
-      {premiumFiltersOpen && (
-        <div className="mt-6 p-6 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-200 dark:border-amber-800 animate-in slide-in-from-top-2 duration-200">
-          <PremiumFilters isPremium={isPremium} />
+          </details>
         </div>
       )}
     </div>

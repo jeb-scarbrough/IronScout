@@ -3,10 +3,18 @@ import { aiSearch, getAds, AISearchResponse, ExplicitFilters } from '@/lib/api'
 import { ProductCard } from '@/components/products/product-card'
 import { AdCard } from '@/components/ads/ad-card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Sparkles, Search, Crown, SlidersHorizontal } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles, Search, Crown, SlidersHorizontal, Bookmark, TrendingUp } from 'lucide-react'
 import { SearchHeader } from './search-header'
 import { AIExplanationBanner } from '@/components/premium'
 import Link from 'next/link'
+
+// Quick-start chips for empty state
+const QUICK_SEARCHES = [
+  { label: '9mm bulk', query: '9mm bulk' },
+  { label: '.223 range', query: '.223 range ammo' },
+  { label: 'home defense', query: '9mm home defense' },
+  { label: '.22 LR cheap', query: '.22 LR bulk cheap' },
+]
 
 interface SearchResultsProps {
   searchParams: {
@@ -87,28 +95,35 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   
   if (!query) {
     return (
-      <div className="text-center py-16">
-        <div className="max-w-md mx-auto">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Sparkles className="h-8 w-8 text-white" />
+      <div className="text-center py-12">
+        <div className="max-w-lg mx-auto">
+          {/* Hero icon */}
+          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Sparkles className="h-8 w-8 text-primary" />
           </div>
-          <h2 className="text-2xl font-bold mb-3">Search with AI</h2>
+
+          <h2 className="text-2xl font-bold mb-2">Find your ammo</h2>
           <p className="text-muted-foreground mb-6">
-            Describe what you're looking for in plain English. Our AI will find the perfect match.
+            Type what you're looking for. AI understands natural language.
           </p>
-          <div className="space-y-2 text-sm text-left bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-            <p className="font-medium mb-2">Try searching for:</p>
-            <p className="text-muted-foreground">"best 9mm for home defense"</p>
-            <p className="text-muted-foreground">"cheap bulk .223 for target practice"</p>
-            <p className="text-muted-foreground">"match grade 6.5 Creedmoor"</p>
-            <p className="text-muted-foreground">"AR15 ammo for beginners"</p>
-            {isPremium && (
-              <>
-                <p className="text-amber-600 dark:text-amber-400 mt-3 font-medium">Premium examples:</p>
-                <p className="text-amber-600 dark:text-amber-400">"9mm for compact carry, low flash"</p>
-                <p className="text-amber-600 dark:text-amber-400">"subsonic .300 blackout for suppressor"</p>
-              </>
-            )}
+
+          {/* Quick search chips */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {QUICK_SEARCHES.map((chip) => (
+              <Link
+                key={chip.label}
+                href={`/dashboard/search?q=${encodeURIComponent(chip.query)}`}
+                className="px-4 py-2 rounded-full border border-border bg-background hover:border-primary hover:bg-primary/5 transition-all text-sm font-medium"
+              >
+                {chip.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Social proof */}
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            <TrendingUp className="h-3 w-3" />
+            <span>Most searched today: 9mm bulk, .223 range ammo, 5.56 green tip</span>
           </div>
         </div>
       </div>
@@ -182,8 +197,8 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
 
     return (
       <>
-        <SearchHeader 
-          query={query} 
+        <SearchHeader
+          query={query}
           resultCount={pagination.total}
           intent={intent}
           processingTimeMs={searchMetadata.processingTimeMs}
@@ -193,11 +208,17 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           isPremium={isPremium}
           premiumFiltersActive={premiumFiltersActive}
         />
-        
+
         <div className="space-y-6 mt-6">
+          {/* Retention hint - save to track */}
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground bg-muted/30 py-2 px-4 rounded-lg">
+            <Bookmark className="h-4 w-4 text-primary" />
+            <span>Save an item to track price drops and get alerts</span>
+          </div>
+
           {/* AI Explanation Banner */}
-          <AIExplanationBanner 
-            intent={intent} 
+          <AIExplanationBanner
+            intent={intent}
             isPremium={isPremium}
             processingTimeMs={searchMetadata.processingTimeMs}
           />

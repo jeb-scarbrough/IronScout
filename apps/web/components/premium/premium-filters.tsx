@@ -155,8 +155,7 @@ export function PremiumFilters({ isPremium, className }: PremiumFiltersProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Crown className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold">Premium Filters</h3>
+          <h3 className="text-sm font-medium text-foreground">Performance Filters</h3>
           {activeFilterCount > 0 && isPremium && (
             <Badge variant="secondary" className="text-xs">
               {activeFilterCount} active
@@ -176,27 +175,23 @@ export function PremiumFilters({ isPremium, className }: PremiumFiltersProps) {
         )}
       </div>
 
-      {/* Upgrade Banner for FREE users */}
+      {/* Upgrade prompt for FREE users - aspirational, not punitive */}
       {!isPremium && (
-        <div className="mb-4 p-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-          <div className="flex items-start gap-3">
-            <Crown className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-                Unlock Premium Filters
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                Filter by bullet type, pressure rating, velocity, and performance characteristics
-              </p>
-              <Button
-                size="sm"
-                asChild
-                className="mt-2 h-7 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
-              >
-                <Link href="/pricing">Upgrade Now</Link>
-              </Button>
-            </div>
-          </div>
+        <div className="mb-4 p-3 bg-muted/50 border border-border rounded-lg">
+          <p className="text-sm font-medium text-foreground">
+            Filters used by serious buyers
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 mb-3">
+            Match grade, subsonic, suppressor-safe, low flash, short barrel optimized
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            asChild
+            className="h-7 text-xs"
+          >
+            <Link href="/pricing">Unlock performance filters</Link>
+          </Button>
         </div>
       )}
 
