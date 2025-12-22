@@ -1,8 +1,17 @@
+/**
+ * Alerts Routes (DEPRECATED - ADR-011)
+ *
+ * This route is deprecated. Use /api/saved-items instead.
+ * These endpoints redirect to the new unified Saved Items service.
+ *
+ * @deprecated Use /api/saved-items endpoints instead
+ */
+
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
-import { prisma } from '@ironscout/db'
-import { TIER_CONFIG, hasReachedAlertLimit, visibleDealerPriceWhere } from '../config/tiers'
+import { saveItem, unsaveItem, getSavedItems } from '../services/saved-items'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
+import { getMaxWatchlistItems } from '../config/tiers'
 
 const router: any = Router()
 
@@ -12,281 +21,116 @@ const createAlertSchema = z.object({
   alertType: z.enum(['PRICE_DROP', 'BACK_IN_STOCK', 'NEW_PRODUCT']).default('PRICE_DROP')
 })
 
-const updateAlertSchema = z.object({
-  targetPrice: z.number().optional(),
-  isActive: z.boolean().optional()
-})
-
-// Create new alert
+/**
+ * @deprecated Use POST /api/saved-items/:productId instead
+ */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // Get authenticated user from JWT
     const userId = getAuthenticatedUserId(req)
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' })
     }
 
     const alertData = createAlertSchema.parse(req.body)
-    const userTier = await getUserTier(req)
-    const tierConfig = TIER_CONFIG[userTier] || TIER_CONFIG.FREE
 
-    // Verify product exists
-    const product = await prisma.product.findUnique({
-      where: { id: alertData.productId }
-    })
+    // Redirect to new saved-items service
+    const item = await saveItem(userId, alertData.productId)
 
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' })
-    }
-
-    // Check for duplicate alert
-    const existingAlert = await prisma.alert.findFirst({
-      where: {
-        userId,
-        productId: alertData.productId,
-        isActive: true
-      }
-    })
-
-    if (existingAlert) {
-      return res.status(409).json({ error: 'Alert already exists for this product' })
-    }
-
-    // Check tier-based alert limit
-    const activeAlertCount = await prisma.alert.count({
-      where: {
-        userId,
-        isActive: true
-      }
-    })
-
-    if (hasReachedAlertLimit(userTier, activeAlertCount)) {
-      return res.status(403).json({
-        error: 'Alert limit reached',
-        message: `Free accounts are limited to ${tierConfig.maxActiveAlerts} active alerts. Upgrade to Premium for unlimited alerts.`,
-        currentCount: activeAlertCount,
-        limit: tierConfig.maxActiveAlerts,
-        tier: userTier
-      })
-    }
-
-    // Create alert
-    const alert = await prisma.alert.create({
-      data: {
-        userId,
-        productId: alertData.productId,
-        targetPrice: alertData.targetPrice,
-        alertType: alertData.alertType,
-        isActive: true
-      },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-            category: true,
-            caliber: true,
-            brand: true
-          }
-        }
-      }
-    })
-
+    // Return in legacy format for backwards compatibility
     res.status(201).json({
-      ...alert,
-      _meta: {
-        alertsUsed: activeAlertCount + 1,
-        alertsLimit: tierConfig.maxActiveAlerts,
-        tier: userTier
-      }
+      id: item.id,
+      userId,
+      productId: item.productId,
+      alertType: 'PRICE_DROP',
+      isActive: item.notificationsEnabled,
+      createdAt: item.savedAt,
+      product: {
+        id: item.productId,
+        name: item.name,
+        caliber: item.caliber,
+        brand: item.brand,
+        imageUrl: item.imageUrl,
+      },
+      _deprecated: 'This endpoint is deprecated. Use POST /api/saved-items/:productId instead.',
     })
-  } catch (error) {
-    console.error('Create alert error:', error)
+  } catch (error: any) {
+    console.error('Create alert error (deprecated):', error)
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid alert data', details: error.errors })
+    }
+    if (error.message === 'Product not found') {
+      return res.status(404).json({ error: 'Product not found' })
     }
     res.status(500).json({ error: 'Failed to create alert' })
   }
 })
 
-// Get alerts for authenticated user
+/**
+ * @deprecated Use GET /api/saved-items instead
+ */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    // Get authenticated user from JWT
     const userId = getAuthenticatedUserId(req)
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' })
     }
 
-    const { activeOnly } = req.query
     const userTier = await getUserTier(req)
-    const tierConfig = TIER_CONFIG[userTier] || TIER_CONFIG.FREE
+    const items = await getSavedItems(userId)
 
-    const alerts = await prisma.alert.findMany({
-      where: {
-        userId,
-        ...(activeOnly === 'true' && { isActive: true })
-      },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-            category: true,
-            caliber: true,
-            brand: true,
-            prices: {
-              where: visibleDealerPriceWhere(),
-              take: 1,
-              orderBy: [
-                { retailer: { tier: 'desc' } },
-                { price: 'asc' }
-              ],
-              include: {
-                retailer: {
-                  select: {
-                    id: true,
-                    name: true,
-                    tier: true,
-                    logoUrl: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
-
-    // Count active alerts for limit info
-    const activeAlertCount = alerts.filter((a: any) => a.isActive).length
-
-    // Format response with current price info
-    const formattedAlerts = alerts.map((alert: any) => ({
-      id: alert.id,
-      userId: alert.userId,
-      productId: alert.productId,
-      targetPrice: alert.targetPrice ? parseFloat(alert.targetPrice.toString()) : null,
-      alertType: alert.alertType,
-      isActive: alert.isActive,
-      createdAt: alert.createdAt,
-      updatedAt: alert.updatedAt,
+    // Return in legacy format
+    const alerts = items.map(item => ({
+      id: item.id,
+      userId,
+      productId: item.productId,
+      alertType: 'PRICE_DROP',
+      isActive: item.notificationsEnabled,
+      createdAt: item.savedAt,
       product: {
-        ...alert.product,
-        currentPrice: alert.product.prices[0] ? parseFloat(alert.product.prices[0].price.toString()) : null,
-        retailer: alert.product.prices[0]?.retailer || null,
-        inStock: alert.product.prices[0]?.inStock || false
-      }
+        id: item.productId,
+        name: item.name,
+        caliber: item.caliber,
+        brand: item.brand,
+        imageUrl: item.imageUrl,
+        currentPrice: item.price,
+        inStock: item.inStock,
+      },
     }))
 
     res.json({
-      alerts: formattedAlerts,
+      alerts,
       _meta: {
-        activeCount: activeAlertCount,
-        limit: tierConfig.maxActiveAlerts,
+        activeCount: alerts.length,
+        limit: getMaxWatchlistItems(userTier),
         tier: userTier,
-        canCreateMore: activeAlertCount < tierConfig.maxActiveAlerts
-      }
+        canCreateMore: true,
+      },
+      _deprecated: 'This endpoint is deprecated. Use GET /api/saved-items instead.',
     })
   } catch (error) {
-    console.error('Fetch alerts error:', error)
+    console.error('Fetch alerts error (deprecated):', error)
     res.status(500).json({ error: 'Failed to fetch alerts' })
   }
 })
 
-// Update alert
+/**
+ * @deprecated Use PATCH /api/saved-items/:productId instead
+ */
 router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const { id } = req.params
-    const updateData = updateAlertSchema.parse(req.body)
-
-    // Check if alert exists
-    const existingAlert = await prisma.alert.findUnique({
-      where: { id },
-      select: { id: true, userId: true }
-    })
-    if (!existingAlert) {
-      return res.status(404).json({ error: 'Alert not found' })
-    }
-
-    // Verify user owns this alert
-    if (existingAlert.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    const updatedAlert = await prisma.alert.update({
-      where: { id },
-      data: {
-        ...(updateData.targetPrice !== undefined && { targetPrice: updateData.targetPrice }),
-        ...(updateData.isActive !== undefined && { isActive: updateData.isActive })
-      },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-            category: true,
-            caliber: true,
-            brand: true
-          }
-        }
-      }
-    })
-
-    res.json(updatedAlert)
-  } catch (error) {
-    console.error('Update alert error:', error)
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Invalid update data', details: error.errors })
-    }
-    res.status(500).json({ error: 'Failed to update alert' })
-  }
+  res.status(410).json({
+    error: 'This endpoint is deprecated',
+    message: 'Use PATCH /api/saved-items/:productId instead',
+  })
 })
 
-// Delete alert
+/**
+ * @deprecated Use DELETE /api/saved-items/:productId instead
+ */
 router.delete('/:id', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const { id } = req.params
-
-    // Check if alert exists
-    const existingAlert = await prisma.alert.findUnique({
-      where: { id },
-      select: { id: true, userId: true }
-    })
-    if (!existingAlert) {
-      return res.status(404).json({ error: 'Alert not found' })
-    }
-
-    // Verify user owns this alert
-    if (existingAlert.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    await prisma.alert.delete({ where: { id } })
-
-    res.json({ message: 'Alert deleted successfully', id })
-  } catch (error) {
-    console.error('Delete alert error:', error)
-    res.status(500).json({ error: 'Failed to delete alert' })
-  }
+  res.status(410).json({
+    error: 'This endpoint is deprecated',
+    message: 'Use DELETE /api/saved-items/:productId instead',
+  })
 })
 
 export { router as alertsRouter }

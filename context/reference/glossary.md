@@ -69,3 +69,24 @@ Data flow: Source (config) → Fetch → ParsedProduct (ephemeral) → Normalize
 Data flow: DealerFeed → Fetch → Parse → DealerSku → Match → CanonicalSku → PricingSnapshot
 
 These are separate pipelines with different lifecycle semantics.
+
+---
+
+## Saved Items & Notifications (ADR-011)
+
+### Saved Item
+User-facing concept for "I care about this product." Maps to `WatchlistItem` table internally. A single save action creates tracking + notification rules with sensible defaults.
+
+See ADR-011 for full details.
+
+### WatchlistItem (Internal)
+Database table that stores a saved item. Owns all notification preferences (`notificationsEnabled`, `priceDropEnabled`, `backInStockEnabled`, thresholds) and cooldown state (`lastPriceNotifiedAt`, `lastStockNotifiedAt`).
+
+### Alert (Internal)
+Database table that acts as a declarative rule marker. Indicates which notification rule types (`PRICE_DROP`, `BACK_IN_STOCK`) exist for a saved item. Does NOT store thresholds, target prices, or state—those live on WatchlistItem.
+
+### Notification Rule
+User-facing term for alert configurations. Examples: "Price Drop Alerts", "Back in Stock Alerts". Internally implemented via Alert records linked to WatchlistItem.
+
+### SavedItemDTO
+API response type for saved items. Contains core fields (product info, notification preferences) but NOT derived insights like "lowest price seen." Derived values come from price history queries and are tier-gated.

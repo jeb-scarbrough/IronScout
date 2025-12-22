@@ -20,6 +20,7 @@ import { searchRouter } from './routes/search'
 import { authRouter } from './routes/auth'
 import { dashboardRouter } from './routes/dashboard'
 import { watchlistRouter } from './routes/watchlist'
+import { savedItemsRouter } from './routes/saved-items'
 import { adminRouter } from './routes/admin'
 
 const app: Express = express()
@@ -69,6 +70,7 @@ app.use('/api/search', searchRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/watchlist', watchlistRouter)
+app.use('/api/saved-items', savedItemsRouter)
 app.use('/api/admin', adminRouter)
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

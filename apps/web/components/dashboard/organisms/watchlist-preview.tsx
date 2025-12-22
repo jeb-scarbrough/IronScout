@@ -205,3 +205,8 @@ function WatchlistRowSkeleton() {
     </div>
   )
 }
+
+/**
+ * @deprecated Use SavedItemsPreview instead
+ */
+export const WatchlistPreview = SavedItemsPreview

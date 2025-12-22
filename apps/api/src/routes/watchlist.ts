@@ -1,21 +1,20 @@
+/**
+ * Watchlist Routes (DEPRECATED - ADR-011)
+ *
+ * This route is deprecated. Use /api/saved-items instead.
+ * These endpoints redirect to the new unified Saved Items service.
+ *
+ * @deprecated Use /api/saved-items endpoints instead
+ */
+
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import {
-  getMaxWatchlistItems,
-  hasReachedWatchlistLimit,
-  hasFeature,
-  visibleDealerPriceWhere
-} from '../config/tiers'
+import { saveItem, unsaveItem, getSavedItems, countSavedItems } from '../services/saved-items'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
+import { getMaxWatchlistItems, hasReachedWatchlistLimit, hasFeature } from '../config/tiers'
 
 const router: any = Router()
-
-// ============================================================================
-// WATCHLIST CRUD ENDPOINTS
-// Free: 5 items max, no collections
-// Premium: Unlimited items, collections support
-// ============================================================================
 
 const createWatchlistItemSchema = z.object({
   productId: z.string(),
@@ -23,22 +22,11 @@ const createWatchlistItemSchema = z.object({
   collectionId: z.string().optional()
 })
 
-const updateWatchlistItemSchema = z.object({
-  targetPrice: z.number().optional().nullable(),
-  collectionId: z.string().optional().nullable()
-})
-
-const createCollectionSchema = z.object({
-  name: z.string().min(1).max(50)
-})
-
-// ============================================================================
-// GET /api/watchlist - Get all watchlist items for authenticated user
-// ============================================================================
-
+/**
+ * @deprecated Use GET /api/saved-items instead
+ */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    // Get authenticated user from JWT
     const userId = getAuthenticatedUserId(req)
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' })
@@ -48,119 +36,54 @@ router.get('/', async (req: Request, res: Response) => {
     const maxItems = getMaxWatchlistItems(userTier)
     const hasCollections = hasFeature(userTier, 'collections')
 
-    const items = await prisma.watchlistItem.findMany({
-      where: { userId },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            caliber: true,
-            brand: true,
-            imageUrl: true,
-            roundCount: true,
-            grainWeight: true,
-            prices: {
-              where: {
-                inStock: true,
-                ...visibleDealerPriceWhere(),
-              },
-              orderBy: [{ retailer: { tier: 'desc' } }, { price: 'asc' }],
-              take: 1,
-              include: {
-                retailer: {
-                  select: { id: true, name: true, tier: true, logoUrl: true }
-                }
-              }
-            }
-          }
-        },
-        collection: hasCollections
-          ? { select: { id: true, name: true } }
-          : false
+    const items = await getSavedItems(userId)
+
+    // Return in legacy format
+    const formattedItems = items.map(item => ({
+      id: item.id,
+      productId: item.productId,
+      targetPrice: null, // Deprecated field
+      createdAt: item.savedAt,
+      product: {
+        id: item.productId,
+        name: item.name,
+        caliber: item.caliber,
+        brand: item.brand,
+        imageUrl: item.imageUrl,
+        currentPrice: item.price,
+        retailer: null,
+        inStock: item.inStock,
       },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    // Get collections if user has access
-    let collections: any[] = []
-    if (hasCollections) {
-      collections = await prisma.watchlistCollection.findMany({
-        where: { userId },
-        include: {
-          _count: { select: { items: true } }
-        },
-        orderBy: { createdAt: 'desc' }
-      })
-    }
-
-    // Format items with current price and savings info
-    const formattedItems = items.map(item => {
-      const currentPrice = item.product.prices[0]
-        ? parseFloat(item.product.prices[0].price.toString())
-        : null
-
-      const targetPrice = item.targetPrice
-        ? parseFloat(item.targetPrice.toString())
-        : null
-
-      let savingsVsTarget: number | null = null
-      if (currentPrice && targetPrice && currentPrice < targetPrice) {
-        savingsVsTarget = Math.round((targetPrice - currentPrice) * 100) / 100
-      }
-
-      // Check if this is lowest price seen
-      let isLowestSeen = false
-      if (item.lowestPriceSeen && currentPrice) {
-        const lowest = parseFloat(item.lowestPriceSeen.toString())
-        isLowestSeen = currentPrice <= lowest
-      }
-
-      return {
-        id: item.id,
-        productId: item.productId,
-        targetPrice,
-        createdAt: item.createdAt,
-        product: {
-          ...item.product,
-          currentPrice,
-          retailer: item.product.prices[0]?.retailer || null,
-          inStock: item.product.prices.length > 0 && item.product.prices[0].inStock
-        },
-        collection: hasCollections ? item.collection : undefined,
-        lowestPriceSeen: item.lowestPriceSeen
-          ? parseFloat(item.lowestPriceSeen.toString())
-          : null,
-        lowestPriceSeenAt: item.lowestPriceSeenAt,
-        isLowestSeen,
-        savingsVsTarget
-      }
-    })
+      collection: null,
+      lowestPriceSeen: null,
+      lowestPriceSeenAt: null,
+      isLowestSeen: false,
+      savingsVsTarget: null,
+    }))
 
     res.json({
       items: formattedItems,
-      collections: hasCollections ? collections : undefined,
+      collections: hasCollections ? [] : undefined,
       _meta: {
         tier: userTier,
         itemCount: items.length,
         itemLimit: maxItems,
         canAddMore: maxItems === -1 || items.length < maxItems,
-        hasCollections
-      }
+        hasCollections,
+      },
+      _deprecated: 'This endpoint is deprecated. Use GET /api/saved-items instead.',
     })
   } catch (error) {
-    console.error('Get watchlist error:', error)
+    console.error('Get watchlist error (deprecated):', error)
     res.status(500).json({ error: 'Failed to fetch watchlist' })
   }
 })
 
-// ============================================================================
-// POST /api/watchlist - Add item to watchlist
-// ============================================================================
-
+/**
+ * @deprecated Use POST /api/saved-items/:productId instead
+ */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // Get authenticated user from JWT
     const userId = getAuthenticatedUserId(req)
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' })
@@ -168,36 +91,9 @@ router.post('/', async (req: Request, res: Response) => {
 
     const data = createWatchlistItemSchema.parse(req.body)
     const userTier = await getUserTier(req)
-    const hasCollections = hasFeature(userTier, 'collections')
-
-    // Check if product exists
-    const product = await prisma.product.findUnique({
-      where: { id: data.productId }
-    })
-
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' })
-    }
-
-    // Check for duplicate
-    const existing = await prisma.watchlistItem.findUnique({
-      where: {
-        userId_productId: {
-          userId,
-          productId: data.productId
-        }
-      }
-    })
-
-    if (existing) {
-      return res.status(409).json({ error: 'Product already in watchlist' })
-    }
 
     // Check tier limit
-    const currentCount = await prisma.watchlistItem.count({
-      where: { userId }
-    })
-
+    const currentCount = await countSavedItems(userId)
     if (hasReachedWatchlistLimit(userTier, currentCount)) {
       const limit = getMaxWatchlistItems(userTier)
       return res.status(403).json({
@@ -205,316 +101,86 @@ router.post('/', async (req: Request, res: Response) => {
         message: `Free accounts are limited to ${limit} watchlist items. Upgrade to Premium for unlimited tracking.`,
         currentCount,
         limit,
-        tier: userTier
+        tier: userTier,
       })
     }
 
-    // If collectionId provided, verify user owns it and has access
-    if (data.collectionId) {
-      if (!hasCollections) {
-        return res.status(403).json({
-          error: 'Collections are a Premium feature',
-          message: 'Upgrade to Premium to organize your watchlist into collections.'
-        })
-      }
-
-      const collection = await prisma.watchlistCollection.findFirst({
-        where: { id: data.collectionId, userId }
-      })
-
-      if (!collection) {
-        return res.status(404).json({ error: 'Collection not found' })
-      }
-    }
-
-    // Get current lowest price for initialization
-    const currentPrice = await prisma.price.findFirst({
-      where: {
-        productId: data.productId,
-        inStock: true,
-        ...visibleDealerPriceWhere(),
-      },
-      orderBy: { price: 'asc' },
-      select: { price: true }
-    })
-
-    // Create watchlist item
-    const item = await prisma.watchlistItem.create({
-      data: {
-        userId,
-        productId: data.productId,
-        targetPrice: data.targetPrice,
-        collectionId: hasCollections ? data.collectionId : undefined,
-        lowestPriceSeen: currentPrice?.price,
-        lowestPriceSeenAt: currentPrice ? new Date() : undefined
-      },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            caliber: true,
-            brand: true,
-            imageUrl: true
-          }
-        }
-      }
-    })
+    const item = await saveItem(userId, data.productId)
 
     res.status(201).json({
-      item,
+      item: {
+        id: item.id,
+        productId: item.productId,
+        product: {
+          id: item.productId,
+          name: item.name,
+          caliber: item.caliber,
+          brand: item.brand,
+          imageUrl: item.imageUrl,
+        },
+      },
       _meta: {
         itemsUsed: currentCount + 1,
         itemsLimit: getMaxWatchlistItems(userTier),
-        tier: userTier
-      }
+        tier: userTier,
+      },
+      _deprecated: 'This endpoint is deprecated. Use POST /api/saved-items/:productId instead.',
     })
-  } catch (error) {
-    console.error('Create watchlist item error:', error)
+  } catch (error: any) {
+    console.error('Create watchlist item error (deprecated):', error)
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid data', details: error.errors })
+    }
+    if (error.message === 'Product not found') {
+      return res.status(404).json({ error: 'Product not found' })
     }
     res.status(500).json({ error: 'Failed to add to watchlist' })
   }
 })
 
-// ============================================================================
-// PUT /api/watchlist/:id - Update watchlist item
-// ============================================================================
-
+/**
+ * @deprecated Use PATCH /api/saved-items/:productId instead
+ */
 router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const { id } = req.params
-    const data = updateWatchlistItemSchema.parse(req.body)
-
-    // Get existing item
-    const existing = await prisma.watchlistItem.findUnique({
-      where: { id },
-      select: { id: true, userId: true }
-    })
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Watchlist item not found' })
-    }
-
-    // Verify user owns this item
-    if (existing.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    const userTier = await getUserTier(req)
-    const hasCollections = hasFeature(userTier, 'collections')
-
-    // If updating collection, verify access
-    if (data.collectionId !== undefined) {
-      if (!hasCollections) {
-        return res.status(403).json({
-          error: 'Collections are a Premium feature'
-        })
-      }
-
-      if (data.collectionId !== null) {
-        const collection = await prisma.watchlistCollection.findFirst({
-          where: { id: data.collectionId, userId }
-        })
-
-        if (!collection) {
-          return res.status(404).json({ error: 'Collection not found' })
-        }
-      }
-    }
-
-    const updated = await prisma.watchlistItem.update({
-      where: { id },
-      data: {
-        ...(data.targetPrice !== undefined && { targetPrice: data.targetPrice }),
-        ...(data.collectionId !== undefined && hasCollections && {
-          collectionId: data.collectionId
-        })
-      },
-      include: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            caliber: true,
-            brand: true,
-            imageUrl: true
-          }
-        }
-      }
-    })
-
-    res.json(updated)
-  } catch (error) {
-    console.error('Update watchlist item error:', error)
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Invalid data', details: error.errors })
-    }
-    res.status(500).json({ error: 'Failed to update watchlist item' })
-  }
+  res.status(410).json({
+    error: 'This endpoint is deprecated',
+    message: 'Use PATCH /api/saved-items/:productId instead',
+  })
 })
 
-// ============================================================================
-// DELETE /api/watchlist/:id - Remove item from watchlist
-// ============================================================================
-
+/**
+ * @deprecated Use DELETE /api/saved-items/:productId instead
+ */
 router.delete('/:id', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const { id } = req.params
-
-    const existing = await prisma.watchlistItem.findUnique({
-      where: { id },
-      select: { id: true, userId: true }
-    })
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Watchlist item not found' })
-    }
-
-    // Verify user owns this item
-    if (existing.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    await prisma.watchlistItem.delete({ where: { id } })
-
-    res.json({ message: 'Removed from watchlist', id })
-  } catch (error) {
-    console.error('Delete watchlist item error:', error)
-    res.status(500).json({ error: 'Failed to remove from watchlist' })
-  }
+  res.status(410).json({
+    error: 'This endpoint is deprecated',
+    message: 'Use DELETE /api/saved-items/:productId instead',
+  })
 })
 
 // ============================================================================
-// COLLECTIONS ENDPOINTS (Premium only)
+// COLLECTIONS ENDPOINTS (Premium only) - Still deprecated
 // ============================================================================
 
-// GET /api/watchlist/collections
 router.get('/collections', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const userTier = await getUserTier(req)
-
-    if (!hasFeature(userTier, 'collections')) {
-      return res.status(403).json({
-        error: 'Collections are a Premium feature',
-        message: 'Upgrade to Premium to organize your watchlist into collections like "Home Defense" or "Range Day".'
-      })
-    }
-
-    const collections = await prisma.watchlistCollection.findMany({
-      where: { userId },
-      include: {
-        items: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                caliber: true,
-                imageUrl: true
-              }
-            }
-          }
-        },
-        _count: { select: { items: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    res.json({ collections })
-  } catch (error) {
-    console.error('Get collections error:', error)
-    res.status(500).json({ error: 'Failed to fetch collections' })
-  }
+  res.status(410).json({
+    error: 'Collections feature is deprecated',
+    message: 'Collections have been removed in the new Saved Items system.',
+  })
 })
 
-// POST /api/watchlist/collections
 router.post('/collections', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const data = createCollectionSchema.parse(req.body)
-    const userTier = await getUserTier(req)
-
-    if (!hasFeature(userTier, 'collections')) {
-      return res.status(403).json({
-        error: 'Collections are a Premium feature'
-      })
-    }
-
-    const collection = await prisma.watchlistCollection.create({
-      data: {
-        userId,
-        name: data.name
-      }
-    })
-
-    res.status(201).json(collection)
-  } catch (error) {
-    console.error('Create collection error:', error)
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Invalid data', details: error.errors })
-    }
-    res.status(500).json({ error: 'Failed to create collection' })
-  }
+  res.status(410).json({
+    error: 'Collections feature is deprecated',
+    message: 'Collections have been removed in the new Saved Items system.',
+  })
 })
 
-// DELETE /api/watchlist/collections/:id
 router.delete('/collections/:id', async (req: Request, res: Response) => {
-  try {
-    // Get authenticated user from JWT
-    const userId = getAuthenticatedUserId(req)
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' })
-    }
-
-    const { id } = req.params
-
-    const existing = await prisma.watchlistCollection.findUnique({
-      where: { id },
-      select: { id: true, userId: true }
-    })
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Collection not found' })
-    }
-
-    // Verify user owns this collection
-    if (existing.userId !== userId) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
-    // Items will have collectionId set to null via onDelete: SetNull
-    await prisma.watchlistCollection.delete({ where: { id } })
-
-    res.json({ message: 'Collection deleted', id })
-  } catch (error) {
-    console.error('Delete collection error:', error)
-    res.status(500).json({ error: 'Failed to delete collection' })
-  }
+  res.status(410).json({
+    error: 'Collections feature is deprecated',
+    message: 'Collections have been removed in the new Saved Items system.',
+  })
 })
 
 export { router as watchlistRouter }

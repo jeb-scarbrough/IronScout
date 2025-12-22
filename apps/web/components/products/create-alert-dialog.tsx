@@ -4,30 +4,30 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { createAlert, type Product } from '@/lib/api'
-import { X } from 'lucide-react'
+import { saveItem, type Product } from '@/lib/api'
+import { X, Bell, TrendingDown, Package } from 'lucide-react'
 import { toast } from 'sonner'
 
-interface CreateAlertDialogProps {
+interface SaveItemDialogProps {
   product: Product
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDialogProps) {
+/**
+ * Save Item Dialog (ADR-011)
+ *
+ * Simplified save flow - just save the item with default notifications.
+ * Users can customize notification preferences in the Saved Items Manager.
+ */
+export function SaveItemDialog({ product, open, onOpenChange }: SaveItemDialogProps) {
   const { data: session } = useSession()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [alertType, setAlertType] = useState<'PRICE_DROP' | 'BACK_IN_STOCK' | 'NEW_PRODUCT'>('PRICE_DROP')
-  const [targetPrice, setTargetPrice] = useState(
-    product.prices[0]?.price ? (product.prices[0].price * 0.9).toFixed(2) : ''
-  )
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSave = async () => {
     setError(null)
 
     const token = (session as any)?.accessToken
@@ -38,20 +38,25 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
 
     try {
       setLoading(true)
-      await createAlert({
-        token,
-        productId: product.id,
-        targetPrice: targetPrice ? parseFloat(targetPrice) : undefined,
-        alertType
-      })
+      const result = await saveItem(token, product.id)
 
-      toast.success('Item saved!', {
-        description: `We'll notify you when the price drops${targetPrice ? ` to $${targetPrice}` : ''}.`,
-        action: {
-          label: 'View Saved Items',
-          onClick: () => router.push('/dashboard/saved')
-        }
-      })
+      if (result._meta.wasExisting) {
+        toast.info('Already saved', {
+          description: 'This item is already in your saved items.',
+          action: {
+            label: 'View Saved',
+            onClick: () => router.push('/dashboard/saved'),
+          },
+        })
+      } else {
+        toast.success('Item saved!', {
+          description: 'You\'ll be notified when the price drops or it comes back in stock.',
+          action: {
+            label: 'Manage Alerts',
+            onClick: () => router.push('/dashboard/saved'),
+          },
+        })
+      }
       onOpenChange(false)
     } catch (error: any) {
       toast.error(error.message || 'Failed to save item')
@@ -62,6 +67,8 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
   }
 
   if (!open) return null
+
+  const currentPrice = product.prices[0]?.price
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -74,70 +81,77 @@ export function CreateAlertDialog({ product, open, onOpenChange }: CreateAlertDi
             <X className="h-4 w-4" />
           </button>
           <CardTitle>Save Item</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Track {product.name} and get notified when it meets your criteria
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {product.name}
           </p>
         </CardHeader>
 
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
-                {error}
-              </div>
-            )}
+        <CardContent className="space-y-4">
+          {error && (
+            <div className="rounded-md bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-200">
+              {error}
+            </div>
+          )}
 
-            <div className="space-y-2">
-              <label htmlFor="notification-type" className="text-sm font-medium">
-                Notify me when
-              </label>
-              <select
-                id="notification-type"
-                value={alertType}
-                onChange={(e) => setAlertType(e.target.value as any)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-              >
-                <option value="PRICE_DROP">Price drops</option>
-                <option value="BACK_IN_STOCK">Back in stock</option>
-                <option value="NEW_PRODUCT">New products available</option>
-              </select>
+          {/* Current price info */}
+          {currentPrice && (
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">Current lowest price</p>
+              <p className="text-2xl font-bold">${currentPrice.toFixed(2)}</p>
+            </div>
+          )}
+
+          {/* What you'll get */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">You'll be notified when:</p>
+
+            <div className="flex items-start gap-3 p-3 border rounded-lg">
+              <TrendingDown className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div>
+                <p className="font-medium">Price Drops</p>
+                <p className="text-sm text-muted-foreground">
+                  Alert when price drops by 5% or more
+                </p>
+              </div>
             </div>
 
-            {alertType === 'PRICE_DROP' && (
-              <div className="space-y-2">
-                <label htmlFor="target-price" className="text-sm font-medium">
-                  Target Price (Current: ${product.prices[0]?.price.toFixed(2)})
-                </label>
-                <Input
-                  id="target-price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={targetPrice}
-                  onChange={(e) => setTargetPrice(e.target.value)}
-                  placeholder="Enter target price"
-                  required={alertType === 'PRICE_DROP'}
-                />
+            <div className="flex items-start gap-3 p-3 border rounded-lg">
+              <Package className="h-5 w-5 text-green-600 mt-0.5" />
+              <div>
+                <p className="font-medium">Back in Stock</p>
+                <p className="text-sm text-muted-foreground">
+                  Alert when this item is available again
+                </p>
               </div>
-            )}
-          </CardContent>
+            </div>
+          </div>
 
-          <CardFooter className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Saving...' : 'Save Item'}
-            </Button>
-          </CardFooter>
-        </form>
+          <p className="text-xs text-muted-foreground">
+            You can customize notification preferences in your Saved Items.
+          </p>
+        </CardContent>
+
+        <CardFooter className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={loading} className="flex-1">
+            <Bell className="h-4 w-4 mr-2" />
+            {loading ? 'Saving...' : 'Save & Track'}
+          </Button>
+        </CardFooter>
       </Card>
     </div>
   )
 }
+
+/**
+ * @deprecated Use SaveItemDialog instead
+ */
+export const CreateAlertDialog = SaveItemDialog

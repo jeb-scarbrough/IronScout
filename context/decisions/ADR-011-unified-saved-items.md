@@ -125,3 +125,116 @@ Does NOT affect:
 - Harvester alert engine (internal implementation)
 - Email notification system
 - Database schema (Phase 1-2)
+
+---
+
+## Data Ownership (Phase 2 Clarification)
+
+### WatchlistItem
+
+`WatchlistItem` is the **Saved Item record**. It owns:
+
+- User tracking intent (userId + productId)
+- All notification preferences:
+  - `notificationsEnabled` - master toggle
+  - `priceDropEnabled` - price drop alerts on/off
+  - `backInStockEnabled` - stock alerts on/off
+  - `minDropPercent` - threshold (default: 5)
+  - `minDropAmount` - threshold (default: $5)
+  - `stockAlertCooldownHours` - anti-spam (default: 24)
+- Cooldown state:
+  - `lastPriceNotifiedAt` - last price drop notification
+  - `lastStockNotifiedAt` - last stock notification
+
+### Alert
+
+`Alert` is a **declarative rule marker**. It only indicates:
+
+- Which rule types exist for a saved item (`PRICE_DROP`, `BACK_IN_STOCK`)
+- Whether the rule is enabled (`isEnabled`)
+
+Alert does NOT store:
+- ~~`targetPrice`~~ - Removed. Not a user concept in v1.
+- ~~`lastTriggered`~~ - Cooldown state lives on WatchlistItem.
+- ~~Thresholds~~ - Preferences live on WatchlistItem.
+
+**Rationale**: Alert as a thin marker allows future rule types without schema changes. All stateful/configurable data stays on WatchlistItem, the canonical "saved" record.
+
+---
+
+## SavedItemDTO Contract
+
+The `SavedItemDTO` returned by `/api/saved-items` includes:
+
+### Core Fields (Stable)
+
+```typescript
+interface SavedItemDTO {
+  id: string              // WatchlistItem ID
+  productId: string
+  name: string
+  brand: string
+  caliber: string
+  price: number | null    // Current lowest price (derived, not stored)
+  inStock: boolean
+  imageUrl: string | null
+  savedAt: string         // ISO timestamp
+
+  // Notification preferences
+  notificationsEnabled: boolean
+  priceDropEnabled: boolean
+  backInStockEnabled: boolean
+  minDropPercent: number
+  minDropAmount: number
+  stockAlertCooldownHours: number
+}
+```
+
+### Explicitly Out of Scope
+
+These fields are **not** part of `SavedItemDTO`:
+
+- `lowestPriceSeen` - Derived from price history; future Premium insight
+- `isLowestSeen` - Derived from price history; future Premium insight
+- `targetPrice` - Deprecated; not a user concept in unified model
+- `savingsVsTarget` - Deprecated with targetPrice
+
+**Rationale**: Keeping SavedItemDTO lean ensures the core save/unsave path remains simple. Derived insights require separate queries against append-only price history and are tier-gated.
+
+---
+
+## Default Rule Policy
+
+When a user saves an item, these defaults apply:
+
+### Price Drop Rule
+
+- **Default threshold**: max(5%, $5) - whichever is greater
+- **Rationale**: Prevents noisy penny-drop alerts
+- **Stored on**: `WatchlistItem.minDropPercent`, `WatchlistItem.minDropAmount`
+- **Cooldown**: None (each significant drop triggers)
+
+### Back in Stock Rule
+
+- **Default cooldown**: 24 hours
+- **Rationale**: Prevents spam when stock fluctuates
+- **Stored on**: `WatchlistItem.stockAlertCooldownHours`
+- **State**: `WatchlistItem.lastStockNotifiedAt`
+
+### Master Toggle
+
+- **Default**: `notificationsEnabled = true`
+- Users can disable all notifications without removing the saved item
+
+---
+
+## Terminology
+
+| User-Facing | Internal (Code/DB) | Notes |
+|-------------|-------------------|-------|
+| Saved Item | WatchlistItem | The canonical "I care about this" record |
+| Notification | Alert | Alert is internal; users see "notifications" |
+| Price Drop Alert | Alert (ruleType: PRICE_DROP) | |
+| Stock Alert | Alert (ruleType: BACK_IN_STOCK) | |
+
+**Rule**: UI and user-facing docs use "Saved Items" and "Notifications". Code and architecture docs may use internal terms with clarification.

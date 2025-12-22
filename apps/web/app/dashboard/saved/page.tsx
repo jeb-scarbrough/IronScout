@@ -1,4 +1,4 @@
-import { AlertsManager } from '@/components/dashboard/alerts-manager'
+import { SavedItemsManager } from '@/components/dashboard/saved-items-manager'
 
 export default function SavedItemsPage() {
   return (
@@ -11,8 +11,7 @@ export default function SavedItemsPage() {
         </p>
       </div>
 
-      {/* TODO: Replace with SavedItemsManager once SavedItemDTO is wired */}
-      <AlertsManager />
+      <SavedItemsManager />
     </div>
   )
 }

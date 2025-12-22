@@ -812,6 +812,7 @@ export async function createWatchlistCollection(token: string, name: string): Pr
 
 /**
  * Delete watchlist collection (Premium only)
+ * @deprecated Use saved items API instead
  */
 export async function deleteWatchlistCollection(id: string, token: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/watchlist/collections/${id}`, {
@@ -822,4 +823,166 @@ export async function deleteWatchlistCollection(id: string, token: string): Prom
     const error = await response.json().catch(() => ({}))
     throw new Error(error.error || 'Failed to delete collection')
   }
+}
+
+// ============================================
+// Saved Items API (ADR-011 - replaces watchlist/alerts)
+// ============================================
+
+/**
+ * Saved item with product info and notification preferences
+ */
+export interface SavedItem {
+  id: string
+  productId: string
+  name: string
+  brand: string
+  caliber: string
+  price: number | null
+  inStock: boolean
+  imageUrl: string | null
+  savedAt: string
+
+  // Notification preferences
+  notificationsEnabled: boolean
+  priceDropEnabled: boolean
+  backInStockEnabled: boolean
+  minDropPercent: number
+  minDropAmount: number
+  stockAlertCooldownHours: number
+}
+
+export interface SavedItemsResponse {
+  items: SavedItem[]
+  _meta: {
+    tier: 'FREE' | 'PREMIUM'
+    itemCount: number
+    itemLimit: number
+    canAddMore: boolean
+  }
+}
+
+export interface SaveItemResponse extends SavedItem {
+  _meta: {
+    tier: 'FREE' | 'PREMIUM'
+    itemCount: number
+    itemLimit: number
+    canAddMore: boolean
+    wasExisting: boolean
+  }
+}
+
+export interface UpdateSavedItemPrefs {
+  notificationsEnabled?: boolean
+  priceDropEnabled?: boolean
+  backInStockEnabled?: boolean
+  minDropPercent?: number
+  minDropAmount?: number
+  stockAlertCooldownHours?: number
+}
+
+/**
+ * Get all saved items for the authenticated user
+ */
+export async function getSavedItems(token: string): Promise<SavedItemsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items`, {
+    headers: buildAuthHeaders(token),
+  })
+  if (!response.ok) {
+    throw new Error('Failed to fetch saved items')
+  }
+  return response.json()
+}
+
+/**
+ * Save a product (idempotent - returns existing if already saved)
+ */
+export async function saveItem(token: string, productId: string): Promise<SaveItemResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to save item')
+  }
+
+  return response.json()
+}
+
+/**
+ * Unsave a product
+ */
+export async function unsaveItem(token: string, productId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to remove saved item')
+  }
+}
+
+/**
+ * Update notification preferences for a saved item
+ */
+export async function updateSavedItemPrefs(
+  token: string,
+  productId: string,
+  prefs: UpdateSavedItemPrefs
+): Promise<SavedItem> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
+    method: 'PATCH',
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify(prefs),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to update preferences')
+  }
+
+  return response.json()
+}
+
+/**
+ * Check if a product is saved
+ */
+export async function isSaved(token: string, productId: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
+    headers: buildAuthHeaders(token),
+  })
+
+  if (response.status === 404) {
+    return false
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to check saved status')
+  }
+
+  const data = await response.json()
+  return data.isSaved === true
+}
+
+/**
+ * Get a single saved item with full details
+ */
+export async function getSavedItem(token: string, productId: string): Promise<SavedItem | null> {
+  const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
+    headers: buildAuthHeaders(token),
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch saved item')
+  }
+
+  return response.json()
 }

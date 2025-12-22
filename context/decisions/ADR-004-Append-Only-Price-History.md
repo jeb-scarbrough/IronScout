@@ -75,3 +75,21 @@ Price records may include promotional context persisted at ingestion time:
 3. **No retroactive mutation** - Like all price data, promo metadata is append-only. Do not update historical records to "fix" sale status.
 
 If a field is unknown, store `null`. Do not default to REGULAR or compute priceType from originalPrice vs price.
+
+## Clarification: Derived Insights (2025-12-22)
+
+Certain user-facing insights are **derived** from price history, not stored:
+
+- "Lowest price seen" for a saved item
+- "Is this the lowest price?" indicator
+- Price percentile position
+
+**Rules:**
+
+1. **Derive at query time** - These values are computed from append-only price records, not stored on SavedItem or WatchlistItem.
+
+2. **Tier-gated** - Derived insights like "lowest in 30 days" are Premium features. Free tier sees current price only.
+
+3. **Not part of SavedItemDTO core** - The unified Saved Items API (ADR-011) returns core fields only. Derived insights require separate queries or a dedicated insights endpoint.
+
+**Rationale**: Storing derived values would create denormalization risk and stale data. Keeping them query-time ensures consistency with append-only source of truth.

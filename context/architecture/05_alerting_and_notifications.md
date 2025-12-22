@@ -6,6 +6,20 @@ This document defines **mechanics and constraints**, not marketing language. Use
 
 ---
 
+## Terminology Note
+
+| User-Facing | Internal (Code/DB) | Notes |
+|-------------|-------------------|-------|
+| **Saved Item** | WatchlistItem | The canonical "I care about this" record |
+| **Notification** | Alert | Alert is internal; users see "notifications" |
+| Saved Items page | `/dashboard/saved` | Was `/dashboard/alerts` |
+
+**Rule**: User-facing surfaces (UI, emails, docs) use "Saved Items" and "Notifications". This document uses internal terms for precision.
+
+See ADR-011 for the unified Saved Items model.
+
+---
+
 ## Purpose of Alerts
 
 Alerts exist to:

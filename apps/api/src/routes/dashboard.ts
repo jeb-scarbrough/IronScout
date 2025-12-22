@@ -34,21 +34,14 @@ router.get('/pulse', async (req: Request, res: Response) => {
     const maxCalibers = getMaxMarketPulseCalibers(userTier)
     const showPriceTimingSignal = hasFeature(userTier, 'priceTimingSignal')
 
-    // Get user's calibers from alerts and watchlist
-    const [alerts, watchlistItems] = await Promise.all([
-      prisma.alert.findMany({
-        where: { userId, isActive: true },
-        include: { product: { select: { caliber: true } } }
-      }),
-      prisma.watchlistItem.findMany({
-        where: { userId },
-        include: { product: { select: { caliber: true } } }
-      })
-    ])
+    // Get user's calibers from saved items (watchlist)
+    const watchlistItems = await prisma.watchlistItem.findMany({
+      where: { userId },
+      include: { product: { select: { caliber: true } } }
+    })
 
     // Extract unique calibers
     const calibersSet = new Set<string>()
-    alerts.forEach(a => a.product.caliber && calibersSet.add(a.product.caliber))
     watchlistItems.forEach(w => w.product.caliber && calibersSet.add(w.product.caliber))
 
     // Default calibers if user has none tracked
@@ -205,26 +198,16 @@ router.get('/deals', async (req: Request, res: Response) => {
     const showStockIndicators = hasFeature(userTier, 'stockIndicators')
     const showExplanations = hasFeature(userTier, 'aiExplanations')
 
-    // Get user's calibers from alerts and watchlist for personalization
-    const [alerts, watchlistItems] = await Promise.all([
-      prisma.alert.findMany({
-        where: { userId, isActive: true },
-        include: { product: { select: { caliber: true, id: true } } }
-      }),
-      prisma.watchlistItem.findMany({
-        where: { userId },
-        include: { product: { select: { caliber: true, id: true } } }
-      })
-    ])
+    // Get user's calibers from saved items (watchlist) for personalization
+    const watchlistItems = await prisma.watchlistItem.findMany({
+      where: { userId },
+      include: { product: { select: { caliber: true, id: true } } }
+    })
 
     // Extract calibers and product IDs for personalization
     const calibersSet = new Set<string>()
     const watchedProductIds = new Set<string>()
 
-    alerts.forEach(a => {
-      if (a.product.caliber) calibersSet.add(a.product.caliber)
-      watchedProductIds.add(a.product.id)
-    })
     watchlistItems.forEach(w => {
       if (w.product.caliber) calibersSet.add(w.product.caliber)
       watchedProductIds.add(w.product.id)
@@ -353,83 +336,38 @@ router.get('/savings', async (req: Request, res: Response) => {
 
     const userTier = await getUserTier(req)
 
-    // Get user's alerts with target prices
-    const alerts = await prisma.alert.findMany({
-      where: { userId },
-      include: {
-        product: {
-          include: {
-            prices: {
-              where: {
-                inStock: true,
-                ...visibleDealerPriceWhere(),
-              },
-              orderBy: { price: 'asc' },
-              take: 1
-            }
-          }
-        }
-      }
-    })
-
-    // Calculate price deltas vs target prices
-    // This is purely arithmetic comparison - not a claim of actual savings
-    let totalDeltaAmount = 0
+    // Price Delta feature was deprecated with ADR-011
+    // targetPrice no longer exists on the data model
+    // Return empty data for backwards compatibility
     const deltaBreakdown: Array<{
       productId: string
       productName: string
-      baselinePrice: number      // User's target price
+      baselinePrice: number
       baselineType: 'USER_TARGET'
       currentPrice: number
-      deltaAmount: number        // Positive = below baseline
+      deltaAmount: number
       deltaPercent: number
     }> = []
-
-    for (const alert of alerts) {
-      if (alert.targetPrice && alert.product.prices.length > 0) {
-        const currentPrice = parseFloat(alert.product.prices[0].price.toString())
-        const baselinePrice = parseFloat(alert.targetPrice.toString())
-
-        if (currentPrice < baselinePrice) {
-          const deltaAmount = baselinePrice - currentPrice
-          const deltaPercent = (deltaAmount / baselinePrice) * 100
-          totalDeltaAmount += deltaAmount
-          deltaBreakdown.push({
-            productId: alert.productId,
-            productName: alert.product.name,
-            baselinePrice,
-            baselineType: 'USER_TARGET',
-            currentPrice,
-            deltaAmount: Math.round(deltaAmount * 100) / 100,
-            deltaPercent: Math.round(deltaPercent * 10) / 10
-          })
-        }
-      }
-    }
+    const totalDeltaAmount = 0
 
     res.json({
       priceDelta: {
-        totalDeltaAmount: Math.round(totalDeltaAmount * 100) / 100,
+        totalDeltaAmount: 0,
         breakdown: deltaBreakdown,
-        alertsBelowTarget: deltaBreakdown.length,
-        totalAlerts: alerts.length
+        alertsBelowTarget: 0,
+        totalAlerts: 0
       },
       // Legacy field names for backwards compatibility during migration
       savings: {
-        potentialSavings: Math.round(totalDeltaAmount * 100) / 100,
-        breakdown: deltaBreakdown.map(d => ({
-          productId: d.productId,
-          productName: d.productName,
-          targetPrice: d.baselinePrice,
-          currentPrice: d.currentPrice,
-          savings: d.deltaAmount
-        })),
-        alertsWithSavings: deltaBreakdown.length,
-        totalAlerts: alerts.length
+        potentialSavings: 0,
+        breakdown: [],
+        alertsWithSavings: 0,
+        totalAlerts: 0
       },
       _meta: {
         tier: userTier
-      }
+      },
+      _deprecated: 'Price delta/savings feature was deprecated with ADR-011. targetPrice no longer exists.'
     })
   } catch (error) {
     console.error('Savings error:', error)
