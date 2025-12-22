@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { getMarketPulse } from '@/lib/api'
 import type { MarketPulseResponse, UseMarketPulseResult } from '@/types/dashboard'
@@ -10,13 +10,16 @@ import type { MarketPulseResponse, UseMarketPulseResult } from '@/types/dashboar
  * Shows Buy/Wait indicators for user's tracked calibers
  */
 export function useMarketPulse(): UseMarketPulseResult {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [data, setData] = useState<MarketPulseResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Extract access token from session (set by auth callback)
+  const token = useMemo(() => (session as any)?.accessToken as string | undefined, [session])
+
   const fetchPulse = useCallback(async () => {
-    if (!session?.user?.id) {
+    if (!token) {
       setLoading(false)
       return
     }
@@ -24,7 +27,7 @@ export function useMarketPulse(): UseMarketPulseResult {
     try {
       setLoading(true)
       setError(null)
-      const response = await getMarketPulse(session.user.id)
+      const response = await getMarketPulse(token)
       setData(response)
     } catch (err) {
       console.error('Failed to fetch market pulse:', err)
@@ -32,13 +35,18 @@ export function useMarketPulse(): UseMarketPulseResult {
     } finally {
       setLoading(false)
     }
-  }, [session?.user?.id])
+  }, [token])
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (status === 'loading') return
+    if (status === 'unauthenticated') {
+      setLoading(false)
+      return
+    }
+    if (token) {
       fetchPulse()
     }
-  }, [session?.user?.id, fetchPulse])
+  }, [token, status, fetchPulse])
 
   return { data, loading, error, refetch: fetchPulse }
 }

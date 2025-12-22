@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { getSavings } from '@/lib/api'
 import type { SavingsResponse, UseSavingsResult } from '@/types/dashboard'
@@ -11,13 +11,16 @@ import type { SavingsResponse, UseSavingsResult } from '@/types/dashboard'
  * Premium: Verified savings with attribution
  */
 export function useSavings(): UseSavingsResult {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [data, setData] = useState<SavingsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Extract access token from session (set by auth callback)
+  const token = useMemo(() => (session as any)?.accessToken as string | undefined, [session])
+
   const fetchSavings = useCallback(async () => {
-    if (!session?.user?.id) {
+    if (!token) {
       setLoading(false)
       return
     }
@@ -25,7 +28,7 @@ export function useSavings(): UseSavingsResult {
     try {
       setLoading(true)
       setError(null)
-      const response = await getSavings(session.user.id)
+      const response = await getSavings(token)
       setData(response)
     } catch (err) {
       console.error('Failed to fetch savings:', err)
@@ -33,13 +36,18 @@ export function useSavings(): UseSavingsResult {
     } finally {
       setLoading(false)
     }
-  }, [session?.user?.id])
+  }, [token])
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (status === 'loading') return
+    if (status === 'unauthenticated') {
+      setLoading(false)
+      return
+    }
+    if (token) {
       fetchSavings()
     }
-  }, [session?.user?.id, fetchSavings])
+  }, [token, status, fetchSavings])
 
   return { data, loading, error, refetch: fetchSavings }
 }
