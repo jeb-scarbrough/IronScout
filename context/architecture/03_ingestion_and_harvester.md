@@ -61,6 +61,39 @@ This pipeline ingests third-party retailer or affiliate sources.
 - Unchanged content should not produce new writes
 - Failures must not corrupt historical data
 
+#### Affiliate Ingestion Path
+
+Affiliate feeds (Impact, AvantLink, ShareASale, etc.) follow a specific data flow:
+
+**Data Flow:**
+```
+Source (config) → Fetch → ParsedProduct (ephemeral) → Normalize → Price (persistent)
+```
+
+**Key Constraints:**
+
+1. **ParsedProduct is network-agnostic and ephemeral**
+   - Common interface across all affiliate networks
+   - Lives only in memory during pipeline execution
+   - Never persisted directly
+
+2. **Source scopes affiliate configuration**
+   - `affiliateNetwork`, `affiliateProgramId`, `affiliateAdvertiserId`, `affiliateCampaignId`
+   - `affiliateTrackingTemplate` for click-time URL generation
+   - One Source = one feed = one affiliate config
+
+3. **Price is append-only and promo-aware**
+   - Canonical product URL stored (no tracking params)
+   - Optional sale metadata: `originalPrice`, `priceType`, `saleStartsAt`, `saleEndsAt`
+   - Sale windows are informational only, never enforced
+
+4. **No lifecycle state for affiliate products**
+   - Use `Source.lastRunAt` and `Price.createdAt` for presence
+   - No `productStatus`, `lastSeenAt`, or `missingCount` on affiliate path
+   - Add `SourceProduct` table later if per-product lifecycle needed
+
+**Reference:** See `context/reference/market/affiliate-feed-analysis.md` for full decision log.
+
 ---
 
 ### 2) Dealer Feed Ingestion

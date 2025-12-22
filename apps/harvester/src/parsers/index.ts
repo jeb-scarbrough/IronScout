@@ -28,6 +28,12 @@ export interface ParsedProduct {
   originalPrice?: number
   /** Discount percentage (0-100) */
   discountPercentage?: number
+  /** Price type: REGULAR, SALE, or CLEARANCE */
+  priceType?: 'REGULAR' | 'SALE' | 'CLEARANCE'
+  /** Sale start date (ISO-8601, informational only) */
+  saleStartsAt?: string
+  /** Sale end date (ISO-8601, informational only) */
+  saleEndsAt?: string
   /** ISO-4217 currency code (e.g., USD) */
   currency?: string
   /** Raw stock availability text */

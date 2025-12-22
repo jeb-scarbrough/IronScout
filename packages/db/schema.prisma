@@ -145,6 +145,12 @@ model Price {
   retailer            Retailer        @relation(fields: [retailerId], references: [id], onDelete: Cascade)
   reports             ProductReport[]
 
+  // Sale/promo metadata (persisted with snapshot per ADR-004)
+  originalPrice       Decimal?        @db.Decimal(10, 2) // MSRP when feed provides it
+  priceType           PriceType?      // Regular, sale, or clearance pricing
+  saleStartsAt        DateTime?       // Informational only, not enforced
+  saleEndsAt          DateTime?       // Informational only, not enforced
+
   @@index([productId])
   @@index([retailerId])
   @@index([inStock])
@@ -216,6 +222,12 @@ model Source {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   executions       Execution[]
+
+  // Affiliate configuration (for tracking URL generation at click time)
+  affiliateProgramId        String?       // Internal program identifier for this Source, if used
+  affiliateAdvertiserId     String?       // Network advertiser/merchant ID (Impact advertiser ID or equivalent)
+  affiliateCampaignId       String?       // Campaign identifier for attribution within the network
+  affiliateTrackingTemplate String? @db.Text // URL template for generating tracking links at click time
 
   @@map("sources")
 }
@@ -783,6 +795,12 @@ enum UserTier {
 enum RetailerTier {
   STANDARD
   PREMIUM
+}
+
+enum PriceType {
+  REGULAR
+  SALE
+  CLEARANCE
 }
 
 enum AlertType {

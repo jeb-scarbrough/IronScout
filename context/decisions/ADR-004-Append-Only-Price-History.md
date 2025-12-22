@@ -59,3 +59,19 @@ This ADR directly supports:
 - alert evaluation correctness
 - conservative AI explanations
 - trust-safe rollback and debugging
+
+## Clarification: Promotional Metadata (2025-12-22)
+
+Price records may include promotional context persisted at ingestion time:
+
+- `originalPrice` - MSRP when feed provides it
+- `priceType` - REGULAR, SALE, or CLEARANCE (or null if unknown)
+- `saleStartsAt`, `saleEndsAt` - Sale window timestamps
+
+**Rules:**
+
+1. **No inference** - These fields store what the feed explicitly provides. Do not compute or guess.
+2. **No enforcement** - Sale windows are informational only. Feeds lie. Never use them for access control or filtering.
+3. **No retroactive mutation** - Like all price data, promo metadata is append-only. Do not update historical records to "fix" sale status.
+
+If a field is unknown, store `null`. Do not default to REGULAR or compute priceType from originalPrice vs price.
