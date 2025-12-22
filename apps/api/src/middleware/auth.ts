@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { prisma } from '@ironscout/db'
 import { TIER_CONFIG } from '../config/tiers'
+import { getRedisClient } from '../config/redis'
 
 /**
  * List of admin email addresses
@@ -160,37 +161,399 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction) {
  */
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>()
 
-export function rateLimit(options: { 
+export function rateLimit(options: {
   windowMs?: number
-  max?: number 
-  keyGenerator?: (req: Request) => string 
+  max?: number
+  keyGenerator?: (req: Request) => string
 } = {}) {
-  const { 
+  const {
     windowMs = 60 * 1000, // 1 minute
     max = 10,
     keyGenerator = (req) => req.ip || 'unknown'
   } = options
-  
+
   return (req: Request, res: Response, next: NextFunction) => {
     const key = keyGenerator(req)
     const now = Date.now()
-    
+
     let record = rateLimitStore.get(key)
-    
+
     if (!record || now > record.resetTime) {
       record = { count: 0, resetTime: now + windowMs }
       rateLimitStore.set(key, record)
     }
-    
+
     record.count++
-    
+
     if (record.count > max) {
       return res.status(429).json({
         error: 'Too many requests',
         message: `Rate limit exceeded. Try again in ${Math.ceil((record.resetTime - now) / 1000)} seconds.`
       })
     }
-    
+
     next()
   }
+}
+
+/**
+ * Redis-based rate limiting middleware for production use.
+ * Uses sliding window algorithm with Redis for distributed rate limiting.
+ *
+ * Features:
+ * - Works across multiple API instances
+ * - Persists across restarts
+ * - Includes rate limit headers in response
+ * - Structured logging for observability
+ * - Metrics tracking via Redis
+ */
+export interface RedisRateLimitOptions {
+  /** Time window in milliseconds (default: 60000 = 1 minute) */
+  windowMs?: number
+  /** Maximum requests per window (default: 10) */
+  max?: number
+  /** Redis key prefix (default: 'rl:') */
+  keyPrefix?: string
+  /** Custom key generator function */
+  keyGenerator?: (req: Request) => string
+  /** Skip rate limiting for certain requests */
+  skip?: (req: Request) => boolean
+  /** Block duration in seconds after limit exceeded (default: same as window) */
+  blockDurationSec?: number
+  /** Endpoint name for metrics (e.g., 'signin', 'signup') */
+  endpoint?: string
+}
+
+/** Redis key prefixes for rate limit metrics */
+const METRICS_PREFIX = 'rl:metrics:'
+const METRICS_TTL_SEC = 86400 // 24 hours
+
+/**
+ * Log a rate limit event with structured context
+ */
+function logRateLimitEvent(
+  level: 'INFO' | 'WARN' | 'ERROR',
+  event: string,
+  context: Record<string, unknown>
+): void {
+  const timestamp = new Date().toISOString()
+  const logEntry = {
+    timestamp,
+    level,
+    service: 'api',
+    event,
+    ...context,
+  }
+
+  const prefix = `[${timestamp}] [RateLimit] [${level}]`
+  const message = `${prefix} ${event} ${JSON.stringify(context)}`
+
+  switch (level) {
+    case 'INFO':
+      console.info(message)
+      break
+    case 'WARN':
+      console.warn(message)
+      break
+    case 'ERROR':
+      console.error(message)
+      break
+  }
+}
+
+/**
+ * Track rate limit metrics in Redis for observability
+ */
+async function trackRateLimitMetrics(
+  redis: ReturnType<typeof getRedisClient>,
+  endpoint: string,
+  blocked: boolean,
+  ip: string
+): Promise<void> {
+  const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+
+  try {
+    const pipeline = redis.pipeline()
+
+    // Increment total requests counter
+    const totalKey = `${METRICS_PREFIX}${endpoint}:total:${today}`
+    pipeline.incr(totalKey)
+    pipeline.expire(totalKey, METRICS_TTL_SEC)
+
+    if (blocked) {
+      // Increment blocked requests counter
+      const blockedKey = `${METRICS_PREFIX}${endpoint}:blocked:${today}`
+      pipeline.incr(blockedKey)
+      pipeline.expire(blockedKey, METRICS_TTL_SEC)
+
+      // Track blocked IPs in a sorted set (score = block count)
+      const ipKey = `${METRICS_PREFIX}${endpoint}:blocked_ips:${today}`
+      pipeline.zincrby(ipKey, 1, ip)
+      pipeline.expire(ipKey, METRICS_TTL_SEC)
+    }
+
+    await pipeline.exec()
+  } catch (error) {
+    // Don't let metrics tracking break the request
+    console.error('[RateLimit] Metrics tracking error:', error)
+  }
+}
+
+export function redisRateLimit(options: RedisRateLimitOptions = {}) {
+  const {
+    windowMs = 60 * 1000,
+    max = 10,
+    keyPrefix = 'rl:',
+    keyGenerator = (req) => req.ip || 'unknown',
+    skip,
+    blockDurationSec,
+    endpoint = 'unknown',
+  } = options
+
+  const windowSec = Math.ceil(windowMs / 1000)
+  const blockSec = blockDurationSec ?? windowSec
+
+  return async (req: Request, res: Response, next: NextFunction) => {
+    // Allow skipping rate limit for certain requests
+    if (skip?.(req)) {
+      logRateLimitEvent('INFO', 'RATE_LIMIT_SKIPPED', {
+        endpoint,
+        ip: req.ip || 'unknown',
+        reason: 'skip_function',
+      })
+      return next()
+    }
+
+    const redis = getRedisClient()
+    const ip = keyGenerator(req)
+    const key = `${keyPrefix}${ip}`
+    const now = Date.now()
+
+    try {
+      // Use Redis MULTI for atomic operations
+      const results = await redis
+        .multi()
+        .incr(key)
+        .pttl(key) // Get TTL in milliseconds
+        .exec()
+
+      if (!results) {
+        // Redis error - fail open (allow request)
+        logRateLimitEvent('ERROR', 'RATE_LIMIT_REDIS_ERROR', {
+          endpoint,
+          ip,
+          error: 'multi exec returned null',
+          action: 'fail_open',
+        })
+        return next()
+      }
+
+      const [[incrErr, count], [ttlErr, ttl]] = results as [[Error | null, number], [Error | null, number]]
+
+      if (incrErr || ttlErr) {
+        logRateLimitEvent('ERROR', 'RATE_LIMIT_REDIS_ERROR', {
+          endpoint,
+          ip,
+          error: String(incrErr || ttlErr),
+          action: 'fail_open',
+        })
+        return next()
+      }
+
+      // Set expiry if this is a new key (TTL will be -1)
+      if (ttl === -1) {
+        await redis.pexpire(key, blockSec * 1000)
+      }
+
+      // Calculate remaining time
+      const resetTime = ttl > 0 ? now + ttl : now + (blockSec * 1000)
+      const remaining = Math.max(0, max - count)
+
+      // Set rate limit headers
+      res.setHeader('X-RateLimit-Limit', max)
+      res.setHeader('X-RateLimit-Remaining', remaining)
+      res.setHeader('X-RateLimit-Reset', Math.ceil(resetTime / 1000))
+
+      if (count > max) {
+        const retryAfterSec = Math.ceil((ttl > 0 ? ttl : blockSec * 1000) / 1000)
+        res.setHeader('Retry-After', retryAfterSec)
+
+        // Log blocked request
+        logRateLimitEvent('WARN', 'RATE_LIMIT_BLOCKED', {
+          endpoint,
+          ip,
+          count,
+          max,
+          retryAfterSec,
+          path: req.path,
+          method: req.method,
+        })
+
+        // Track metrics (non-blocking)
+        trackRateLimitMetrics(redis, endpoint, true, ip)
+
+        return res.status(429).json({
+          error: 'Too many requests',
+          message: `Rate limit exceeded. Try again in ${retryAfterSec} seconds.`,
+          retryAfter: retryAfterSec,
+        })
+      }
+
+      // Log warning if approaching limit (>80%)
+      if (count > max * 0.8) {
+        logRateLimitEvent('INFO', 'RATE_LIMIT_WARNING', {
+          endpoint,
+          ip,
+          count,
+          max,
+          remaining,
+          path: req.path,
+        })
+      }
+
+      // Track metrics (non-blocking)
+      trackRateLimitMetrics(redis, endpoint, false, ip)
+
+      next()
+    } catch (error) {
+      // On Redis failure, fail open (allow request) but log the error
+      logRateLimitEvent('ERROR', 'RATE_LIMIT_REDIS_ERROR', {
+        endpoint,
+        ip,
+        error: error instanceof Error ? error.message : String(error),
+        action: 'fail_open',
+      })
+      next()
+    }
+  }
+}
+
+/**
+ * Get rate limit metrics for a specific endpoint and date
+ */
+export async function getRateLimitMetrics(
+  endpoint: string,
+  date?: string
+): Promise<{
+  endpoint: string
+  date: string
+  totalRequests: number
+  blockedRequests: number
+  blockRate: number
+  topBlockedIps: Array<{ ip: string; count: number }>
+}> {
+  const redis = getRedisClient()
+  const targetDate = date || new Date().toISOString().split('T')[0]
+
+  const totalKey = `${METRICS_PREFIX}${endpoint}:total:${targetDate}`
+  const blockedKey = `${METRICS_PREFIX}${endpoint}:blocked:${targetDate}`
+  const ipKey = `${METRICS_PREFIX}${endpoint}:blocked_ips:${targetDate}`
+
+  const [totalStr, blockedStr, topIps] = await Promise.all([
+    redis.get(totalKey),
+    redis.get(blockedKey),
+    redis.zrevrange(ipKey, 0, 9, 'WITHSCORES'), // Top 10 blocked IPs
+  ])
+
+  const totalRequests = parseInt(totalStr || '0', 10)
+  const blockedRequests = parseInt(blockedStr || '0', 10)
+  const blockRate = totalRequests > 0 ? blockedRequests / totalRequests : 0
+
+  // Parse top IPs from Redis ZREVRANGE result
+  const topBlockedIps: Array<{ ip: string; count: number }> = []
+  for (let i = 0; i < topIps.length; i += 2) {
+    topBlockedIps.push({
+      ip: topIps[i],
+      count: parseInt(topIps[i + 1], 10),
+    })
+  }
+
+  return {
+    endpoint,
+    date: targetDate,
+    totalRequests,
+    blockedRequests,
+    blockRate,
+    topBlockedIps,
+  }
+}
+
+/**
+ * Get metrics for all auth endpoints
+ */
+export async function getAllAuthRateLimitMetrics(date?: string): Promise<{
+  date: string
+  endpoints: Record<string, Awaited<ReturnType<typeof getRateLimitMetrics>>>
+  summary: {
+    totalRequests: number
+    totalBlocked: number
+    overallBlockRate: number
+  }
+}> {
+  const targetDate = date || new Date().toISOString().split('T')[0]
+  const endpointNames = ['signin', 'signup', 'refresh', 'oauth']
+
+  const results = await Promise.all(
+    endpointNames.map((name) => getRateLimitMetrics(name, targetDate))
+  )
+
+  const endpoints: Record<string, Awaited<ReturnType<typeof getRateLimitMetrics>>> = {}
+  let totalRequests = 0
+  let totalBlocked = 0
+
+  for (const result of results) {
+    endpoints[result.endpoint] = result
+    totalRequests += result.totalRequests
+    totalBlocked += result.blockedRequests
+  }
+
+  return {
+    date: targetDate,
+    endpoints,
+    summary: {
+      totalRequests,
+      totalBlocked,
+      overallBlockRate: totalRequests > 0 ? totalBlocked / totalRequests : 0,
+    },
+  }
+}
+
+/**
+ * Pre-configured rate limiters for authentication endpoints.
+ * These have stricter limits to prevent brute-force attacks.
+ */
+export const authRateLimits = {
+  /** Strict limit for login attempts: 5 per minute per IP */
+  signin: redisRateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    keyPrefix: 'rl:auth:signin:',
+    blockDurationSec: 60,
+    endpoint: 'signin',
+  }),
+
+  /** Strict limit for signup attempts: 3 per minute per IP */
+  signup: redisRateLimit({
+    windowMs: 60 * 1000,
+    max: 3,
+    keyPrefix: 'rl:auth:signup:',
+    blockDurationSec: 120, // Longer block for signup abuse
+    endpoint: 'signup',
+  }),
+
+  /** Moderate limit for token refresh: 30 per minute per IP */
+  refresh: redisRateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    keyPrefix: 'rl:auth:refresh:',
+    endpoint: 'refresh',
+  }),
+
+  /** Moderate limit for OAuth: 10 per minute per IP */
+  oauth: redisRateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    keyPrefix: 'rl:auth:oauth:',
+    endpoint: 'oauth',
+  }),
 }

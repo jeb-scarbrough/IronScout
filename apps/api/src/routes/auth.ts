@@ -20,6 +20,7 @@ import { prisma } from '@ironscout/db'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
+import { authRateLimits } from '../middleware/auth'
 
 const router: RouterType = Router()
 
@@ -102,7 +103,7 @@ function verifyToken(token: string): { sub: string; email: string; type: string 
 // SIGNUP - Create new user with email/password
 // ============================================================================
 
-router.post('/signup', async (req: Request, res: Response) => {
+router.post('/signup', authRateLimits.signup, async (req: Request, res: Response) => {
   try {
     const parsed = signupSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -174,7 +175,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 // SIGNIN - Authenticate with email/password
 // ============================================================================
 
-router.post('/signin', async (req: Request, res: Response) => {
+router.post('/signin', authRateLimits.signin, async (req: Request, res: Response) => {
   try {
     const parsed = signinSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -243,7 +244,7 @@ router.post('/signin', async (req: Request, res: Response) => {
 // OAUTH SIGNIN - Sign in or create user via OAuth provider
 // ============================================================================
 
-router.post('/oauth/signin', async (req: Request, res: Response) => {
+router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Response) => {
   try {
     const parsed = oauthSigninSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -374,7 +375,7 @@ router.post('/oauth/signin', async (req: Request, res: Response) => {
 // OAUTH LINK - Link OAuth account to existing user
 // ============================================================================
 
-router.post('/oauth/link', async (req: Request, res: Response) => {
+router.post('/oauth/link', authRateLimits.oauth, async (req: Request, res: Response) => {
   try {
     const parsed = oauthLinkSchema.safeParse(req.body)
     if (!parsed.success) {
@@ -478,7 +479,7 @@ router.get('/session', async (req: Request, res: Response) => {
 // REFRESH - Get new access token using refresh token
 // ============================================================================
 
-router.post('/refresh', async (req: Request, res: Response) => {
+router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.body
     if (!refreshToken) {
