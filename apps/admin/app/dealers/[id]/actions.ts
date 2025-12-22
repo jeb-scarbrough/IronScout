@@ -534,7 +534,7 @@ export async function resendVerificationEmail(dealerId: string) {
 // =============================================================================
 
 const DEALER_JWT_SECRET = new TextEncoder().encode(
-  process.env.DEALER_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
+  process.env.DEALER_JWT_SECRET || process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
 );
 
 export async function impersonateDealer(dealerId: string) {

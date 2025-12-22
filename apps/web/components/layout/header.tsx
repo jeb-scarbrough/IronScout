@@ -100,7 +100,7 @@ export function Header() {
                 )}
               </div>
             ) : (
-              <Button onClick={() => signIn()} size="sm">
+              <Button onClick={() => signIn(undefined, { callbackUrl: '/dashboard' })} size="sm">
                 Sign In
               </Button>
             )}
@@ -182,7 +182,7 @@ export function Header() {
               ) : (
                 <Button
                   onClick={() => {
-                    signIn()
+                    signIn(undefined, { callbackUrl: '/dashboard' })
                     setIsMenuOpen(false)
                   }}
                   size="sm"

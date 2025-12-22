@@ -12,7 +12,8 @@ const nextConfig = {
   },
   env: {
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+    // Support both JWT_SECRET (preferred) and NEXTAUTH_SECRET (legacy)
+    NEXTAUTH_SECRET: process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET,
   },
   async headers() {
     return [

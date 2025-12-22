@@ -6,7 +6,7 @@ import { prisma } from '@ironscout/db';
 export const dynamic = 'force-dynamic';
 
 const DEALER_JWT_SECRET = new TextEncoder().encode(
-  process.env.DEALER_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
+  process.env.DEALER_JWT_SECRET || process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
 );
 
 // Get the base URL for redirects

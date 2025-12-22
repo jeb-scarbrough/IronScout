@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import axios from 'axios'
+import { gunzipSync } from 'zlib'
 import { redisConnection } from '../config/redis'
 import { extractQueue, normalizeQueue, FetchJobData } from '../config/queues'
 import { computeContentHash } from '../utils/hash'
@@ -54,6 +55,41 @@ function safeJsonStringify(data: unknown, maxSize: number = MAX_TOTAL_CONTENT_SI
   return result
 }
 
+/**
+ * Decompress gzip content if needed
+ * Detects gzip magic bytes (1f 8b) and decompresses
+ * Returns original content if not gzip compressed
+ */
+function decompressIfGzip(data: Buffer | string): string {
+  // If it's a string, check if it looks like gzip
+  if (typeof data === 'string') {
+    // Check for gzip magic bytes in binary string
+    if (data.charCodeAt(0) === 0x1f && data.charCodeAt(1) === 0x8b) {
+      const buffer = Buffer.from(data, 'binary')
+      return gunzipSync(buffer).toString('utf-8')
+    }
+    return data
+  }
+
+  // If it's a buffer, check for gzip magic bytes
+  if (Buffer.isBuffer(data) && data.length >= 2) {
+    if (data[0] === 0x1f && data[1] === 0x8b) {
+      return gunzipSync(data).toString('utf-8')
+    }
+    return data.toString('utf-8')
+  }
+
+  return String(data)
+}
+
+/**
+ * Check if URL suggests gzip content
+ */
+function isGzipUrl(url: string): boolean {
+  const lowerUrl = url.toLowerCase()
+  return lowerUrl.endsWith('.gz') || lowerUrl.endsWith('.gzip') || lowerUrl.includes('.gz?')
+}
+
 export const fetcherWorker = new Worker<FetchJobData>(
   'fetch',
   async (job: Job<FetchJobData>) => {
@@ -100,14 +136,20 @@ export const fetcherWorker = new Worker<FetchJobData>(
       let pagesFetched = 0
       let totalContentSize = 0
 
+      // Check if URL is likely gzip compressed
+      const expectGzip = isGzipUrl(url)
+
       // Axios config with size limits
-      const axiosConfig = {
+      const axiosConfig: Record<string, unknown> = {
         headers: {
           'User-Agent': 'IronScout.ai Price Crawler/1.0',
+          'Accept-Encoding': 'gzip, deflate', // Accept compressed responses
         },
         timeout: REQUEST_TIMEOUT,
         maxContentLength: MAX_CONTENT_LENGTH_PER_PAGE,
         maxBodyLength: MAX_CONTENT_LENGTH_PER_PAGE,
+        // For gzip files, get raw buffer to decompress manually
+        ...(expectGzip && { responseType: 'arraybuffer' }),
       }
 
       // Loop through pages
@@ -130,10 +172,18 @@ export const fetcherWorker = new Worker<FetchJobData>(
 
         // Standard HTTP fetch with limits
         const response = await axios.get(pageUrl, axiosConfig)
-        // Convert to string if axios parsed JSON, with size limit
-        pageContent = typeof response.data === 'string'
-          ? response.data
-          : safeJsonStringify(response.data, MAX_CONTENT_LENGTH_PER_PAGE)
+
+        // Handle response data based on type
+        if (expectGzip || Buffer.isBuffer(response.data)) {
+          // Decompress if gzip
+          pageContent = decompressIfGzip(response.data)
+        } else if (typeof response.data === 'string') {
+          // Check for gzip magic bytes in string (can happen with some servers)
+          pageContent = decompressIfGzip(response.data)
+        } else {
+          // Convert to string if axios parsed JSON, with size limit
+          pageContent = safeJsonStringify(response.data, MAX_CONTENT_LENGTH_PER_PAGE)
+        }
 
         // Track total content size
         totalContentSize += pageContent.length

@@ -246,8 +246,24 @@ router.post('/signin', authRateLimits.signin, async (req: Request, res: Response
 
 router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Response) => {
   try {
+    // Log incoming request for debugging
+    console.log('[Auth] OAuth signin request:', {
+      provider: req.body?.provider,
+      email: req.body?.email,
+      hasProviderAccountId: !!req.body?.providerAccountId,
+    })
+
+    // Check JWT_SECRET before proceeding
+    if (!JWT_SECRET) {
+      console.error('[Auth] JWT_SECRET not configured - cannot generate tokens')
+      return res.status(500).json({
+        error: 'Server configuration error: JWT_SECRET not set',
+      })
+    }
+
     const parsed = oauthSigninSchema.safeParse(req.body)
     if (!parsed.success) {
+      console.error('[Auth] OAuth validation failed:', parsed.error.issues)
       return res.status(400).json({
         error: 'Validation failed',
         details: parsed.error.issues,
@@ -364,7 +380,12 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
       isNewUser: true,
     })
   } catch (error) {
-    console.error('[Auth] OAuth signin error:', error)
+    // Log full error details for debugging
+    console.error('[Auth] OAuth signin error:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    })
     return res.status(500).json({
       error: 'An error occurred during OAuth sign in',
     })

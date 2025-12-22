@@ -54,15 +54,19 @@ If you use separate roles:
 ## apps/api
 
 Required:
-- `PORT` (default 3001 or similar)
+- `PORT` (default 8000)
 - `DATABASE_URL`
 - `REDIS_URL` (if API enqueues jobs or reads queue state)
+- `JWT_SECRET` - **Required for auth**. Must match `JWT_SECRET` used by web/dealer/admin apps.
 
-Auth (pick one model, document it, enforce it):
-- If API verifies JWTs:
-  - `JWT_PUBLIC_KEY` or `JWT_SECRET`
-- If API trusts internal service token:
-  - `INTERNAL_API_TOKEN` (web/dealer/admin use it server-to-server)
+Auth:
+- API signs and verifies JWTs using `JWT_SECRET`
+- All apps sharing auth must use the same `JWT_SECRET` value
+- API also accepts `NEXTAUTH_SECRET` as fallback (for backwards compatibility)
+
+Optional:
+- `ADMIN_EMAILS` - Comma-separated list of admin email addresses
+- `INTERNAL_API_KEY` - For internal service-to-service calls
 
 AI/Search:
 - `OPENAI_API_KEY` (or equivalent provider key)
@@ -83,8 +87,8 @@ Required behavior:
 
 Required:
 - `NEXT_PUBLIC_API_URL` (points to apps/api)
-- `NEXTAUTH_URL` (if using NextAuth)
-- `NEXTAUTH_SECRET` (if using NextAuth)
+- `NEXTAUTH_URL` (canonical URL for NextAuth callbacks)
+- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
 
 Stripe (client):
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (if checkout is embedded)
@@ -96,8 +100,7 @@ Stripe (client):
 
 Required:
 - `NEXT_PUBLIC_API_URL` or dealer-specific API URL (if separate)
-- `NEXTAUTH_URL` (if NextAuth)
-- `NEXTAUTH_SECRET`
+- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
 
 Optional:
 - Dealer onboarding keys if dealer feeds are pulled from private endpoints
@@ -107,9 +110,9 @@ Optional:
 ## apps/admin
 
 Required:
-- `NEXTAUTH_URL`
-- `NEXTAUTH_SECRET`
+- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
 - `NEXT_PUBLIC_ADMIN_API_URL` (if admin calls API directly)
+- `ADMIN_EMAILS` - Comma-separated list of admin email addresses
 
 Important:
 - Admin impersonation must not bypass tier/eligibility enforcement.
@@ -142,7 +145,7 @@ Safety:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `OPENAI_API_KEY` (if AI search is enabled locally)
-- `NEXTAUTH_SECRET` (for web/dealer/admin if applicable)
+- `JWT_SECRET` - Same value across all apps (api, web, dealer, admin)
 - `NEXT_PUBLIC_API_URL` (for web/dealer/admin)
 
 ---

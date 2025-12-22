@@ -216,7 +216,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           })
 
           if (!response.ok) {
-            console.error('[Auth] OAuth signin failed:', await response.text())
+            const errorText = await response.text()
+            console.error('[Auth] OAuth signin failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              body: errorText,
+              provider: account.provider,
+              email: user.email,
+            })
             return false
           }
 

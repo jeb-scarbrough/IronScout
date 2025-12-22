@@ -21,7 +21,7 @@ import { logger } from './logger';
 // =============================================
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.DEALER_JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
+  process.env.DEALER_JWT_SECRET || process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'dealer-secret-change-me'
 );
 
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
