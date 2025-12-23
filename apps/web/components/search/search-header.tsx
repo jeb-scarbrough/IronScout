@@ -134,51 +134,41 @@ export function SearchHeader({
   }
 
   return (
-    <div className="border-b pb-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">
-            {query ? `Results for "${query}"` : 'Browse Products'}
-          </h1>
-          
+    <div className="pb-4">
+      {/* Compact Control Bar */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {/* Left: Result count + AI confirmation chip */}
+        <div className="flex items-center gap-3">
           {resultCount !== undefined && (
-            <p className="text-muted-foreground">
-              Found {resultCount.toLocaleString()} products
-              {processingTimeMs && (
-                <span className="text-sm ml-2">({processingTimeMs}ms)</span>
-              )}
-            </p>
+            <span className="text-sm font-medium text-muted-foreground">
+              {resultCount.toLocaleString()} results
+            </span>
+          )}
+
+          {/* AI Confirmation - subtle text link, not competing with results */}
+          {hasIntent && (
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Sparkles className="h-3 w-3 opacity-60" />
+              <span className="underline underline-offset-2 decoration-dotted">
+                {showDetails ? 'Hide interpretation' : 'View interpretation'}
+              </span>
+            </button>
+          )}
+
+          {/* Active filter count */}
+          {activeFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+              <SlidersHorizontal className="h-3 w-3" />
+              {activeFilters.length} active
+            </span>
           )}
         </div>
-        
-        <div className="flex items-center gap-3">
-          {/* Sort Select */}
-          <EnhancedSortSelect isPremium={isPremium} />
-          
-          {/* Filter indicators */}
-          <div className="flex items-center gap-2">
-            {hasFilters && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Filtered</span>
-              </div>
-            )}
-            
-            {premiumFiltersActive > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 border border-amber-200 dark:border-amber-700 rounded-full">
-                <Crown className="h-3.5 w-3.5 text-amber-600" />
-                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">{premiumFiltersActive} Premium</span>
-              </div>
-            )}
-            
-            {vectorSearchUsed && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-200 dark:border-blue-800 rounded-full">
-                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                <span className="text-xs font-medium text-blue-600">AI Search</span>
-              </div>
-            )}
-          </div>
-        </div>
+
+        {/* Right: Sort Select */}
+        <EnhancedSortSelect isPremium={isPremium} />
       </div>
 
       {/* Active Explicit Filters */}
@@ -196,113 +186,43 @@ export function SearchHeader({
         </div>
       )}
 
-      {/* AI Understanding Panel */}
-      {hasIntent && (
-        <div className="mt-4">
-          <button 
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Sparkles className="h-4 w-4 text-purple-500" />
-            <span>AI understood your search</span>
-            {isPremium && intent.premiumIntent && (
-              <Crown className="h-3.5 w-3.5 text-amber-500" />
+      {/* AI Understanding Details - collapsed behind "View interpretation" */}
+      {hasIntent && showDetails && (
+        <div className="mt-2 py-2 px-3 bg-muted/30 rounded border border-border text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-foreground/70">Understood:</span>
+            {intent.calibers?.map((cal, i) => (
+              <span key={i} className={explicitFilters?.caliber ? 'line-through opacity-50' : ''}>
+                {cal}
+              </span>
+            ))}
+            {intent.purpose && (
+              <span className={explicitFilters?.purpose ? 'line-through opacity-50' : ''}>
+                {intent.purpose}
+              </span>
             )}
-            {showDetails ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
+            {(intent.grainWeights?.length ?? 0) > 0 && (
+              <span className={explicitFilters?.minGrain !== undefined || explicitFilters?.maxGrain !== undefined ? 'line-through opacity-50' : ''}>
+                {intent.grainWeights?.join('/')}gr
+              </span>
             )}
-          </button>
-          
-          {showDetails && (
-            <div className="mt-3 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
-              <p className="text-xs text-muted-foreground mb-2">
-                {hasFilters 
-                  ? "AI interpretation (your filters override these):" 
-                  : "AI interpretation of your search:"}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {intent.calibers?.map((cal, i) => (
-                  <span key={i} className={`px-2 py-1 rounded text-xs font-medium ${
-                    explicitFilters?.caliber 
-                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 line-through' 
-                      : 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-                  }`}>
-                    Caliber: {cal}
-                  </span>
-                ))}
-                {intent.purpose && (
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    explicitFilters?.purpose 
-                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 line-through' 
-                      : 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300'
-                  }`}>
-                    Purpose: {intent.purpose}
-                  </span>
-                )}
-                {(intent.grainWeights?.length ?? 0) > 0 && (
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    explicitFilters?.minGrain !== undefined || explicitFilters?.maxGrain !== undefined
-                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 line-through' 
-                      : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300'
-                  }`}>
-                    Grain: {intent.grainWeights?.join('/') ?? ''}gr
-                  </span>
-                )}
-                {intent.caseMaterials?.map((mat, i) => (
-                  <span key={i} className={`px-2 py-1 rounded text-xs font-medium ${
-                    explicitFilters?.caseMaterial 
-                      ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 line-through' 
-                      : 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300'
-                  }`}>
-                    Case: {mat}
-                  </span>
-                ))}
-                {intent.qualityLevel && (
-                  <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded text-xs font-medium">
-                    Quality: {intent.qualityLevel}
-                  </span>
-                )}
-                
-                {/* Premium Intent Details */}
-                {isPremium && intent.premiumIntent && (
-                  <>
-                    {intent.premiumIntent.environment && (
-                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        {intent.premiumIntent.environment}
-                      </span>
-                    )}
-                    {intent.premiumIntent.barrelLength && (
-                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        {intent.premiumIntent.barrelLength} barrel
-                      </span>
-                    )}
-                    {intent.premiumIntent.suppressorUse && (
-                      <span className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        suppressor use
-                      </span>
-                    )}
-                    {intent.premiumIntent.preferredBulletTypes?.map((type, i) => (
-                      <span key={i} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded text-xs font-medium flex items-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        {type}
-                      </span>
-                    ))}
-                  </>
-                )}
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                Confidence: {Math.round(intent.confidence * 100)}%
-                {isPremium && intent.premiumIntent && (
-                  <span className="ml-2 text-amber-600">• Premium analysis enabled</span>
-                )}
-              </div>
-            </div>
-          )}
+            {intent.caseMaterials?.map((mat, i) => (
+              <span key={i} className={explicitFilters?.caseMaterial ? 'line-through opacity-50' : ''}>
+                {mat}
+              </span>
+            ))}
+            {intent.qualityLevel && <span>{intent.qualityLevel}</span>}
+            {isPremium && intent.premiumIntent?.environment && (
+              <span>{intent.premiumIntent.environment}</span>
+            )}
+            {isPremium && intent.premiumIntent?.barrelLength && (
+              <span>{intent.premiumIntent.barrelLength} barrel</span>
+            )}
+            {isPremium && intent.premiumIntent?.suppressorUse && (
+              <span>suppressor</span>
+            )}
+            <span className="opacity-50">· {Math.round(intent.confidence * 100)}%</span>
+          </div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, ChevronDown, ChevronUp, Bell, BellOff } from 'lucide-react'
+import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import { trackAffiliateClick, trackTrackToggle, trackDetailsToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
 
@@ -33,6 +33,9 @@ export interface ResultCardProps {
 
   isTracked: boolean
 
+  /** Visual emphasis - crown this card as the default choice */
+  isBestPrice?: boolean
+
   /** Reserved for future insight line (e.g., "Lowest price this week") */
   topSlot?: React.ReactNode
 
@@ -47,7 +50,6 @@ export interface ResultCardProps {
  * Format price per round with consistent precision
  */
 function formatPricePerRound(price: number): string {
-  // Always show 3 decimal places for per-round pricing
   return `$${price.toFixed(3)}`
 }
 
@@ -56,20 +58,27 @@ function formatPricePerRound(price: number): string {
  */
 function formatPer1000(pricePerRound: number): string {
   const per1000 = pricePerRound * 1000
-  // Use 2 decimal places for bulk pricing
   return `$${per1000.toFixed(2)}`
+}
+
+/**
+ * Truncate title for collapsed state
+ */
+function truncateTitle(title: string, maxLength: number = 40): string {
+  if (title.length <= maxLength) return title
+  return title.slice(0, maxLength).trim() + '…'
 }
 
 /**
  * ResultCard Component
  *
- * Hierarchy (non-negotiable):
- * 1. (Reserved) Insight slot - empty in v1
+ * Revised hierarchy:
+ * 1. Best price badge (if applicable)
  * 2. Price block (largest visual element)
- * 3. Primary CTA: View at retailer
- * 4. Secondary CTA: Track price
- * 5. Availability cue
- * 6. Details (collapsed)
+ * 3. Availability (directly under price - users check this immediately)
+ * 4. Primary CTA: View at retailer
+ * 5. Track price (inline text, not button)
+ * 6. Details (collapsed, truncated title)
  */
 export function ResultCard({
   id,
@@ -83,6 +92,7 @@ export function ResultCard({
   grain,
   caseMaterial,
   isTracked,
+  isBestPrice = false,
   topSlot,
   placement = 'search',
   onTrackToggle,
@@ -91,43 +101,28 @@ export function ResultCard({
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [trackingOptimistic, setTrackingOptimistic] = useState(isTracked)
 
-  // Validate retailer URL
   const isValidUrl = retailerUrl && retailerUrl.startsWith('http')
 
-  // Handle primary CTA click
   const handlePrimaryClick = useCallback(() => {
-    // Track analytics event
     trackAffiliateClick(id, retailerName, pricePerRound, placement)
-
-    // Call optional callback
     if (onPrimaryClick) {
       onPrimaryClick(id)
     }
-
-    // Open in new tab
     if (isValidUrl) {
       window.open(retailerUrl, '_blank', 'noopener,noreferrer')
     }
   }, [id, retailerName, pricePerRound, placement, onPrimaryClick, isValidUrl, retailerUrl])
 
-  // Handle track toggle with optimistic update
   const handleTrackToggle = useCallback(() => {
     const nextState = !trackingOptimistic
     setTrackingOptimistic(nextState)
-
-    // Track analytics event
     trackTrackToggle(id, nextState)
-
-    // Show toast feedback
     toast.success(nextState ? 'Price tracking enabled' : 'Price tracking removed', {
       duration: 2000,
     })
-
-    // Call parent handler
     onTrackToggle(id)
   }, [id, trackingOptimistic, onTrackToggle])
 
-  // Handle details toggle
   const handleDetailsToggle = useCallback(() => {
     const nextState = !detailsExpanded
     setDetailsExpanded(nextState)
@@ -135,9 +130,24 @@ export function ResultCard({
   }, [id, detailsExpanded])
 
   return (
-    <Card className="bg-card border-border overflow-hidden hover:border-primary/30 transition-colors">
-      <CardContent className="p-4 space-y-3">
-        {/* 1. Reserved Insight Slot - only render if provided */}
+    <Card
+      className={cn(
+        'overflow-hidden transition-all duration-200',
+        isBestPrice
+          ? 'bg-card border-primary/40 ring-1 ring-primary/20 shadow-md shadow-primary/5'
+          : 'bg-card border-border hover:border-primary/30'
+      )}
+    >
+      <CardContent className="p-4 space-y-2.5">
+        {/* 1. Best Price Badge - visual crown for default choice */}
+        {isBestPrice && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-primary -mt-1 mb-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />
+            Best price
+          </div>
+        )}
+
+        {/* Reserved Insight Slot */}
         {topSlot && (
           <div className="pb-2 border-b border-border">
             {topSlot}
@@ -146,86 +156,84 @@ export function ResultCard({
 
         {/* 2. Price Block - largest visual element */}
         <div className="space-y-0.5">
-          <div className="text-2xl font-bold font-mono tracking-tight text-foreground">
-            {formatPricePerRound(pricePerRound)} <span className="text-sm font-normal text-muted-foreground">/ rd</span>
+          <div className={cn(
+            'font-bold font-mono tracking-tight',
+            isBestPrice ? 'text-2xl text-primary' : 'text-2xl text-foreground'
+          )}>
+            {formatPricePerRound(pricePerRound)}
+            <span className="text-sm font-normal text-muted-foreground ml-1">/ rd</span>
           </div>
           <div className="text-sm text-muted-foreground">
-            {formatPer1000(pricePerRound)} per 1,000 rounds
+            {formatPer1000(pricePerRound)} per 1,000
           </div>
         </div>
 
-        {/* 3. Primary CTA: View at retailer */}
+        {/* 3. Availability - directly under price (users check this immediately) */}
+        {inStock !== undefined && (
+          <p className={cn(
+            'text-xs',
+            inStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+          )}>
+            {inStock ? 'In stock' : 'Out of stock'}
+          </p>
+        )}
+
+        {/* 4. Primary CTA: View at retailer */}
         <Button
           onClick={handlePrimaryClick}
           disabled={!isValidUrl}
-          className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+          className={cn(
+            'w-full h-10 font-medium',
+            isBestPrice
+              ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
+              : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+          )}
         >
-          View at retailer
-          <ExternalLink className="ml-2 h-4 w-4" />
+          View at {retailerName}
+          <ExternalLink className="ml-2 h-3.5 w-3.5" />
         </Button>
 
-        {/* 4. Secondary CTA: Track price */}
-        <Button
-          variant="ghost"
+        {/* 5. Track price - inline text link, not a button (safety net, not fork) */}
+        <button
           onClick={handleTrackToggle}
           className={cn(
-            'w-full h-9 text-sm font-normal',
+            'w-full text-xs text-center py-1 transition-colors',
             trackingOptimistic
               ? 'text-primary hover:text-primary/80'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >
-          {trackingOptimistic ? (
-            <>
-              <BellOff className="mr-2 h-4 w-4" />
-              Stop tracking
-            </>
-          ) : (
-            <>
-              <Bell className="mr-2 h-4 w-4" />
-              Track price
-            </>
-          )}
-        </Button>
+          {trackingOptimistic ? 'Tracking · Stop' : 'Track price'}
+        </button>
 
-        {/* 5. Availability Cue - muted text, no badges, no color drama */}
-        {inStock !== undefined && (
-          <p className="text-xs text-muted-foreground text-center">
-            {inStock ? 'In stock' : 'Out of stock'}
-          </p>
-        )}
-
-        {/* 6. Details - collapsed by default */}
+        {/* 6. Details - collapsed, truncated title */}
         <div className="pt-2 border-t border-border">
           <button
             onClick={handleDetailsToggle}
             className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            <span>Details</span>
+            <span className="truncate pr-2">
+              {detailsExpanded ? 'Hide details' : truncateTitle(productTitle, 35)}
+            </span>
             {detailsExpanded ? (
-              <ChevronUp className="h-3.5 w-3.5" />
+              <ChevronUp className="h-3.5 w-3.5 shrink-0" />
             ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
             )}
           </button>
 
           {detailsExpanded && (
-            <div className="mt-3 space-y-1.5 text-sm animate-in slide-in-from-top-2 duration-200">
-              {/* Product title */}
+            <div className="mt-2.5 space-y-1.5 text-sm animate-in slide-in-from-top-2 duration-200">
+              {/* Full product title */}
               <p className="font-medium text-foreground leading-tight">
                 {productTitle}
               </p>
 
-              {/* Retailer name */}
-              <p className="text-muted-foreground">
-                {retailerName}
-              </p>
-
               {/* Specs: Caliber, Grain, Case Material */}
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                 <span>{caliber}</span>
-                {grain && <span>{grain}gr</span>}
-                {caseMaterial && <span>{caseMaterial}</span>}
+                {grain && <span>· {grain}gr</span>}
+                {caseMaterial && <span>· {caseMaterial}</span>}
               </div>
             </div>
           )}
@@ -241,22 +249,16 @@ export function ResultCard({
 export function ResultCardSkeleton() {
   return (
     <Card className="bg-card border-border overflow-hidden">
-      <CardContent className="p-4 space-y-3">
-        {/* Price skeleton */}
+      <CardContent className="p-4 space-y-2.5">
         <div className="space-y-1">
-          <div className="h-8 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+          <div className="h-7 w-20 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-28 bg-muted rounded animate-pulse" />
         </div>
-
-        {/* Primary CTA skeleton */}
-        <div className="h-11 w-full bg-muted rounded animate-pulse" />
-
-        {/* Secondary CTA skeleton */}
-        <div className="h-9 w-full bg-muted/50 rounded animate-pulse" />
-
-        {/* Details skeleton */}
+        <div className="h-3 w-14 bg-muted rounded animate-pulse" />
+        <div className="h-10 w-full bg-muted rounded animate-pulse" />
+        <div className="h-4 w-16 mx-auto bg-muted/50 rounded animate-pulse" />
         <div className="pt-2 border-t border-border">
-          <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
         </div>
       </CardContent>
     </Card>

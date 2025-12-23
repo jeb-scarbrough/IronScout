@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 interface SearchResultCardProps {
   product: Product
   isTracked?: boolean
+  /** Crown this card as the best price in the result set */
+  isBestPrice?: boolean
   onTrackChange?: (productId: string, isTracked: boolean) => void
 }
 
@@ -22,6 +24,7 @@ interface SearchResultCardProps {
 export function SearchResultCard({
   product,
   isTracked = false,
+  isBestPrice = false,
   onTrackChange,
 }: SearchResultCardProps) {
   const { data: session } = useSession()
@@ -75,6 +78,7 @@ export function SearchResultCard({
       grain={product.grainWeight}
       caseMaterial={product.caseMaterial}
       isTracked={isTracked}
+      isBestPrice={isBestPrice}
       placement="search"
       onTrackToggle={handleTrackToggle}
     />

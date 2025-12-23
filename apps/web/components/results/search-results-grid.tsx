@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { SearchResultCard } from './search-result-card'
 import { ResultCardSkeleton } from './result-card'
 import { AdCard } from '@/components/ads/ad-card'
@@ -66,6 +66,46 @@ export function SearchResultsGrid({
     })
   }, [])
 
+  // Find the best price product (lowest price per round, in stock preferred)
+  const bestPriceProductId = useMemo(() => {
+    if (products.length === 0) return null
+
+    // Calculate price per round for each product
+    const withPrices = products
+      .map((product) => {
+        const lowestPrice = product.prices.reduce(
+          (min, price) => (price.price < min.price ? price : min),
+          product.prices[0]
+        )
+        if (!lowestPrice) return null
+
+        const pricePerRound =
+          product.roundCount && product.roundCount > 0
+            ? lowestPrice.price / product.roundCount
+            : lowestPrice.price
+
+        return {
+          id: product.id,
+          pricePerRound,
+          inStock: lowestPrice.inStock,
+        }
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+
+    if (withPrices.length === 0) return null
+
+    // Sort: in-stock first, then by price
+    withPrices.sort((a, b) => {
+      // In-stock items first
+      if (a.inStock && !b.inStock) return -1
+      if (!a.inStock && b.inStock) return 1
+      // Then by price
+      return a.pricePerRound - b.pricePerRound
+    })
+
+    return withPrices[0].id
+  }, [products])
+
   // Mix ads into products
   const mixedResults: Array<{ type: 'product' | 'ad'; data: Product | Advertisement }> = []
   let adIndex = 0
@@ -87,6 +127,7 @@ export function SearchResultsGrid({
             <SearchResultCard
               product={item.data as Product}
               isTracked={trackedIds.has((item.data as Product).id)}
+              isBestPrice={(item.data as Product).id === bestPriceProductId}
               onTrackChange={handleTrackChange}
             />
           ) : (
