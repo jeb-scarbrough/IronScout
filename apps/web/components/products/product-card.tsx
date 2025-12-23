@@ -12,8 +12,9 @@ import { CreateAlertDialog } from './create-alert-dialog'
 import {
   PerformanceBadges,
   BulletTypeBadge,
-  PressureRatingBadge
-} from '@/components/premium/performance-badges'
+  PressureRatingBadge,
+  InlineVerdict
+} from '@/components/premium'
 import {
   Tooltip,
   TooltipContent,
@@ -68,16 +69,16 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
   const finalScore = premium?.premiumRanking?.finalScore
 
   return (
-    <Card className="group hover:shadow-lg transition-all duration-200 overflow-hidden">
+    <Card className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden border-2 border-transparent hover:border-primary/20">
       <div className="relative">
-        <div className="aspect-square relative overflow-hidden bg-gray-50 dark:bg-gray-900">
+        <div className="aspect-square relative overflow-hidden bg-gradient-to-br from-muted/50 to-muted">
           <ProductImage
             imageUrl={product.imageUrl}
             caliber={product.caliber}
             brand={product.brand}
             alt={product.name}
             fill
-            className="group-hover:scale-105 transition-transform duration-200"
+            className="group-hover:scale-105 transition-transform duration-500 ease-out"
           />
         </div>
 
@@ -146,11 +147,11 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
         </div>
 
         {/* Quick Actions */}
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0">
           <Button
             size="sm"
             variant="secondary"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 backdrop-blur-sm bg-background/80 hover:bg-background shadow-lg"
             onClick={() => setShowAlertDialog(true)}
             aria-label="Save item"
           >
@@ -209,7 +210,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             )}
           </div>
 
-          <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors">
+          <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-primary transition-colors leading-snug">
             {product.name}
           </h3>
 
@@ -236,7 +237,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-baseline gap-2">
-                <p className="text-lg font-bold text-primary">
+                <p className="text-xl font-bold text-primary font-mono tracking-tight">
                   {formatPrice(lowestPrice.price, lowestPrice.currency)}
                 </p>
                 {pricePerRound !== null && (
@@ -245,9 +246,13 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
                   </p>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                at {lowestPrice.retailer.name}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground">
+                  at {lowestPrice.retailer.name}
+                </p>
+                {/* Price verdict - everyone gets the conclusion */}
+                <InlineVerdict priceContext={product.priceContext} />
+              </div>
             </div>
 
             {product.prices.length > 1 && (
@@ -262,7 +267,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
 
       <CardFooter className="p-4 pt-0 space-y-2">
         <div className="flex space-x-2 w-full">
-          <Button size="sm" className="flex-1" asChild>
+          <Button size="sm" className="flex-1 shadow-sm hover:shadow-md transition-shadow" asChild>
             <a
               href={lowestPrice.url}
               target="_blank"

@@ -8,6 +8,7 @@ import {
   ProductForRanking,
   PremiumRankedProduct
 } from './premium-ranking'
+import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
 import { visibleDealerPriceWhere } from '../../config/tiers'
 
@@ -213,11 +214,34 @@ export async function aiSearch(
   
   // 9. Trim to requested limit
   rankedProducts = rankedProducts.slice(0, limit)
-  
-  // 10. Format products (with Premium data if applicable)
+
+  // 10. Calculate price context for ALL users (verdict for everyone, depth for premium)
+  // For premium users with premiumRanking, use existing priceSignal
+  // For all others, calculate it now
+  const productsNeedingPriceSignal = rankedProducts.filter(
+    (p: any) => !p.premiumRanking?.priceSignal
+  )
+
+  let priceSignalMap = new Map<string, PriceSignalIndex>()
+  if (productsNeedingPriceSignal.length > 0) {
+    priceSignalMap = await batchCalculatePriceSignalIndex(productsNeedingPriceSignal)
+  }
+
+  // Merge price signals into products
+  rankedProducts = rankedProducts.map((p: any) => {
+    // Use existing priceSignal from premiumRanking if available
+    const existingSignal = p.premiumRanking?.priceSignal
+    const calculatedSignal = priceSignalMap.get(p.id)
+    return {
+      ...p,
+      _priceSignal: existingSignal || calculatedSignal
+    }
+  })
+
+  // 11. Format products (with Premium data if applicable)
   const formattedProducts = rankedProducts.map(p => formatProduct(p, isPremium))
 
-  // 11. Build facets (with Premium facets if applicable)
+  // 12. Build facets (with Premium facets if applicable)
   const facets = await buildFacets(where, isPremium)
 
   const processingTimeMs = Date.now() - startTime
@@ -829,8 +853,33 @@ function stripPremiumExplanations(intent: SearchIntent, isPremium: boolean): Sea
 
 /**
  * Format product for API response
+ *
+ * Price context tiering (The Rule):
+ * - Everyone gets the conclusion (contextBand)
+ * - Premium gets the reasoning (relativePricePct, positionInRange, meta)
  */
 function formatProduct(product: any, isPremium: boolean): any {
+  // Build price context - verdict for everyone, depth for premium
+  let priceContext: any = undefined
+  const priceSignal = product._priceSignal
+
+  if (priceSignal && priceSignal.contextBand) {
+    if (isPremium) {
+      // Premium: Full depth - quantification, history, confidence
+      priceContext = {
+        contextBand: priceSignal.contextBand,
+        relativePricePct: priceSignal.relativePricePct,
+        positionInRange: priceSignal.positionInRange,
+        meta: priceSignal.meta
+      }
+    } else {
+      // FREE: Just the verdict - no numbers, no charts, no tuning knobs
+      priceContext = {
+        contextBand: priceSignal.contextBand
+      }
+    }
+  }
+
   const base = {
     id: product.id,
     name: product.name,
@@ -845,6 +894,8 @@ function formatProduct(product: any, isPremium: boolean): any {
     purpose: product.purpose,
     roundCount: product.roundCount,
     relevanceScore: product._relevanceScore,
+    // Price context - everyone gets verdict, premium gets depth
+    ...(priceContext && { priceContext }),
     prices: product.prices.map((price: any) => ({
       id: price.id,
       price: parseFloat(price.price.toString()),

@@ -1,13 +1,55 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ProductCard } from '../molecules/deal-card'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ForYouResultCard } from '@/components/results'
+import { ResultCardSkeleton } from '@/components/results'
 import { Search, ChevronRight, Lock, Sparkles, TrendingDown, Bell } from 'lucide-react'
 import { useDealsForYou } from '@/hooks/use-deals-for-you'
 import { UPGRADE_COPY } from '@/types/dashboard'
 import Link from 'next/link'
+
+import type { ProductFeedItem } from '@/types/dashboard'
+
+/**
+ * ForYouResultsGrid - Grid component for "For You" feed
+ * Manages local tracking state for optimistic updates
+ */
+function ForYouResultsGrid({
+  items: initialItems,
+  onAddToWatchlist,
+}: {
+  items: ProductFeedItem[]
+  onAddToWatchlist?: (productId: string) => void
+}) {
+  const [items, setItems] = useState(initialItems)
+
+  const handleTrackChange = useCallback((productId: string, isTracked: boolean) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.product.id === productId
+          ? { ...item, isWatched: isTracked }
+          : item
+      )
+    )
+    if (isTracked && onAddToWatchlist) {
+      onAddToWatchlist(productId)
+    }
+  }, [onAddToWatchlist])
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {items.map((item) => (
+        <ForYouResultCard
+          key={item.id}
+          item={item}
+          onTrackChange={handleTrackChange}
+        />
+      ))}
+    </div>
+  )
+}
 
 // Sample teasers to show value before user saves items
 const SAMPLE_TEASERS = [
@@ -62,18 +104,7 @@ export function PersonalizedFeed({ isPremium = false, onAddToWatchlist }: Person
       {loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-card border-border">
-              <CardContent className="p-4 space-y-3">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-4 w-24" />
-                <div className="flex justify-between">
-                  <Skeleton className="h-8 w-20" />
-                  <Skeleton className="h-8 w-16" />
-                </div>
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
+            <ResultCardSkeleton key={i} />
           ))}
         </div>
       )}
@@ -130,7 +161,7 @@ export function PersonalizedFeed({ isPremium = false, onAddToWatchlist }: Person
                     Your feed is empty. Let's fix that.
                   </p>
                   <p className="text-xs text-muted-foreground mt-1 mb-4">
-                    Save your first item to unlock personalized recommendations
+                    Save your first item to see products matching your interests
                   </p>
                   <Link href="/dashboard/search">
                     <Button size="sm">
@@ -142,20 +173,10 @@ export function PersonalizedFeed({ isPremium = false, onAddToWatchlist }: Person
               </Card>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {data.items.map((item) => (
-                <ProductCard
-                  key={item.id}
-                  item={item}
-                  isPremium={isPremium}
-                  onWatchlistClick={
-                    onAddToWatchlist && !item.isWatched
-                      ? () => onAddToWatchlist(item.product.id)
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
+            <ForYouResultsGrid
+              items={data.items}
+              onAddToWatchlist={onAddToWatchlist}
+            />
           )}
 
           {/* Free tier limit message */}

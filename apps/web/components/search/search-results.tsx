@@ -1,11 +1,9 @@
 import { auth } from '@/lib/auth'
 import { aiSearch, getAds, AISearchResponse, ExplicitFilters } from '@/lib/api'
-import { ProductCard } from '@/components/products/product-card'
-import { AdCard } from '@/components/ads/ad-card'
+import { SearchResultsGrid } from '@/components/results'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Search, Crown, Bookmark, TrendingUp, Bell } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, Crown } from 'lucide-react'
 import { SearchHeader } from './search-header'
-import { AIExplanationBanner } from '@/components/premium'
 import Link from 'next/link'
 
 interface SearchResultsProps {
@@ -142,19 +140,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
       )
     }
 
-    // Mix in ads every 4 products
-    const mixedResults: Array<{ type: 'product' | 'ad'; data: any }> = []
-    let adIndex = 0
-
-    products.forEach((product, index) => {
-      mixedResults.push({ type: 'product', data: product })
-      
-      if ((index + 1) % 4 === 0 && adIndex < ads.length) {
-        mixedResults.push({ type: 'ad', data: ads[adIndex] })
-        adIndex++
-      }
-    })
-
     return (
       <>
         <SearchHeader
@@ -169,20 +154,8 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           premiumFiltersActive={premiumFiltersActive}
         />
 
-        <div className="space-y-6 mt-6">
-          {/* Retention hint - contextual, after value delivered */}
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground bg-muted/30 py-2 px-4 rounded-lg">
-            <Bookmark className="h-4 w-4 text-primary" />
-            <span>Save items to get price drop alerts</span>
-          </div>
-
-          {/* AI Explanation Banner */}
-          <AIExplanationBanner
-            intent={intent}
-            isPremium={isPremium}
-            processingTimeMs={searchMetadata.processingTimeMs}
-          />
-          
+        {/* Results Zone - visually separated from controls */}
+        <div className="space-y-4 mt-4">
           {/* Results Limited Banner */}
           {_meta?.resultsLimited && (
             <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between">
@@ -207,48 +180,8 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             </div>
           )}
 
-          {/* Premium Features Used Banner */}
-          {isPremium && searchMetadata.premiumFeaturesUsed && searchMetadata.premiumFeaturesUsed.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
-              <Crown className="h-4 w-4" />
-              <span>Premium features active: {searchMetadata.premiumFeaturesUsed.join(', ')}</span>
-            </div>
-          )}
-
-          {/* Results Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {mixedResults.map((item, index) => (
-              <div key={`${item.type}-${index}`}>
-                {item.type === 'product' ? (
-                  <ProductCard
-                    product={item.data}
-                    showRelevance={sortBy === 'relevance' || sortBy === 'best_value'}
-                    showPremiumFeatures={isPremium}
-                  />
-                ) : (
-                  <AdCard ad={item.data} />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Post-search premium bridge - contextual, after value delivered */}
-          {!isPremium && products.length > 0 && (
-            <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border">
-              <div className="flex items-center gap-3">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">See how prices have changed</p>
-                  <p className="text-xs text-muted-foreground">Historical trends and advanced filters</p>
-                </div>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/pricing">
-                  Unlock
-                </Link>
-              </Button>
-            </div>
-          )}
+          {/* Results Grid - using new ResultCard component */}
+          <SearchResultsGrid products={products} ads={ads} adInterval={4} />
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (

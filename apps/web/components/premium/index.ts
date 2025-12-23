@@ -1,12 +1,15 @@
 // Premium feature components
 
 // Badges for displaying performance characteristics
+// Note: BestValueBadge removed from exports per ADR-006 (no deal scores/value judgments)
 export {
   PerformanceBadges,
   BulletTypeBadge,
   PressureRatingBadge,
-  BestValueBadge,
 } from './performance-badges'
+
+// Price verdict - everyone gets conclusion, premium gets reasoning
+export { PriceVerdict, InlineVerdict } from './price-verdict'
 
 // Premium filters panel
 export { PremiumFilters } from './premium-filters'

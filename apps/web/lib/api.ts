@@ -14,6 +14,34 @@ function buildAuthHeaders(token?: string): Record<string, string> {
   return headers
 }
 
+/**
+ * Price context band classification
+ * Everyone gets the verdict (contextBand)
+ * Premium gets the reasoning (relativePricePct, positionInRange, meta)
+ */
+export type ContextBand = 'LOW' | 'TYPICAL' | 'HIGH' | 'INSUFFICIENT_DATA'
+
+/**
+ * Price context - available to ALL users (verdict)
+ * Premium users get additional depth fields
+ */
+export interface PriceContext {
+  /** Descriptive classification - available to ALL users */
+  contextBand: ContextBand
+
+  // Premium-only fields (depth/reasoning)
+  /** Percentage relative to trailing median (negative = below median) */
+  relativePricePct?: number
+  /** Position within observed range (0 = min, 1 = max) */
+  positionInRange?: number
+  /** Data coverage metadata */
+  meta?: {
+    windowDays: number
+    sampleCount: number
+    asOf: string
+  }
+}
+
 export interface Product {
   id: string
   name: string
@@ -30,7 +58,10 @@ export interface Product {
   purpose?: string
   roundCount?: number
   relevanceScore?: number
-  
+
+  // Price context - verdict for all, depth for premium
+  priceContext?: PriceContext
+
   // Premium fields (only populated for Premium users)
   premium?: PremiumProductData
 }
