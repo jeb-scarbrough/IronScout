@@ -144,30 +144,44 @@ export async function aiSearch(
     where.prices = { some: priceConditions }
   }
   
-  // 5. Get total count
-  const total = await prisma.product.count({ where })
-  
-  // 6. Fetch products - use vector search if enabled and sorting by relevance
+  // 5. Fetch products - use vector search if enabled and sorting by relevance
   const skip = (page - 1) * limit
   let products: any[]
   let vectorSearchUsed = false
+  let total: number
   const hasExplicitFilters = Object.keys(explicitFilters).length > 0
-  
+
   if (useVectorSearch && (sortBy === 'relevance' || sortBy === 'price_context') && !hasExplicitFilters) {
     try {
       // Try vector-enhanced search (only when no explicit filters)
       products = await vectorEnhancedSearch(query, mergedIntent, explicitFilters, { skip, limit: limit * 2 }, isPremium)
       vectorSearchUsed = true
-      console.log('[AI Search] Vector search returned', products.length, 'results')
+      // For vector search, count products with embeddings matching the intent filters
+      // Use a simplified count that matches vector search conditions
+      const vectorCountWhere = {
+        ...where,
+        embedding: { not: null }
+      }
+      total = await prisma.product.count({ where: vectorCountWhere })
+      console.log('[AI Search] Vector search returned', products.length, 'results, total:', total)
     } catch (error) {
       console.warn('[AI Search] Vector search failed, falling back to standard search:', error)
       products = await standardSearch(where, skip, limit * 2, isPremium)
+      total = await prisma.product.count({ where })
     }
   } else {
     // Use standard Prisma search with explicit filters
     console.log('[AI Search] Using standard search', hasExplicitFilters ? '(explicit filters active)' : '')
     products = await standardSearch(where, skip, limit * 2, isPremium)
-    console.log('[AI Search] Standard search returned', products.length, 'results')
+    total = await prisma.product.count({ where })
+    console.log('[AI Search] Standard search returned', products.length, 'results, total:', total)
+  }
+
+  // Ensure total is at least the number of products returned on this page
+  // This handles edge cases where count query doesn't match actual results
+  if (page === 1 && products.length > total) {
+    console.warn('[AI Search] Count mismatch: products.length', products.length, '> total', total, '- adjusting')
+    total = products.length
   }
   
   // 7. Apply tier-appropriate ranking

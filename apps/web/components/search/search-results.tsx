@@ -140,11 +140,15 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
       )
     }
 
+    // Use products.length for display count - more accurate than pagination.total
+    // which may be incorrect due to grouping or backend inconsistencies
+    const displayCount = products.length > 0 ? Math.max(products.length, pagination.total) : pagination.total
+
     return (
       <>
         <SearchHeader
           query={query}
-          resultCount={pagination.total}
+          resultCount={displayCount}
           intent={intent}
           processingTimeMs={searchMetadata.processingTimeMs}
           vectorSearchUsed={searchMetadata.vectorSearchUsed}

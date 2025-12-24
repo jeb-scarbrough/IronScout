@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { ResultCard } from './result-card'
+import { ResultCard, type CardBadge } from './result-card'
 import type { ProductFeedItem } from '@/types/dashboard'
 import { addToWatchlist, removeFromWatchlist } from '@/lib/api'
 import { useSession } from 'next-auth/react'
@@ -9,7 +9,12 @@ import { toast } from 'sonner'
 
 interface ForYouResultCardProps {
   item: ProductFeedItem
+  /** Crown this card as the best price */
+  isBestPrice?: boolean
+  /** Additional badges to display */
+  badges?: CardBadge[]
   onTrackChange?: (productId: string, isTracked: boolean) => void
+  onWhyThisPrice?: (productId: string) => void
 }
 
 /**
@@ -20,7 +25,10 @@ interface ForYouResultCardProps {
  */
 export function ForYouResultCard({
   item,
+  isBestPrice = false,
+  badges = [],
   onTrackChange,
+  onWhyThisPrice,
 }: ForYouResultCardProps) {
   const { data: session } = useSession()
   const accessToken = (session as any)?.accessToken
@@ -31,7 +39,7 @@ export function ForYouResultCard({
   // Handle track toggle
   const handleTrackToggle = useCallback(async (id: string) => {
     if (!accessToken) {
-      toast.error('Please sign in to track prices')
+      toast.error('Please sign in to create alerts')
       return
     }
 
@@ -47,24 +55,34 @@ export function ForYouResultCard({
       }
     } catch (error) {
       console.error('Failed to toggle tracking:', error)
-      toast.error('Failed to update tracking')
+      toast.error('Failed to update alert')
     }
   }, [accessToken, item.isWatched, item.id, item.product.id, onTrackChange])
+
+  // Handle "Why this price?" click
+  const handleWhyThisPrice = useCallback((id: string) => {
+    onWhyThisPrice?.(item.product.id)
+  }, [item.product.id, onWhyThisPrice])
 
   return (
     <ResultCard
       id={item.id}
-      pricePerRound={pricePerRound}
-      inStock={item.inStock}
       productTitle={item.product.name}
+      pricePerRound={pricePerRound}
+      totalPrice={item.price}
+      roundCount={item.product.roundCount ?? undefined}
+      inStock={item.inStock}
       retailerName={item.retailer.name}
       retailerUrl={item.url}
       caliber={item.product.caliber}
       grain={item.product.grainWeight ?? undefined}
       caseMaterial={undefined} // Not in ProductFeedItem
       isTracked={item.isWatched}
+      isBestPrice={isBestPrice}
+      badges={badges}
       placement="for_you"
       onTrackToggle={handleTrackToggle}
+      onWhyThisPrice={handleWhyThisPrice}
     />
   )
 }

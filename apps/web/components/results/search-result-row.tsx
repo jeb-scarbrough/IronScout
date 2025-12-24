@@ -1,37 +1,29 @@
 'use client'
 
 import { useCallback } from 'react'
-import { ResultCard, type CardBadge } from './result-card'
+import { ResultRow } from './result-row'
 import type { Product } from '@/lib/api'
 import { saveItem, unsaveItem } from '@/lib/api'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
-interface SearchResultCardProps {
+interface SearchResultRowProps {
   product: Product
   isTracked?: boolean
-  /** Crown this card as the best price in the result set */
-  isBestPrice?: boolean
-  /** Additional badges to display */
-  badges?: CardBadge[]
   onTrackChange?: (productId: string, isTracked: boolean) => void
-  onWhyThisPrice?: (productId: string) => void
 }
 
 /**
- * SearchResultCard - Adapter for search results
+ * SearchResultRow - Adapter for grid view rows
  *
- * Maps a Product to the ResultCard spec contract.
+ * Maps a Product to the ResultRow spec contract.
  * Handles tracking state via the saved items API.
  */
-export function SearchResultCard({
+export function SearchResultRow({
   product,
   isTracked = false,
-  isBestPrice = false,
-  badges = [],
   onTrackChange,
-  onWhyThisPrice,
-}: SearchResultCardProps) {
+}: SearchResultRowProps) {
   const { data: session } = useSession()
   const accessToken = (session as any)?.accessToken
 
@@ -48,7 +40,7 @@ export function SearchResultCard({
   // Calculate price per round
   const pricePerRound = product.roundCount && product.roundCount > 0
     ? lowestPrice.price / product.roundCount
-    : lowestPrice.price // Fallback to total if no round count
+    : lowestPrice.price
 
   // Handle track toggle
   const handleTrackToggle = useCallback(async (id: string) => {
@@ -71,13 +63,8 @@ export function SearchResultCard({
     }
   }, [accessToken, isTracked, product.id, onTrackChange])
 
-  // Handle "Why this price?" click
-  const handleWhyThisPrice = useCallback((id: string) => {
-    onWhyThisPrice?.(product.id)
-  }, [product.id, onWhyThisPrice])
-
   return (
-    <ResultCard
+    <ResultRow
       id={product.id}
       productTitle={product.name}
       pricePerRound={pricePerRound}
@@ -86,15 +73,9 @@ export function SearchResultCard({
       inStock={lowestPrice.inStock}
       retailerName={lowestPrice.retailer.name}
       retailerUrl={lowestPrice.url}
-      caliber={product.caliber || 'Unknown'}
-      grain={product.grainWeight}
-      caseMaterial={product.caseMaterial}
       isTracked={isTracked}
-      isBestPrice={isBestPrice}
-      badges={badges}
       placement="search"
       onTrackToggle={handleTrackToggle}
-      onWhyThisPrice={handleWhyThisPrice}
     />
   )
 }
