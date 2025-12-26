@@ -2,7 +2,10 @@ import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import * as cheerio from 'cheerio'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { normalizeQueue, ExtractJobData } from '../config/queues'
+
+const log = logger.extractor
 
 // Extractor worker - parses content and extracts product data
 export const extractorWorker = new Worker<ExtractJobData>(
@@ -12,7 +15,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
     const stageStart = Date.now()
     const contentBytes = typeof content === 'string' ? content.length : JSON.stringify(content).length
 
-    console.log(`[Extractor] Extracting data for execution ${executionId}`)
+    log.info('Extracting data', { executionId, sourceId, sourceType, contentBytes })
 
     try {
       await prisma.executionLog.create({
@@ -184,9 +187,9 @@ async function extractFromHTML(content: string, sourceId: string): Promise<any[]
 }
 
 extractorWorker.on('completed', (job) => {
-  console.log(`[Extractor] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 extractorWorker.on('failed', (job, err) => {
-  console.error(`[Extractor] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })

@@ -3,9 +3,12 @@ import { prisma } from '@ironscout/db'
 import axios from 'axios'
 import { gunzipSync } from 'zlib'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { extractQueue, normalizeQueue, FetchJobData } from '../config/queues'
 import { computeContentHash } from '../utils/hash'
 import { ImpactParser, AvantLinkParser, ShareASaleParser } from '../parsers'
+
+const log = logger.fetcher
 
 // ============================================================================
 // FETCHER LIMITS - Prevent memory exhaustion from bad sources
@@ -96,7 +99,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
     const { sourceId, executionId, url, type } = job.data
     const stageStart = Date.now()
 
-    console.log(`[Fetcher] Fetching ${url}`)
+    log.info('Fetching URL', { sourceId, executionId, url, type })
 
     try {
       // Get source to check pagination config
@@ -166,7 +169,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
           }
         }
 
-        console.log(`[Fetcher] Fetching page ${pageNum + 1}: ${pageUrl}`)
+        log.debug('Fetching page', { pageNum: pageNum + 1, pageUrl })
 
         let pageContent: string
 
@@ -188,7 +191,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         // Track total content size
         totalContentSize += pageContent.length
         if (totalContentSize > MAX_TOTAL_CONTENT_SIZE) {
-          console.warn(`[Fetcher] Total content size limit exceeded (${totalContentSize} > ${MAX_TOTAL_CONTENT_SIZE}), stopping`)
+          log.warn('Total content size limit exceeded, stopping', { totalContentSize, limit: MAX_TOTAL_CONTENT_SIZE })
           await prisma.executionLog.create({
             data: {
               executionId,
@@ -210,7 +213,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
             const items = Array.isArray(parsed) ? parsed : parsed.products || parsed.items || []
 
             if (items.length === 0) {
-              console.log(`[Fetcher] No more items found on page ${pageNum + 1}, stopping pagination`)
+              log.debug('No more items found, stopping pagination', { pageNum: pageNum + 1 })
               break
             }
 
@@ -218,7 +221,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
 
             // Check items limit
             if (allContent.length >= MAX_ITEMS_COLLECTED) {
-              console.warn(`[Fetcher] Max items limit reached (${allContent.length} >= ${MAX_ITEMS_COLLECTED}), stopping`)
+              log.warn('Max items limit reached, stopping', { itemCount: allContent.length, limit: MAX_ITEMS_COLLECTED })
               await prisma.executionLog.create({
                 data: {
                   executionId,
@@ -248,7 +251,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         currentPage += increment
       }
 
-      console.log(`[Fetcher] Fetched ${pagesFetched} page(s), total items: ${allContent.length}`)
+      log.info('Fetch complete', { pagesFetched, itemCount: allContent.length, totalContentSize })
 
       // Serialize content based on type with size limits
       let content: string
@@ -463,9 +466,9 @@ export const fetcherWorker = new Worker<FetchJobData>(
 )
 
 fetcherWorker.on('completed', (job) => {
-  console.log(`[Fetcher] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 fetcherWorker.on('failed', (job, err) => {
-  console.error(`[Fetcher] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })

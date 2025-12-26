@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ironscout/db": "workspace:*",
+    "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",
     "csv-parse": "^6.1.0",
     "fast-xml-parser": "^5.3.2",

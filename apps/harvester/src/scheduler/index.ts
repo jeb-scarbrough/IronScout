@@ -1,7 +1,10 @@
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { crawlQueue, fetchQueue, CrawlJobData } from '../config/queues'
+
+const log = logger.scheduler
 
 // Scheduler worker - creates crawl jobs for enabled sources
 export const schedulerWorker = new Worker<CrawlJobData>(
@@ -9,7 +12,7 @@ export const schedulerWorker = new Worker<CrawlJobData>(
   async (job: Job<CrawlJobData>) => {
     const { sourceId, executionId } = job.data
 
-    console.log(`[Scheduler] Processing crawl job for source ${sourceId}`)
+    log.info('Processing crawl job', { sourceId, executionId })
 
     try {
       // Update execution status to RUNNING
@@ -108,7 +111,7 @@ export async function scheduleAllCrawls() {
     where: { enabled: true },
   })
 
-  console.log(`[Scheduler] Scheduling ${sources.length} enabled sources for window ${schedulingWindow}`)
+  log.info('Scheduling enabled sources', { sourceCount: sources.length, schedulingWindow })
 
   let scheduledCount = 0
   let skippedCount = 0
@@ -147,16 +150,16 @@ export async function scheduleAllCrawls() {
     })
 
     scheduledCount++
-    console.log(`[Scheduler] Queued crawl for source ${source.name}`)
+    log.debug('Queued crawl for source', { sourceName: source.name, sourceId: source.id })
   }
 
-  console.log(`[Scheduler] Crawl scheduling: ${scheduledCount} new, ${skippedCount} already scheduled`)
+  log.info('Crawl scheduling complete', { scheduledCount, skippedCount })
 }
 
 schedulerWorker.on('completed', (job) => {
-  console.log(`[Scheduler] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 schedulerWorker.on('failed', (job, err) => {
-  console.error(`[Scheduler] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })

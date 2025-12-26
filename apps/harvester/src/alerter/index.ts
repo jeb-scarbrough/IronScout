@@ -1,8 +1,11 @@
 import { Worker, Job, Queue } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { AlertJobData } from '../config/queues'
 import { Resend } from 'resend'
+
+const log = logger.alerter
 
 // Tier configuration (duplicated from API for harvester independence)
 const TIER_ALERT_DELAY_MS = {
@@ -54,7 +57,7 @@ try {
     resend = new Resend(process.env.RESEND_API_KEY)
   }
 } catch (error) {
-  console.warn('[Alerter] Resend API key not configured - email notifications will be disabled')
+  log.warn('Resend API key not configured - email notifications will be disabled')
 }
 const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
@@ -72,7 +75,7 @@ export const alerterWorker = new Worker<AlertJobData>(
   async (job: Job<AlertJobData>) => {
     const { executionId, productId, oldPrice, newPrice, inStock } = job.data
 
-    console.log(`[Alerter] Evaluating alerts for product ${productId}`)
+    log.info('Evaluating alerts', { productId, oldPrice, newPrice, inStock })
 
     try {
       // ADR-005: Check dealer visibility before evaluating alerts
@@ -80,7 +83,7 @@ export const alerterWorker = new Worker<AlertJobData>(
       const hasVisiblePrice = await hasVisibleDealerPrice(productId)
 
       if (!hasVisiblePrice) {
-        console.log(`[Alerter] Product ${productId} has no visible dealer prices, skipping alerts`)
+        log.debug('No visible dealer prices, skipping alerts', { productId })
 
         await prisma.executionLog.create({
           data: {
@@ -105,11 +108,12 @@ export const alerterWorker = new Worker<AlertJobData>(
         },
       })
 
-      // Find all active alerts for this product with user tier info
+      // Find all enabled alerts for this product with user tier info and watchlist preferences
+      // ADR-011: Alert is a rule marker; all preferences/state live on WatchlistItem
       const alerts = await prisma.alert.findMany({
         where: {
           productId,
-          isActive: true,
+          isEnabled: true,
         },
         include: {
           user: {
@@ -121,6 +125,7 @@ export const alerterWorker = new Worker<AlertJobData>(
             }
           },
           product: true,
+          watchlistItem: true, // ADR-011: preferences and cooldown state
         },
       })
 
@@ -128,51 +133,71 @@ export const alerterWorker = new Worker<AlertJobData>(
       let delayedCount = 0
 
       for (const alert of alerts) {
+        const watchlistItem = alert.watchlistItem
+        if (!watchlistItem) {
+          log.debug('Alert has no watchlistItem, skipping', { alertId: alert.id })
+          continue
+        }
+
+        // ADR-011: Check if notifications are enabled on the watchlist item
+        if (!watchlistItem.notificationsEnabled) {
+          log.debug('Notifications disabled for watchlist item, skipping', { watchlistItemId: watchlistItem.id })
+          continue
+        }
+
         let shouldTrigger = false
         let triggerReason = ''
+        const now = new Date()
 
-        switch (alert.alertType) {
+        switch (alert.ruleType) {
           case 'PRICE_DROP':
+            if (!watchlistItem.priceDropEnabled) {
+              continue // Price drop notifications disabled for this item
+            }
             if (oldPrice && newPrice && newPrice < oldPrice) {
-              // Check if price dropped below target (if specified)
-              if (alert.targetPrice) {
-                const target = parseFloat(alert.targetPrice.toString())
-                if (newPrice <= target) {
-                  shouldTrigger = true
-                  triggerReason = `Price dropped to $${newPrice} (target: $${target})`
+              const dropAmount = oldPrice - newPrice
+              const dropPercent = (dropAmount / oldPrice) * 100
+              const minDropPercent = watchlistItem.minDropPercent || 5
+              const minDropAmount = parseFloat(watchlistItem.minDropAmount?.toString() || '5')
+
+              // ADR-011: Check thresholds from WatchlistItem
+              if (dropPercent >= minDropPercent || dropAmount >= minDropAmount) {
+                // Check cooldown from WatchlistItem
+                if (watchlistItem.lastPriceNotifiedAt) {
+                  const cooldownHours = 24 // Default cooldown for price drops
+                  const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
+                  if (watchlistItem.lastPriceNotifiedAt > cooldownThreshold) {
+                    log.debug('Price drop alert in cooldown period, skipping', { alertId: alert.id })
+                    continue
+                  }
                 }
-              } else {
-                // Any price drop
                 shouldTrigger = true
-                triggerReason = `Price dropped from $${oldPrice} to $${newPrice}`
+                triggerReason = `Price dropped from $${oldPrice} to $${newPrice} (${dropPercent.toFixed(1)}% / $${dropAmount.toFixed(2)} drop)`
               }
             }
             break
 
           case 'BACK_IN_STOCK':
+            if (!watchlistItem.backInStockEnabled) {
+              continue // Back in stock notifications disabled for this item
+            }
             if (inStock === true) {
+              // Check cooldown from WatchlistItem
+              const cooldownHours = watchlistItem.stockAlertCooldownHours || 24
+              if (watchlistItem.lastStockNotifiedAt) {
+                const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
+                if (watchlistItem.lastStockNotifiedAt > cooldownThreshold) {
+                  log.debug('Back in stock alert in cooldown period, skipping', { alertId: alert.id })
+                  continue
+                }
+              }
               shouldTrigger = true
               triggerReason = 'Product is back in stock'
             }
             break
-
-          case 'NEW_PRODUCT':
-            // This would be triggered differently, when a new product is first added
-            // For now, skip this type in price update evaluations
-            break
         }
 
         if (shouldTrigger) {
-          // Check cooldown period - don't trigger same alert within 24 hours
-          const cooldownHours = 24
-          const now = new Date()
-          const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
-
-          if (alert.lastTriggered && alert.lastTriggered > cooldownThreshold) {
-            console.log(`[Alerter] Alert ${alert.id} in cooldown period, skipping`)
-            continue
-          }
-
           // Get user tier and calculate delay
           const userTier = (alert.user.tier || 'FREE') as keyof typeof TIER_ALERT_DELAY_MS
           const delayMs = TIER_ALERT_DELAY_MS[userTier] || TIER_ALERT_DELAY_MS.FREE
@@ -192,7 +217,7 @@ export const alerterWorker = new Worker<AlertJobData>(
               }
             )
 
-            console.log(`[Alerter] Queued delayed notification for FREE user ${alert.user.email} (delay: ${delayMs / 60000} minutes)`)
+            log.info('Queued delayed notification', { email: alert.user.email, delayMinutes: delayMs / 60000, userTier })
 
             await prisma.executionLog.create({
               data: {
@@ -234,14 +259,17 @@ export const alerterWorker = new Worker<AlertJobData>(
             triggeredCount++
           }
 
-          // Update lastTriggered timestamp
-          await prisma.alert.update({
-            where: { id: alert.id },
-            data: {
-              lastTriggered: now,
-              // Deactivate BACK_IN_STOCK alerts after triggering (one-time alerts)
-              isActive: alert.alertType === 'BACK_IN_STOCK' ? false : true,
-            },
+          // ADR-011: Update lastNotified timestamp on WatchlistItem, not Alert
+          const updateData: Record<string, Date> = {}
+          if (alert.ruleType === 'PRICE_DROP') {
+            updateData.lastPriceNotifiedAt = now
+          } else if (alert.ruleType === 'BACK_IN_STOCK') {
+            updateData.lastStockNotifiedAt = now
+          }
+
+          await prisma.watchlistItem.update({
+            where: { id: watchlistItem.id },
+            data: updateData,
           })
         }
       }
@@ -289,27 +317,34 @@ export const delayedNotificationWorker = new Worker<{
   async (job) => {
     const { alertId, triggerReason, executionId } = job.data
 
-    console.log(`[Alerter] Processing delayed notification for alert ${alertId}`)
+    log.info('Processing delayed notification', { alertId })
 
     try {
-      // Fetch the alert with user and product info
+      // Fetch the alert with user, product, and watchlist info
       const alert = await prisma.alert.findUnique({
         where: { id: alertId },
         include: {
           user: true,
           product: true,
+          watchlistItem: true,
         },
       })
 
       if (!alert) {
-        console.log(`[Alerter] Alert ${alertId} not found, skipping`)
+        log.warn('Alert not found, skipping', { alertId })
         return { success: false, reason: 'Alert not found' }
       }
 
-      // Check if alert is still active (user might have disabled it)
-      if (!alert.isActive) {
-        console.log(`[Alerter] Alert ${alertId} is no longer active, skipping`)
-        return { success: false, reason: 'Alert no longer active' }
+      // ADR-011: Check if alert is still enabled
+      if (!alert.isEnabled) {
+        log.debug('Alert no longer enabled, skipping', { alertId })
+        return { success: false, reason: 'Alert no longer enabled' }
+      }
+
+      // ADR-011: Check if notifications are still enabled on watchlist item
+      if (alert.watchlistItem && !alert.watchlistItem.notificationsEnabled) {
+        log.debug('Notifications disabled for watchlist item, skipping', { alertId })
+        return { success: false, reason: 'Notifications disabled' }
       }
 
       // Send the notification
@@ -332,7 +367,8 @@ export const delayedNotificationWorker = new Worker<{
 
       return { success: true }
     } catch (error) {
-      console.error(`[Alerter] Failed to process delayed notification:`, error)
+      const err = error as Error
+      log.error('Failed to process delayed notification', { alertId, error: err.message })
       throw error
     }
   },
@@ -343,13 +379,15 @@ export const delayedNotificationWorker = new Worker<{
 )
 
 // Send notification to user
+// ADR-011: Uses ruleType instead of alertType
 async function sendNotification(alert: any, reason: string) {
-  console.log(`[Alerter] NOTIFICATION:`)
-  console.log(`  To: ${alert.user.email}`)
-  console.log(`  Product: ${alert.product.name}`)
-  console.log(`  Reason: ${reason}`)
-  console.log(`  Alert Type: ${alert.alertType}`)
-  console.log(`  User Tier: ${alert.user.tier}`)
+  log.info('Sending notification', {
+    email: alert.user.email,
+    productName: alert.product.name,
+    ruleType: alert.ruleType,
+    userTier: alert.user.tier,
+    reason,
+  })
 
   try {
     // Get the latest price for the product from a visible dealer
@@ -369,25 +407,20 @@ async function sendNotification(alert: any, reason: string) {
     })
 
     if (!latestPrice) {
-      console.log(`[Alerter] No price found for product ${alert.productId}`)
+      log.warn('No price found for product', { productId: alert.productId })
       return
     }
 
     const currentPrice = parseFloat(latestPrice.price.toString())
     const productUrl = `${FRONTEND_URL}/products/${alert.productId}`
 
-    if (alert.alertType === 'PRICE_DROP') {
-      const targetPrice = alert.targetPrice ? parseFloat(alert.targetPrice.toString()) : 0
-      const savings = targetPrice > 0 ? targetPrice - currentPrice : 0
-
+    if (alert.ruleType === 'PRICE_DROP') {
       const html = generatePriceDropEmailHTML({
         userName: alert.user.name || 'there',
         productName: alert.product.name,
         productUrl,
         productImageUrl: alert.product.imageUrl,
         currentPrice,
-        targetPrice,
-        savings,
         retailerName: latestPrice.retailer.name,
         retailerUrl: latestPrice.url,
         userTier: alert.user.tier,
@@ -400,11 +433,11 @@ async function sendNotification(alert: any, reason: string) {
           subject: `🎉 Price Drop Alert: ${alert.product.name}`,
           html
         })
-        console.log(`[Alerter] Price drop email sent to ${alert.user.email}`)
+        log.info('Price drop email sent', { email: alert.user.email })
       } else {
-        console.log(`[Alerter] Email sending disabled (no RESEND_API_KEY) - would send price drop alert to ${alert.user.email}`)
+        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.user.email, type: 'price_drop' })
       }
-    } else if (alert.alertType === 'BACK_IN_STOCK') {
+    } else if (alert.ruleType === 'BACK_IN_STOCK') {
       const html = generateBackInStockEmailHTML({
         userName: alert.user.name || 'there',
         productName: alert.product.name,
@@ -423,13 +456,14 @@ async function sendNotification(alert: any, reason: string) {
           subject: `✨ Back in Stock: ${alert.product.name}`,
           html
         })
-        console.log(`[Alerter] Back in stock email sent to ${alert.user.email}`)
+        log.info('Back in stock email sent', { email: alert.user.email })
       } else {
-        console.log(`[Alerter] Email sending disabled (no RESEND_API_KEY) - would send back-in-stock alert to ${alert.user.email}`)
+        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.user.email, type: 'back_in_stock' })
       }
     }
   } catch (error) {
-    console.error(`[Alerter] Failed to send email:`, error)
+    const err = error as Error
+    log.error('Failed to send email', { error: err.message })
     // Don't throw - we don't want email failures to stop alert processing
   }
 }
@@ -440,15 +474,13 @@ function generatePriceDropEmailHTML(data: {
   productUrl: string
   productImageUrl?: string
   currentPrice: number
-  targetPrice: number
-  savings: number
   retailerName: string
   retailerUrl: string
   userTier: string
 }): string {
-  const delayNotice = data.userTier === 'FREE' 
+  const delayNotice = data.userTier === 'FREE'
     ? `<p style="margin: 20px 0 0 0; padding: 15px; background-color: #fef3c7; border-radius: 8px; font-size: 13px; color: #92400e;">
-        💡 <strong>Free account:</strong> This alert was delayed by 1 hour. 
+        💡 <strong>Free account:</strong> This alert was delayed by 1 hour.
         <a href="${FRONTEND_URL}/pricing" style="color: #d97706; text-decoration: underline;">Upgrade to Premium</a> for real-time alerts!
        </p>`
     : ''
@@ -487,24 +519,13 @@ function generatePriceDropEmailHTML(data: {
                     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 30px;">
                       <tr>
                         <td style="padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #10b981;">
-                          <table width="100%" cellpadding="0" cellspacing="0">
-                            <tr>
-                              <td>
-                                <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Current Price</p>
-                                <p style="margin: 0; color: #10b981; font-size: 32px; font-weight: 700;">$${data.currentPrice.toFixed(2)}</p>
-                              </td>
-                              <td align="right">
-                                <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px; text-align: right;">You Save</p>
-                                <p style="margin: 0; color: #10b981; font-size: 24px; font-weight: 700; text-align: right;">$${data.savings.toFixed(2)}</p>
-                                <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px; text-align: right;">Target: $${data.targetPrice.toFixed(2)}</p>
-                              </td>
-                            </tr>
-                          </table>
+                          <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Current Price</p>
+                          <p style="margin: 0; color: #10b981; font-size: 32px; font-weight: 700;">$${data.currentPrice.toFixed(2)}</p>
                         </td>
                       </tr>
                     </table>
                     <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                      The price dropped to <strong>$${data.currentPrice.toFixed(2)}</strong> at <strong>${data.retailerName}</strong>, which is below your target price of $${data.targetPrice.toFixed(2)}!
+                      The price dropped to <strong>$${data.currentPrice.toFixed(2)}</strong> at <strong>${data.retailerName}</strong>!
                     </p>
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
@@ -638,17 +659,17 @@ function generateBackInStockEmailHTML(data: {
 }
 
 alerterWorker.on('completed', (job) => {
-  console.log(`[Alerter] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 alerterWorker.on('failed', (job, err) => {
-  console.error(`[Alerter] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })
 
 delayedNotificationWorker.on('completed', (job) => {
-  console.log(`[Alerter] Delayed notification ${job.id} sent`)
+  log.info('Delayed notification sent', { jobId: job.id })
 })
 
 delayedNotificationWorker.on('failed', (job, err) => {
-  console.error(`[Alerter] Delayed notification ${job?.id} failed:`, err.message)
+  log.error('Delayed notification failed', { jobId: job?.id, error: err.message })
 })

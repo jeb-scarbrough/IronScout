@@ -12,6 +12,7 @@
     "@auth/core": "^0.37.0",
     "@auth/prisma-adapter": "^2.11.1",
     "@ironscout/db": "workspace:*",
+    "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",
     "clsx": "^2.1.0",
     "jose": "^5.2.0",

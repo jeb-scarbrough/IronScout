@@ -1,7 +1,10 @@
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { alertQueue, WriteJobData, NormalizedProduct } from '../config/queues'
+
+const log = logger.writer
 
 // ============================================================================
 // BATCH CONFIGURATION
@@ -215,7 +218,7 @@ async function processBatch(
     return { upsertedCount, priceChanges, errors }
   } catch (error) {
     // If batch fails, try item-by-item to identify failures
-    console.warn(`[Writer] Batch failed, falling back to item-by-item processing`)
+    log.warn('Batch failed, falling back to item-by-item processing')
 
     let upsertedCount = 0
     const priceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> = []
@@ -305,7 +308,7 @@ export const writerWorker = new Worker<WriteJobData>(
     const totalItems = normalizedItems.length
     const batchCount = Math.ceil(totalItems / BATCH_SIZE)
 
-    console.log(`[Writer] Writing ${totalItems} items in ${batchCount} batches`)
+    log.info('Writing items', { executionId, sourceId, totalItems, batchCount })
 
     let totalUpserted = 0
     const allPriceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> = []
@@ -336,7 +339,7 @@ export const writerWorker = new Worker<WriteJobData>(
 
         // Log batch progress (only every 5 batches or on last batch to reduce logs)
         if (batchCount > 5 && (batchNum % 5 === 0 || batchNum === batchCount)) {
-          console.log(`[Writer] Progress: batch ${batchNum}/${batchCount}, ${totalUpserted} upserted so far`)
+          log.debug('Batch progress', { batchNum, batchCount, upsertedSoFar: totalUpserted })
         }
       }
 
@@ -464,9 +467,9 @@ export const writerWorker = new Worker<WriteJobData>(
 )
 
 writerWorker.on('completed', (job) => {
-  console.log(`[Writer] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 writerWorker.on('failed', (job, err) => {
-  console.error(`[Writer] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })

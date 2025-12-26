@@ -5,6 +5,9 @@ import express, { Express } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import { prisma } from '@ironscout/db'
+import { loggers } from './config/logger'
+
+const log = loggers.server
 
 import { productsRouter } from './routes/products'
 import { adsRouter } from './routes/ads'
@@ -22,6 +25,7 @@ import { dashboardRouter } from './routes/dashboard'
 import { watchlistRouter } from './routes/watchlist'
 import { savedItemsRouter } from './routes/saved-items'
 import { adminRouter } from './routes/admin'
+import { usersRouter } from './routes/users'
 
 const app: Express = express()
 const PORT = process.env.PORT || 8000
@@ -72,14 +76,15 @@ app.use('/api/dashboard', dashboardRouter)
 app.use('/api/watchlist', watchlistRouter)
 app.use('/api/saved-items', savedItemsRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/users', usersRouter)
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack)
+  log.error('Unhandled error', { path: req.path, method: req.method }, err)
   res.status(500).json({ error: 'Something went wrong!' })
 })
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 API server running on port ${PORT}`)
+  log.info('API server started', { port: PORT })
 })
 
 // Track if shutdown is in progress
@@ -88,35 +93,34 @@ let isShuttingDown = false
 // Graceful shutdown
 const shutdown = async (signal: string) => {
   if (isShuttingDown) {
-    console.log('[Shutdown] Already in progress, please wait...')
+    log.warn('Shutdown already in progress')
     return
   }
   isShuttingDown = true
 
-  console.log(`\n[Shutdown] Received ${signal}, starting graceful shutdown...`)
   const shutdownStart = Date.now()
+  log.info('Starting graceful shutdown', { signal })
 
   try {
     // 1. Stop accepting new connections
-    console.log('[Shutdown] Closing HTTP server...')
+    log.info('Closing HTTP server')
     await new Promise<void>((resolve, reject) => {
       server.close((err) => {
         if (err) reject(err)
         else resolve()
       })
     })
-    console.log('[Shutdown] HTTP server closed')
+    log.info('HTTP server closed')
 
     // 2. Disconnect from database
-    console.log('[Shutdown] Disconnecting from database...')
+    log.info('Disconnecting from database')
     await prisma.$disconnect()
-    console.log('[Shutdown] Database disconnected')
 
-    const duration = ((Date.now() - shutdownStart) / 1000).toFixed(1)
-    console.log(`[Shutdown] Graceful shutdown complete in ${duration}s`)
+    const durationMs = Date.now() - shutdownStart
+    log.info('Graceful shutdown complete', { durationMs })
     process.exit(0)
   } catch (error) {
-    console.error('[Shutdown] Error during shutdown:', error)
+    log.error('Error during shutdown', {}, error)
     process.exit(1)
   }
 }

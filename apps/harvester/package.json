@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@ironscout/db": "workspace:*",
+    "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",
     "axios": "^1.13.2",
     "bullmq": "^5.65.1",

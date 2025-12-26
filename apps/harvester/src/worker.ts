@@ -15,6 +15,8 @@
 import 'dotenv/config'
 
 import { prisma } from '@ironscout/db'
+import { warmupRedis } from './config/redis'
+import { logger } from './config/logger'
 import { schedulerWorker } from './scheduler'
 import { fetcherWorker } from './fetcher'
 import { extractorWorker } from './extractor'
@@ -40,67 +42,78 @@ import { startDealerScheduler, stopDealerScheduler } from './dealer/scheduler'
  */
 const SCHEDULER_ENABLED = process.env.HARVESTER_SCHEDULER_ENABLED === 'true'
 
+const log = logger.worker
+const dbLog = logger.database
+
 /**
  * Warm up database connection with retries
  */
 async function warmupDatabase(maxAttempts = 5): Promise<boolean> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log(`[Database] Connection attempt ${attempt}/${maxAttempts}...`)
+      dbLog.info('Connection attempt', { attempt, maxAttempts })
       await prisma.$queryRaw`SELECT 1`
-      console.log('[Database] Connection established successfully')
+      dbLog.info('Connection established successfully')
       return true
     } catch (error) {
       const err = error as Error
-      console.error(`[Database] Connection failed: ${err.message}`)
+      dbLog.error('Connection failed', { error: err.message })
 
       if (attempt < maxAttempts) {
         const delayMs = Math.min(2000 * Math.pow(2, attempt - 1), 30000)
-        console.log(`[Database] Retrying in ${delayMs / 1000}s...`)
+        dbLog.info('Retrying', { delayMs })
         await new Promise(resolve => setTimeout(resolve, delayMs))
       }
     }
   }
 
-  console.error('[Database] Failed to establish connection after all attempts')
+  dbLog.error('Failed to establish connection after all attempts', { maxAttempts })
   return false
 }
 
-console.log('Starting IronScout.ai Harvester Workers...')
-console.log('---')
-console.log(`Scheduler: ${SCHEDULER_ENABLED ? 'ENABLED' : 'DISABLED (set HARVESTER_SCHEDULER_ENABLED=true to enable)'}`)
-console.log('---')
-console.log('Active Workers:')
-console.log('  - Scheduler (crawl jobs)')
-console.log('  - Fetcher (HTTP requests)')
-console.log('  - Extractor (content parsing)')
-console.log('  - Normalizer (data standardization)')
-console.log('  - Writer (database upserts)')
-console.log('  - Alerter (notification triggers)')
-console.log('')
-console.log('Dealer Portal Workers:')
-console.log('  - DealerFeedIngest (feed downloads & parsing)')
-console.log('  - DealerSkuMatch (SKU → canonical matching)')
-console.log('  - DealerBenchmark (price benchmarks)')
-console.log('  - DealerInsight (insight generation)')
-console.log('---')
+log.info('Starting IronScout.ai Harvester Workers', {
+  schedulerEnabled: SCHEDULER_ENABLED,
+  workers: [
+    'scheduler',
+    'fetcher',
+    'extractor',
+    'normalizer',
+    'writer',
+    'alerter',
+  ],
+  dealerWorkers: [
+    'feed-ingest',
+    'sku-match',
+    'benchmark',
+    'insight',
+  ],
+})
 
-// Warm up database connection before starting scheduler (if enabled)
-warmupDatabase().then(async (connected) => {
+// Warm up Redis and database connections before starting workers
+async function startup() {
+  // Redis must be available for BullMQ workers to function
+  const redisConnected = await warmupRedis()
+  if (!redisConnected) {
+    log.error('Redis not available - cannot start workers')
+    process.exit(1)
+  }
+
   if (!SCHEDULER_ENABLED) {
-    console.log('[Worker] Scheduler disabled - this instance will only process jobs, not create them')
+    log.info('Scheduler disabled - this instance will only process jobs, not create them')
     return
   }
 
-  if (connected) {
-    // Start dealer scheduler only after database is ready
-    console.log('[Worker] Starting dealer scheduler...')
+  // Database is only required for scheduler
+  const dbConnected = await warmupDatabase()
+  if (dbConnected) {
+    log.info('Starting dealer scheduler')
     await startDealerScheduler()
   } else {
-    console.error('[Worker] Database not ready - scheduler will not start')
-    console.error('[Worker] Fix database connection and restart to enable scheduling')
+    log.error('Database not ready - scheduler will not start')
   }
-})
+}
+
+startup()
 
 // Track if shutdown is in progress to prevent double-shutdown
 let isShuttingDown = false
@@ -108,23 +121,23 @@ let isShuttingDown = false
 // Graceful shutdown
 const shutdown = async (signal: string) => {
   if (isShuttingDown) {
-    console.log('[Shutdown] Already in progress, please wait...')
+    log.warn('Shutdown already in progress')
     return
   }
   isShuttingDown = true
 
-  console.log(`\n[Shutdown] Received ${signal}, starting graceful shutdown...`)
   const shutdownStart = Date.now()
+  log.info('Starting graceful shutdown', { signal })
 
   try {
     // 1. Stop scheduling new jobs (if scheduler was enabled)
     if (SCHEDULER_ENABLED) {
-      console.log('[Shutdown] Stopping scheduler...')
+      log.info('Stopping scheduler')
       stopDealerScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)
-    console.log('[Shutdown] Waiting for workers to finish current jobs...')
+    log.info('Waiting for workers to finish current jobs')
     await Promise.all([
       schedulerWorker.close(),
       fetcherWorker.close(),
@@ -138,18 +151,18 @@ const shutdown = async (signal: string) => {
       dealerBenchmarkWorker.close(),
       dealerInsightWorker.close(),
     ])
-    console.log('[Shutdown] All workers closed')
+    log.info('All workers closed')
 
     // 3. Disconnect from database
-    console.log('[Shutdown] Disconnecting from database...')
+    log.info('Disconnecting from database')
     await prisma.$disconnect()
-    console.log('[Shutdown] Database disconnected')
 
-    const duration = ((Date.now() - shutdownStart) / 1000).toFixed(1)
-    console.log(`[Shutdown] Graceful shutdown complete in ${duration}s`)
+    const durationMs = Date.now() - shutdownStart
+    log.info('Graceful shutdown complete', { durationMs })
     process.exit(0)
   } catch (error) {
-    console.error('[Shutdown] Error during shutdown:', error)
+    const err = error as Error
+    log.error('Error during shutdown', { error: err.message })
     process.exit(1)
   }
 }
@@ -157,5 +170,4 @@ const shutdown = async (signal: string) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
 
-// Keep the process running
-console.log('\nWorkers are running. Press Ctrl+C to stop.\n')
+log.info('Workers are running')

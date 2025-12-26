@@ -1,8 +1,11 @@
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
+import { logger } from '../config/logger'
 import { writeQueue, NormalizeJobData, NormalizedProduct } from '../config/queues'
 import { normalizeAmmoProduct } from './ammo-utils'
+
+const log = logger.normalizer
 
 // Normalizer worker - standardizes extracted data into a common format
 export const normalizerWorker = new Worker<NormalizeJobData>(
@@ -11,7 +14,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
     const { executionId, sourceId, rawItems, contentHash } = job.data
     const stageStart = Date.now()
 
-    console.log(`[Normalizer] Normalizing ${rawItems.length} items`)
+    log.info('Normalizing items', { executionId, sourceId, itemCount: rawItems.length })
 
     try {
       await prisma.executionLog.create({
@@ -259,9 +262,9 @@ function categorizeProduct(name: string, description: string): string {
 }
 
 normalizerWorker.on('completed', (job) => {
-  console.log(`[Normalizer] Job ${job.id} completed`)
+  log.info('Job completed', { jobId: job.id })
 })
 
 normalizerWorker.on('failed', (job, err) => {
-  console.error(`[Normalizer] Job ${job?.id} failed:`, err.message)
+  log.error('Job failed', { jobId: job?.id, error: err.message })
 })
