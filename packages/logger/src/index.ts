@@ -149,7 +149,12 @@ export interface ILogger {
   warn(message: string, meta?: LogContext, error?: unknown): void
   error(message: string, meta?: LogContext, error?: unknown): void
   fatal(message: string, meta?: LogContext, error?: unknown): void
-  child(component: string, defaultContext?: LogContext): ILogger
+  /**
+   * Create a child logger
+   * @param componentOrContext - Component name (string) or context object for backwards compatibility
+   * @param defaultContext - Optional default context (only used when first arg is a string)
+   */
+  child(componentOrContext: string | LogContext, defaultContext?: LogContext): ILogger
 }
 
 export class Logger implements ILogger {
@@ -213,10 +218,18 @@ export class Logger implements ILogger {
     this.log('fatal', message, meta, error)
   }
 
-  child(component: string, defaultContext: LogContext = {}): ILogger {
+  child(componentOrContext: string | LogContext, defaultContext: LogContext = {}): ILogger {
+    // Backwards compatibility: if first arg is object, treat as context
+    if (typeof componentOrContext === 'object') {
+      return new Logger(this.service, this.component, {
+        ...this.defaultContext,
+        ...componentOrContext,
+      })
+    }
+    // New signature: first arg is component name string
     const newComponent = this.component
-      ? `${this.component}:${component}`
-      : component
+      ? `${this.component}:${componentOrContext}`
+      : componentOrContext
     return new Logger(this.service, newComponent, {
       ...this.defaultContext,
       ...defaultContext,

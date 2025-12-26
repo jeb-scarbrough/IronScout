@@ -17,6 +17,7 @@ export interface ILogger {
   info(message: string, meta?: LogContext): void
   warn(message: string, meta?: LogContext, error?: unknown): void
   error(message: string, meta?: LogContext, error?: unknown): void
+  child(componentOrContext: string | LogContext, defaultContext?: LogContext): ILogger
 }
 
 // Simple client-side logger
@@ -50,8 +51,12 @@ class ClientLogger implements ILogger {
     console.error(`[${this.component}] ${message}${this.formatMeta(meta)}`, error || '')
   }
 
-  child(subComponent: string): ILogger {
-    return new ClientLogger(`${this.component}:${subComponent}`)
+  child(componentOrContext: string | LogContext, defaultContext?: LogContext): ILogger {
+    if (typeof componentOrContext === 'object') {
+      // Backwards compatibility: context object passed, keep same component
+      return new ClientLogger(this.component)
+    }
+    return new ClientLogger(`${this.component}:${componentOrContext}`)
   }
 }
 
@@ -75,24 +80,31 @@ async function getServerLogger(): Promise<ILogger> {
 export function createLogger(component: string): ILogger {
   if (isServer) {
     // Return a proxy that lazily loads the server logger
-    return {
+    const createServerProxy = (comp: string): ILogger => ({
       debug: async (message: string, meta?: LogContext) => {
         const log = await getServerLogger()
-        log.child(component).debug(message, meta)
+        log.child(comp).debug(message, meta)
       },
       info: async (message: string, meta?: LogContext) => {
         const log = await getServerLogger()
-        log.child(component).info(message, meta)
+        log.child(comp).info(message, meta)
       },
       warn: async (message: string, meta?: LogContext, error?: unknown) => {
         const log = await getServerLogger()
-        log.child(component).warn(message, meta, error)
+        log.child(comp).warn(message, meta, error)
       },
       error: async (message: string, meta?: LogContext, error?: unknown) => {
         const log = await getServerLogger()
-        log.child(component).error(message, meta, error)
+        log.child(comp).error(message, meta, error)
       },
-    } as ILogger
+      child: (componentOrContext: string | LogContext, defaultContext?: LogContext): ILogger => {
+        if (typeof componentOrContext === 'object') {
+          return createServerProxy(comp)
+        }
+        return createServerProxy(`${comp}:${componentOrContext}`)
+      },
+    })
+    return createServerProxy(component)
   }
 
   return new ClientLogger(component)
