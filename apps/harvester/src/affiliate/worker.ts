@@ -79,13 +79,14 @@ export function createAffiliateFeedWorker() {
  * On retry (runId in job.data): Reuse existing run record.
  */
 async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<void> {
-  const { feedId, trigger, runId: existingRunId, feedLockId: cachedLockId } = job.data
+  const { feedId, trigger, runId: existingRunId, feedLockId: cachedLockIdStr } = job.data
   const t0 = new Date()
 
   log.info('Processing affiliate feed job', {
     feedId,
     trigger,
     jobId: job.id,
+    attemptsMade: job.attemptsMade,
     isRetry: !!existingRunId,
   })
 
@@ -99,7 +100,8 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     throw new Error(`Feed not found: ${feedId}`)
   }
 
-  const feedLockId = cachedLockId ?? feed.feedLockId
+  // Parse cached feedLockId from string (BigInt can't be JSON serialized)
+  const feedLockId = cachedLockIdStr ? BigInt(cachedLockIdStr) : feed.feedLockId
 
   // Check eligibility
   if (feed.status === 'DRAFT') {
@@ -192,10 +194,11 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     // Step 3: IMMEDIATELY persist runId to job data
     // Per spec §6.4.1: If this fails, BullMQ will retry and create duplicate run
     // If this succeeds but later I/O fails, retry will reuse this run
+    // Note: feedLockId is converted to string for JSON serialization (BigInt not supported)
     await job.updateData({
       ...job.data,
       runId: run.id,
-      feedLockId: feedLockId,
+      feedLockId: feedLockId.toString(),
     })
 
     log.info('RUN_START', {
@@ -304,6 +307,15 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       { feedId, trigger: 'MANUAL_PENDING' },
       { jobId: `${feedId}-manual-followup-${Date.now()}` }
     )
+
+    // Step 7: Clear manualRunPending AFTER successfully enqueueing follow-up
+    // Per spec §6.4: This ensures we don't lose the follow-up if we crash between
+    // reading the flag and enqueueing the job.
+    await prisma.affiliateFeed.update({
+      where: { id: feedId },
+      data: { manualRunPending: false },
+    })
+    log.debug('Cleared manualRunPending after enqueueing follow-up', { feedId })
   }
 }
 
@@ -552,9 +564,9 @@ async function finalizeRun(
   }
 
   if (status === 'SUCCEEDED') {
-    // Per spec Q8.2.3: Clear manualRunPending unconditionally on success
-    // (regardless of trigger type - scheduled runs should also clear pending manual requests)
-    updateData.manualRunPending = false
+    // NOTE: manualRunPending is NOT cleared here - it's cleared AFTER enqueueing follow-up
+    // in processAffiliateFeedJob to avoid race where we clear it before reading it.
+    // See spec §6.4: Read manualRunPending under lock, clear after follow-up enqueued.
 
     // Check if this is a recovery (had previous failures, and not a skipped run)
     const wasRecovery = feed.consecutiveFailures > 0 && !metrics.skippedReason

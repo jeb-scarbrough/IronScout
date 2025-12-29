@@ -64,8 +64,8 @@ export async function evaluateCircuitBreaker(
   // ═══════════════════════════════════════════════════════════════════════════
   const activeCountBefore = await prisma.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*) as count
-    FROM "SourceProductPresence" spp
-    INNER JOIN "SourceProduct" sp ON sp.id = spp."sourceProductId"
+    FROM source_product_presence spp
+    INNER JOIN source_products sp ON sp.id = spp."sourceProductId"
     WHERE sp."sourceId" = ${feed.sourceId}
       AND spp."lastSeenSuccessAt" IS NOT NULL
       AND spp."lastSeenSuccessAt" >= ${expiryThreshold}
@@ -78,9 +78,9 @@ export async function evaluateCircuitBreaker(
   // ═══════════════════════════════════════════════════════════════════════════
   const seenSuccessCount = await prisma.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*) as count
-    FROM "SourceProductPresence" spp
-    INNER JOIN "SourceProduct" sp ON sp.id = spp."sourceProductId"
-    INNER JOIN "SourceProductSeen" seen ON seen."sourceProductId" = spp."sourceProductId"
+    FROM source_product_presence spp
+    INNER JOIN source_products sp ON sp.id = spp."sourceProductId"
+    INNER JOIN source_product_seen seen ON seen."sourceProductId" = spp."sourceProductId"
     WHERE sp."sourceId" = ${feed.sourceId}
       AND seen."runId" = ${runId}
       AND spp."lastSeenSuccessAt" IS NOT NULL

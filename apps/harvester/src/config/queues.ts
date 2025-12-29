@@ -184,8 +184,8 @@ export interface AffiliateFeedJobData {
   trigger: 'SCHEDULED' | 'MANUAL' | 'MANUAL_PENDING' | 'ADMIN_TEST' | 'RETRY'
   // Per spec §6.4.1: Set after first lock acquisition, reused on retry
   runId?: string
-  // Cached to avoid re-query on retry
-  feedLockId?: bigint
+  // Cached to avoid re-query on retry (stored as string for JSON serialization)
+  feedLockId?: string
 }
 
 export interface AffiliateFeedSchedulerJobData {

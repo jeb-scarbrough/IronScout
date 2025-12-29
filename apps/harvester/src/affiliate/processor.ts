@@ -473,8 +473,9 @@ async function batchUpdatePresence(
 
   // Use raw SQL for efficient bulk upsert with ON CONFLICT
   // Per spec: Phase 1 only updates lastSeenAt, NOT lastSeenSuccessAt
+  // Table name: source_product_presence (per Prisma @@map)
   await prisma.$executeRaw`
-    INSERT INTO "SourceProductPresence" ("id", "sourceProductId", "lastSeenAt", "createdAt", "updatedAt")
+    INSERT INTO source_product_presence ("id", "sourceProductId", "lastSeenAt", "createdAt", "updatedAt")
     SELECT gen_random_uuid(), id, ${t0}, NOW(), NOW()
     FROM unnest(${sourceProductIds}::text[]) AS id
     ON CONFLICT ("sourceProductId") DO UPDATE SET
@@ -494,8 +495,9 @@ async function batchRecordSeen(
   if (sourceProductIds.length === 0) return
 
   // Use raw SQL for efficient bulk insert with ON CONFLICT DO NOTHING
+  // Table name: source_product_seen (per Prisma @@map)
   await prisma.$executeRaw`
-    INSERT INTO "SourceProductSeen" ("id", "runId", "sourceProductId", "createdAt")
+    INSERT INTO source_product_seen ("id", "runId", "sourceProductId", "createdAt")
     SELECT gen_random_uuid(), ${runId}, id, NOW()
     FROM unnest(${sourceProductIds}::text[]) AS id
     ON CONFLICT ("runId", "sourceProductId") DO NOTHING
@@ -512,12 +514,13 @@ async function batchFetchLastPrices(
   if (sourceProductIds.length === 0) return []
 
   // Per spec: Use DISTINCT ON to get latest price per sourceProductId
+  // Table name: prices (per Prisma @@map)
   const results = await prisma.$queryRaw<LastPriceEntry[]>`
     SELECT DISTINCT ON ("sourceProductId")
       "sourceProductId",
       "priceSignatureHash",
       "createdAt"
-    FROM "Price"
+    FROM prices
     WHERE "sourceProductId" = ANY(${sourceProductIds}::text[])
     ORDER BY "sourceProductId", "createdAt" DESC
   `
@@ -615,8 +618,9 @@ async function bulkInsertPrices(
   // Bulk insert with ON CONFLICT DO NOTHING
   // Per spec: Returns actual row count, which may be less than array length
   // if duplicates were suppressed by prices_affiliate_dedupe index
+  // Table name: prices (per Prisma @@map)
   const insertedCount = await prisma.$executeRaw`
-    INSERT INTO "Price" (
+    INSERT INTO prices (
       "id",
       "sourceProductId",
       "retailerId",
