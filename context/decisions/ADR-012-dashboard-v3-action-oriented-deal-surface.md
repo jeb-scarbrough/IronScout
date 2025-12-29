@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Date:** 2025-12-29
 **Owners:** Product, UX, Engineering
-**Related ADRs:** ADR-006, ADR-011, ADR-013, ADR-014
+**Related ADRs:** ADR-006, ADR-011, ADR-013 (Homepage Guardrails), ADR-014 (Search Guardrails)
 **Related Docs:** [UX Charter](../06_ux_charter.md)
 
 ---
@@ -23,18 +23,20 @@ Saved Items and Saved Searches exist but are under-leveraged and overly visible 
 We will implement **Dashboard v3**, a simplified, action-oriented dashboard that:
 
 1. Surfaces **at most one high-confidence deal recommendation** at a time.
-2. Promotes **Saved Items** as the primary repeat-engagement and conversion surface.
-3. Integrates **Saved Searches silently** as signal inputs rather than explicit UI objects.
-4. Uses **plain, descriptive language** and allows empty states.
-5. Avoids scores, rankings, verdicts, charts, or claims of optimality.
+2. Treats the absence of a recommendation as a valid and expected state.
+3. Promotes **Saved Items** as the primary repeat-engagement and conversion surface.
+4. Integrates **Saved Searches silently** as signal inputs rather than explicit UI objects.
+5. Uses **plain, descriptive language** and allows intentional empty states.
+6. Avoids scores, rankings, verdicts, charts, or claims of optimality.
 
-The dashboard will function as an **action surface**, not a discovery or analytics surface.
+The dashboard functions as an **action surface**, not a discovery or analytics surface.
 
 ---
 
 ## Design Principles
 
 - One clear recommendation is better than many weak ones.
+- Silence is preferable to low-confidence signals.
 - Confidence beats cleverness.
 - Empty states are preferable to filler.
 - Saved searches should feel automatic, not configured.
@@ -55,7 +57,7 @@ The Dashboard is the system’s **point of judgment**, not explanation.
 
 The Dashboard exists to answer one question:
 
-> “Is there something worth buying right now?”
+> **“Is there something worth buying right now?”**
 
 If a dashboard element does not help answer this question, it does not belong.
 
@@ -67,15 +69,18 @@ If a dashboard element does not help answer this question, it does not belong.
 
 Dashboard copy may use:
 - “Good deal right now”
+- “Nothing urgent right now”
+- “Nothing changed yet”
 - “Lower than usual”
 - “Seen this low recently”
 - “Price is going down / about the same / going up”
 - “Something you’re watching changed”
 - “Based on what you’ve been looking for”
+- **“We’re out scouting prices and availability”**
 
 All language must be:
 - Plain
-- Descriptive
+- Calm
 - Defensible by observable data
 
 ---
@@ -102,6 +107,7 @@ The Dashboard **must not**:
 - Display charts, graphs, or historical timelines
 - List saved searches or configuration controls
 - Duplicate search result grids or filters
+- Fill empty space with generic or popular content
 
 The Dashboard **may**:
 - Be partially empty
@@ -138,7 +144,7 @@ The Dashboard must never claim *how* those detections were made.
 
 ---
 
-### Saved Searches Guardrails (Dashboard-Scoped)
+## Saved Searches Guardrails (Dashboard-Scoped)
 
 These guardrails apply **only to how Saved Searches are surfaced or consumed by the Dashboard**.  
 Creation and management remain governed by Search behavior.
@@ -149,11 +155,11 @@ They are an internal system primitive, not a primary UI feature.
 
 ---
 
-#### Canonical Role
+### Canonical Role
 
 Saved Searches answer one question:
 
-> “What should the system keep an eye on for this user?”
+> **“What should the system keep an eye on for this user?”**
 
 They do not exist to:
 - Teach users how the system works
@@ -162,7 +168,7 @@ They do not exist to:
 
 ---
 
-#### UX Guardrails
+### UX Guardrails
 
 Saved Searches **must not**:
 - Appear as a list on the Dashboard
@@ -179,7 +185,7 @@ Saved Searches **may**:
 
 ---
 
-#### Language Guardrails
+### Language Guardrails
 
 Primary UI **must not** use the term “Saved Search”.
 
@@ -195,7 +201,7 @@ The term “Saved Search” may exist only:
 
 ---
 
-#### Relationship to Automation
+### Relationship to Automation
 
 Saved Searches:
 - Trigger tracking
@@ -206,33 +212,6 @@ They must not:
 - Explain automation logic
 - Claim intelligence or prediction
 - Compete with the Dashboard for attention
-
----
-
-#### Escalation Path
-
-If Saved Searches require:
-- User-defined thresholds
-- Multiple rules per search
-- Scheduling or prioritization
-- Visible management UI on the Dashboard
-
-Then a standalone ADR **must** be created before implementation.
-
----
-
-### Enforcement
-
-Product owns adherence to these guardrails.  
-Engineering must block merges that violate them.
-
-Any new Dashboard feature, copy change, or UI addition must be reviewed against:
-- This ADR
-- ADR-013 (Homepage Positioning Guardrails)
-- ADR-014 (Search Positioning Guardrails)
-- [UX Charter](../06_ux_charter.md)
-
-Conflicting changes must be rejected or escalated via ADR amendment.
 
 ---
 
@@ -256,6 +235,7 @@ A single, optional hero recommendation shown only when eligibility criteria are 
   - “Lower than most prices this week”
   - “Seen this low only a few times recently”
   - “Matches something you’re watching”
+  - “Based on what you’ve been looking for”
 
 **CTA**
 - `View at <Retailer>`
@@ -267,7 +247,64 @@ A single, optional hero recommendation shown only when eligibility criteria are 
 
 ---
 
-### 2. Saved Items Section (“Stuff You’re Watching”)
+### 2. No-Hero State (Intentional Default)
+
+The absence of a Hero recommendation is the **expected default state**.
+
+“No hero” indicates that:
+- Prices are within typical ranges, or
+- No confident signal meets eligibility thresholds.
+
+This state must feel intentional and reassuring, not empty or broken.
+
+---
+
+#### No-Hero Copy (Locked)
+
+When no Hero is shown, display a low-emphasis status message above Saved Items.
+
+**Default**
+> **Nothing urgent right now**  
+> We’re out scouting prices and availability. We’ll surface deals when something stands out.
+
+**If the user has Saved Items**
+> **Nothing changed yet**  
+> We’re out scouting prices and availability on the items you’re watching.
+
+**If a minor change occurred since last visit**
+> **Minor changes detected**  
+> Prices moved slightly, but nothing worth acting on yet.
+
+Only one message may be shown at a time.
+
+---
+
+#### No-Hero UI Rules
+
+In a no-hero state, the Dashboard must not:
+- Show filler recommendations
+- Promote popular or trending items
+- Encourage random browsing
+- Escalate urgency or upsell Premium
+- Introduce educational or analytical content
+
+The Dashboard must transition directly into the Saved Items section.
+
+---
+
+#### Rationale
+
+Silence is a feature.
+
+By surfacing deals only when confidence exists, the Dashboard trains users to trust that:
+- Quiet days mean nothing worth rushing
+- Shown deals are meaningful
+
+This restraint is a deliberate product choice.
+
+---
+
+### 3. Saved Items Section (“Stuff You’re Watching”)
 
 **Source**
 - WatchlistItem records.
@@ -291,36 +328,15 @@ Saved Items are the primary dashboard list and main repeat-visit driver.
 
 ---
 
-### 3. Saved Searches Integration (Non-Surface)
+### 4. Saved Searches Integration (Non-Surface)
 
 Saved Searches do **not** appear as a list or section on the dashboard.
 
 They are used exclusively as **signal inputs**.
 
-#### 3.1 Hero Influence
-
-If the hero item matches a saved search, add:
-- “Matches something you’re watching”
-
-No link. No explanation.
-
 ---
 
-#### 3.2 Single “Heads Up” Nudge (Optional)
-
-If a saved search detects a meaningful event:
-
-> Heads up: 9mm prices dropped this week  
-> [ See 9mm deals ]
-
-**Constraints**
-- Only one nudge at a time.
-- Must deep-link to the saved search results.
-- If no strong signal exists, do not render.
-
----
-
-### 4. Search Relationship
+### 5. Search Relationship
 
 - Search remains the primary discovery tool.
 - Dashboard links land on filtered search results.
@@ -329,7 +345,7 @@ If a saved search detects a meaningful event:
 
 ---
 
-### 5. Premium Integration
+### 6. Premium Integration
 
 A single, soft prompt at the bottom of the dashboard:
 
@@ -343,30 +359,6 @@ CTA:
 - No locked data shown.
 - No blurred UI.
 - Premium framed as automation and speed, not exclusive truth.
-
----
-
-## Empty States
-
-- **No Hero Deal:**  
-  “No standout deals right now. Check your saved items below.”
-
-- **No Saved Items:**  
-  “Start watching items to spot good deals faster.”
-
-Empty states are intentional and build trust.
-
----
-
-## Non-Goals
-
-The dashboard will not:
-- Rank items.
-- Display scores, grades, or verdicts.
-- Show multiple competing recommendations.
-- Display saved search lists.
-- Include charts or analytics views.
-- Duplicate search result grids.
 
 ---
 
@@ -394,12 +386,105 @@ The dashboard will not:
 
 ---
 
-## Open Questions / Iteration Points
+---
 
-1. Final definition of “meaningfully lower” price.
-2. Thresholds for saved search signal generation.
-3. Maximum number of saved items shown before pagination.
-4. Whether hero eligibility differs by plan tier.
+## Notifications vs Dashboard Policy (v1)
+
+The Dashboard and Notifications serve distinct roles and must not overlap in purpose.
+
+### Canonical Roles
+
+- **Dashboard:** Passive awareness. A place to check what, if anything, is worth acting on.
+- **Notifications:** Interruptions. Used only when immediate attention provides clear user value.
+
+Silence on the Dashboard is expected and intentional.  
+Notifications are rare by design.
+
+---
+
+### Notification Eligibility (v1)
+
+For v1, notifications are limited to **explicitly Saved Items only**.
+
+Saved Searches influence Dashboard visibility but **do not trigger notifications** in v1.
+
+This constraint is intentional and designed to:
+- Minimize alert fatigue
+- Preserve trust in interruptions
+- Ensure signal quality before expanding scope
+
+---
+
+### Interruption-Worthy Events
+
+Notifications may be sent only for the following event classes:
+
+1. **Meaningful price drops** on a Saved Item  
+2. **Back in stock** events for a Saved Item
+
+All other changes, including:
+- Minor price movement
+- Typical price fluctuations
+- Category-level trends
+- Saved Search matches
+
+Must remain Dashboard-only signals.
+
+---
+
+### Dashboard Redundancy Rule
+
+If a notification is sent, the related change may also appear on the Dashboard as context.
+
+However, the Dashboard must not:
+- Escalate urgency
+- Repeat alert-style copy
+- Compete with notifications for attention
+
+The notification is the interruption.  
+The Dashboard is the confirmation.
+
+---
+
+### Premium Boundary
+
+Premium unlocks:
+- Automation
+- Speed of detection
+- Fewer missed moments
+
+Premium does **not** unlock:
+- Additional urgency
+- Higher alert volume
+- Lower signal thresholds
+
+Alert caps, cooldowns, and thresholds must remain conservative by default.
+
+---
+
+### Future Expansion
+
+Expansion to Saved Search–driven notifications (Model 2) requires:
+- Proven signal accuracy
+- Documented thresholds
+- A new ADR amendment
+
+Until then, v1 operates under this policy.
+
+---
+
+## Enforcement
+
+Product owns adherence to this ADR.
+Engineering must block merges that violate it.
+
+Any new Dashboard feature, copy change, or UI addition must be reviewed against:
+- This ADR
+- ADR-013 (Homepage Positioning Guardrails)
+- ADR-014 (Search Positioning Guardrails)
+- [UX Charter](../06_ux_charter.md)
+
+Conflicting changes must be rejected or escalated via ADR amendment.
 
 ---
 

@@ -1,263 +1,200 @@
 # Alerting and Notifications
 
-This document describes how alerts and notifications work in IronScout **as implemented today**, with explicit guardrails to ensure alerts remain trust-safe, tier-correct, and operationally manageable.
+This document defines how IronScout sends notifications to users in v1.
 
-This document defines **mechanics and constraints**, not marketing language. User-facing promises live in `context/00_public_promises.md`.
-
----
-
-## Terminology Note
-
-| User-Facing | Internal (Code/DB) | Notes |
-|-------------|-------------------|-------|
-| **Saved Item** | WatchlistItem | The canonical "I care about this" record |
-| **Notification** | Alert | Alert is internal; users see "notifications" |
-| Saved Items page | `/dashboard/saved` | Was `/dashboard/alerts` |
-
-**Rule**: User-facing surfaces (UI, emails, docs) use "Saved Items" and "Notifications". This document uses internal terms for precision.
-
-See ADR-011 for the unified Saved Items model.
+Alerts are a **runtime behavior** with direct trust and support impact.  
+They are governed by policy, not feature experimentation.
 
 ---
 
-## Purpose of Alerts
+## Purpose
 
-Alerts exist to:
-- Notify users when monitored conditions change
-- Reduce the need for constant manual checking
-- Surface *signals*, not decisions
+Alerts exist to notify users of **rare, time-sensitive moments** where immediate action provides clear value.
 
-Alerts are informational.  
-They must never imply advice, urgency, or guaranteed outcomes.
+Alerts are interruptions, not engagement tools.
+
+If an alert cannot be defended as interruption-worthy, it must not be sent.
 
 ---
 
-## Alert Types (v1)
+## Canonical Roles
 
-### Consumer Alerts
+- **Dashboard:** Passive awareness and context.
+- **Alerts:** Interruptions for urgent, user-relevant events only.
 
-Supported alert categories in v1:
-- **Price change alerts** for a product or group
-- **Availability change alerts** (in stock / out of stock)
-- **Watchlist-based alerts**
-
-Alerts are scoped to:
-- Canonical products
-- User-defined conditions
-- User subscription tier
+Silence is expected. Alerts are rare by design.
 
 ---
 
-### Dealer Notifications
+## Alert Scope (v1)
 
-Dealer-facing notifications are operational, not marketing.
+In v1, alerts are limited to **explicitly Saved Items only**.
 
-Examples:
-- Feed failures
-- Quarantine events
-- Subscription state changes
-- Visibility changes
+- Saved Items → alert-eligible  
+- Saved Searches → **not alert-eligible in v1**
 
-Dealer notifications must not:
-- Compare dealers competitively
-- Imply performance outcomes
-- Recommend pricing actions
+Saved Searches influence Dashboard visibility only.
+
+This constraint is intentional and must not be bypassed by tier logic.
 
 ---
 
-## Alert Lifecycle
+## Supported Alert Types (v1)
 
-### Creation
+Only the following alert types are permitted:
 
-- Alerts are created by authenticated users
-- Alert configuration is validated server-side
-- Invalid or ambiguous alert conditions must be rejected
+### 1. Meaningful Price Drop
 
-**Invariant**
-- Alert conditions must be evaluable using stored data.
-- Alerts must not rely on speculative inference.
+An alert may be sent when:
+- The user has explicitly saved the item, and
+- The price drops meaningfully relative to recent history.
 
----
+Thresholds must be:
+- Conservative
+- Deterministic
+- Auditable
 
-### Evaluation
-
-Alerts are evaluated when:
-- New price data is ingested
-- Availability state changes
-- Relevant dealer eligibility changes
-
-Evaluation may occur:
-- Synchronously (limited cases)
-- Asynchronously via background jobs
-
-**Tier shaping applies at evaluation time**, not just at delivery.
+Minor price fluctuations must not trigger alerts.
 
 ---
 
-### Triggering
+### 2. Back In Stock
 
-When an alert condition is met:
-- An alert event is created
-- Delivery is scheduled according to user preferences and tier
+An alert may be sent when:
+- A saved item transitions from out of stock to in stock.
 
-Triggering must:
-- Be idempotent
-- Avoid duplicate notifications for the same condition
-- Respect cooldowns and rate limits
+This alert type is always interruption-worthy.
 
 ---
 
-### Delivery
+## Explicitly Disallowed Alerts
 
-Supported delivery mechanisms (v1):
-- Email
-- In-app notifications (where implemented)
+The system must not send alerts for:
+- Minor price movement
+- Typical day-to-day fluctuation
+- Category-level or Saved Search matches
+- Popularity or demand signals
+- “Good deal right now” without prior user intent
+- Marketing or promotional messaging
 
-Delivery must:
-- Respect user preferences
-- Respect subscription tier limits
-- Fail gracefully if delivery fails
-
----
-
-## Tier-Based Alert Behavior
-
-### Free Users
-
-- Limited number of active alerts
-- Slower evaluation cadence
-- Basic alert language
-- Fewer delivery options
+If an alert resembles advertising, it violates this policy.
 
 ---
 
-### Premium Users
+## Tier Behavior
 
-- Higher alert limits
-- Faster evaluation cadence
-- More flexible conditions
-- Optional AI-assisted explanations (where data quality allows)
+### Free Tier
 
-**Important**
-Premium improves speed and flexibility, not certainty.
+- Alerts for explicitly saved items only
+- Subject to strict global caps and cooldowns
+- No user-defined conditions
 
----
+### Premium Tier
 
-## Language and Presentation Rules
+- Faster alert evaluation cadence
+- Priority delivery within global caps
+- Reduced chance of missing eligible events
 
-Alerts must:
-- Describe *what changed*
-- Avoid telling users *what to do*
-- Avoid urgency framing (“buy now”, “last chance”)
+Premium improves **timing and automation**, not alert scope, volume, or urgency.
 
-Acceptable language:
-- “The price changed from X to Y.”
-- “This item is back in stock.”
-- “This price is lower than recent levels.”
-
-Unacceptable language:
-- “This is the best time to buy.”
-- “You should act now.”
-- “Guaranteed savings.”
-
-Language is part of the trust boundary.
+Tiering must not override alert policy.
 
 ---
 
-## Dealer Eligibility and Alert Safety
+## Cooldowns and Caps (Mandatory)
 
-### Required Enforcement
+### Per-Item Limits
+- Price drop alerts: max **1 per 24 hours per item**
+- Back-in-stock alerts: max **1 per 24 hours per item**
 
-- Alerts must not trigger on inventory from ineligible dealers
-- Dealer eligibility must be checked at evaluation time
-- Historical alerts must not retroactively expose ineligible data
+### Per-User Limits
+- Max **1 alert per 6 hours**
+- Max **3 alerts per day**
 
-**Critical invariant**
-If a dealer is blocked or suspended:
-- Their inventory must not trigger alerts
-- Their offers must not appear in alert payloads
+If multiple alert-eligible events occur:
+1. Back in stock
+2. Meaningful price drop
 
----
-
-## AI-Assisted Alert Explanations
-
-### Purpose
-
-AI-assisted explanations may:
-- Provide context about why an alert triggered
-- Reference historical price behavior
-- Explain grouping or evaluation logic at a high level
-
-### Constraints
-
-AI explanations:
-- Must be optional
-- Must be tier-gated
-- Must degrade or be removed when data quality is low
-- Must never present advice or certainty
-
-If explanation safety cannot be guaranteed, explanations must be disabled.
+Lower-priority alerts must be suppressed.
 
 ---
 
-## Observability and Debugging
+## Message Content Constraints
 
-### Required Capabilities
+Alerts must be:
+- Factual
+- Short
+- Non-urgent in tone
+- Free of recommendations or explanations
 
-Operators must be able to:
-- Inspect why an alert triggered
-- See evaluation inputs and outputs
-- Identify duplicate or missed triggers
-- Replay evaluation safely for debugging
-
-Alert evaluation must be reproducible from stored data.
-
----
-
-## Failure Modes
-
-### Acceptable Failures
-
-- Delayed alerts
-- Missed non-critical alerts during outages
-
-### Unacceptable Failures
-
-- Alerts triggered from ineligible inventory
-- Alerts implying advice or certainty
-- Duplicate alert spam
-- Alerts leaking cross-account data
-
-If failures occur, default to **not notifying** rather than notifying incorrectly.
+Alerts must not:
+- Explain system reasoning
+- Mention AI or automation
+- Predict future prices
+- Use persuasive language
 
 ---
 
-## Known Inconsistencies and Required Decisions
+## Delivery Semantics
 
-1. **Evaluation ownership**
-   - Decision: confirm whether alert evaluation lives in API, harvester, or both.
-   - Ensure there is a single authoritative evaluation path.
-
-2. **Deduplication strategy**
-   - Decision: define deterministic keys for alert triggers to prevent duplicates.
-
-3. **AI explanation gating**
-   - Decision: explicitly gate explanations by tier *and* data sufficiency.
-
-4. **Delivery guarantees**
-   - Decision: document that delivery is best-effort, not guaranteed.
+- Alerts are best-effort, not guaranteed
+- Duplicate alerts must be deduplicated
+- Delivery failures must not escalate urgency
+- Retries must respect cooldowns
 
 ---
 
-## Non-Negotiables
+## Auditability and Support
 
-- Alerts must be accurate or silent
-- Eligibility enforcement must apply at evaluation time
-- Language must remain conservative
-- Tier shaping must occur before delivery
+All alerts must be traceable to:
+- A saved item
+- A specific triggering event
+- A deterministic threshold
+
+Support and operations must be able to answer:
+> “Why did this alert fire?”
+
+Without referencing AI or internal heuristics.
 
 ---
 
-## Guiding Principle
+## Relationship to Dashboard
 
-> An alert should inform, not persuade.
+If an alert is sent:
+- The related change may appear on the Dashboard for context
+- The Dashboard must not duplicate alert language or urgency
+
+The alert is the interruption.  
+The Dashboard is the confirmation.
+
+---
+
+## Explicit Non-Goals (v1)
+
+In v1, alerts do not:
+- Use Saved Searches
+- Support user-defined thresholds
+- Provide AI explanations
+- Predict outcomes
+- Increase frequency for Premium users
+
+Any expansion requires an ADR amendment.
+
+---
+
+## Compliance
+
+Alert behavior must comply with:
+- `context/operations/alerts_policy_v1.md`
+- Dashboard v3 ADR
+- 06_ux_charter.md
+
+Conflicts must be resolved via ADR.
+
+---
+
+## Summary
+
+Alerts exist to protect user attention.
+
+If in doubt, do not send the alert.

@@ -1,213 +1,159 @@
-# Consumer App
+# Consumer App Behavior
 
-This document describes the **consumer-facing experience** of IronScout as implemented for v1.  
-It defines what consumers can see, do, and expect, and where explicit constraints apply.
+This document defines the behavior of the IronScout consumer-facing application.
 
-This document must remain aligned with:
-- `context/00_public_promises.md`
-- `context/01_product_overview.md`
-- `context/02_v1_scope_and_cut_list.md`
-
-If consumer UI behavior conflicts with those documents, this document is wrong.
+It describes what users see, how surfaces behave, and how decisions are communicated.  
+All user-facing behavior must comply with the UX Charter and relevant ADRs.
 
 ---
 
-## Purpose of the Consumer App
+## Core User Flow
 
-The consumer app exists to help users:
-- Discover ammunition more easily
-- Compare prices across fragmented listings
-- Interpret prices using historical context
-- Monitor changes without constant manual checking
+IronScout follows a simple loop:
 
-It is not designed to:
-- Tell users what to buy
-- Predict future prices
-- Guarantee savings or optimal timing
+1. Users search to explore prices.
+2. Users save items they care about.
+3. IronScout watches the market.
+4. The Dashboard surfaces moments worth attention.
+
+The system favors restraint over noise.
 
 ---
 
-## Core Consumer Flows (v1)
+## Search
 
-### Search
+Search is the primary discovery surface.
 
-Consumers can:
-- Enter free-text queries
-- Apply structured filters (caliber, grain, casing, etc.)
-- Browse canonically grouped products
+Users can:
+- Search by caliber, brand, and attributes
+- Compare current prices across retailers
+- View limited historical context
+- Filter and refine results
 
-Search behavior:
-- Is intent-aware, not keyword-only
-- Returns grouped results for like-for-like comparison
-- Prioritizes clarity and consistency over exhaustiveness
+Search does not recommend what to buy.
 
-Search must not:
-- Imply recommendations
-- Hide relevant uncertainty
-- Collapse distinct products incorrectly for convenience
+Search captures user intent but does not escalate urgency.
 
 ---
 
-### Product Detail View
+## Saved Items
 
-For a selected product, consumers can:
-- See current offers from multiple retailers and eligible dealers
-- Compare prices in a consistent format
-- View historical price context (tier-limited)
-- See availability status where known
+Saved Items represent explicit user interest.
 
-Constraints:
-- Offers must reflect dealer eligibility at view time
-- Historical gaps must be visible or explained
-- Prices must be tied to a source and timestamp
+Users can:
+- Save individual products
+- View current price and retailer
+- See simple directional price movement
 
----
+Saved Items power:
+- Dashboard surfacing
+- Alert eligibility (per Alerts Policy v1)
 
-### Price History and Context
-
-Price history is presented as:
-- A time series or summary
-- Contextual comparisons to recent ranges
-- Descriptive signals, not verdicts
-
-Language rules:
-- “Lower than recent prices” is acceptable
-- “Best deal” or “Buy now” is not
-
-If history is sparse or noisy:
-- Context must degrade
-- Confidence must not be implied
+Saved Items are the primary repeat-engagement mechanism.
 
 ---
 
-### Alerts and Watchlists
+## Saved Searches
 
-Consumers can:
-- Create alerts for price or availability changes
-- Add products to watchlists
-- Manage alert preferences
+Saved Searches exist to capture intent **implicitly**.
 
-Alert behavior:
-- Tier-limited in quantity and cadence
-- Best-effort delivery
-- Conservative language
+They are created when:
+- Users repeat similar searches, or
+- Users explicitly enable alerts from search
 
-Alerts must not:
-- Trigger from ineligible dealer inventory
-- Leak cross-account data
-- Imply advice or urgency
+Saved Searches:
+- Influence Dashboard visibility
+- Do not appear as primary UI objects
+- Are not managed on the Dashboard
+- Do not trigger alerts in v1
 
----
-
-## Subscription Behavior
-
-### Free Users
-
-Free users have access to:
-- Core search
-- Canonical grouping
-- Current price and availability
-- Limited historical context
-- Basic alerts
-
-Free users must not see:
-- Premium-only explanations
-- Deep historical views
-- Advanced filters or ranking options
+Users are not expected to configure or tune Saved Searches.
 
 ---
 
-### Premium Users
+## Dashboard
 
-Premium users gain:
-- Deeper historical price context
-- Faster and more flexible alerts
-- Advanced filters and ranking
-- AI-assisted explanations where data allows
+The Dashboard is the primary **action surface**.
 
-Premium:
-- Enhances information density
-- Does not change guarantees
-- Does not unlock recommendations or predictions
+It answers one question:
 
-Tier enforcement must occur server-side.
+> “Is there something worth buying right now?”
 
----
+### Hero Recommendation
 
-## UI Language and Presentation Rules
+- At most one Hero may be shown.
+- The Hero appears only when a confident signal exists.
+- If no Hero qualifies, nothing is shown in its place.
 
-Consumer UI must:
-- Use conservative, descriptive language
-- Avoid claims of certainty or optimality
-- Avoid urgency framing
+### No-Hero State (Default)
 
-Disallowed language includes:
-- “Best price”
-- “Guaranteed savings”
-- “You should buy now”
+The absence of a Hero is the expected state.
 
-Allowed language includes:
-- “Compared to recent prices”
-- “Historically priced around”
-- “Lower than recent averages”
+In this case, the Dashboard displays a calm status message such as:
+- “Nothing urgent right now”
+- “Nothing changed yet”
 
-Language is a trust surface.
+This indicates the system is actively watching.
 
----
+### Saved Items List
 
-## Error States and Degradation
+Below the Hero or No-Hero message, Saved Items are shown.
 
-When data is missing, delayed, or unreliable:
-- Errors must be explicit and honest
-- Features may be hidden or reduced
-- UI must not fabricate confidence
+Saved Items include:
+- Current price
+- Retailer
+- Directional price movement
 
-Acceptable degradation:
-- Hide explanations
-- Reduce history depth
-- Delay alerts
-
-Unacceptable degradation:
-- Showing stale data as current
-- Showing ineligible inventory
-- Presenting guesses as facts
+No charts, scores, or timelines are shown.
 
 ---
 
-## Accessibility and Performance
+## Alerts
 
-- Pages must load predictably
-- Heavy computation must not block rendering
-- Core functionality must remain usable on common devices
+Alerts are governed by `context/operations/alerts_policy_v1.md`.
 
-Performance tradeoffs should:
-- Favor clarity over density
-- Favor correctness over speed
+In v1:
+- Alerts apply only to explicitly Saved Items
+- Alerts are rare and interruption-worthy
+- Alerts do not apply to Saved Searches
 
----
-
-## Known Constraints and Decisions
-
-These are intentional for v1:
-
-- No purchase links guarantee outcomes
-- No “deal score” or verdict
-- No social proof or gamification
-- No personalization beyond tier and alerts
-
-If any of these appear in UI, they are bugs.
+Alerts complement the Dashboard. They do not replace it.
 
 ---
 
-## Non-Negotiables
+## Premium
 
-- Consumer trust overrides conversion optimization
-- Tier enforcement is mandatory
-- Dealer eligibility is mandatory
-- Conservative language is mandatory
+Premium unlocks:
+- Automated monitoring
+- Faster detection of eligible events
+- Reduced chance of missing time-sensitive moments
+
+Premium does not:
+- Increase alert volume
+- Lower thresholds
+- Introduce recommendations or predictions
+
+Premium improves speed, not judgment.
 
 ---
 
-## Guiding Principle
+## Language and Tone
 
-> The consumer app exists to clarify the market, not to decide for the user.
+All user-facing copy must:
+- Be calm and factual
+- Avoid urgency unless justified
+- Avoid explanations or reasoning
+- Avoid claims of optimality or authority
+
+See `06_ux_charter.md` for enforcement rules.
+
+---
+
+## Summary
+
+The consumer app is designed to:
+- Reduce noise
+- Preserve trust
+- Surface moments selectively
+
+Silence is intentional.

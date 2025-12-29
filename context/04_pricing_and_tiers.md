@@ -1,196 +1,110 @@
 # Pricing and Tiers
 
-This document defines IronScout’s pricing model and tier boundaries.
+This document defines IronScout’s pricing philosophy and tier boundaries.
 
-Its purpose is to:
-- Clarify what users pay for
-- Prevent over-claiming in pricing pages
-- Ensure tiers map to enforceable behavior
-- Align monetization with trust and operability
-
-If a pricing claim cannot be enforced in the product, it must not appear here.
+It describes **what additional automation a user may pay for**, not additional certainty, authority, or guarantees.
 
 ---
 
 ## Pricing Philosophy
 
-IronScout pricing is based on **access to context**, not outcomes.
+IronScout does not sell predictions, recommendations, or “best deals.”
 
-Users pay for:
-- More information
-- More control
-- More historical depth
-- Faster or more flexible alerts
+We provide:
+- Access to market context
+- Monitoring over time
+- Signals when something meaningfully changes
 
-Users do not pay for:
-- Guaranteed results
-- Predictions
-- Recommendations
-- Performance outcomes
-
-Pricing increases information density, not certainty.
+Paid tiers improve **automation and timing**, not judgment or outcomes.
 
 ---
 
-## Consumer Tiers
+## Free Tier
 
-### Free
+The Free tier allows users to explore prices and monitor items manually.
 
-The Free tier provides baseline access to IronScout.
+### Included
 
-Included:
-- AI-powered search
-- Canonical product grouping
-- Current price and availability
-- Limited historical price context
-- Basic price and availability alerts
+- Full access to search across retailers
+- Current prices and availability
+- Limited historical context
+- Dashboard visibility into standout deals when they exist
+- **Limited alerts for explicitly saved items only**
 
-Not included:
-- Deep historical views
-- Advanced alerting
-- Advanced filters or ranking
-- AI-assisted explanations beyond basic context
+Alerts in the Free tier:
+- Are rare and interruption-worthy
+- Apply only to items the user has explicitly saved
+- Are subject to strict caps
 
-The Free tier is designed to be useful without creating false confidence.
+Saved Searches do not trigger alerts in the Free tier.
 
 ---
 
-### Premium
+## Premium Tier
 
-Premium enhances context and control.
+Premium exists for users who want IronScout to **watch the market on their behalf** and notify them sooner.
 
-Included:
-- Deeper historical price context
-- Faster and more flexible alerts
-- Advanced filters and ranking
-- AI-assisted explanations where available
+### Included
 
-Not included:
-- Guaranteed savings
+- Faster detection of price and availability changes
+- Automated alerts for explicitly saved items
+- Priority alert delivery within global caps
+- Reduced chance of missing time-sensitive moments
+
+Premium improves **speed and automation**, not alert volume, urgency, or scope.
+
+Premium does not:
+- Increase the number of alerts sent
+- Lower alert thresholds
+- Expand alerts to Saved Searches in v1
+- Introduce predictions or recommendations
+
+---
+
+## Alert Scope and Limits
+
+Alert behavior for all tiers is governed by:
+
+- `context/operations/alerts_policy_v1.md`
+
+This includes:
+- Which events are alert-eligible
+- Cooldowns and caps
+- Explicitly disallowed alert types
+
+Pricing tiers must not override alert policy.
+
+---
+
+## What IronScout Does Not Sell
+
+Regardless of tier, IronScout does not provide:
+- Guarantees
 - Purchase recommendations
+- Deal scores or rankings
 - Predictive pricing
-- Exclusive deals
+- Exclusive or hidden inventory
 
-Premium improves clarity and speed.  
-It does not change the fundamental guarantees of the platform.
-
----
-
-## Dealer Tiers
-
-Dealer tiers are designed to balance:
-- Market visibility
-- Fair competition
-- Operational simplicity
-
-All dealer tiers are subject to eligibility rules.
-
-Eligibility is determined by:
-- Active subscription status
-- Feed health and data quality
-- Platform policies
+Users remain in control of all buying decisions.
 
 ---
 
-### Dealer Starter
+## Future Considerations
 
-The Starter tier enables basic participation.
+Expansion of alert scope or automation (e.g., Saved Search alerts) requires:
+- Proven signal quality
+- Documented thresholds
+- An explicit ADR amendment
 
-Included:
-- Inventory ingestion and normalization
-- Canonical matching to products
-- Eligible inventory visibility in consumer search
-
-Not included:
-- Market pricing benchmarks
-- Historical context
-- Performance analytics
-- Usage-based billing UI (v1)
-
-Starter is designed for onboarding and basic presence.
+No tier changes imply future features by default.
 
 ---
 
-### Dealer Standard
+## Summary
 
-Standard adds market context.
+Free gives access.  
+Premium saves time.
 
-Included:
-- All Starter features
-- Caliber-level pricing benchmarks
-- Basic historical context
-- Plan-based refresh rates
+Neither tier sells certainty.
 
-Not included:
-- SKU-level competitive comparisons
-- Pricing recommendations
-- Conversion analytics
-
-Standard provides context without operational complexity.
-
----
-
-### Dealer Pro
-
-Pro adds deeper context for larger or more active dealers.
-
-Included:
-- All Standard features
-- SKU-level pricing context where data is sufficient
-- Deeper historical benchmarks
-- More frequent refresh where applicable
-
-Not included:
-- Automated repricing
-- Pricing recommendations
-- Guaranteed performance metrics
-
-Pro increases resolution, not authority.
-
----
-
-## Billing Boundaries
-
-### Consumer Billing
-
-- Consumers are billed via subscription
-- Tier changes take effect according to subscription state
-- Access is enforced server-side
-
-There are no usage-based consumer charges in v1.
-
----
-
-### Dealer Billing
-
-- Dealers are billed via subscription
-- Billing method may vary by dealer (e.g. invoice, platform billing)
-- Subscription state determines eligibility and access
-
-Usage-based billing may exist internally but must not be exposed in v1.
-
----
-
-## Enforcement Rules
-
-- Tier benefits must be enforced at the API and data level
-- UI hiding alone is not sufficient
-- Admin overrides must be audited
-- If enforcement is ambiguous, the feature must be removed or downgraded
-
----
-
-## Change Control
-
-Any change to pricing or tier definitions requires:
-- Review against `00_public_promises.md`
-- Confirmation that enforcement exists
-- Update to pricing pages and in-product copy
-
-Pricing language must remain conservative.
-
----
-
-## Guiding Principle
-
-> Users pay for better understanding, not guaranteed outcomes.
+Trust is the product.

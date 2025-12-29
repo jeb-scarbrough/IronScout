@@ -15,7 +15,7 @@ This folder is the single source of truth for how IronScout is defined and opera
 Documents in `context/` are organized by **authority and purpose**.
 
 ### Highest authority (read first)
-These documents define constraints that everything else must obey:
+These documents define constraints that everything else must obey, including **UX, copy, and feature behavior**:
 
 1. `00_public_promises.md`  
    What IronScout promises externally. This is the ceiling for UI copy, marketing, and API behavior.
@@ -26,25 +26,31 @@ These documents define constraints that everything else must obey:
 3. `03_release_criteria.md`  
    Binary conditions for shipping. If these are not met, we do not release.
 
+4. `06_ux_charter.md`  
+   Language, UX, and interaction guardrails that all user-facing surfaces must follow.
+
 If there is a conflict between documents, **higher-authority documents always win**.
 
 ---
 
 ## Who This Is For
 
-- Product: use public promises and scope docs
-- Engineering: use architecture and reference
+- Product: use public promises, scope, and UX charter
+- Engineering: use architecture, reference, and UX charter
 - Operations: use operations, runbooks, and guides
+
+---
 
 ## Folder Overview
 
-### Top-level (`00_` – `05_`)
-Business and product truth:
+### Top-level (`00_` – `06_`)
+Business, product, and UX truth:
 - Public promises
 - Product definition
 - Scope decisions
 - Release gates
 - Pricing and trust boundaries
+- UX and language guardrails
 
 These are enforced constraints, not aspirations.
 
@@ -121,7 +127,7 @@ ADRs prevent re-litigating settled decisions.
 ---
 
 ### `archive/`
-Historical documents with **no authority**.
+Historical documents with **no authority**.  
 Preserved for context only. Never referenced by active docs.
 
 ---
@@ -131,6 +137,7 @@ Preserved for context only. Never referenced by active docs.
 - Numbering is **local to each folder**.
 - Every document must have a clear job.
 - Public-facing claims must never exceed enforced behavior.
+- UX and copy changes must comply with `06_ux_charter.md` unless overridden by a newer ADR.
 - If a document becomes outdated, it is archived, not edited in place.
 - If you are unsure what is true, defer to higher-authority docs.
 

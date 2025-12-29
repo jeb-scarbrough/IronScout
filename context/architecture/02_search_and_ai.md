@@ -1,275 +1,146 @@
-# Search and AI
+# Search and AI Architecture
 
-This document describes how search and AI are used in IronScout **as implemented today**, and where explicit decisions or code changes may be required to fully align with v1 goals and trust constraints.
+This document describes how IronScout ingests, normalizes, and surfaces product data for search, monitoring, and alerting.
 
-This document does not define product promises. Those live in `context/00_public_promises.md`.
+It explains where automation and machine-assisted classification are used, and just as importantly, where they are not.
 
----
-
-## Purpose of AI in IronScout
-
-AI in IronScout exists to **reduce friction caused by messy data**, not to make decisions for users.
-
-AI is used to:
-- Interpret ambiguous search intent
-- Normalize inconsistent listings
-- Assist ranking and grouping
-- Generate optional explanatory context
-
-AI is **not** used to:
-- Recommend purchases
-- Predict prices
-- Provide verdicts
-- Assert certainty
-
-If AI output cannot be constrained or explained safely, it must be removed or downgraded.
+This document is internal and architectural. It does not define user-facing promises.
 
 ---
 
-## Search Architecture (Current)
+## Design Goals
 
-### Entry Points
-
-- Consumer search originates in `apps/web`
-- Requests are handled by `apps/api` search endpoints
-- Dealer inventory and retailer inventory are unified at query time
-
-### High-Level Flow
-
-1. User submits a search query (text + filters)
-2. API parses intent (AI-assisted)
-3. Explicit filters are validated and applied
-4. Canonical products are resolved
-5. Offers are fetched and shaped by tier
-6. Results are ranked and returned
+- Handle inconsistent, low-quality retailer data at scale
+- Normalize listings into comparable, equivalent products
+- Support fast, flexible search across structured and semi-structured inputs
+- Enable reliable detection of price and availability change over time
+- Preserve determinism, auditability, and trust
 
 ---
 
-## Intent Parsing
+## Core Principle
 
-### What It Does
+Automation in IronScout exists to **reduce noise**, not to make decisions for users.
 
-AI-assisted intent parsing is used to:
-- Interpret free-text queries
-- Extract ammo-relevant attributes (caliber, grain, casing, etc.)
-- Resolve synonyms and inconsistent phrasing
-- Fill gaps when users provide incomplete information
-
-This allows users to search naturally without knowing exact terminology.
-
-### What It Does Not Do
-
-- It does not override explicit filters
-- It does not guess missing constraints with high confidence
-- It does not inject attributes that are not supported by data
-
-If intent parsing fails or confidence is low, the system should:
-- fall back to keyword-style behavior
-- broaden results rather than hallucinate precision
+The system may classify, group, and detect change.  
+It must never determine what a user “should” buy.
 
 ---
 
-## Canonical Product Grouping
+## Data Ingestion and Normalization
 
-### Purpose
+Retailer feeds vary widely in quality, structure, and naming conventions.
 
-Canonical grouping exists to:
-- Group inconsistent listings into comparable products
-- Enable like-for-like comparisons
-- Reduce noise in search results
+IronScout applies automated normalization to:
+- Parse caliber, grain, casing, and packaging details
+- Standardize units and quantities
+- Resolve obvious naming inconsistencies
+- Flag ambiguous or incomplete listings
 
-### Mechanism (Conceptual)
+This process produces **normalized product candidates**, not recommendations.
 
-- AI and rules assist normalization
-- Canonical attributes are stored explicitly
-- Grouping must be deterministic once assigned
-
-### Invariants
-
-- Canonical grouping must be stable
-- Grouping changes must be explainable for ops
-- A product should not oscillate between groups without intervention
+When ambiguity cannot be resolved confidently, the system preserves uncertainty rather than guessing.
 
 ---
 
-## Ranking and Result Shaping
+## Equivalence Grouping
 
-### Ranking Inputs
+Listings that represent the same real-world product are grouped together.
 
-Ranking may consider:
-- Text relevance
-- Attribute match quality
+Grouping is based on:
+- Parsed technical attributes
+- Manufacturer identifiers
+- Known retailer patterns
+- Historical consistency
+
+Grouping exists to reduce duplication and comparison noise.  
+It does not imply quality, value, or endorsement.
+
+---
+
+## Search Query Processing
+
+Search accepts free-form input but anchors on structured interpretation.
+
+Automation is used to:
+- Parse query terms into structured filters
+- Match equivalent products
+- Exclude obviously incompatible listings
+
+Search returns **eligible results**, not ranked advice.
+
+Ordering within search results is deterministic and based on transparent factors such as:
+- Price
 - Availability
-- Price (relative, not absolute)
-- Recency
+- Retailer grouping
+- User-selected filters
 
-Premium tiers may unlock:
-- additional ranking signals
-- more flexible sorting
-- deeper history access
-
-### Hard Constraints
-
-- Ranking must never imply recommendation
-- Ranking language must remain descriptive
-- “Best” must always be contextual (“lowest price”, “most recent”, etc.)
+Search does not determine “best” options.
 
 ---
 
-## Tier-Based Shaping
+## Use of Automation and Machine Assistance
 
-### Free Users
+Automation is used to:
+- Normalize messy input data
+- Classify product attributes
+- Group equivalent listings
+- Detect price and availability change over time
 
-- Limited history depth
-- Fewer ranking and sorting options
-- Basic explanations only
+Automation is **not** used to:
+- Assign value judgments
+- Score deals
+- Rank products by desirability
+- Generate recommendations or verdicts
+- Explain outcomes to users
 
-### Premium Users
-
-- Deeper historical context
-- Faster and more flexible alerts
-- Additional filters and ranking options
-- AI-assisted explanations where data quality allows
-
-Tier shaping must occur:
-- server-side
-- before data reaches the client
-
-UI hiding alone is insufficient.
+All surfaced outcomes must be explainable via observable data.
 
 ---
 
-## AI-Assisted Explanations
+## Change Detection
 
-### Purpose
+The system continuously monitors normalized listings for:
+- Price movement
+- Availability changes
+- Inventory signals (where available)
 
-Explanations exist to:
-- Help users understand *why* something appears the way it does
-- Describe price context relative to recent history
-- Explain grouping or ranking at a high level
+Detected changes are classified as:
+- Minor (informational)
+- Meaningful (eligible for dashboard surfacing or alerts)
 
-### Constraints
-
-AI explanations must:
-- Be optional
-- Be clearly framed as context
-- Avoid prescriptive language
-- Degrade gracefully when data is weak
-
-Examples of acceptable language:
-- “Compared to recent prices…”
-- “Historically this item has been priced around…”
-
-Unacceptable language:
-- “You should buy now”
-- “This is the best deal”
-- “This price will not last”
+Change classification thresholds are deterministic and auditable.
 
 ---
 
-## Embeddings and Vector Search
+## Relationship to Dashboard and Alerts
 
-### Current State (Observed)
+Search provides discovery.  
+Saved Items and Saved Searches capture intent.  
+The Dashboard surfaces moments worth attention.  
+Alerts interrupt only when actionably better now than later.
 
-- Embedding generation and usage appear to live in `apps/api`
-- Embeddings are used for:
-  - semantic search
-  - similarity grouping
-  - ranking assistance
-
-Harvester does **not** currently appear to generate embeddings as part of ingestion.
-
-### Decision Point
-
-There is a mismatch between:
-- earlier documentation that described an “embedding queue”
-- current implementation that appears API-centric
-
-**Decision required:**
-- Treat API-based embedding generation as the v1 reality, or
-- Move embedding generation to harvester queues later and defer for v1
-
-**Recommendation for v1**
-- Keep embeddings API-centric
-- Treat queued embedding generation as deferred work
-- Update architecture docs accordingly
+Automation feeds these systems but does not control their tone, urgency, or messaging.
 
 ---
 
-## Failure Modes and Safe Degradation
+## Explicit Non-Goals (v1)
 
-When AI systems fail or data is weak:
+In v1, the system does not:
+- Generate explanations or reasoning text
+- Surface AI-derived scores or confidence levels
+- Predict future prices
+- Make purchase recommendations
+- Optimize for engagement or novelty
 
-- Explanations should be hidden or simplified
-- Results should broaden, not narrow
-- Language should reflect uncertainty
-- Defaults should favor transparency over precision
-
-If safe degradation cannot be guaranteed, the feature must not be enabled.
-
----
-
-## Observability and Debugging
-
-To support trust and ops:
-
-- AI decisions should be traceable at a high level
-- Inputs and outputs should be inspectable (where feasible)
-- Search behavior should be reproducible for a given query and dataset
-
-Exact internal scores do not need to be exposed, but behavior must be explainable.
+Any future expansion in these areas requires explicit ADR approval.
 
 ---
 
-## Known Inconsistencies and Required Decisions
+## Summary
 
-These items require explicit decisions or code review:
+IronScout uses automation to make messy data usable and monitoring reliable.
 
-### 1. Identity and Tier Resolution in API
-- Some API paths appear to trust headers for tier resolution
-- This conflicts with server-side enforcement requirements
+It does not use automation to decide, persuade, or judge.
 
-**Action**
-- Resolve tier from verified auth only
-
----
-
-### 2. Embedding Lifecycle Ownership
-- Docs vs code disagree on whether embeddings are API- or harvester-owned
-
-**Action**
-- Declare one owner for v1 and document the other as deferred
-
----
-
-### 3. Explanation Gating
-- Ensure explanations are:
-  - gated by tier
-  - gated by data sufficiency
-  - removable without breaking UX
-
-**Action**
-- Add explicit guards before explanation generation
-
----
-
-### 4. Canonical Group Stability
-- No documented mechanism for preventing oscillation
-
-**Action**
-- Define when canonical mappings are allowed to change
-- Document operational overrides if needed
-
----
-
-## Non-Negotiables
-
-- AI output must never exceed data quality
-- AI language must never imply advice
-- All AI-assisted behavior must be removable without breaking core search
-
----
-
-## Guiding Principle
-
-> AI exists to make messy data legible, not to make decisions.
+This distinction is foundational and must be preserved.
