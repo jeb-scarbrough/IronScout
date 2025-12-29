@@ -44,6 +44,17 @@ The following guides are required for v1 operations.
 
 ---
 
+### Guide: Affiliate Feeds Go-Live
+
+**Purpose**
+- Safely enable and validate the affiliate feed pipeline.
+
+**Docs**
+- `context/operations/affiliate-feeds-go-live.md`
+- Verification SQL: `context/operations/affiliate_feeds_verify.sql`
+
+---
+
 ### Guide: Debugging a Broken Dealer Feed
 
 **When to use**
