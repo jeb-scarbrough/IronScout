@@ -6,7 +6,11 @@ import { redisConnection } from '../config/redis'
 import { logger } from '../config/logger'
 import { extractQueue, normalizeQueue, FetchJobData } from '../config/queues'
 import { computeContentHash } from '../utils/hash'
+import { safeExtractArray } from '../utils/arrays'
 import { ImpactParser } from '../parsers' // v1 only supports IMPACT
+
+// Re-export for backwards compatibility
+export { safeExtractArray } from '../utils/arrays'
 
 const log = logger.fetcher
 
@@ -29,6 +33,23 @@ const MAX_ITEMS_COLLECTED = 50000
 /** Request timeout in milliseconds */
 const REQUEST_TIMEOUT = 30000
 
+/** Maximum items per normalize job to prevent Redis payload overflow */
+const NORMALIZE_CHUNK_SIZE = 1000
+
+/** Maximum payload size in bytes for a single BullMQ job (5MB safety margin) */
+const MAX_JOB_PAYLOAD_BYTES = 5 * 1024 * 1024
+
+/**
+ * Estimate payload size in bytes (accurate for UTF-8)
+ */
+function estimatePayloadBytes(items: unknown[]): number {
+  if (items.length === 0) return 0
+  // Use Buffer.byteLength for accurate UTF-8 byte count
+  const sample = JSON.stringify(items.slice(0, 10))
+  const avgItemBytes = Buffer.byteLength(sample, 'utf8') / Math.min(items.length, 10)
+  return Math.ceil(avgItemBytes * items.length)
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -48,12 +69,14 @@ interface PaginationConfig {
 
 /**
  * Safely stringify JSON with size limit
+ * Uses Buffer.byteLength for accurate UTF-8 byte counting
  * Throws if result would exceed maxSize
  */
 function safeJsonStringify(data: unknown, maxSize: number = MAX_TOTAL_CONTENT_SIZE): string {
   const result = JSON.stringify(data)
-  if (result.length > maxSize) {
-    throw new Error(`JSON stringify result exceeds max size (${result.length} > ${maxSize} bytes)`)
+  const byteSize = Buffer.byteLength(result, 'utf8')
+  if (byteSize > maxSize) {
+    throw new Error(`JSON stringify result exceeds max size (${byteSize} > ${maxSize} bytes)`)
   }
   return result
 }
@@ -226,8 +249,8 @@ export const fetcherWorker = new Worker<FetchJobData>(
           pageContent = safeJsonStringify(response.data, MAX_CONTENT_LENGTH_PER_PAGE)
         }
 
-        // Track total content size
-        totalContentSize += pageContent.length
+        // Track total content size in bytes (accurate for UTF-8)
+        totalContentSize += Buffer.byteLength(pageContent, 'utf8')
         if (totalContentSize > MAX_TOTAL_CONTENT_SIZE) {
           log.warn('Total content size limit exceeded, stopping', { totalContentSize, limit: MAX_TOTAL_CONTENT_SIZE })
           await prisma.executionLog.create({
@@ -248,7 +271,8 @@ export const fetcherWorker = new Worker<FetchJobData>(
         if (type === 'JSON' || type === 'RSS') {
           try {
             const parsed = typeof pageContent === 'string' ? JSON.parse(pageContent) : pageContent
-            const items = Array.isArray(parsed) ? parsed : parsed.products || parsed.items || []
+            // Use safe extraction to handle non-iterable objects
+            const items = safeExtractArray(parsed)
 
             if (items.length === 0) {
               log.debug('No more items found, stopping pagination', { pageNum: pageNum + 1 })
@@ -297,28 +321,30 @@ export const fetcherWorker = new Worker<FetchJobData>(
         content = safeJsonStringify(allContent)
       } else if (type === 'HTML') {
         content = allContent.join('\n')
-        if (content.length > MAX_TOTAL_CONTENT_SIZE) {
-          throw new Error(`HTML content exceeds max size (${content.length} > ${MAX_TOTAL_CONTENT_SIZE} bytes)`)
+        const htmlBytes = Buffer.byteLength(content, 'utf8')
+        if (htmlBytes > MAX_TOTAL_CONTENT_SIZE) {
+          throw new Error(`HTML content exceeds max size (${htmlBytes} > ${MAX_TOTAL_CONTENT_SIZE} bytes)`)
         }
       } else {
         content = safeJsonStringify(allContent)
       }
 
       const fetchDurationMs = Date.now() - stageStart
+      const contentBytes = Buffer.byteLength(content, 'utf8')
 
       await prisma.executionLog.create({
         data: {
           executionId,
           level: 'INFO',
           event: 'FETCH_OK',
-          message: `Fetched ${pagesFetched} page(s), ${allContent.length} items (${content.length} bytes)`,
+          message: `Fetched ${pagesFetched} page(s), ${allContent.length} items (${contentBytes} bytes)`,
           metadata: {
             // Timing
             durationMs: fetchDurationMs,
             // Counters
             pagesFetched,
             itemsCollected: allContent.length,
-            contentBytes: content.length,
+            contentBytes,
             // Context
             sourceId,
             type,
@@ -362,7 +388,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
           },
         })
 
-        return { success: true, contentLength: content.length, skipped: true }
+        return { success: true, contentLength: Buffer.byteLength(content, 'utf8'), skipped: true }
       }
 
       // Hash differs or is null - continue with processing
@@ -426,24 +452,67 @@ export const fetcherWorker = new Worker<FetchJobData>(
           data: { itemsFound: parsedItems.length },
         })
 
-        // Queue directly to normalizer (skip extractor for feeds)
-        await normalizeQueue.add('normalize', {
-          executionId,
-          sourceId,
-          rawItems: parsedItems,
-          contentHash,
-        }, {
-          jobId: `normalize:${executionId}`, // Idempotent: one normalize per execution
-        })
+        // Check payload size and chunk if needed to prevent Redis overflow
+        const estimatedBytes = estimatePayloadBytes(parsedItems)
+        const needsChunking = parsedItems.length > NORMALIZE_CHUNK_SIZE || estimatedBytes > MAX_JOB_PAYLOAD_BYTES
 
-        await prisma.executionLog.create({
-          data: {
+        if (needsChunking) {
+          // Chunk into smaller jobs
+          const chunkCount = Math.ceil(parsedItems.length / NORMALIZE_CHUNK_SIZE)
+          log.info('Chunking normalize jobs (feed path)', {
             executionId,
-            level: 'INFO',
-            event: 'NORMALIZE_QUEUED',
-            message: 'Normalize job queued (feed path)',
-          },
-        })
+            totalItems: parsedItems.length,
+            estimatedBytes,
+            chunkCount,
+            chunkSize: NORMALIZE_CHUNK_SIZE,
+          })
+
+          for (let i = 0; i < parsedItems.length; i += NORMALIZE_CHUNK_SIZE) {
+            const chunkIndex = Math.floor(i / NORMALIZE_CHUNK_SIZE)
+            const chunk = parsedItems.slice(i, i + NORMALIZE_CHUNK_SIZE)
+            const isLastChunk = chunkIndex === chunkCount - 1
+
+            await normalizeQueue.add('normalize', {
+              executionId,
+              sourceId,
+              rawItems: chunk,
+              // Only pass contentHash on last chunk to update after all chunks processed
+              contentHash: isLastChunk ? contentHash : undefined,
+              chunkInfo: { index: chunkIndex, total: chunkCount, isLast: isLastChunk },
+            }, {
+              jobId: `normalize--${executionId}--${chunkIndex}`, // Unique per chunk
+            })
+          }
+
+          await prisma.executionLog.create({
+            data: {
+              executionId,
+              level: 'INFO',
+              event: 'NORMALIZE_QUEUED',
+              message: `Queued ${chunkCount} normalize chunks for ${parsedItems.length} items (feed path)`,
+              metadata: { chunkCount, totalItems: parsedItems.length, estimatedBytes },
+            },
+          })
+        } else {
+          // Single job for small payloads
+          await normalizeQueue.add('normalize', {
+            executionId,
+            sourceId,
+            rawItems: parsedItems,
+            contentHash,
+          }, {
+            jobId: `normalize--${executionId}`, // Idempotent: one normalize per execution
+          })
+
+          await prisma.executionLog.create({
+            data: {
+              executionId,
+              level: 'INFO',
+              event: 'NORMALIZE_QUEUED',
+              message: 'Normalize job queued (feed path)',
+            },
+          })
+        }
       } else {
         // Route to extractor for scrapers
         await extractQueue.add('extract', {
@@ -466,7 +535,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         })
       }
 
-      return { success: true, contentLength: content.length }
+      return { success: true, contentLength: Buffer.byteLength(content, 'utf8') }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 

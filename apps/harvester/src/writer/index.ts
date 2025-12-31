@@ -110,7 +110,7 @@ async function batchUpsertProducts(
 /**
  * Batch process prices - check existing and create new where needed
  */
-async function batchProcessPrices(
+export async function batchProcessPrices(
   items: NormalizedProduct[],
   retailerMap: RetailerMap
 ): Promise<{ upsertedCount: number; priceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> }> {
@@ -122,6 +122,15 @@ async function batchProcessPrices(
     productId: item.productId,
     retailerId: retailerMap[item.retailerWebsite]?.id,
   })).filter((k) => k.retailerId)
+
+  // Short-circuit if no valid price keys (prevents Prisma "OR must not be empty" error)
+  if (priceKeys.length === 0) {
+    log.warn('No valid price keys - all items missing retailer mapping', {
+      itemCount: items.length,
+      retailerMapSize: Object.keys(retailerMap).length,
+    })
+    return { upsertedCount, priceChanges }
+  }
 
   // Fetch all existing prices in one query
   const existingPrices = await prisma.price.findMany({

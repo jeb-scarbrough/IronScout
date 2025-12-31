@@ -46,6 +46,7 @@ export interface NormalizeJobData {
   sourceId: string
   rawItems: any[]
   contentHash?: string // Hash to be stored after successful write
+  chunkInfo?: { index: number; total: number; isLast: boolean } // For chunked processing
 }
 
 export interface WriteJobData {

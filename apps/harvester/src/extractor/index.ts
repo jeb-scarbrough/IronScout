@@ -7,13 +7,35 @@ import { normalizeQueue, ExtractJobData } from '../config/queues'
 
 const log = logger.extractor
 
+// ============================================================================
+// PAYLOAD LIMITS - Prevent Redis/BullMQ overflow
+// ============================================================================
+
+/** Maximum items per normalize job to prevent Redis payload overflow */
+const NORMALIZE_CHUNK_SIZE = 1000
+
+/** Maximum payload size in bytes for a single BullMQ job (5MB safety margin) */
+const MAX_JOB_PAYLOAD_BYTES = 5 * 1024 * 1024
+
+/**
+ * Estimate payload size in bytes (accurate for UTF-8)
+ */
+function estimatePayloadBytes(items: unknown[]): number {
+  // Use Buffer.byteLength for accurate UTF-8 byte count
+  const sample = JSON.stringify(items.slice(0, 10))
+  const avgItemBytes = Buffer.byteLength(sample, 'utf8') / Math.min(items.length, 10)
+  return Math.ceil(avgItemBytes * items.length)
+}
+
 // Extractor worker - parses content and extracts product data
 export const extractorWorker = new Worker<ExtractJobData>(
   'extract',
   async (job: Job<ExtractJobData>) => {
     const { executionId, sourceId, content, sourceType, contentHash } = job.data
     const stageStart = Date.now()
-    const contentBytes = typeof content === 'string' ? content.length : JSON.stringify(content).length
+    // Use Buffer.byteLength for accurate UTF-8 byte counting
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content)
+    const contentBytes = Buffer.byteLength(contentStr, 'utf8')
 
     log.debug('EXTRACT_JOB_RECEIVED', {
       jobId: job.id,
@@ -104,24 +126,67 @@ export const extractorWorker = new Worker<ExtractJobData>(
         data: { itemsFound: rawItems.length },
       })
 
-      // Queue normalization job with idempotent jobId
-      await normalizeQueue.add('normalize', {
-        executionId,
-        sourceId,
-        rawItems,
-        contentHash, // Pass hash to be stored after successful write
-      }, {
-        jobId: `normalize:${executionId}`, // Idempotent: one normalize per execution
-      })
+      // Check payload size and chunk if needed to prevent Redis overflow
+      const estimatedBytes = estimatePayloadBytes(rawItems)
+      const needsChunking = rawItems.length > NORMALIZE_CHUNK_SIZE || estimatedBytes > MAX_JOB_PAYLOAD_BYTES
 
-      await prisma.executionLog.create({
-        data: {
+      if (needsChunking) {
+        // Chunk into smaller jobs
+        const chunkCount = Math.ceil(rawItems.length / NORMALIZE_CHUNK_SIZE)
+        log.info('Chunking normalize jobs', {
           executionId,
-          level: 'INFO',
-          event: 'NORMALIZE_QUEUED',
-          message: 'Normalize job queued',
-        },
-      })
+          totalItems: rawItems.length,
+          estimatedBytes,
+          chunkCount,
+          chunkSize: NORMALIZE_CHUNK_SIZE,
+        })
+
+        for (let i = 0; i < rawItems.length; i += NORMALIZE_CHUNK_SIZE) {
+          const chunkIndex = Math.floor(i / NORMALIZE_CHUNK_SIZE)
+          const chunk = rawItems.slice(i, i + NORMALIZE_CHUNK_SIZE)
+          const isLastChunk = chunkIndex === chunkCount - 1
+
+          await normalizeQueue.add('normalize', {
+            executionId,
+            sourceId,
+            rawItems: chunk,
+            // Only pass contentHash on last chunk to update after all chunks processed
+            contentHash: isLastChunk ? contentHash : undefined,
+            chunkInfo: { index: chunkIndex, total: chunkCount, isLast: isLastChunk },
+          }, {
+            jobId: `normalize--${executionId}--${chunkIndex}`, // Unique per chunk
+          })
+        }
+
+        await prisma.executionLog.create({
+          data: {
+            executionId,
+            level: 'INFO',
+            event: 'NORMALIZE_QUEUED',
+            message: `Queued ${chunkCount} normalize chunks for ${rawItems.length} items`,
+            metadata: { chunkCount, totalItems: rawItems.length, estimatedBytes },
+          },
+        })
+      } else {
+        // Single job for small payloads
+        await normalizeQueue.add('normalize', {
+          executionId,
+          sourceId,
+          rawItems,
+          contentHash, // Pass hash to be stored after successful write
+        }, {
+          jobId: `normalize--${executionId}`, // Idempotent: one normalize per execution
+        })
+
+        await prisma.executionLog.create({
+          data: {
+            executionId,
+            level: 'INFO',
+            event: 'NORMALIZE_QUEUED',
+            message: 'Normalize job queued',
+          },
+        })
+      }
 
       return { success: true, itemCount: rawItems.length }
     } catch (error) {
