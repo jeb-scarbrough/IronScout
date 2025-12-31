@@ -158,7 +158,7 @@ function SavedItemRow({
   onRemove,
 }: SavedItemRowProps) {
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg">
       {/* Main row */}
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4 p-4 hover:bg-accent/50 transition-colors">
         {/* Product Image */}

@@ -12,6 +12,7 @@ export const SETTING_KEYS = {
   AFFILIATE_BATCH_SIZE: 'AFFILIATE_BATCH_SIZE',
   PRICE_HEARTBEAT_HOURS: 'PRICE_HEARTBEAT_HOURS',
   AFFILIATE_RUN_RETENTION_DAYS: 'AFFILIATE_RUN_RETENTION_DAYS',
+  HARVESTER_LOG_LEVEL: 'HARVESTER_LOG_LEVEL',
 
   // Queue History Settings - Bull Board job retention
   QUEUE_HISTORY_RETENTION_COUNT: 'QUEUE_HISTORY_RETENTION_COUNT',
@@ -53,6 +54,7 @@ export const OPERATIONS_KEYS = [
   SETTING_KEYS.AFFILIATE_BATCH_SIZE,
   SETTING_KEYS.PRICE_HEARTBEAT_HOURS,
   SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS,
+  SETTING_KEYS.HARVESTER_LOG_LEVEL,
 ] as const;
 
 export const QUEUE_HISTORY_KEYS = [
@@ -84,7 +86,7 @@ export const FEATURE_FLAG_KEYS = [
 // Default Values
 // =============================================================================
 
-export const SETTING_DEFAULTS: Record<SettingKey, boolean | number> = {
+export const SETTING_DEFAULTS: Record<SettingKey, boolean | number | string> = {
   // Danger Zone
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: false,
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: true,
@@ -94,6 +96,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, boolean | number> = {
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 1000,
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 24,
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 30,
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'info',
 
   // Queue History (all enabled by default for visibility)
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 100,
@@ -133,6 +136,7 @@ export const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 'Number of items to process per batch in affiliate feeds',
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 'Hours between price heartbeat updates',
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 'Days to retain affiliate feed run history',
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'Log verbosity level for harvester (debug, info, warn, error, fatal). Takes effect without restart.',
 
   // Queue History
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 'Number of completed/failed jobs to retain per queue',
@@ -162,7 +166,7 @@ export const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
 // Setting Types
 // =============================================================================
 
-export type SettingType = 'boolean' | 'number';
+export type SettingType = 'boolean' | 'number' | 'string';
 
 export const SETTING_TYPES: Record<SettingKey, SettingType> = {
   // Danger Zone - all boolean
@@ -170,10 +174,11 @@ export const SETTING_TYPES: Record<SettingKey, SettingType> = {
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: 'boolean',
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: 'boolean',
 
-  // Operations - numbers
+  // Operations - numbers and strings
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 'number',
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 'number',
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 'number',
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'string',
 
   // Queue History - one number, rest boolean
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 'number',
@@ -227,4 +232,19 @@ export const QUEUE_DISPLAY_NAMES: Record<string, string> = {
   [SETTING_KEYS.QUEUE_HISTORY_DEALER_INSIGHT]: 'Dealer Insight',
   [SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_FEED]: 'Affiliate Feed',
   [SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_SCHEDULER]: 'Affiliate Scheduler',
+};
+
+// =============================================================================
+// Log Level Options
+// =============================================================================
+
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'] as const;
+export type LogLevel = typeof LOG_LEVELS[number];
+
+export const LOG_LEVEL_DESCRIPTIONS: Record<LogLevel, string> = {
+  debug: 'Most verbose - all logs including fine-grained debugging',
+  info: 'Standard - informational messages and above',
+  warn: 'Warnings and errors only',
+  error: 'Errors and fatal only',
+  fatal: 'Fatal errors only',
 };

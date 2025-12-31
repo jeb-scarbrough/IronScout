@@ -1,10 +1,21 @@
 import { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
 import { prisma } from '@ironscout/db'
 import { TIER_CONFIG } from '../config/tiers'
 import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
 
 const log = loggers.auth
+
+/**
+ * JWT secret for verifying tokens.
+ * NextAuth uses NEXTAUTH_SECRET, but we also support JWT_SECRET for flexibility.
+ */
+const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET
+
+if (!JWT_SECRET) {
+  log.warn('JWT_SECRET/NEXTAUTH_SECRET not set - JWT verification will fail')
+}
 
 /**
  * List of admin email addresses
@@ -15,10 +26,48 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean)
 export type UserTier = keyof typeof TIER_CONFIG
 
 /**
+ * JWT payload type for NextAuth tokens
+ */
+interface JwtPayload {
+  sub?: string
+  userId?: string
+  email?: string
+  iat?: number
+  exp?: number
+}
+
+/**
+ * Verify and decode a JWT token.
+ * Returns the payload if valid, null otherwise.
+ *
+ * SECURITY: This uses jwt.verify to cryptographically validate the signature.
+ * Never use base64 decode without verification - that allows forged tokens.
+ */
+function verifyAuthToken(token: string): JwtPayload | null {
+  if (!JWT_SECRET) {
+    log.error('JWT verification failed - no secret configured')
+    return null
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
+    return payload
+  } catch (err) {
+    // Log specific JWT errors for debugging
+    if (err instanceof jwt.TokenExpiredError) {
+      log.debug('JWT expired', { expiredAt: err.expiredAt })
+    } else if (err instanceof jwt.JsonWebTokenError) {
+      log.debug('JWT verification failed', { message: err.message })
+    }
+    return null
+  }
+}
+
+/**
  * Extract and validate user ID from JWT in Authorization header.
  * Returns null if no valid session.
  *
- * SECURITY: Never trust X-User-Id headers - always validate JWT.
+ * SECURITY: Never trust X-User-Id headers - always validate JWT with signature verification.
  */
 function extractUserIdFromJwt(req: Request): string | null {
   const authHeader = req.headers.authorization
@@ -27,18 +76,15 @@ function extractUserIdFromJwt(req: Request): string | null {
     return null
   }
 
-  try {
-    const token = authHeader.substring(7)
-    // NextAuth JWTs are base64 encoded JSON
-    const payload = JSON.parse(
-      Buffer.from(token.split('.')[1], 'base64').toString()
-    )
+  const token = authHeader.substring(7)
+  const payload = verifyAuthToken(token)
 
-    // 'sub' is the standard JWT claim for subject (user ID)
-    return payload.sub || payload.userId || null
-  } catch {
+  if (!payload) {
     return null
   }
+
+  // 'sub' is the standard JWT claim for subject (user ID)
+  return payload.sub || payload.userId || null
 }
 
 /**
@@ -48,6 +94,7 @@ function extractUserIdFromJwt(req: Request): string | null {
  * - If no valid JWT session → FREE tier
  * - If valid JWT → lookup user tier from database
  * - Never trusts client-provided headers for tier
+ * - FAIL CLOSED: Non-ACTIVE users (PENDING_DELETION, DELETED) get FREE tier
  */
 export async function getUserTier(req: Request): Promise<UserTier> {
   const userId = extractUserIdFromJwt(req)
@@ -59,9 +106,23 @@ export async function getUserTier(req: Request): Promise<UserTier> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { tier: true }
+      select: { tier: true, status: true }
     })
-    return (user?.tier as UserTier) || 'FREE'
+
+    // SECURITY: Fail closed - non-ACTIVE users get FREE tier
+    // This prevents suspended/deleted users from retaining premium features
+    if (!user || user.status !== 'ACTIVE') {
+      if (user && user.status !== 'ACTIVE') {
+        log.info('Denying tier for non-ACTIVE user', {
+          userId,
+          status: user.status,
+          requestedTier: user.tier
+        })
+      }
+      return 'FREE'
+    }
+
+    return (user.tier as UserTier) || 'FREE'
   } catch {
     return 'FREE'
   }
@@ -94,38 +155,33 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   
   // Method 2: Check for authenticated admin user via Authorization header
   const authHeader = req.headers.authorization
-  
+
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
-    
-    try {
-      // Decode JWT to get user info
-      // NextAuth JWTs are base64 encoded JSON
-      const payload = JSON.parse(
-        Buffer.from(token.split('.')[1], 'base64').toString()
-      )
-      
+
+    // SECURITY: Use jwt.verify to cryptographically validate the token
+    const payload = verifyAuthToken(token)
+
+    if (payload) {
       const userEmail = payload.email
-      
+
       if (userEmail && ADMIN_EMAILS.includes(userEmail)) {
-        // User is an admin
+        // User is an admin (verified by JWT signature)
         return next()
       }
-      
+
       // Also check database for user with this ID
       if (payload.sub) {
         const user = await prisma.user.findUnique({
           where: { id: payload.sub },
-          select: { email: true }
+          select: { email: true, status: true }
         })
-        
-        if (user && ADMIN_EMAILS.includes(user.email)) {
+
+        // SECURITY: Fail closed - only allow ACTIVE users
+        if (user && user.status === 'ACTIVE' && ADMIN_EMAILS.includes(user.email)) {
           return next()
         }
       }
-    } catch (error) {
-      // Token parsing failed
-      log.error('Admin auth token parse error', {}, error)
     }
   }
   

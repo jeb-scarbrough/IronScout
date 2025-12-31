@@ -7,12 +7,16 @@ import {
   Pause,
   RotateCcw,
   RefreshCw,
+  XOctagon,
+  Eraser,
 } from 'lucide-react';
 import {
   enableFeed,
   pauseFeed,
   reenableFeed,
   triggerManualRun,
+  resetFeedState,
+  forceReprocess,
 } from '../actions';
 import type { AffiliateFeed } from '@ironscout/db/generated/prisma';
 
@@ -94,6 +98,40 @@ export function FeedStatusActions({ feed }: FeedStatusActionsProps) {
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
           Run Pending
         </span>
+      )}
+
+      {/* Force Reprocess button - clears content hash to force full reprocessing */}
+      {feed.lastContentHash && (
+        <button
+          onClick={() => {
+            if (confirm('Force reprocess? This clears the content hash so the next run will fully process the feed even if the file hasn\'t changed.')) {
+              handleAction(() => forceReprocess(feed.id));
+            }
+          }}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+          title="Clear content hash to force full reprocessing on next run"
+        >
+          <Eraser className="h-4 w-4" />
+          Force Reprocess
+        </button>
+      )}
+
+      {/* Reset button - shows when there's stuck state to clear */}
+      {(feed.manualRunPending || feed.consecutiveFailures > 0) && (
+        <button
+          onClick={() => {
+            if (confirm('Reset feed state? This will clear pending runs, failure counts, and cancel any stuck jobs.')) {
+              handleAction(() => resetFeedState(feed.id));
+            }
+          }}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 rounded-md bg-gray-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+          title="Reset stuck state (clears pending runs, failure counts)"
+        >
+          <XOctagon className="h-4 w-4" />
+          Reset
+        </button>
       )}
     </div>
   );

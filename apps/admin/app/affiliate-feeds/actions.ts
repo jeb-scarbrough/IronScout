@@ -469,6 +469,149 @@ export async function reenableFeed(id: string) {
 // Manual Operations
 // =============================================================================
 
+export async function resetFeedState(feedId: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const feed = await prisma.affiliateFeed.findUnique({
+      where: { id: feedId },
+    });
+
+    if (!feed) {
+      return { success: false, error: 'Feed not found' };
+    }
+
+    const now = new Date();
+
+    // Find any stuck RUNNING runs and mark them as CANCELLED
+    const stuckRuns = await prisma.affiliateFeedRun.findMany({
+      where: { feedId, status: 'RUNNING' },
+      select: { id: true, startedAt: true },
+    });
+
+    const cancelledRunIds: string[] = [];
+    for (const run of stuckRuns) {
+      // Mark as FAILED with admin note (no CANCELLED status in enum)
+      await prisma.affiliateFeedRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'FAILED',
+          finishedAt: now,
+          failureKind: 'ADMIN_RESET',
+          failureCode: 'MANUALLY_CANCELLED',
+          failureMessage: `Manually reset by admin (${session.email})`,
+        },
+      });
+      cancelledRunIds.push(run.id);
+    }
+
+    // Reset feed state: clear manualRunPending, consecutiveFailures
+    // Also recalculate nextRunAt if the feed is enabled with a schedule
+    const nextRunAt =
+      feed.status === 'ENABLED' && feed.scheduleFrequencyHours
+        ? new Date(now.getTime() + feed.scheduleFrequencyHours * 3600000)
+        : null;
+
+    await prisma.affiliateFeed.update({
+      where: { id: feedId },
+      data: {
+        manualRunPending: false,
+        consecutiveFailures: 0,
+        nextRunAt,
+      },
+    });
+
+    await logAdminAction(session.userId, 'RESET_FEED_STATE', {
+      resource: 'AffiliateFeed',
+      resourceId: feedId,
+      oldValue: {
+        manualRunPending: feed.manualRunPending,
+        consecutiveFailures: feed.consecutiveFailures,
+        nextRunAt: feed.nextRunAt,
+        stuckRunCount: stuckRuns.length,
+      },
+      newValue: {
+        manualRunPending: false,
+        consecutiveFailures: 0,
+        nextRunAt,
+        cancelledRunIds,
+      },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath(`/affiliate-feeds/${feedId}`);
+
+    const runMsg = cancelledRunIds.length > 0
+      ? ` Cancelled ${cancelledRunIds.length} stuck run(s).`
+      : '';
+    return { success: true, message: `Feed state has been reset.${runMsg}` };
+  } catch (error) {
+    loggers.feeds.error('Failed to reset feed state', { feedId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to reset feed state' };
+  }
+}
+
+export async function forceReprocess(feedId: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const feed = await prisma.affiliateFeed.findUnique({
+      where: { id: feedId },
+    });
+
+    if (!feed) {
+      return { success: false, error: 'Feed not found' };
+    }
+
+    // Clear the content hash to force reprocessing on next run
+    // Also clear mtime and size to ensure change detection doesn't skip
+    const oldHash = feed.lastContentHash?.slice(0, 16);
+
+    await prisma.affiliateFeed.update({
+      where: { id: feedId },
+      data: {
+        lastContentHash: null,
+        lastRemoteMtime: null,
+        lastRemoteSize: null,
+      },
+    });
+
+    await logAdminAction(session.userId, 'FORCE_REPROCESS', {
+      resource: 'AffiliateFeed',
+      resourceId: feedId,
+      oldValue: {
+        lastContentHash: oldHash,
+        lastRemoteMtime: feed.lastRemoteMtime,
+        lastRemoteSize: feed.lastRemoteSize ? Number(feed.lastRemoteSize) : null,
+      },
+      newValue: {
+        lastContentHash: null,
+        lastRemoteMtime: null,
+        lastRemoteSize: null,
+      },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath(`/affiliate-feeds/${feedId}`);
+
+    return {
+      success: true,
+      message: 'Content hash cleared. Next run will fully reprocess the feed regardless of file changes.',
+    };
+  } catch (error) {
+    loggers.feeds.error('Failed to force reprocess', { feedId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to force reprocess' };
+  }
+}
+
 export async function triggerManualRun(feedId: string) {
   const session = await getAdminSession();
 
@@ -489,39 +632,62 @@ export async function triggerManualRun(feedId: string) {
       return { success: false, error: 'Cannot run a draft feed. Enable it first.' };
     }
 
-    // Per spec §6.5: Always set manualRunPending=true (idempotent)
-    // The lock will serialize execution - no need to reject if a run is in progress
-    // If a run is active, it will process the pending flag after completion
-    await prisma.affiliateFeed.update({
-      where: { id: feedId },
-      data: { manualRunPending: true },
-    });
-
-    await logAdminAction(session.userId, 'TRIGGER_MANUAL_RUN', {
-      resource: 'AffiliateFeed',
-      resourceId: feedId,
-      newValue: { manualRunPending: true },
-    });
-
-    revalidatePath('/affiliate-feeds');
-    revalidatePath(`/affiliate-feeds/${feedId}`);
-
-    // Check if a run is in progress to provide accurate feedback
+    // Check if a run is already in progress
     const runningRun = await prisma.affiliateFeedRun.findFirst({
       where: { feedId, status: 'RUNNING' },
       select: { id: true },
     });
 
     if (runningRun) {
+      // Set flag for follow-up run after current completes
+      await prisma.affiliateFeed.update({
+        where: { id: feedId },
+        data: { manualRunPending: true },
+      });
+
+      await logAdminAction(session.userId, 'TRIGGER_MANUAL_RUN', {
+        resource: 'AffiliateFeed',
+        resourceId: feedId,
+        newValue: { manualRunPending: true, reason: 'queued_for_followup' },
+      });
+
+      revalidatePath('/affiliate-feeds');
+      revalidatePath(`/affiliate-feeds/${feedId}`);
+
       return {
         success: true,
         message: 'Manual run queued. A run is currently in progress - this will execute after it completes.',
       };
     }
 
+    // No run in progress - directly enqueue the job to BullMQ
+    // Import dynamically to avoid issues during build
+    const { enqueueAffiliateFeedJob, hasActiveJob } = await import('@/lib/queue');
+
+    // Check if there's already a job in the queue
+    const hasJob = await hasActiveJob(feedId);
+    if (hasJob) {
+      return {
+        success: true,
+        message: 'A job is already queued for this feed.',
+      };
+    }
+
+    // Enqueue the job
+    const { jobId } = await enqueueAffiliateFeedJob(feedId, 'MANUAL');
+
+    await logAdminAction(session.userId, 'TRIGGER_MANUAL_RUN', {
+      resource: 'AffiliateFeed',
+      resourceId: feedId,
+      newValue: { jobId, enqueued: true },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath(`/affiliate-feeds/${feedId}`);
+
     return {
       success: true,
-      message: 'Manual run queued. The harvester will pick it up shortly.',
+      message: `Manual run started. Job ID: ${jobId}`,
     };
   } catch (error) {
     loggers.feeds.error('Failed to trigger manual run', { feedId }, error instanceof Error ? error : new Error(String(error)));
@@ -697,6 +863,153 @@ export async function listAffiliateFeeds() {
   } catch (error) {
     loggers.feeds.error('Failed to list affiliate feeds', {}, error instanceof Error ? error : new Error(String(error)));
     return { success: false, error: 'Failed to list feeds', feeds: [] };
+  }
+}
+
+export async function generateRunReport(runId: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized', report: null };
+  }
+
+  try {
+    const run = await prisma.affiliateFeedRun.findUnique({
+      where: { id: runId },
+      include: {
+        feed: {
+          include: {
+            source: {
+              include: { retailer: true },
+            },
+          },
+        },
+        errors: {
+          orderBy: { rowNumber: 'asc' },
+        },
+      },
+    });
+
+    if (!run) {
+      return { success: false, error: 'Run not found', report: null };
+    }
+
+    // Build the report
+    const report = {
+      // Header
+      reportGeneratedAt: new Date().toISOString(),
+      reportGeneratedBy: session.email,
+
+      // Run identification
+      run: {
+        id: run.id,
+        correlationId: run.correlationId,
+        trigger: run.trigger,
+        status: run.status,
+        startedAt: run.startedAt.toISOString(),
+        finishedAt: run.finishedAt?.toISOString() ?? null,
+        durationMs: run.durationMs,
+        durationFormatted: run.durationMs ? `${(run.durationMs / 1000).toFixed(2)}s` : null,
+      },
+
+      // Feed information
+      feed: {
+        id: run.feed.id,
+        sourceName: run.feed.source.name,
+        retailerName: run.feed.source.retailer?.name ?? 'Unknown',
+        network: run.feed.network,
+        transport: run.feed.transport,
+        host: run.feed.host,
+        path: run.feed.path,
+        format: run.feed.format,
+        compression: run.feed.compression,
+        expiryHours: run.feed.expiryHours,
+      },
+
+      // Processing metrics
+      metrics: {
+        downloadBytes: run.downloadBytes ? Number(run.downloadBytes) : null,
+        downloadBytesFormatted: run.downloadBytes
+          ? `${(Number(run.downloadBytes) / 1024 / 1024).toFixed(2)} MB`
+          : null,
+        rowsRead: run.rowsRead,
+        rowsParsed: run.rowsParsed,
+        productsUpserted: run.productsUpserted,
+        pricesWritten: run.pricesWritten,
+        productsPromoted: run.productsPromoted,
+        productsRejected: run.productsRejected,
+        duplicateKeyCount: run.duplicateKeyCount,
+        urlHashFallbackCount: run.urlHashFallbackCount,
+        errorCount: run.errorCount,
+      },
+
+      // Calculated rates
+      rates: {
+        parseSuccessRate: run.rowsRead && run.rowsParsed
+          ? `${((run.rowsParsed / run.rowsRead) * 100).toFixed(1)}%`
+          : null,
+        productSuccessRate: run.rowsParsed && run.productsUpserted
+          ? `${((run.productsUpserted / run.rowsParsed) * 100).toFixed(1)}%`
+          : null,
+        rejectionRate: run.rowsParsed && run.productsRejected
+          ? `${((run.productsRejected / run.rowsParsed) * 100).toFixed(1)}%`
+          : null,
+        urlHashFallbackRate: run.productsUpserted && run.urlHashFallbackCount
+          ? `${((run.urlHashFallbackCount / run.productsUpserted) * 100).toFixed(1)}%`
+          : null,
+      },
+
+      // Circuit breaker / expiry info
+      circuitBreaker: {
+        expiryBlocked: run.expiryBlocked,
+        expiryBlockedReason: run.expiryBlockedReason,
+        expiryApprovedAt: run.expiryApprovedAt?.toISOString() ?? null,
+        expiryApprovedBy: run.expiryApprovedBy,
+      },
+
+      // Failure details (if failed)
+      failure: run.status === 'FAILED' ? {
+        kind: run.failureKind,
+        code: run.failureCode,
+        message: run.failureMessage,
+      } : null,
+
+      // Skipped reason (if skipped)
+      skipped: run.skippedReason ? {
+        reason: run.skippedReason,
+      } : null,
+
+      // All errors
+      errors: run.errors.map((err) => ({
+        id: err.id,
+        code: err.code,
+        message: err.message,
+        rowNumber: err.rowNumber,
+        sample: err.sample,
+        createdAt: err.createdAt.toISOString(),
+      })),
+
+      // Summary
+      summary: {
+        totalErrors: run.errors.length,
+        errorsByCode: run.errors.reduce((acc, err) => {
+          acc[err.code] = (acc[err.code] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        isPartial: run.isPartial,
+      },
+    };
+
+    await logAdminAction(session.userId, 'DOWNLOAD_RUN_REPORT', {
+      resource: 'AffiliateFeedRun',
+      resourceId: runId,
+      newValue: { downloadedAt: new Date().toISOString() },
+    });
+
+    return { success: true, report };
+  } catch (error) {
+    loggers.feeds.error('Failed to generate run report', { runId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to generate report', report: null };
   }
 }
 

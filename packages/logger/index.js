@@ -78,6 +78,24 @@ const LOG_LEVELS = {
     error: 3,
     fatal: 4,
 };
+// Dynamic log level support - allows runtime changes without restart
+let dynamicLogLevel = null;
+/**
+ * Set the log level dynamically at runtime
+ * This takes precedence over LOG_LEVEL env var
+ * @param level - The log level to set
+ */
+export function setLogLevel(level) {
+    if (LOG_LEVELS[level] !== undefined) {
+        dynamicLogLevel = level;
+    }
+}
+/**
+ * Get the current effective log level
+ */
+export function getCurrentLogLevel() {
+    return getLogLevel();
+}
 // Safe environment variable access
 function getEnv(key) {
     if (isNode && typeof process !== 'undefined' && process.env) {
@@ -94,6 +112,11 @@ function getEnv(key) {
     return undefined;
 }
 function getLogLevel() {
+    // Check dynamic level first (set via setLogLevel())
+    if (dynamicLogLevel !== null) {
+        return dynamicLogLevel;
+    }
+    // Fall back to env var
     const level = getEnv('LOG_LEVEL')?.toLowerCase();
     if (level && LOG_LEVELS[level] !== undefined) {
         return level;

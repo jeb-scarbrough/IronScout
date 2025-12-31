@@ -14,7 +14,8 @@
 // Load environment variables first, before any other imports
 import 'dotenv/config'
 
-import { prisma, isHarvesterSchedulerEnabled, isAffiliateSchedulerEnabled } from '@ironscout/db'
+import { prisma, isHarvesterSchedulerEnabled, isAffiliateSchedulerEnabled, getHarvesterLogLevel } from '@ironscout/db'
+import { setLogLevel, type LogLevel } from '@ironscout/logger'
 import { warmupRedis } from './config/redis'
 import { initQueueSettings } from './config/queues'
 import { logger } from './config/logger'
@@ -51,8 +52,49 @@ let affiliateFeedScheduler: ReturnType<typeof createAffiliateFeedScheduler> | nu
 let harvesterSchedulerEnabled = false
 let affiliateSchedulerEnabled = false
 
+// Log level polling interval handle
+let logLevelPollInterval: NodeJS.Timeout | null = null
+const LOG_LEVEL_POLL_MS = 30_000 // Check every 30 seconds
+
 const log = logger.worker
 const dbLog = logger.database
+
+/**
+ * Poll for log level changes from admin settings
+ * Updates the logger dynamically without restart
+ */
+async function pollLogLevel(): Promise<void> {
+  try {
+    const level = await getHarvesterLogLevel() as LogLevel
+    setLogLevel(level)
+    log.debug('Log level refreshed', { level })
+  } catch (error) {
+    // Silently ignore errors - we'll retry next poll
+    // Don't log errors here to avoid spam if DB is temporarily unavailable
+  }
+}
+
+/**
+ * Start log level polling
+ */
+function startLogLevelPolling(): void {
+  // Set initial level
+  pollLogLevel()
+
+  // Poll periodically for changes
+  logLevelPollInterval = setInterval(pollLogLevel, LOG_LEVEL_POLL_MS)
+  log.info('Log level polling started', { intervalMs: LOG_LEVEL_POLL_MS })
+}
+
+/**
+ * Stop log level polling
+ */
+function stopLogLevelPolling(): void {
+  if (logLevelPollInterval) {
+    clearInterval(logLevelPollInterval)
+    logLevelPollInterval = null
+  }
+}
 
 /**
  * Warm up database connection with retries
@@ -130,10 +172,13 @@ async function startup() {
     affiliateSchedulerEnabled,
   })
 
-  if (!harvesterSchedulerEnabled && !affiliateSchedulerEnabled) {
-    log.info('All schedulers disabled - this instance will only process jobs, not create them')
-    return
-  }
+  // Start log level polling for dynamic updates
+  startLogLevelPolling()
+
+  // Always start affiliate feed worker to process jobs (including manual ones)
+  // The worker must run regardless of scheduler state to process manually-triggered jobs
+  log.info('Starting affiliate feed worker')
+  affiliateFeedWorker = createAffiliateFeedWorker()
 
   // Start harvester/dealer scheduler if enabled
   if (harvesterSchedulerEnabled) {
@@ -141,11 +186,13 @@ async function startup() {
     await startDealerScheduler()
   }
 
-  // Start affiliate feed scheduler and worker if enabled
+  // Start affiliate feed scheduler only if enabled
+  // The scheduler creates repeatable jobs that enqueue work
   if (affiliateSchedulerEnabled) {
-    log.info('Starting affiliate feed workers')
-    affiliateFeedWorker = createAffiliateFeedWorker()
+    log.info('Starting affiliate feed scheduler')
     affiliateFeedScheduler = createAffiliateFeedScheduler()
+  } else {
+    log.info('Affiliate feed scheduler disabled - worker will only process manually-triggered jobs')
   }
 }
 
@@ -166,6 +213,9 @@ const shutdown = async (signal: string) => {
   log.info('Starting graceful shutdown', { signal })
 
   try {
+    // 0. Stop log level polling
+    stopLogLevelPolling()
+
     // 1. Stop scheduling new jobs (if scheduler was enabled)
     if (harvesterSchedulerEnabled) {
       log.info('Stopping dealer scheduler')

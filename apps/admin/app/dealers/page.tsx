@@ -1,5 +1,6 @@
 import { prisma } from '@ironscout/db';
 import { DealerActions } from './dealer-actions';
+import { DealerSearch } from './dealer-search';
 import { Users, Clock, CheckCircle, AlertTriangle, XCircle, Rss, CreditCard } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -24,8 +25,30 @@ const feedStatusConfig: Record<string, { label: string; color: string }> = {
   FAILED: { label: 'Failed', color: 'text-red-600' },
 };
 
-export default async function DealersPage() {
+interface SearchParams {
+  search?: string;
+}
+
+export default async function DealersPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const { search } = await searchParams;
+
+  // Build where clause for search
+  const where = search
+    ? {
+        OR: [
+          { businessName: { contains: search, mode: 'insensitive' as const } },
+          { contactFirstName: { contains: search, mode: 'insensitive' as const } },
+          { contactLastName: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
+    : {};
+
   const dealers = await prisma.dealer.findMany({
+    where,
     orderBy: [
       { status: 'asc' }, // PENDING first
       { createdAt: 'desc' },
@@ -60,6 +83,9 @@ export default async function DealersPage() {
           <p className="mt-1 text-sm text-gray-500">
             Manage dealer accounts and approvals
           </p>
+        </div>
+        <div className="w-72">
+          <DealerSearch />
         </div>
       </div>
 
@@ -278,7 +304,7 @@ export default async function DealersPage() {
             {dealers.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
-                  No dealers registered yet.
+                  {search ? `No dealers found matching "${search}"` : 'No dealers registered yet.'}
                 </td>
               </tr>
             )}

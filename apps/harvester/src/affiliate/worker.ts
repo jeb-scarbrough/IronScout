@@ -82,38 +82,121 @@ export function createAffiliateFeedWorker() {
 async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<void> {
   const { feedId, trigger, runId: existingRunId, feedLockId: cachedLockIdStr } = job.data
   const t0 = new Date()
+  const jobStartedAt = t0.toISOString()
 
-  log.info('Processing affiliate feed job', {
+  log.info('AFFILIATE_JOB_START', {
     feedId,
     trigger,
     jobId: job.id,
+    startedAt: jobStartedAt,
     attemptsMade: job.attemptsMade,
     isRetry: !!existingRunId,
+    workerPid: process.pid,
+  })
+
+  log.debug('Job data received', {
+    feedId,
+    trigger,
+    existingRunId: existingRunId || null,
+    cachedLockIdStr: cachedLockIdStr || null,
+    jobAttempts: job.attemptsMade,
+    maxAttempts: job.opts?.attempts,
   })
 
   // Load feed configuration (use cached feedLockId on retry if available)
+  log.debug('Loading feed configuration', { feedId })
+  const feedLoadStart = Date.now()
   const feed = await prisma.affiliateFeed.findUnique({
     where: { id: feedId },
     include: { source: { include: { retailer: true } } },
   })
+  log.debug('Feed configuration loaded', {
+    feedId,
+    found: !!feed,
+    loadTimeMs: Date.now() - feedLoadStart,
+  })
 
   if (!feed) {
+    log.error('Feed not found - aborting job', { feedId })
     throw new Error(`Feed not found: ${feedId}`)
   }
 
   // Parse cached feedLockId from string (BigInt can't be JSON serialized)
   const feedLockId = cachedLockIdStr ? BigInt(cachedLockIdStr) : feed.feedLockId
+  log.debug('Feed lock ID resolved', {
+    feedId,
+    feedLockId: feedLockId.toString(),
+    usedCached: !!cachedLockIdStr,
+  })
+
+  // Log feed configuration details
+  log.debug('Feed configuration details', {
+    feedId,
+    sourceName: feed.source.name,
+    retailerName: feed.source.retailer?.name,
+    status: feed.status,
+    transport: feed.transport,
+    format: feed.format,
+    network: feed.network,
+    expiryHours: feed.expiryHours,
+    scheduleFrequencyHours: feed.scheduleFrequencyHours,
+    maxRowCount: feed.maxRowCount,
+    consecutiveFailures: feed.consecutiveFailures,
+    manualRunPending: feed.manualRunPending,
+    lastRunAt: feed.lastRunAt?.toISOString(),
+    lastContentHash: feed.lastContentHash?.slice(0, 16),
+  })
 
   // Check eligibility
   if (feed.status === 'DRAFT') {
-    log.warn('Skipping draft feed', { feedId, sourceName: feed.source.name, retailerName: feed.source.retailer?.name })
+    log.warn('Skipping draft feed - not yet activated', {
+      feedId,
+      sourceName: feed.source.name,
+      retailerName: feed.source.retailer?.name,
+      decision: 'SKIP',
+      reason: 'DRAFT_STATUS',
+    })
+    log.info('AFFILIATE_JOB_END', {
+      feedId,
+      trigger,
+      jobId: job.id,
+      startedAt: jobStartedAt,
+      endedAt: new Date().toISOString(),
+      durationMs: Date.now() - t0.getTime(),
+      status: 'skipped',
+      skipReason: 'DRAFT_STATUS',
+    })
     return
   }
 
   if (feed.status === 'DISABLED' && trigger !== 'MANUAL' && trigger !== 'ADMIN_TEST') {
-    log.warn('Skipping disabled feed', { feedId, sourceName: feed.source.name, retailerName: feed.source.retailer?.name })
+    log.warn('Skipping disabled feed - only manual/admin triggers allowed', {
+      feedId,
+      sourceName: feed.source.name,
+      retailerName: feed.source.retailer?.name,
+      trigger,
+      decision: 'SKIP',
+      reason: 'DISABLED_STATUS',
+    })
+    log.info('AFFILIATE_JOB_END', {
+      feedId,
+      trigger,
+      jobId: job.id,
+      startedAt: jobStartedAt,
+      endedAt: new Date().toISOString(),
+      durationMs: Date.now() - t0.getTime(),
+      status: 'skipped',
+      skipReason: 'DISABLED_STATUS',
+    })
     return
   }
+
+  log.debug('Feed eligibility check passed', {
+    feedId,
+    status: feed.status,
+    trigger,
+    decision: 'PROCEED',
+  })
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LOCK ACQUISITION + RUN RECORD CREATION
@@ -143,6 +226,17 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         feedId,
         message: 'Retry found run not in RUNNING status - potential duplicate or stale retry',
       })
+      log.info('AFFILIATE_JOB_END', {
+        feedId,
+        trigger,
+        jobId: job.id,
+        runId: existingRunId,
+        startedAt: jobStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0.getTime(),
+        status: 'skipped',
+        skipReason: 'RUN_STATUS_MISMATCH',
+      })
       // Don't proceed - this indicates something went wrong
       return
     }
@@ -155,6 +249,17 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         feedId,
         feedLockId: feedLockId.toString(),
         message: 'Another run started - this retry is obsolete',
+      })
+      log.info('AFFILIATE_JOB_END', {
+        feedId,
+        trigger,
+        jobId: job.id,
+        runId: existingRunId,
+        startedAt: jobStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0.getTime(),
+        status: 'skipped',
+        skipReason: 'RETRY_LOCK_CONFLICT',
       })
       return
     }
@@ -176,6 +281,16 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         // Per spec §6.3.1: Scheduled runs skip silently
         log.debug('SKIPPED_LOCK_BUSY', { feedId, feedLockId: feedLockId.toString(), trigger })
       }
+      log.info('AFFILIATE_JOB_END', {
+        feedId,
+        trigger,
+        jobId: job.id,
+        startedAt: jobStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: Date.now() - t0.getTime(),
+        status: 'skipped',
+        skipReason: 'LOCK_BUSY',
+      })
       return
     }
 
@@ -227,22 +342,94 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
 
   try {
     // Phase 1: Download → Parse → Process
+    log.debug('Starting Phase 1: Download → Parse → Process', {
+      feedId: feed.id,
+      runId: run.id,
+      sourceName: feed.source.name,
+    })
+    const phase1Start = Date.now()
     const result = await executePhase1(context)
+    const phase1Duration = Date.now() - phase1Start
+
+    log.debug('Phase 1 completed', {
+      feedId: feed.id,
+      runId: run.id,
+      phase1DurationMs: phase1Duration,
+      skipped: result.skipped,
+      skippedReason: result.skippedReason,
+      metrics: result.skipped ? null : result.metrics,
+    })
 
     if (result.skipped) {
       // Per spec Q8.2.3: Use SUCCEEDED + skippedReason, not separate SKIPPED status
+      log.debug('Run skipped - finalizing with SUCCEEDED status', {
+        feedId: feed.id,
+        runId: run.id,
+        skippedReason: result.skippedReason,
+        decision: 'SKIP_UNCHANGED',
+      })
       await finalizeRun(context, 'SUCCEEDED', {
         skippedReason: result.skippedReason,
       })
     } else {
       // Phase 2: Circuit Breaker → Promote
-      const phase2Result = await executePhase2(context, result)
-
-      // Success - include both Phase 1 and Phase 2 metrics
-      await finalizeRun(context, 'SUCCEEDED', {
-        ...result.metrics,
-        productsPromoted: phase2Result.productsPromoted,
+      log.debug('Starting Phase 2: Circuit Breaker → Promote', {
+        feedId: feed.id,
+        runId: run.id,
+        productsToEvaluate: result.metrics.productsUpserted,
       })
+      const phase2Start = Date.now()
+      const phase2Result = await executePhase2(context, result)
+      const phase2Duration = Date.now() - phase2Start
+
+      log.debug('Phase 2 completed', {
+        feedId: feed.id,
+        runId: run.id,
+        phase2DurationMs: phase2Duration,
+        productsPromoted: phase2Result.productsPromoted,
+        circuitBreakerBlocked: phase2Result.circuitBreakerBlocked,
+      })
+
+      // Check for catastrophic failure: all products rejected (e.g., database error)
+      // If rowsParsed > 0 and productsUpserted == 0 with errors, this is a FAILED run
+      const isCatastrophicFailure =
+        result.metrics.rowsParsed > 0 &&
+        result.metrics.productsUpserted === 0 &&
+        result.metrics.errorCount > 0
+
+      if (isCatastrophicFailure) {
+        log.warn('Catastrophic failure detected - all products rejected', {
+          feedId: feed.id,
+          runId: run.id,
+          rowsParsed: result.metrics.rowsParsed,
+          productsUpserted: result.metrics.productsUpserted,
+          productsRejected: result.metrics.productsRejected,
+          errorCount: result.metrics.errorCount,
+        })
+        // Mark as FAILED and don't update content hash
+        await finalizeRun(context, 'FAILED', {
+          ...result.metrics,
+          productsPromoted: phase2Result.productsPromoted,
+          failureKind: 'PROCESSING_ERROR',
+          failureCode: 'CATASTROPHIC_REJECTION',
+          errorMessage: `All ${result.metrics.rowsParsed} products rejected due to processing errors`,
+        })
+      } else {
+        // Success - include both Phase 1 and Phase 2 metrics
+        log.debug('Run succeeded - finalizing', {
+          feedId: feed.id,
+          runId: run.id,
+          totalDurationMs: phase1Duration + phase2Duration,
+          phase1Ms: phase1Duration,
+          phase2Ms: phase2Duration,
+        })
+        await finalizeRun(context, 'SUCCEEDED', {
+          ...result.metrics,
+          productsPromoted: phase2Result.productsPromoted,
+          // Include change detection data - only saved on true success
+          changeDetection: result.changeDetection,
+        })
+      }
     }
   } catch (error) {
     // Generate correlation ID for this failure (for log correlation)
@@ -279,6 +466,21 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       })
       await job.discard()
     }
+
+    log.info('AFFILIATE_JOB_END', {
+      feedId,
+      trigger,
+      jobId: job.id,
+      runId: run.id,
+      startedAt: jobStartedAt,
+      endedAt: new Date().toISOString(),
+      durationMs: Date.now() - t0.getTime(),
+      status: 'failed',
+      failureKind: feedError.kind,
+      failureCode: feedError.code,
+      retryable: feedError.retryable,
+      correlationId,
+    })
 
     throw error // Re-throw for BullMQ to mark as failed
   } finally {
@@ -327,6 +529,21 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     })
     log.debug('Cleared manualRunPending after enqueueing follow-up', { feedId })
   }
+
+  // Final job metrics for observability
+  const jobEndedAt = new Date()
+  const totalJobDurationMs = jobEndedAt.getTime() - t0.getTime()
+  log.info('AFFILIATE_JOB_END', {
+    feedId,
+    trigger,
+    jobId: job.id,
+    runId: run.id,
+    startedAt: jobStartedAt,
+    endedAt: jobEndedAt.toISOString(),
+    durationMs: totalJobDurationMs,
+    status: 'completed',
+    workerPid: process.pid,
+  })
 }
 
 interface Phase1Result {
@@ -342,6 +559,12 @@ interface Phase1Result {
     duplicateKeyCount: number
     urlHashFallbackCount: number
     errorCount: number
+  }
+  // Change detection data - only saved to feed after successful processing
+  changeDetection?: {
+    mtime: Date | null
+    size: bigint
+    contentHash: string
   }
 }
 
@@ -376,15 +599,9 @@ async function executePhase1(context: FeedRunContext): Promise<Phase1Result> {
     }
   }
 
-  // Update change detection fields
-  await prisma.affiliateFeed.update({
-    where: { id: feed.id },
-    data: {
-      lastRemoteMtime: downloadResult.mtime,
-      lastRemoteSize: downloadResult.size,
-      lastContentHash: downloadResult.contentHash,
-    },
-  })
+  // NOTE: Change detection fields (lastContentHash, etc.) are updated in finalizeRun
+  // ONLY after successful processing. This prevents marking a failed run's hash as "seen"
+  // which would cause subsequent runs to skip processing.
 
   // Parse (v1 only supports CSV)
   log.info('Phase 1: Parsing feed', { feedId: feed.id, runId: run.id, sourceName, bytes: downloadResult.content.length })
@@ -439,6 +656,12 @@ async function executePhase1(context: FeedRunContext): Promise<Phase1Result> {
       duplicateKeyCount: processResult.duplicateKeyCount,
       urlHashFallbackCount: processResult.urlHashFallbackCount,
       errorCount: parseResult.errors.length + processResult.errors.length,
+    },
+    // Change detection data - only saved to feed after successful processing
+    changeDetection: {
+      mtime: downloadResult.mtime,
+      size: downloadResult.size,
+      contentHash: downloadResult.contentHash,
     },
   }
 }
@@ -600,6 +823,15 @@ async function finalizeRun(
       )
     }
 
+    // Update change detection fields ONLY on true success (not skipped runs without changeDetection)
+    // This prevents marking a failed run's hash as "seen" which would skip reprocessing
+    const changeDetection = metrics.changeDetection as { mtime: Date | null; size: bigint; contentHash: string } | undefined
+    if (changeDetection) {
+      updateData.lastRemoteMtime = changeDetection.mtime
+      updateData.lastRemoteSize = changeDetection.size
+      updateData.lastContentHash = changeDetection.contentHash
+    }
+
     // Send recovery notification if we had previous failures (not for skipped runs)
     if (wasRecovery) {
       notifyAffiliateFeedRecovered(
@@ -688,8 +920,14 @@ async function finalizeRun(
     sourceName: feed.source.name,
     retailerName: feed.source.retailer?.name,
     status,
+    startedAt: t0.toISOString(),
+    finishedAt: finishedAt.toISOString(),
     durationMs,
     productsUpserted: metrics.productsUpserted,
+    productsPromoted: metrics.productsPromoted,
+    pricesWritten: metrics.pricesWritten,
+    errorCount: metrics.errorCount,
+    skipped: !!metrics.skippedReason,
   })
 
   // NOTE: Follow-up enqueue is handled in processAffiliateFeedJob after lock release

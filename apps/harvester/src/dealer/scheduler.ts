@@ -76,7 +76,13 @@ function getSchedulingJitter(maxJitterMinutes: number = 2): number {
 export async function scheduleDealerFeeds(): Promise<number> {
   const schedulingWindow = getSchedulingWindow()
 
+  log.debug('DEALER_FEED_SCHEDULE_START', {
+    schedulingWindow,
+    timestamp: new Date().toISOString(),
+  })
+
   // Get all enabled feeds from active dealers that are not failed
+  const queryStart = Date.now()
   const feeds = await prisma.dealerFeed.findMany({
     where: {
       enabled: true, // Only enabled feeds
@@ -92,74 +98,139 @@ export async function scheduleDealerFeeds(): Promise<number> {
     },
   })
 
+  log.debug('DEALER_FEEDS_LOADED', {
+    feedCount: feeds.length,
+    queryDurationMs: Date.now() - queryStart,
+    schedulingWindow,
+  })
+
   let scheduledCount = 0
   let skippedCount = 0
+  let notDueCount = 0
+  let alreadyScheduledCount = 0
+  let errorCount = 0
   const now = new Date()
 
   for (const feed of feeds) {
-    // Check if feed is due for refresh
-    const lastRun = feed.lastRunAt || feed.lastSuccessAt || feed.createdAt
-    const minutesSinceRun = (now.getTime() - lastRun.getTime()) / (1000 * 60)
+    try {
+      // Check if feed is due for refresh
+      const lastRun = feed.lastRunAt || feed.lastSuccessAt || feed.createdAt
+      const minutesSinceRun = (now.getTime() - lastRun.getTime()) / (1000 * 60)
 
-    if (minutesSinceRun < feed.scheduleMinutes) {
-      continue // Not due yet
-    }
-
-    // Idempotent job ID: only one job per feed per scheduling window
-    const jobId = `feed-${feed.id}-${schedulingWindow}`
-
-    // Check if job already exists (idempotency check)
-    const existingJob = await dealerFeedIngestQueue.getJob(jobId)
-    if (existingJob) {
-      skippedCount++
-      continue // Already scheduled in this window
-    }
-
-    // Update lastRunAt to prevent duplicate scheduling
-    await prisma.dealerFeed.update({
-      where: { id: feed.id },
-      data: { lastRunAt: now },
-    })
-
-    // Create feed run record
-    const feedRun = await prisma.dealerFeedRun.create({
-      data: {
-        dealerId: feed.dealerId,
-        feedId: feed.id,
-        status: 'PENDING',
-      },
-    })
-
-    // Apply random jitter (0-2 minutes) to prevent thundering herd
-    const jitterMs = getSchedulingJitter(2)
-
-    // Queue the job with idempotent jobId
-    await dealerFeedIngestQueue.add(
-      'ingest',
-      {
-        dealerId: feed.dealerId,
-        feedId: feed.id,
-        feedRunId: feedRun.id,
-        accessType: feed.accessType,
-        formatType: feed.formatType,
-        url: feed.url || undefined,
-        username: feed.username || undefined,
-        password: feed.password || undefined,
-      },
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 30000 },
-        jobId, // Idempotent job ID
-        delay: jitterMs, // Apply jitter
+      if (minutesSinceRun < feed.scheduleMinutes) {
+        notDueCount++
+        log.debug('DEALER_FEED_NOT_DUE', {
+          feedId: feed.id,
+          dealerId: feed.dealerId,
+          minutesSinceRun: Math.round(minutesSinceRun),
+          scheduleMinutes: feed.scheduleMinutes,
+          nextDueInMinutes: Math.round(feed.scheduleMinutes - minutesSinceRun),
+          decision: 'SKIP_NOT_DUE',
+        })
+        continue // Not due yet
       }
-    )
 
-    scheduledCount++
+      // Idempotent job ID: only one job per feed per scheduling window
+      // BullMQ job IDs cannot contain colons, so sanitize the ISO timestamp
+      const sanitizedWindow = schedulingWindow.replace(/[:.]/g, '-')
+      const jobId = `feed-${feed.id}-${sanitizedWindow}`
+
+      // Check if job already exists (idempotency check)
+      const existingJob = await dealerFeedIngestQueue.getJob(jobId)
+      if (existingJob) {
+        alreadyScheduledCount++
+        skippedCount++
+        log.debug('DEALER_FEED_ALREADY_SCHEDULED', {
+          feedId: feed.id,
+          dealerId: feed.dealerId,
+          jobId,
+          existingJobState: await existingJob.getState(),
+          decision: 'SKIP_IDEMPOTENT',
+        })
+        continue // Already scheduled in this window
+      }
+
+      log.debug('DEALER_FEED_SCHEDULING', {
+        feedId: feed.id,
+        dealerId: feed.dealerId,
+        minutesSinceRun: Math.round(minutesSinceRun),
+        scheduleMinutes: feed.scheduleMinutes,
+        jobId,
+      })
+
+      // Create feed run record
+      const feedRun = await prisma.dealerFeedRun.create({
+        data: {
+          dealerId: feed.dealerId,
+          feedId: feed.id,
+          status: 'PENDING',
+        },
+      })
+
+      // Apply random jitter (0-2 minutes) to prevent thundering herd
+      const jitterMs = getSchedulingJitter(2)
+
+      // Queue the job with idempotent jobId
+      // SECURITY: Must add to queue BEFORE updating lastRunAt
+      // If Redis fails, the job should be retried on next scheduler run
+      await dealerFeedIngestQueue.add(
+        'ingest',
+        {
+          dealerId: feed.dealerId,
+          feedId: feed.id,
+          feedRunId: feedRun.id,
+          accessType: feed.accessType,
+          formatType: feed.formatType,
+          url: feed.url || undefined,
+          username: feed.username || undefined,
+          password: feed.password || undefined,
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 30000 },
+          jobId, // Idempotent job ID
+          delay: jitterMs, // Apply jitter
+        }
+      )
+
+      // Update lastRunAt ONLY AFTER successful enqueue
+      // This prevents missed ingestion if Redis fails
+      await prisma.dealerFeed.update({
+        where: { id: feed.id },
+        data: { lastRunAt: now },
+      })
+
+      log.debug('DEALER_FEED_SCHEDULED', {
+        feedId: feed.id,
+        dealerId: feed.dealerId,
+        feedRunId: feedRun.id,
+        jobId,
+        jitterMs,
+        decision: 'SCHEDULED',
+      })
+
+      scheduledCount++
+    } catch (error) {
+      // Log error but continue with remaining feeds
+      errorCount++
+      log.error('DEALER_FEED_SCHEDULE_ERROR', {
+        feedId: feed.id,
+        dealerId: feed.dealerId,
+        error: error instanceof Error ? error.message : String(error),
+        decision: 'CONTINUE_LOOP',
+      }, error instanceof Error ? error : undefined)
+    }
   }
 
-  if (scheduledCount > 0 || skippedCount > 0) {
-    log.info('Feed scheduling', { scheduledCount, skippedCount })
-  }
+  log.info('DEALER_FEED_SCHEDULE_TICK', {
+    schedulingWindow,
+    feedsEvaluated: feeds.length,
+    scheduledCount,
+    skippedCount,
+    notDueCount,
+    alreadyScheduledCount,
+    errorCount,
+  })
 
   return scheduledCount
 }
@@ -296,7 +367,9 @@ function getBenchmarkWindow(): string {
  */
 export async function scheduleBenchmarkRecalc(fullRecalc: boolean = false): Promise<boolean> {
   const benchmarkWindow = getBenchmarkWindow()
-  const jobId = `benchmark-${fullRecalc ? 'full' : 'incremental'}-${benchmarkWindow}`
+  // BullMQ job IDs cannot contain colons, so sanitize the ISO timestamp
+  const sanitizedWindow = benchmarkWindow.replace(/[:.]/g, '-')
+  const jobId = `benchmark-${fullRecalc ? 'full' : 'incremental'}-${sanitizedWindow}`
 
   // Check if job already exists (idempotency check)
   const existingJob = await dealerBenchmarkQueue.getJob(jobId)

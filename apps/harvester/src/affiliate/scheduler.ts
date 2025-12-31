@@ -130,12 +130,21 @@ async function setupRepeatableJob() {
 async function schedulerTick(): Promise<{ processed: number }> {
   const now = new Date()
   let processed = 0
+  const tickStart = Date.now()
 
-  log.debug('Scheduler tick', { timestamp: now.toISOString() })
+  log.debug('AFFILIATE_SCHEDULER_TICK_START', {
+    timestamp: now.toISOString(),
+    tickId: `tick-${now.getTime()}`,
+  })
 
   try {
     // Atomically claim due feeds by selecting AND updating nextRunAt in one transaction
     // This prevents double-enqueuing: once claimed, the feed won't be selected again
+    log.debug('AFFILIATE_SCHEDULER_CLAIM_START', {
+      timestamp: now.toISOString(),
+    })
+    const claimStart = Date.now()
+
     const claimedFeeds = await prisma.$transaction(async (tx) => {
       // Find feeds that are due for processing
       // Uses FOR UPDATE SKIP LOCKED to safely handle concurrent schedulers
@@ -155,6 +164,11 @@ async function schedulerTick(): Promise<{ processed: number }> {
         LIMIT 10
       `
 
+      log.debug('AFFILIATE_SCHEDULER_DUE_FEEDS_FOUND', {
+        count: dueFeeds.length,
+        feedIds: dueFeeds.map(f => f.id),
+      })
+
       if (dueFeeds.length === 0) {
         return []
       }
@@ -171,41 +185,73 @@ async function schedulerTick(): Promise<{ processed: number }> {
             where: { id: feed.id },
             data: { nextRunAt },
           })
+          log.debug('AFFILIATE_FEED_CLAIMED', {
+            feedId: feed.id,
+            sourceId: feed.sourceId,
+            scheduleFrequencyHours: feed.scheduleFrequencyHours,
+            nextRunAt: nextRunAt.toISOString(),
+          })
         }
       }
 
       return dueFeeds
     })
 
+    log.debug('AFFILIATE_SCHEDULER_CLAIM_COMPLETE', {
+      claimedCount: claimedFeeds.length,
+      durationMs: Date.now() - claimStart,
+    })
+
     if (claimedFeeds.length === 0) {
-      log.debug('No feeds due for processing')
+      log.debug('AFFILIATE_SCHEDULER_NO_FEEDS_DUE', {
+        tickDurationMs: Date.now() - tickStart,
+      })
       return { processed: 0 }
     }
 
-    log.info('Claimed due feeds', { count: claimedFeeds.length })
+    log.info('AFFILIATE_SCHEDULER_FEEDS_CLAIMED', {
+      count: claimedFeeds.length,
+      feedIds: claimedFeeds.map(f => f.id),
+    })
 
     // Enqueue jobs for claimed feeds (outside transaction)
     // If this fails, the feed is already claimed (nextRunAt advanced),
     // so it won't be double-enqueued. It will run at next scheduled time.
     for (const feed of claimedFeeds) {
       try {
+        const jobId = `${feed.id}-scheduled-${Date.now()}`
+        log.debug('AFFILIATE_FEED_ENQUEUEING', {
+          feedId: feed.id,
+          sourceId: feed.sourceId,
+          trigger: 'SCHEDULED',
+          jobId,
+        })
+
         await affiliateFeedQueue.add(
           'process',
           { feedId: feed.id, trigger: 'SCHEDULED' },
-          {
-            jobId: `${feed.id}-scheduled-${Date.now()}`,
-          }
+          { jobId }
         )
         processed++
-        log.info('Feed enqueued', { feedId: feed.id })
+        log.info('AFFILIATE_FEED_ENQUEUED', {
+          feedId: feed.id,
+          sourceId: feed.sourceId,
+          trigger: 'SCHEDULED',
+          jobId,
+        })
       } catch (error) {
         // Feed was claimed but enqueue failed - will retry at next scheduled time
-        log.error('Failed to enqueue claimed feed', { feedId: feed.id }, error as Error)
+        log.error('AFFILIATE_FEED_ENQUEUE_FAILED', {
+          feedId: feed.id,
+          sourceId: feed.sourceId,
+          error: error instanceof Error ? error.message : String(error),
+        }, error as Error)
       }
     }
 
     // Also check for manual run pending feeds
     // Manual runs don't need atomic claiming - they use the manualRunPending flag
+    log.debug('AFFILIATE_SCHEDULER_CHECK_MANUAL_PENDING')
     const manualPendingFeeds = await prisma.affiliateFeed.findMany({
       where: {
         manualRunPending: true,
@@ -213,6 +259,11 @@ async function schedulerTick(): Promise<{ processed: number }> {
       },
       select: { id: true },
       take: 10,
+    })
+
+    log.debug('AFFILIATE_SCHEDULER_MANUAL_PENDING_FOUND', {
+      count: manualPendingFeeds.length,
+      feedIds: manualPendingFeeds.map(f => f.id),
     })
 
     for (const feed of manualPendingFeeds) {
@@ -223,23 +274,53 @@ async function schedulerTick(): Promise<{ processed: number }> {
           (j) => j.data.feedId === feed.id && j.data.trigger === 'MANUAL'
         )
 
-        if (!hasExisting) {
-          await affiliateFeedQueue.add(
-            'process',
-            { feedId: feed.id, trigger: 'MANUAL' },
-            { jobId: `${feed.id}-manual-${Date.now()}` }
-          )
-          processed++
-          log.info('Manual run enqueued', { feedId: feed.id })
+        if (hasExisting) {
+          log.debug('AFFILIATE_MANUAL_FEED_ALREADY_QUEUED', {
+            feedId: feed.id,
+            decision: 'SKIP',
+          })
+          continue
         }
+
+        const jobId = `${feed.id}-manual-${Date.now()}`
+        log.debug('AFFILIATE_MANUAL_FEED_ENQUEUEING', {
+          feedId: feed.id,
+          trigger: 'MANUAL',
+          jobId,
+        })
+
+        await affiliateFeedQueue.add(
+          'process',
+          { feedId: feed.id, trigger: 'MANUAL' },
+          { jobId }
+        )
+        processed++
+        log.info('AFFILIATE_MANUAL_FEED_ENQUEUED', {
+          feedId: feed.id,
+          trigger: 'MANUAL',
+          jobId,
+        })
       } catch (error) {
-        log.error('Failed to enqueue manual run', { feedId: feed.id }, error as Error)
+        log.error('AFFILIATE_MANUAL_FEED_ENQUEUE_FAILED', {
+          feedId: feed.id,
+          error: error instanceof Error ? error.message : String(error),
+        }, error as Error)
       }
     }
 
+    log.debug('AFFILIATE_SCHEDULER_TICK_COMPLETE', {
+      processed,
+      scheduledCount: claimedFeeds.length,
+      manualCount: manualPendingFeeds.length,
+      tickDurationMs: Date.now() - tickStart,
+    })
+
     return { processed }
   } catch (error) {
-    log.error('Scheduler tick error', {}, error as Error)
+    log.error('AFFILIATE_SCHEDULER_TICK_ERROR', {
+      tickDurationMs: Date.now() - tickStart,
+      error: error instanceof Error ? error.message : String(error),
+    }, error as Error)
     throw error
   }
 }

@@ -308,12 +308,25 @@ export const writerWorker = new Worker<WriteJobData>(
     const totalItems = normalizedItems.length
     const batchCount = Math.ceil(totalItems / BATCH_SIZE)
 
+    log.debug('WRITE_JOB_RECEIVED', {
+      jobId: job.id,
+      executionId,
+      sourceId,
+      totalItems,
+      batchCount,
+      batchSize: BATCH_SIZE,
+      contentHashPrefix: contentHash?.slice(0, 16),
+      attemptsMade: job.attemptsMade,
+    })
+
     let totalUpserted = 0
     const allPriceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> = []
     const allErrors: Array<{ item: NormalizedProduct; error: string }> = []
 
     try {
       // Get source name for logging context
+      log.debug('WRITE_LOADING_SOURCE', { sourceId, executionId })
+      const sourceLoadStart = Date.now()
       const source = await prisma.source.findUnique({
         where: { id: sourceId },
         select: { name: true, retailer: { select: { name: true } } },
@@ -321,7 +334,15 @@ export const writerWorker = new Worker<WriteJobData>(
       const sourceName = source?.name
       const retailerName = source?.retailer?.name
 
-      log.info('Writing items', { executionId, sourceId, sourceName, retailerName, totalItems, batchCount })
+      log.debug('WRITE_SOURCE_LOADED', {
+        sourceId,
+        sourceName,
+        retailerName,
+        executionId,
+        loadDurationMs: Date.now() - sourceLoadStart,
+      })
+
+      log.info('WRITE_START', { executionId, sourceId, sourceName, retailerName, totalItems, batchCount })
       // Log start (summary only)
       await prisma.executionLog.create({
         data: {

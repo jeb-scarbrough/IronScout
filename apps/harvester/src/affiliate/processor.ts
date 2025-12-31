@@ -111,6 +111,18 @@ export async function processProducts(
   const { feed, run, sourceId, retailerId, t0 } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
 
+  log.debug('Starting product processing', {
+    runId: run.id,
+    feedId: feed.id,
+    sourceId,
+    retailerId,
+    productCount: products.length,
+    maxRowCount,
+    batchSize: BATCH_SIZE,
+    expectedBatches: Math.ceil(products.length / BATCH_SIZE),
+    heartbeatHours: HEARTBEAT_HOURS,
+  })
+
   let productsUpserted = 0
   let pricesWritten = 0
   let productsRejected = 0
@@ -127,55 +139,115 @@ export async function processProducts(
   // Per spec §4.2.2: "Last row wins" - only process the last occurrence
   // This avoids processing duplicates across chunks and ensures consistency.
   // ═══════════════════════════════════════════════════════════════════════════
+  log.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
+  const prescanStart = Date.now()
   const { winningRows, totalDuplicates, totalUrlHashFallbacks } = prescanIdentities(products)
   duplicateKeyCount = totalDuplicates
   urlHashFallbackCount = totalUrlHashFallbacks
 
   log.debug('Identity pre-scan complete', {
     runId: run.id,
+    prescanDurationMs: Date.now() - prescanStart,
     totalRows: products.length,
     uniqueIdentities: winningRows.size,
     duplicatesSkipped: totalDuplicates,
+    duplicatePercentage: products.length > 0 ? ((totalDuplicates / products.length) * 100).toFixed(2) : 0,
     urlHashFallbacks: totalUrlHashFallbacks,
+    urlHashPercentage: products.length > 0 ? ((totalUrlHashFallbacks / products.length) * 100).toFixed(2) : 0,
   })
 
   // Process in chunks
+  const totalChunks = Math.ceil(products.length / BATCH_SIZE)
+  log.debug('Starting chunk processing', {
+    runId: run.id,
+    totalChunks,
+    batchSize: BATCH_SIZE,
+  })
+
   for (let chunkStart = 0; chunkStart < products.length; chunkStart += BATCH_SIZE) {
     const chunk = products.slice(chunkStart, chunkStart + BATCH_SIZE)
     const chunkNum = Math.floor(chunkStart / BATCH_SIZE) + 1
+    const chunkStartTime = Date.now()
+
+    log.debug('Processing chunk', {
+      runId: run.id,
+      chunkNum,
+      totalChunks,
+      chunkSize: chunk.length,
+      chunkStartIndex: chunkStart,
+    })
 
     try {
       // Step 1: Filter chunk to only include winning rows
       // Per spec §4.2.2: "Last row wins" - skip non-winning rows (duplicates)
       const deduped = filterToWinningRows(chunk, chunkStart, winningRows)
 
+      log.debug('Chunk deduplication complete', {
+        runId: run.id,
+        chunkNum,
+        originalSize: chunk.length,
+        dedupedSize: deduped.length,
+        duplicatesRemoved: chunk.length - deduped.length,
+      })
+
       if (deduped.length === 0) {
+        log.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
         continue
       }
 
       // Step 2: Batch upsert SourceProducts
+      log.debug('Upserting source products', { runId: run.id, chunkNum, count: deduped.length })
+      const upsertStart = Date.now()
       const upsertedProducts = await batchUpsertSourceProducts(
         sourceId,
         deduped,
         run.id
       )
+      log.debug('Source products upserted', {
+        runId: run.id,
+        chunkNum,
+        count: upsertedProducts.length,
+        durationMs: Date.now() - upsertStart,
+      })
 
       const sourceProductIds = upsertedProducts.map((sp) => sp.id)
 
       // Step 3: Batch update presence and seen records
+      log.debug('Updating presence and seen records', { runId: run.id, chunkNum, count: sourceProductIds.length })
+      const presenceStart = Date.now()
       await Promise.all([
         batchUpdatePresence(sourceProductIds, t0),
         batchRecordSeen(run.id, sourceProductIds),
       ])
+      log.debug('Presence and seen records updated', {
+        runId: run.id,
+        chunkNum,
+        durationMs: Date.now() - presenceStart,
+      })
 
       // Step 4: Batch-fetch last prices for uncached IDs
       // Per spec §4.2.1: Only fetch for IDs not already in cache
       const uncachedIds = sourceProductIds.filter((id) => !lastPriceCache.has(id))
       if (uncachedIds.length > 0) {
+        log.debug('Fetching last prices for uncached products', {
+          runId: run.id,
+          chunkNum,
+          uncachedCount: uncachedIds.length,
+          cachedCount: sourceProductIds.length - uncachedIds.length,
+        })
+        const fetchStart = Date.now()
         const fetchedPrices = await batchFetchLastPrices(uncachedIds)
         for (const lp of fetchedPrices) {
           lastPriceCache.set(lp.sourceProductId, lp)
         }
+        log.debug('Last prices fetched', {
+          runId: run.id,
+          chunkNum,
+          fetchedCount: fetchedPrices.length,
+          durationMs: Date.now() - fetchStart,
+        })
+      } else {
+        log.debug('All products in cache - skipping price fetch', { runId: run.id, chunkNum })
       }
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -184,6 +256,12 @@ export async function processProducts(
       // than expected. The cache grows with unique products, not rows.
       // ═══════════════════════════════════════════════════════════════════════
       if (lastPriceCache.size > maxRowCount) {
+        log.error('Memory guard triggered - unique product limit exceeded', {
+          runId: run.id,
+          chunkNum,
+          cacheSize: lastPriceCache.size,
+          maxRowCount,
+        })
         throw AffiliateFeedError.permanentError(
           `Unique product limit exceeded: ${lastPriceCache.size} > ${maxRowCount}`,
           ERROR_CODES.TOO_MANY_ROWS,
@@ -193,6 +271,7 @@ export async function processProducts(
 
       // Step 5: Decide writes in-memory and collect prices to insert
       // Per spec §4.2.1: No per-row DB reads - all decisions use cache
+      log.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
       const pricesToWrite = decidePriceWrites(
         deduped,
         upsertedProducts,
@@ -201,12 +280,28 @@ export async function processProducts(
         t0,
         lastPriceCache
       )
+      log.debug('Price write decisions made', {
+        runId: run.id,
+        chunkNum,
+        pricesToWrite: pricesToWrite.length,
+        skipped: deduped.length - pricesToWrite.length,
+      })
 
       // Step 6: Bulk insert prices with ON CONFLICT DO NOTHING
       // Per spec §4.2.1: Use raw SQL with partial unique index for idempotency
       let actualInserted = 0
       if (pricesToWrite.length > 0) {
+        log.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
+        const insertStart = Date.now()
         actualInserted = await bulkInsertPrices(pricesToWrite, t0)
+        log.debug('Prices inserted', {
+          runId: run.id,
+          chunkNum,
+          requested: pricesToWrite.length,
+          actualInserted,
+          duplicatesRejected: pricesToWrite.length - actualInserted,
+          durationMs: Date.now() - insertStart,
+        })
 
         // Update cache so later chunks see these writes
         // Per spec §4.2.1: Cache updated after each batch insert
@@ -222,15 +317,18 @@ export async function processProducts(
       productsUpserted += upsertedProducts.length
       pricesWritten += actualInserted
 
-      // Log batch progress (every 5 batches or on large feeds)
-      if (chunkNum % 5 === 0 || products.length > 10000) {
+      const chunkDuration = Date.now() - chunkStartTime
+      // Log batch progress (every 5 batches or on large feeds or if slow)
+      if (chunkNum % 5 === 0 || products.length > 10000 || chunkDuration > 5000) {
         log.debug('Chunk progress', {
           runId: run.id,
           chunkNum,
-          totalChunks: Math.ceil(products.length / BATCH_SIZE),
+          totalChunks,
+          chunkDurationMs: chunkDuration,
           productsUpserted,
           pricesWritten,
           cacheSize: lastPriceCache.size,
+          percentComplete: ((chunkNum / totalChunks) * 100).toFixed(1),
         })
       }
     } catch (err) {
@@ -474,9 +572,10 @@ async function batchUpdatePresence(
   // Use raw SQL for efficient bulk upsert with ON CONFLICT
   // Per spec: Phase 1 only updates lastSeenAt, NOT lastSeenSuccessAt
   // Table name: source_product_presence (per Prisma @@map)
+  // Schema: id, sourceProductId, lastSeenAt, lastSeenSuccessAt, updatedAt (no createdAt)
   await prisma.$executeRaw`
-    INSERT INTO source_product_presence ("id", "sourceProductId", "lastSeenAt", "createdAt", "updatedAt")
-    SELECT gen_random_uuid(), id, ${t0}, NOW(), NOW()
+    INSERT INTO source_product_presence ("id", "sourceProductId", "lastSeenAt", "updatedAt")
+    SELECT gen_random_uuid(), id, ${t0}, NOW()
     FROM unnest(${sourceProductIds}::text[]) AS id
     ON CONFLICT ("sourceProductId") DO UPDATE SET
       "lastSeenAt" = ${t0},

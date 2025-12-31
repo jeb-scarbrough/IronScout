@@ -44,6 +44,9 @@ importers:
       basic-ftp:
         specifier: ^5.1.0
         version: 5.1.0
+      bullmq:
+        specifier: ^5.66.4
+        version: 5.66.4
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

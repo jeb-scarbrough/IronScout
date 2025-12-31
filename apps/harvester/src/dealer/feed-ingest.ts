@@ -198,6 +198,7 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
   const { dealerId, feedId, feedRunId, accessType, formatType, url, username, password, adminOverride, adminId } = job.data
 
   const startTime = Date.now()
+  const jobStartedAt = new Date().toISOString()
   let parseResult: FeedParseResult | null = null
 
   // Fetch dealer name for readable logs
@@ -206,6 +207,22 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
     select: { businessName: true },
   })
   const dealerName = dealerInfo?.businessName || 'Unknown'
+
+  log.info('DEALER_JOB_START', {
+    jobId: job.id,
+    feedId,
+    feedRunId,
+    dealerId,
+    dealerName,
+    accessType,
+    formatType,
+    hasUrl: !!url,
+    startedAt: jobStartedAt,
+    adminOverride: adminOverride || false,
+    adminId: adminId || null,
+    attemptsMade: job.attemptsMade,
+    workerPid: process.pid,
+  })
 
   try {
     // =========================================================================
@@ -244,6 +261,20 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
           await sendSubscriptionExpiryNotification(dealerId, feedId, subscriptionResult)
         }
 
+        log.info('DEALER_JOB_END', {
+          feedId,
+          feedRunId,
+          dealerId,
+          dealerName,
+          jobId: job.id,
+          status: 'skipped',
+          skipReason: 'SUBSCRIPTION_EXPIRED',
+          startedAt: jobStartedAt,
+          endedAt: new Date().toISOString(),
+          durationMs: Date.now() - startTime,
+          workerPid: process.pid,
+        })
+
         return {
           skipped: true,
           reason: 'subscription_expired',
@@ -266,8 +297,25 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
       throw new Error('Feed URL is required')
     }
 
-    log.info('Fetching feed', { dealerId, dealerName })
+    const fetchStart = Date.now()
+    log.debug('FETCH_START', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      accessType,
+      urlHost: url ? new URL(url).host : null,
+    })
     const content = await fetchFeed(url, accessType, username, password)
+    const fetchDurationMs = Date.now() - fetchStart
+    log.info('FETCH_OK', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      durationMs: fetchDurationMs,
+      contentBytes: content.length,
+    })
 
     // Calculate content hash for change detection
     const contentHash = createHash('sha256').update(content).digest('hex')
@@ -291,6 +339,19 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
           rejectedCount: 0,
         },
       })
+      log.info('DEALER_JOB_END', {
+        feedId,
+        feedRunId,
+        dealerId,
+        dealerName,
+        jobId: job.id,
+        status: 'skipped',
+        skipReason: 'NO_CHANGES',
+        startedAt: jobStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: Date.now() - startTime,
+        workerPid: process.pid,
+      })
       return { skipped: true, reason: 'no_changes' }
     }
 
@@ -300,22 +361,51 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
         ? detectConnector(content)
         : getConnector(formatType as FeedFormatType)
 
-    log.info('Using connector', { connectorName: connector.name, dealerId, dealerName })
-
-    // Parse feed using connector
-    log.info('Parsing feed', { dealerId, dealerName })
-    parseResult = await connector.parse(content)
-
-    log.info('Feed parsed', {
+    log.debug('CONNECTOR_SELECTED', {
+      feedId,
+      feedRunId,
+      connectorName: connector.name,
+      formatType,
       dealerId,
       dealerName,
+    })
+
+    // Parse feed using connector
+    const parseStart = Date.now()
+    log.debug('PARSE_START', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      connectorName: connector.name,
+      contentBytes: content.length,
+    })
+    parseResult = await connector.parse(content)
+    const parseDurationMs = Date.now() - parseStart
+
+    log.info('PARSE_OK', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      durationMs: parseDurationMs,
       totalRows: parseResult.totalRows,
       indexableCount: parseResult.indexableCount,
       quarantineCount: parseResult.quarantineCount,
       rejectCount: parseResult.rejectCount,
+      errorCodes: Object.keys(parseResult.errorCodes),
     })
 
     // Process records
+    const processStart = Date.now()
+    log.debug('PROCESS_START', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      recordCount: parseResult.parsedRecords.length,
+    })
+
     const dealerSkuIds: string[] = []
     const quarantinedIds: string[] = []
     const errors: Array<{ row: number; error: string; code?: string }> = []
@@ -452,18 +542,38 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
           {
             attempts: 3,
             backoff: { type: 'exponential', delay: 5000 },
-            jobId: `sku-match:${feedRunId}:${batchNum}`, // Idempotent: one match job per feedRun batch
+            jobId: `sku-match--${feedRunId}--${batchNum}`, // Idempotent: one match job per feedRun batch
           }
         )
       }
     }
 
-    log.info('Feed ingestion completed', {
+    const processDurationMs = Date.now() - processStart
+    const totalDurationMs = Date.now() - startTime
+
+    const jobEndedAt = new Date().toISOString()
+    log.info('DEALER_JOB_END', {
+      feedId,
+      feedRunId,
       dealerId,
       dealerName,
+      jobId: job.id,
+      status: feedStatus === 'FAILED' ? 'failed' : 'completed',
+      feedStatus,
+      startedAt: jobStartedAt,
+      endedAt: jobEndedAt,
+      durationMs: totalDurationMs,
+      fetchDurationMs,
+      parseDurationMs,
+      processDurationMs,
+      totalRows: parseResult.totalRows,
       indexedCount: dealerSkuIds.length,
       quarantinedCount: quarantinedIds.length,
       rejectedCount: errors.length,
+      quarantineRatio: quarantineRatio.toFixed(3),
+      rejectRatio: rejectRatio.toFixed(3),
+      skuMatchBatchesQueued: Math.ceil(dealerSkuIds.length / 100),
+      workerPid: process.pid,
     })
 
     return {
@@ -471,20 +581,48 @@ async function processFeedIngest(job: Job<DealerFeedIngestJobData>) {
       indexedCount: dealerSkuIds.length,
       quarantinedCount: quarantinedIds.length,
       rejectedCount: errors.length,
-      duration: Date.now() - startTime,
+      duration: totalDurationMs,
       status: feedStatus,
     }
   } catch (error) {
-    log.error('Feed ingestion error', { dealerId, dealerName, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined)
+    const durationMs = Date.now() - startTime
+    const errorMessage = String(error)
 
     // Determine error code
-    const errorMessage = String(error)
     let primaryErrorCode: string = ERROR_CODES.PARSE_ERROR
     if (errorMessage.includes('fetch')) {
       primaryErrorCode = ERROR_CODES.FETCH_ERROR
     } else if (errorMessage.includes('timeout')) {
       primaryErrorCode = ERROR_CODES.TIMEOUT_ERROR
     }
+
+    const jobEndedAt = new Date().toISOString()
+    log.info('DEALER_JOB_END', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      jobId: job.id,
+      status: 'failed',
+      feedStatus: 'FAILED',
+      startedAt: jobStartedAt,
+      endedAt: jobEndedAt,
+      durationMs,
+      primaryErrorCode,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      workerPid: process.pid,
+    })
+
+    log.error('FEED_INGEST_FAILED', {
+      feedId,
+      feedRunId,
+      dealerId,
+      dealerName,
+      durationMs,
+      primaryErrorCode,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack?.split('\n').slice(0, 5).join('\n') : undefined,
+    }, error instanceof Error ? error : undefined)
 
     // Update feed status and timing
     const failedAt = new Date()

@@ -13,14 +13,30 @@ export const redisConnection = {
   password: redisPassword,
   maxRetriesPerRequest: null,
   // Keepalive to prevent idle connection drops (ECONNRESET)
-  keepAlive: 30000,
+  // Sends TCP keepalive probes every 10 seconds
+  keepAlive: 10000,
+  // Connection timeout for initial connect
+  connectTimeout: 10000,
+  // Command timeout - detect dead connections faster
+  commandTimeout: 30000,
   // Queue commands while reconnecting
   enableOfflineQueue: true,
+  // Lazy connect - don't connect until first command
+  lazyConnect: false,
   // Reconnection settings for dropped connections
   retryStrategy(times: number) {
     const delay = Math.min(times * 500, 30000)
     log.info('Reconnecting', { attempt: times, delayMs: delay })
     return delay
+  },
+  // Log reconnection events
+  reconnectOnError(err: Error) {
+    const targetErrors = ['READONLY', 'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED']
+    if (targetErrors.some(e => err.message.includes(e))) {
+      log.warn('Reconnecting due to error', { error: err.message })
+      return true
+    }
+    return false
   },
 }
 

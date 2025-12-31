@@ -15,8 +15,20 @@ export const extractorWorker = new Worker<ExtractJobData>(
     const stageStart = Date.now()
     const contentBytes = typeof content === 'string' ? content.length : JSON.stringify(content).length
 
+    log.debug('EXTRACT_JOB_RECEIVED', {
+      jobId: job.id,
+      executionId,
+      sourceId,
+      sourceType,
+      contentBytes,
+      contentHashPrefix: contentHash?.slice(0, 16),
+      attemptsMade: job.attemptsMade,
+    })
+
     try {
       // Get source name for logging context
+      log.debug('EXTRACT_LOADING_SOURCE', { sourceId, executionId })
+      const sourceLoadStart = Date.now()
       const source = await prisma.source.findUnique({
         where: { id: sourceId },
         select: { name: true, retailer: { select: { name: true } } },
@@ -24,7 +36,15 @@ export const extractorWorker = new Worker<ExtractJobData>(
       const sourceName = source?.name
       const retailerName = source?.retailer?.name
 
-      log.info('Extracting data', { executionId, sourceId, sourceName, retailerName, sourceType, contentBytes })
+      log.debug('EXTRACT_SOURCE_LOADED', {
+        sourceId,
+        sourceName,
+        retailerName,
+        executionId,
+        loadDurationMs: Date.now() - sourceLoadStart,
+      })
+
+      log.info('EXTRACT_START', { executionId, sourceId, sourceName, retailerName, sourceType, contentBytes })
 
       await prisma.executionLog.create({
         data: {

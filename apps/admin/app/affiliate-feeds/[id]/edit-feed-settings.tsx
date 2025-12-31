@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil, X, Check, Loader2, Key, AlertTriangle, CheckCircle, XCircle, Plug } from 'lucide-react';
 import { updateAffiliateFeed } from '../actions';
-import { testFeedConnection } from './actions';
+import { testFeedConnection, type TestConnectionParams } from './actions';
 
 interface EditFeedSettingsProps {
   feed: {
@@ -111,7 +111,14 @@ export function EditFeedSettings({ feed }: EditFeedSettingsProps) {
         setFormData(prev => ({ ...prev, password: '' }));
       }
 
-      const result = await testFeedConnection(feed.id);
+      // Pass current form values to test with unsaved changes
+      const overrideParams: TestConnectionParams = {
+        host: formData.host,
+        port: formData.port,
+        path: formData.path,
+        username: formData.username,
+      };
+      const result = await testFeedConnection(feed.id, overrideParams);
 
       // Check if aborted during test - don't update state
       if (testAbortedRef.current) return;

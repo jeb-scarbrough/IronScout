@@ -1,156 +1,129 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  MoreVertical,
-  Pause,
   Play,
+  Pause,
+  RefreshCw,
   Trash2,
   Loader2,
   AlertTriangle,
 } from 'lucide-react';
+import type { FeedStatus } from '@ironscout/db/generated/prisma';
 
-interface FeedActionsProps {
+interface FeedStatusActionsProps {
   feedId: string;
   enabled: boolean;
+  status: FeedStatus;
 }
 
-export function FeedActions({ feedId, enabled }: FeedActionsProps) {
+export function FeedStatusActions({ feedId, enabled, status }: FeedStatusActionsProps) {
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isToggling, setIsToggling] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
 
-  useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: rect.right - 192, // 192px = w-48
-      });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-
-  const handleToggle = async () => {
-    setIsToggling(true);
+  const handleAction = async (action: () => Promise<Response>) => {
+    setIsLoading(true);
     setError(null);
-    setIsOpen(false);
-
     try {
-      const res = await fetch('/api/feed/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !enabled }),
-      });
-
+      const res = await action();
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || 'Failed to toggle feed');
+        setError(data.error || 'Action failed');
         return;
       }
-
       router.refresh();
     } catch {
       setError('An unexpected error occurred');
     } finally {
-      setIsToggling(false);
+      setIsLoading(false);
     }
   };
 
+  const handleToggle = () => handleAction(() =>
+    fetch('/api/feed/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !enabled }),
+    })
+  );
+
+  const handleRunNow = () => handleAction(() =>
+    fetch('/api/feed/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feedId }),
+    })
+  );
+
   const handleDelete = async () => {
-    setIsDeleting(true);
+    setIsLoading(true);
     setError(null);
-
     try {
-      const res = await fetch('/api/feed', {
-        method: 'DELETE',
-      });
-
+      const res = await fetch('/api/feed', { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || 'Failed to delete feed');
         setShowDeleteConfirm(false);
         return;
       }
-
       router.refresh();
     } catch {
       setError('An unexpected error occurred');
       setShowDeleteConfirm(false);
     } finally {
-      setIsDeleting(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <>
-      <div className="relative">
-        <button
-          ref={buttonRef}
-          onClick={() => setIsOpen(!isOpen)}
-          disabled={isToggling}
-          className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white p-2 text-gray-500 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50"
-        >
-          {isToggling ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <MoreVertical className="h-5 w-5" />
-          )}
-        </button>
-
-        {isOpen && (
-          <div
-            className="fixed z-50 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5"
-            style={{ top: menuPosition.top, left: menuPosition.left }}
-          >
-            <div className="py-1">
-              <button
-                onClick={handleToggle}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                {enabled ? (
-                  <>
-                    <Pause className="h-4 w-4" />
-                    Pause Feed
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" />
-                    Enable Feed
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setShowDeleteConfirm(true);
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Feed
-              </button>
-            </div>
-          </div>
+      <div className="flex items-center gap-2">
+        {/* Enabled: show Pause and Run Now */}
+        {enabled && (
+          <>
+            <button
+              onClick={handleToggle}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1 rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-700 disabled:opacity-50"
+            >
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
+              Pause
+            </button>
+            <button
+              onClick={handleRunNow}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Run Now
+            </button>
+          </>
         )}
+
+        {/* Paused: show Enable */}
+        {!enabled && (
+          <button
+            onClick={handleToggle}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            Enable
+          </button>
+        )}
+
+        {/* Delete button */}
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </button>
       </div>
 
       {/* Error toast */}
@@ -174,7 +147,7 @@ export function FeedActions({ feedId, enabled }: FeedActionsProps) {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div
             className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-            onClick={() => !isDeleting && setShowDeleteConfirm(false)}
+            onClick={() => !isLoading && setShowDeleteConfirm(false)}
           />
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -200,17 +173,17 @@ export function FeedActions({ feedId, enabled }: FeedActionsProps) {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  disabled={isDeleting}
+                  disabled={isLoading}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDelete}
-                  disabled={isDeleting}
+                  disabled={isLoading}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
                 >
-                  {isDeleting ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Deleting...

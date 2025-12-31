@@ -372,7 +372,8 @@ async function processBenchmark(job: Job<DealerBenchmarkJobData>) {
   insightWindow.setMinutes(0, 0, 0)
   const hours = Math.floor(insightWindow.getHours() / 2) * 2
   insightWindow.setHours(hours)
-  const insightBucket = insightWindow.toISOString()
+  // Sanitize timestamp for BullMQ job ID (colons not allowed)
+  const insightBucket = insightWindow.toISOString().replace(/:/g, '-')
 
   for (const dealerId of dealersToNotify) {
     await dealerInsightQueue.add(
@@ -382,7 +383,7 @@ async function processBenchmark(job: Job<DealerBenchmarkJobData>) {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
         // Idempotent: one insight job per dealer per 2-hour window
-        jobId: `insight:${dealerId}:${insightBucket}`,
+        jobId: `insight--${dealerId}--${insightBucket}`,
       }
     )
   }

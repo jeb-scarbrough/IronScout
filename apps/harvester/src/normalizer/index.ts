@@ -14,21 +14,41 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
     const { executionId, sourceId, rawItems, contentHash } = job.data
     const stageStart = Date.now()
 
+    log.debug('NORMALIZE_JOB_RECEIVED', {
+      jobId: job.id,
+      executionId,
+      sourceId,
+      itemCount: rawItems.length,
+      contentHashPrefix: contentHash?.slice(0, 16),
+      attemptsMade: job.attemptsMade,
+    })
+
     try {
       // Get source info to determine retailer (moved up for logging context)
+      log.debug('NORMALIZE_LOADING_SOURCE', { sourceId, executionId })
+      const sourceLoadStart = Date.now()
       const source = await prisma.source.findUnique({
         where: { id: sourceId },
         include: { retailer: { select: { name: true } } },
       })
 
       if (!source) {
+        log.error('NORMALIZE_SOURCE_NOT_FOUND', { sourceId, executionId })
         throw new Error(`Source ${sourceId} not found`)
       }
 
       const sourceName = source.name
       const retailerName = source.retailer?.name
 
-      log.info('Normalizing items', { executionId, sourceId, sourceName, retailerName, itemCount: rawItems.length })
+      log.debug('NORMALIZE_SOURCE_LOADED', {
+        sourceId,
+        sourceName,
+        retailerName,
+        executionId,
+        loadDurationMs: Date.now() - sourceLoadStart,
+      })
+
+      log.info('NORMALIZE_START', { executionId, sourceId, sourceName, retailerName, itemCount: rawItems.length })
 
       await prisma.executionLog.create({
         data: {

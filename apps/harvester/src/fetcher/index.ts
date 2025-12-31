@@ -99,21 +99,43 @@ export const fetcherWorker = new Worker<FetchJobData>(
     const { sourceId, executionId, url, type } = job.data
     const stageStart = Date.now()
 
+    log.debug('FETCH_JOB_RECEIVED', {
+      jobId: job.id,
+      sourceId,
+      executionId,
+      url: url?.slice(0, 100),
+      type,
+      attemptsMade: job.attemptsMade,
+    })
+
     try {
       // Get source to check pagination config
+      log.debug('FETCH_LOADING_SOURCE', { sourceId, executionId })
+      const sourceLoadStart = Date.now()
       const source = await prisma.source.findUnique({
         where: { id: sourceId },
         include: { retailer: { select: { name: true } } },
       })
 
       if (!source) {
+        log.error('FETCH_SOURCE_NOT_FOUND', { sourceId, executionId })
         throw new Error(`Source ${sourceId} not found`)
       }
 
       const sourceName = source.name
       const retailerName = source.retailer?.name
 
-      log.info('Fetching URL', { sourceId, sourceName, retailerName, executionId, url, type })
+      log.debug('FETCH_SOURCE_LOADED', {
+        sourceId,
+        sourceName,
+        retailerName,
+        executionId,
+        loadDurationMs: Date.now() - sourceLoadStart,
+        affiliateNetwork: source.affiliateNetwork,
+        hasPaginationConfig: !!source.paginationConfig,
+      })
+
+      log.info('FETCH_START', { sourceId, sourceName, retailerName, executionId, url, type })
 
       const paginationConfig = source.paginationConfig as PaginationConfig | null
 
@@ -145,6 +167,18 @@ export const fetcherWorker = new Worker<FetchJobData>(
 
       // Check if URL is likely gzip compressed
       const expectGzip = isGzipUrl(url)
+
+      log.debug('FETCH_CONFIG', {
+        executionId,
+        sourceId,
+        expectGzip,
+        maxPages,
+        maxContentPerPage: MAX_CONTENT_LENGTH_PER_PAGE,
+        maxTotalContent: MAX_TOTAL_CONTENT_SIZE,
+        timeout: REQUEST_TIMEOUT,
+        paginationType: paginationConfig?.type || 'none',
+        paginationParam: paginationConfig?.param,
+      })
 
       // Axios config with size limits
       const axiosConfig: Record<string, unknown> = {

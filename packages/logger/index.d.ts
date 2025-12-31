@@ -46,6 +46,16 @@ export declare function getRequestContext(): RequestContext | undefined;
 export interface LogContext {
     [key: string]: unknown;
 }
+/**
+ * Set the log level dynamically at runtime
+ * This takes precedence over LOG_LEVEL env var
+ * @param level - The log level to set
+ */
+export declare function setLogLevel(level: LogLevel): void;
+/**
+ * Get the current effective log level
+ */
+export declare function getCurrentLogLevel(): LogLevel;
 export interface ILogger {
     debug(message: string, meta?: LogContext): void;
     info(message: string, meta?: LogContext): void;

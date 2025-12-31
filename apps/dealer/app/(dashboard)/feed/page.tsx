@@ -10,12 +10,11 @@ import {
   Clock,
   RefreshCw,
   AlertOctagon,
-  Pause,
+  PauseCircle,
 } from 'lucide-react';
 import { FeedConfigForm } from './feed-config-form';
 import { FeedRunsTable } from './feed-runs-table';
-import { RefreshFeedButton } from './refresh-feed-button';
-import { FeedActions } from './feed-actions';
+import { FeedStatusActions } from './feed-status-actions';
 
 export default async function FeedPage() {
   const session = await getSession();
@@ -44,73 +43,70 @@ export default async function FeedPage() {
     }),
   ]);
 
+  // Status configuration matching affiliate feeds pattern
   const statusConfig = {
-    PENDING: { icon: Clock, color: 'text-gray-500', bg: 'bg-gray-100', label: 'Pending' },
-    HEALTHY: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Healthy' },
-    WARNING: { icon: AlertTriangle, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Warning' },
-    FAILED: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Failed' },
+    PENDING: { icon: Clock, color: 'bg-gray-100 text-gray-700', label: 'Pending' },
+    HEALTHY: { icon: CheckCircle, color: 'bg-green-100 text-green-700', label: 'Healthy' },
+    WARNING: { icon: AlertTriangle, color: 'bg-yellow-100 text-yellow-700', label: 'Warning' },
+    FAILED: { icon: XCircle, color: 'bg-red-100 text-red-700', label: 'Failed' },
   };
 
   const status = feed ? statusConfig[feed.status] : null;
+  const StatusIcon = status?.icon;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header - matching affiliate feeds pattern */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Feed Configuration</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Configure how IronScout imports your product catalog
-          </p>
-        </div>
-        
-        {feed && (
-          <div className="flex items-center gap-2">
-            <RefreshFeedButton feedId={feed.id} />
-            <FeedActions feedId={feed.id} enabled={feed.enabled} />
+        <div className="flex items-center gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">Feed Configuration</h1>
+              {feed && status && StatusIcon && (
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${feed.enabled ? status.color : 'bg-gray-100 text-gray-600'}`}>
+                  {feed.enabled ? (
+                    <StatusIcon className="h-4 w-4" />
+                  ) : (
+                    <PauseCircle className="h-4 w-4" />
+                  )}
+                  {feed.enabled ? status.label : 'Paused'}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              Configure how IronScout imports your product catalog
+            </p>
           </div>
+        </div>
+
+        {feed && (
+          <FeedStatusActions feedId={feed.id} enabled={feed.enabled} status={feed.status} />
         )}
       </div>
 
-      {/* Current Status */}
-      {feed && status && (
+      {/* Last Run Info - simplified to match affiliate feeds */}
+      {feed && (feed.lastSuccessAt || feed.lastError) && (
         <div className="rounded-lg bg-white shadow">
           <div className="px-4 py-5 sm:p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`rounded-full p-2 ${feed.enabled ? status.bg : 'bg-gray-100'}`}>
-                  {feed.enabled ? (
-                    <status.icon className={`h-5 w-5 ${status.color}`} />
-                  ) : (
-                    <Pause className="h-5 w-5 text-gray-500" />
+                {feed.status === 'FAILED' || feed.lastError ? (
+                  <XCircle className="h-5 w-5 text-red-500" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                )}
+                <div>
+                  {feed.lastSuccessAt && (
+                    <p className="text-sm text-gray-900">
+                      Last successful run: {new Date(feed.lastSuccessAt).toLocaleString()}
+                    </p>
+                  )}
+                  {feed.lastError && (
+                    <p className="text-sm text-red-600 mt-1">
+                      Error: {feed.lastError}
+                    </p>
                   )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-medium text-gray-900">Feed Status</h3>
-                    {!feed.enabled && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                        Paused
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {feed.enabled ? status.label : 'Feed is paused and will not run'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                {feed.lastSuccessAt && (
-                  <p className="text-sm text-gray-500">
-                    Last success: {new Date(feed.lastSuccessAt).toLocaleString()}
-                  </p>
-                )}
-                {feed.lastError && (
-                  <p className="text-sm text-red-600 mt-1">
-                    {feed.lastError}
-                  </p>
-                )}
               </div>
             </div>
           </div>

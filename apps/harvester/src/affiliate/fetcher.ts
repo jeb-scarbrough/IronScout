@@ -23,6 +23,16 @@ const DEFAULT_MAX_FILE_SIZE = 500 * 1024 * 1024 // 500 MB
  * Download feed file with change detection
  */
 export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult> {
+  log.debug('Starting feed download', {
+    feedId: feed.id,
+    transport: feed.transport,
+    host: feed.host,
+    port: feed.port,
+    path: feed.path,
+    compression: feed.compression,
+    hasCredentials: !!feed.secretCiphertext,
+  })
+
   // Decrypt credentials
   if (!feed.secretCiphertext) {
     log.error('Feed credentials not configured', {
@@ -33,12 +43,14 @@ export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult>
     throw new Error('Feed credentials not configured - re-save the feed credentials in admin.')
   }
 
+  log.debug('Decrypting feed credentials', { feedId: feed.id, hasKeyId: !!feed.secretKeyId })
   let password: string
   try {
     password = decryptSecret(
       Buffer.from(feed.secretCiphertext),
       feed.secretKeyId || undefined  // AAD (for future KMS migration)
     )
+    log.debug('Credentials decrypted successfully', { feedId: feed.id })
   } catch (err) {
     log.error('Failed to decrypt feed credentials', {
       feedId: feed.id,
@@ -52,11 +64,37 @@ export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult>
     ? Number(feed.maxFileSizeBytes)
     : DEFAULT_MAX_FILE_SIZE
 
+  log.debug('Download configuration', {
+    feedId: feed.id,
+    maxFileSizeBytes: maxFileSize,
+    maxFileSizeMB: Math.round(maxFileSize / 1024 / 1024),
+    lastRemoteMtime: feed.lastRemoteMtime?.toISOString(),
+    lastRemoteSize: feed.lastRemoteSize?.toString(),
+    lastContentHash: feed.lastContentHash?.slice(0, 16),
+  })
+
+  const downloadStart = Date.now()
+  let result: DownloadResult
+
   if (feed.transport === 'SFTP') {
-    return downloadViaSftp(feed, password, maxFileSize)
+    log.debug('Using SFTP transport', { feedId: feed.id, host: feed.host, port: feed.port || 22 })
+    result = await downloadViaSftp(feed, password, maxFileSize)
   } else {
-    return downloadViaFtp(feed, password, maxFileSize)
+    log.debug('Using FTP transport', { feedId: feed.id, host: feed.host, port: feed.port || 21 })
+    result = await downloadViaFtp(feed, password, maxFileSize)
   }
+
+  const downloadDuration = Date.now() - downloadStart
+  log.debug('Download completed', {
+    feedId: feed.id,
+    durationMs: downloadDuration,
+    skipped: result.skipped,
+    skippedReason: result.skippedReason,
+    contentBytes: result.content.length,
+    contentHash: result.contentHash?.slice(0, 16),
+  })
+
+  return result
 }
 
 /**

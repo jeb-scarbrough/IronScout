@@ -21,6 +21,7 @@ export const SETTING_KEYS = {
   AFFILIATE_BATCH_SIZE: 'AFFILIATE_BATCH_SIZE',
   PRICE_HEARTBEAT_HOURS: 'PRICE_HEARTBEAT_HOURS',
   AFFILIATE_RUN_RETENTION_DAYS: 'AFFILIATE_RUN_RETENTION_DAYS',
+  HARVESTER_LOG_LEVEL: 'HARVESTER_LOG_LEVEL',
 
   // Queue History Settings
   QUEUE_HISTORY_RETENTION_COUNT: 'QUEUE_HISTORY_RETENTION_COUNT',
@@ -52,7 +53,7 @@ export type SettingKey = typeof SETTING_KEYS[keyof typeof SETTING_KEYS]
 // Default Values
 // =============================================================================
 
-const DEFAULTS: Record<SettingKey, boolean | number> = {
+const DEFAULTS: Record<SettingKey, boolean | number | string> = {
   // Danger Zone
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: false,
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: true,
@@ -62,6 +63,7 @@ const DEFAULTS: Record<SettingKey, boolean | number> = {
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 1000,
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 24,
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 30,
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'info',
 
   // Queue History (all enabled by default)
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 100,
@@ -92,7 +94,7 @@ const DEFAULTS: Record<SettingKey, boolean | number> = {
 // =============================================================================
 
 interface CachedSetting {
-  value: boolean | number
+  value: boolean | number | string
   timestamp: number
 }
 
@@ -130,6 +132,17 @@ export async function getNumberSetting(key: SettingKey): Promise<number> {
 }
 
 /**
+ * Get a string setting value (with env var override)
+ */
+export async function getStringSetting(key: SettingKey): Promise<string> {
+  // Check env var first (for local override)
+  const envValue = process.env[key]
+  if (envValue) return envValue
+
+  return (await getSettingValue(key)) as string
+}
+
+/**
  * Check if a feature is enabled
  */
 export async function isFeatureEnabled(key: SettingKey): Promise<boolean> {
@@ -152,6 +165,7 @@ export const isAlertProcessingEnabled = () => getBooleanSetting(SETTING_KEYS.ALE
 export const getAffiliateBatchSize = () => getNumberSetting(SETTING_KEYS.AFFILIATE_BATCH_SIZE)
 export const getPriceHeartbeatHours = () => getNumberSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS)
 export const getAffiliateRunRetentionDays = () => getNumberSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS)
+export const getHarvesterLogLevel = () => getStringSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL)
 
 /**
  * Queue history settings - maps queue name to setting key
@@ -199,7 +213,7 @@ export function clearSettingsCache(): void {
 // Internal
 // =============================================================================
 
-async function getSettingValue(key: SettingKey): Promise<boolean | number> {
+async function getSettingValue(key: SettingKey): Promise<boolean | number | string> {
   // Check cache first
   const cached = cache.get(key)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -211,7 +225,7 @@ async function getSettingValue(key: SettingKey): Promise<boolean | number> {
       where: { key },
     })
 
-    const value = setting ? (setting.value as boolean | number) : DEFAULTS[key]
+    const value = setting ? (setting.value as boolean | number | string) : DEFAULTS[key]
 
     // Update cache
     cache.set(key, { value, timestamp: Date.now() })

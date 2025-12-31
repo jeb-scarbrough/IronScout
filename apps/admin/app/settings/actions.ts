@@ -12,7 +12,9 @@ import {
   NUMBER_SETTING_RANGES,
   DANGER_ZONE_KEYS,
   QUEUE_HISTORY_KEYS,
+  LOG_LEVELS,
   type SettingKey,
+  type LogLevel,
 } from './constants';
 
 // =============================================================================
@@ -20,7 +22,7 @@ import {
 // =============================================================================
 
 export interface SettingValue {
-  value: boolean | number;
+  value: boolean | number | string;
   updatedAt: Date | null;
   updatedBy: string | null;
 }
@@ -35,6 +37,7 @@ export interface AllSettings {
     affiliateBatchSize: SettingValue;
     priceHeartbeatHours: SettingValue;
     affiliateRunRetentionDays: SettingValue;
+    harvesterLogLevel: SettingValue;
   };
   queueHistory: {
     retentionCount: SettingValue;
@@ -79,7 +82,7 @@ export async function getSystemSetting(key: SettingKey): Promise<SettingValue> {
   }
 
   return {
-    value: setting.value as boolean | number,
+    value: setting.value as boolean | number | string,
     updatedAt: setting.updatedAt,
     updatedBy: setting.updatedBy,
   };
@@ -101,6 +104,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       affiliateBatchSize,
       priceHeartbeatHours,
       affiliateRunRetentionDays,
+      harvesterLogLevel,
       // Queue history settings
       queueHistoryRetentionCount,
       queueHistoryCrawl,
@@ -129,6 +133,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       getSystemSetting(SETTING_KEYS.AFFILIATE_BATCH_SIZE),
       getSystemSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS),
       getSystemSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS),
+      getSystemSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL),
       // Queue history settings
       getSystemSetting(SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT),
       getSystemSetting(SETTING_KEYS.QUEUE_HISTORY_CRAWL),
@@ -164,6 +169,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
           affiliateBatchSize,
           priceHeartbeatHours,
           affiliateRunRetentionDays,
+          harvesterLogLevel,
         },
         queueHistory: {
           retentionCount: queueHistoryRetentionCount,
@@ -293,6 +299,26 @@ export async function updateFeatureFlagSetting(
 }
 
 /**
+ * Update the harvester log level setting
+ */
+export async function updateLogLevelSetting(
+  value: string
+) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  // Validate that it's a valid log level
+  if (!LOG_LEVELS.includes(value as LogLevel)) {
+    return { success: false, error: `Invalid log level. Must be one of: ${LOG_LEVELS.join(', ')}` };
+  }
+
+  return updateSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL, value, session);
+}
+
+/**
  * Update a queue history setting (boolean or number value)
  */
 export async function updateQueueHistorySetting(
@@ -335,7 +361,7 @@ export async function updateQueueHistorySetting(
  */
 async function updateSetting(
   key: SettingKey,
-  value: boolean | number,
+  value: boolean | number | string,
   session: { userId: string; email: string }
 ) {
   try {

@@ -162,8 +162,10 @@ describe('Dealer Feed Scheduling', () => {
       const minutes = Math.floor(now.getMinutes() / 5) * 5
       now.setMinutes(minutes, 0, 0)
       const schedulingWindow = now.toISOString()
+      // BullMQ job IDs cannot contain colons
+      const sanitizedWindow = schedulingWindow.replace(/[:.]/g, '-')
 
-      const jobId = `feed-123-${schedulingWindow}`
+      const jobId = `feed-123-${sanitizedWindow}`
 
       mockIngestQueueGetJob.mockResolvedValue(null) // No existing job
       mockIngestQueueAdd.mockResolvedValue({ id: jobId })
@@ -178,7 +180,7 @@ describe('Dealer Feed Scheduling', () => {
     })
 
     it('should skip if job already exists in scheduling window', async () => {
-      const jobId = 'feed-123-2024-01-01T00:00:00.000Z'
+      const jobId = 'feed-123-2024-01-01T00-00-00-000Z'
 
       mockIngestQueueGetJob.mockResolvedValue({ id: jobId }) // Job exists
 
@@ -409,7 +411,9 @@ describe('Benchmark Scheduling', () => {
 
     it('should use idempotent job ID based on benchmark window', async () => {
       const benchmarkWindow = '2024-01-01T00:00:00.000Z'
-      const jobId = `benchmark-incremental-${benchmarkWindow}`
+      // BullMQ job IDs cannot contain colons
+      const sanitizedWindow = benchmarkWindow.replace(/[:.]/g, '-')
+      const jobId = `benchmark-incremental-${sanitizedWindow}`
 
       mockBenchmarkQueueGetJob.mockResolvedValue(null)
       mockBenchmarkQueueAdd.mockResolvedValue({ id: jobId })
@@ -422,7 +426,7 @@ describe('Benchmark Scheduling', () => {
     })
 
     it('should skip if benchmark already scheduled for window', async () => {
-      const jobId = 'benchmark-incremental-2024-01-01T00:00:00.000Z'
+      const jobId = 'benchmark-incremental-2024-01-01T00-00-00-000Z'
 
       mockBenchmarkQueueGetJob.mockResolvedValue({ id: jobId })
 
@@ -436,7 +440,9 @@ describe('Benchmark Scheduling', () => {
 
     it('should support full recalc option', async () => {
       const benchmarkWindow = '2024-01-01T00:00:00.000Z'
-      const jobId = `benchmark-full-${benchmarkWindow}`
+      // BullMQ job IDs cannot contain colons
+      const sanitizedWindow = benchmarkWindow.replace(/[:.]/g, '-')
+      const jobId = `benchmark-full-${sanitizedWindow}`
 
       mockBenchmarkQueueGetJob.mockResolvedValue(null)
       mockBenchmarkQueueAdd.mockResolvedValue({ id: jobId })

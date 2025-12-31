@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Settings, Loader2, Save } from 'lucide-react';
-import { updateOperationsSetting } from './actions';
-import { SETTING_KEYS, SETTING_DESCRIPTIONS, NUMBER_SETTING_RANGES } from './constants';
+import { updateOperationsSetting, updateLogLevelSetting } from './actions';
+import { SETTING_KEYS, SETTING_DESCRIPTIONS, NUMBER_SETTING_RANGES, LOG_LEVELS, LOG_LEVEL_DESCRIPTIONS, type LogLevel } from './constants';
 import type { SettingValue } from './actions';
 
 interface OperationsSettingsProps {
@@ -11,6 +11,7 @@ interface OperationsSettingsProps {
     affiliateBatchSize: SettingValue;
     priceHeartbeatHours: SettingValue;
     affiliateRunRetentionDays: SettingValue;
+    harvesterLogLevel: SettingValue;
   };
 }
 
@@ -49,12 +50,17 @@ export function OperationsSettings({ initialSettings }: OperationsSettingsProps)
     [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: initialSettings.affiliateRunRetentionDays.value as number,
   });
 
+  // Log level state
+  const [logLevel, setLogLevel] = useState<LogLevel>(initialSettings.harvesterLogLevel.value as LogLevel);
+  const [originalLogLevel] = useState<LogLevel>(logLevel);
+
   const [originalValues] = useState<Record<string, number>>({ ...values });
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const hasChanges = (key: string) => values[key] !== originalValues[key];
+  const hasLogLevelChanges = logLevel !== originalLogLevel;
 
   const handleChange = (key: string, value: string) => {
     const numValue = parseInt(value, 10);
@@ -80,6 +86,23 @@ export function OperationsSettings({ initialSettings }: OperationsSettingsProps)
     }
   };
 
+  const handleLogLevelSave = async () => {
+    setLoading('logLevel');
+    setError(null);
+    setSuccess(null);
+
+    const result = await updateLogLevelSetting(logLevel);
+
+    setLoading(null);
+
+    if (result.success) {
+      setSuccess('Log level updated - takes effect within 30 seconds');
+      setTimeout(() => setSuccess(null), 5000);
+    } else {
+      setError(result.error || 'Failed to update log level');
+    }
+  };
+
   return (
     <div className="space-y-4">
       {error && (
@@ -94,6 +117,58 @@ export function OperationsSettings({ initialSettings }: OperationsSettingsProps)
         </div>
       )}
 
+      {/* Log Level Setting */}
+      <div
+        className={`p-4 border rounded-lg transition-colors ${
+          hasLogLevelChanges ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 flex-1">
+            <Settings className="h-5 w-5 mt-0.5 text-gray-400" />
+            <div className="flex-1">
+              <h3 className="font-medium text-gray-900">Harvester Log Level</h3>
+              <p className="text-sm text-gray-600 mt-0.5">
+                {SETTING_DESCRIPTIONS[SETTING_KEYS.HARVESTER_LOG_LEVEL]}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {LOG_LEVEL_DESCRIPTIONS[logLevel]}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={logLevel}
+              onChange={(e) => setLogLevel(e.target.value as LogLevel)}
+              className="w-32 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {LOG_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level.toUpperCase()}
+                </option>
+              ))}
+            </select>
+
+            {hasLogLevelChanges && (
+              <button
+                onClick={handleLogLevelSave}
+                disabled={loading === 'logLevel'}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {loading === 'logLevel' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Numeric Settings */}
       {SETTINGS.map((setting) => {
         const range = NUMBER_SETTING_RANGES[setting.key];
         const isModified = hasChanges(setting.key);

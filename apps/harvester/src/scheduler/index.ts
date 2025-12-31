@@ -115,45 +115,58 @@ export async function scheduleAllCrawls() {
 
   let scheduledCount = 0
   let skippedCount = 0
+  let errorCount = 0
 
   for (const source of sources) {
-    // Idempotent job ID: only one crawl per source per hourly window
-    const jobId = `crawl-${source.id}-${schedulingWindow}`
+    try {
+      // Idempotent job ID: only one crawl per source per hourly window
+      // BullMQ job IDs cannot contain colons, so sanitize the ISO timestamp
+      const sanitizedWindow = schedulingWindow.replace(/[:.]/g, '-')
+      const jobId = `crawl-${source.id}-${sanitizedWindow}`
 
-    // Check if job already exists (idempotency check)
-    const existingJob = await crawlQueue.getJob(jobId)
-    if (existingJob) {
-      skippedCount++
-      continue // Already scheduled in this window
-    }
+      // Check if job already exists (idempotency check)
+      const existingJob = await crawlQueue.getJob(jobId)
+      if (existingJob) {
+        skippedCount++
+        continue // Already scheduled in this window
+      }
 
-    // Create execution record
-    const execution = await prisma.execution.create({
-      data: {
+      // Create execution record
+      const execution = await prisma.execution.create({
+        data: {
+          sourceId: source.id,
+          status: 'PENDING',
+        },
+      })
+
+      // Add job to queue with idempotent jobId
+      await crawlQueue.add('crawl', {
         sourceId: source.id,
-        status: 'PENDING',
-      },
-    })
+        executionId: execution.id,
+      }, {
+        jobId, // Idempotent job ID
+      })
 
-    // Add job to queue with idempotent jobId
-    await crawlQueue.add('crawl', {
-      sourceId: source.id,
-      executionId: execution.id,
-    }, {
-      jobId, // Idempotent job ID
-    })
+      // Update lastRunAt ONLY AFTER successful enqueue
+      await prisma.source.update({
+        where: { id: source.id },
+        data: { lastRunAt: new Date() },
+      })
 
-    // Update lastRunAt
-    await prisma.source.update({
-      where: { id: source.id },
-      data: { lastRunAt: new Date() },
-    })
-
-    scheduledCount++
-    log.debug('Queued crawl for source', { sourceName: source.name, sourceId: source.id })
+      scheduledCount++
+      log.debug('Queued crawl for source', { sourceName: source.name, sourceId: source.id })
+    } catch (error) {
+      // Log error but continue with remaining sources
+      errorCount++
+      log.error('Failed to schedule source', {
+        sourceId: source.id,
+        sourceName: source.name,
+        error: error instanceof Error ? error.message : String(error),
+      }, error instanceof Error ? error : undefined)
+    }
   }
 
-  log.info('Crawl scheduling complete', { scheduledCount, skippedCount })
+  log.info('Crawl scheduling complete', { scheduledCount, skippedCount, errorCount })
 }
 
 schedulerWorker.on('completed', (job) => {
