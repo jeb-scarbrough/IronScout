@@ -7,10 +7,14 @@
  * Design principle:
  * Alert records are declarative rule markers; all user preferences and runtime state
  * are stored on WatchlistItem.
+ *
+ * This service uses the watchlist-item repository for core operations.
+ * See: apps/api/src/services/watchlist-item/
  */
 
 import { prisma, AlertRuleType, Prisma } from '@ironscout/db'
 import { visiblePriceWhere } from '../config/tiers'
+import { watchlistItemRepository } from './watchlist-item'
 
 // ============================================================================
 // Types
@@ -67,9 +71,13 @@ const PREFS_VALIDATION = {
 // ============================================================================
 
 /**
- * Save an item (idempotent)
+ * Save an item (idempotent with resurrection support)
  *
- * Creates WatchlistItem with defaults if missing.
+ * Per ADR-011A Section 12.1:
+ * - If active item exists: no-op (idempotent)
+ * - If soft-deleted item exists: resurrect it (clear deletedAt, preserve preferences)
+ * - Otherwise: create new item with defaults
+ *
  * Creates Alert rows for PRICE_DROP and BACK_IN_STOCK if missing.
  * All in one DB transaction.
  */
@@ -77,39 +85,57 @@ export async function saveItem(
   userId: string,
   productId: string
 ): Promise<SavedItemDTO> {
-  // Verify product exists
-  const product = await prisma.products.findUnique({
-    where: { id: productId },
-    select: { id: true, name: true, brand: true, caliber: true, imageUrl: true }
-  })
-
-  if (!product) {
-    throw new Error('Product not found')
-  }
-
-  // Upsert in transaction
+  // Handle save/resurrect in transaction
+  // All checks inside transaction to prevent race conditions
   const result = await prisma.$transaction(async (tx) => {
-    // Upsert WatchlistItem
-    const watchlistItem = await tx.watchlist_items.upsert({
-      where: {
-        userId_productId: { userId, productId }
-      },
-      create: {
-        userId,
-        productId,
-        // Defaults from schema
-        notificationsEnabled: true,
-        priceDropEnabled: true,
-        backInStockEnabled: true,
-        minDropPercent: 5,
-        minDropAmount: 5.0,
-        stockAlertCooldownHours: 24,
-      },
-      update: {
-        // No-op on conflict - item already exists
-        updatedAt: new Date(),
-      },
+    // Verify product exists (inside transaction for consistency)
+    const product = await tx.products.findUnique({
+      where: { id: productId },
+      select: { id: true }
     })
+
+    if (!product) {
+      throw new Error('Product not found')
+    }
+
+    // Check for existing item (includes soft-deleted for resurrection)
+    const existing = await tx.watchlist_items.findFirst({
+      where: { userId, productId, intentType: 'SKU' },
+    })
+
+    let watchlistItem
+
+    if (existing) {
+      if (existing.deletedAt === null) {
+        // Active item exists - no-op (idempotent)
+        watchlistItem = existing
+      } else {
+        // Soft-deleted item exists - resurrect it
+        // Per ADR-011A Section 12.1: Clear deletedAt, preserve preferences
+        watchlistItem = await tx.watchlist_items.update({
+          where: { id: existing.id },
+          data: {
+            deletedAt: null,
+            updatedAt: new Date(),
+          },
+        })
+      }
+    } else {
+      // No existing item - create new with defaults
+      watchlistItem = await tx.watchlist_items.create({
+        data: {
+          userId,
+          productId,
+          intentType: 'SKU',
+          notificationsEnabled: true,
+          priceDropEnabled: true,
+          backInStockEnabled: true,
+          minDropPercent: 5,
+          minDropAmount: 5.0,
+          stockAlertCooldownHours: 24,
+        },
+      })
+    }
 
     // Upsert PRICE_DROP alert
     await tx.alerts.upsert({
@@ -163,29 +189,30 @@ export async function saveItem(
 }
 
 /**
- * Unsave an item
+ * Unsave an item (soft delete)
  *
- * Hard deletes WatchlistItem. Alerts cascade delete via FK.
+ * Per ADR-011A Section 12.1: Set deletedAt = now (do not hard delete).
+ * Preserves preferences for potential resurrection.
+ * Alerts remain linked but will be excluded from evaluation via deletedAt filter.
  */
 export async function unsaveItem(
   userId: string,
   productId: string
 ): Promise<void> {
-  const deleted = await prisma.watchlist_items.deleteMany({
-    where: { userId, productId }
-  })
+  const count = await watchlistItemRepository.softDelete(userId, productId)
 
-  if (deleted.count === 0) {
+  if (count === 0) {
     throw new Error('Item not found')
   }
 }
 
 /**
- * Get all saved items for a user
+ * Get all saved items for a user (active only)
+ * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
  */
 export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
   const items = await prisma.watchlist_items.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null, intentType: 'SKU', productId: { not: null } },
     include: {
       products: {
         select: {
@@ -216,14 +243,15 @@ export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
 }
 
 /**
- * Get a single saved item by WatchlistItem ID
+ * Get a single saved item by WatchlistItem ID (active only)
+ * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
  */
 export async function getSavedItemById(
   userId: string,
   id: string
 ): Promise<SavedItemDTO> {
   const item = await prisma.watchlist_items.findFirst({
-    where: { id, userId },
+    where: { id, userId, deletedAt: null, intentType: 'SKU', productId: { not: null } },
     include: {
       products: {
         select: {
@@ -257,15 +285,19 @@ export async function getSavedItemById(
 }
 
 /**
- * Get a single saved item by productId
+ * Get a single saved item by productId (active only)
+ * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
  */
 export async function getSavedItemByProductId(
   userId: string,
   productId: string
 ): Promise<SavedItemDTO | null> {
-  const item = await prisma.watchlist_items.findUnique({
+  const item = await prisma.watchlist_items.findFirst({
     where: {
-      userId_productId: { userId, productId }
+      userId,
+      productId,
+      deletedAt: null,
+      intentType: 'SKU',
     },
     include: {
       products: {
@@ -300,7 +332,8 @@ export async function getSavedItemByProductId(
 }
 
 /**
- * Update saved item preferences
+ * Update saved item preferences (active items only)
+ * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
  */
 export async function updateSavedItemPrefs(
   userId: string,
@@ -310,56 +343,26 @@ export async function updateSavedItemPrefs(
   // Validate input
   validatePrefs(prefs)
 
-  // Find existing item
-  const existing = await prisma.watchlist_items.findUnique({
-    where: {
-      userId_productId: { userId, productId }
-    },
-  })
+  // Find existing active item using repository
+  const existing = await watchlistItemRepository.findActiveByUserAndProduct(userId, productId)
 
   if (!existing) {
     throw new Error('Item not found')
   }
 
-  // Build update data
-  const updateData: Prisma.watchlist_itemsUpdateInput = {}
-
-  if (prefs.notificationsEnabled !== undefined) {
-    updateData.notificationsEnabled = prefs.notificationsEnabled
-  }
-  if (prefs.priceDropEnabled !== undefined) {
-    updateData.priceDropEnabled = prefs.priceDropEnabled
-  }
-  if (prefs.backInStockEnabled !== undefined) {
-    updateData.backInStockEnabled = prefs.backInStockEnabled
-  }
-  if (prefs.minDropPercent !== undefined) {
-    updateData.minDropPercent = prefs.minDropPercent
-  }
-  if (prefs.minDropAmount !== undefined) {
-    updateData.minDropAmount = prefs.minDropAmount
-  }
-  if (prefs.stockAlertCooldownHours !== undefined) {
-    updateData.stockAlertCooldownHours = prefs.stockAlertCooldownHours
-  }
-
-  // Update
-  await prisma.watchlist_items.update({
-    where: { id: existing.id },
-    data: updateData,
-  })
+  // Update preferences using repository
+  await watchlistItemRepository.updatePreferences(existing.id, prefs)
 
   // Return updated DTO
   return await getSavedItemById(userId, existing.id)
 }
 
 /**
- * Count saved items for a user
+ * Count saved items for a user (active only)
+ * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
  */
 export async function countSavedItems(userId: string): Promise<number> {
-  return await prisma.watchlist_items.count({
-    where: { userId }
-  })
+  return watchlistItemRepository.countForUser(userId)
 }
 
 // ============================================================================
@@ -386,18 +389,31 @@ type WatchlistItemWithProduct = Prisma.watchlist_itemsGetPayload<{
   }
 }>
 
+/**
+ * Map a WatchlistItem with product to SavedItemDTO.
+ *
+ * Per ADR-011A Section 18.5: API mapping layer must not assume product details
+ * are always present. In v1 (SKU-only), products should always exist, but we
+ * handle gracefully with fallback values.
+ */
 function mapToDTO(item: WatchlistItemWithProduct): SavedItemDTO {
-  const lowestPrice = item.products.prices[0]
+  const products = item.products
+  const lowestPrice = products?.prices[0]
+
+  // v1: SKU intent requires productId. Throw if missing (data integrity issue).
+  if (!item.productId) {
+    throw new Error(`WatchlistItem ${item.id} missing productId (required for SKU intent)`)
+  }
 
   return {
     id: item.id,
     productId: item.productId,
-    name: item.products.name,
-    brand: item.products.brand || '',
-    caliber: item.products.caliber || '',
+    name: products?.name || 'Unknown Product',
+    brand: products?.brand || '',
+    caliber: products?.caliber || '',
     price: lowestPrice ? parseFloat(lowestPrice.price.toString()) : null,
-    inStock: item.products.prices.length > 0 && lowestPrice?.inStock === true,
-    imageUrl: item.products.imageUrl || null,
+    inStock: (products?.prices.length ?? 0) > 0 && lowestPrice?.inStock === true,
+    imageUrl: products?.imageUrl || null,
     savedAt: item.createdAt.toISOString(),
 
     notificationsEnabled: item.notificationsEnabled,

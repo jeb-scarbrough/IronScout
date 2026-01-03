@@ -675,7 +675,7 @@ router.post('/admin/update-embedding/:productId', requireAdmin, rateLimit({ max:
  * Debug endpoint - get unique caliber values in database
  * GET /api/search/debug/calibers
  */
-router.get('/debug/calibers', async (req: Request, res: Response) => {
+router.get('/debug/calibers', requireAdmin, async (req: Request, res: Response) => {
   try {
     const calibers = await prisma.products.groupBy({
       by: ['caliber'],
@@ -697,7 +697,7 @@ router.get('/debug/calibers', async (req: Request, res: Response) => {
  * Debug endpoint - get unique purpose values in database
  * GET /api/search/debug/purposes
  */
-router.get('/debug/purposes', async (req: Request, res: Response) => {
+router.get('/debug/purposes', requireAdmin, async (req: Request, res: Response) => {
   try {
     const purposes = await prisma.products.groupBy({
       by: ['purpose'],
@@ -719,7 +719,7 @@ router.get('/debug/purposes', async (req: Request, res: Response) => {
  * Debug endpoint - get unique bullet types in database
  * GET /api/search/debug/bullet-types
  */
-router.get('/debug/bullet-types', async (req: Request, res: Response) => {
+router.get('/debug/bullet-types', requireAdmin, async (req: Request, res: Response) => {
   try {
     const bulletTypes = await prisma.products.groupBy({
       by: ['bulletType'],

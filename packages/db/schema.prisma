@@ -1122,13 +1122,23 @@ model watchlist_collections {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// ADR-011A: Intent-Ready Saved Items (WatchlistItem Resolver Seam)
+/// Supports SKU intent (v1) with schema-level preparation for future SEARCH intent.
+/// See context/decisions/ADR-011A-Intent-Ready-Saved-Items.md for full specification.
 model watchlist_items {
   id                      String                 @id @default(cuid())
   userId                  String
-  productId               String
+  productId               String?                /// Nullable for future SEARCH intent; v1 enforces non-null for SKU
   collectionId            String?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
+
+  /// ADR-011A: Intent-ready fields
+  intentType              String                 @default("SKU") @map("intent_type")
+  querySnapshot           Json?                  @map("query_snapshot")  /// For future SEARCH intent
+  deletedAt               DateTime?              @map("deleted_at")      /// Soft delete timestamp
+
+  /// Notification preferences (per ADR-011)
   notificationsEnabled    Boolean                @default(true)
   priceDropEnabled        Boolean                @default(true)
   backInStockEnabled      Boolean                @default(true)
@@ -1137,15 +1147,23 @@ model watchlist_items {
   stockAlertCooldownHours Int                    @default(24)
   lastStockNotifiedAt     DateTime?
   lastPriceNotifiedAt     DateTime?
+
+  /// Relations
   alerts                  alerts[]
   watchlist_collections   watchlist_collections? @relation(fields: [collectionId], references: [id])
-  products                products               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  products                products?              @relation(fields: [productId], references: [id], onDelete: Cascade)
   users                   users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, productId])
+  // Note: Uniqueness for active SKU items enforced by PARTIAL unique index in migration:
+  // CREATE UNIQUE INDEX watchlist_items_sku_active_uniq ON watchlist_items (user_id, product_id)
+  //   WHERE intent_type = 'SKU' AND deleted_at IS NULL AND product_id IS NOT NULL;
+  // Prisma doesn't support partial indexes in schema, so this is managed via raw SQL migration.
+  // See ADR-011A Section 19.1
   @@index([collectionId])
   @@index([productId])
   @@index([userId])
+  @@index([deletedAt], map: "watchlist_items_deleted_at_idx")
+  @@index([intentType], map: "watchlist_items_intent_type_idx")
 }
 
 enum AdType {

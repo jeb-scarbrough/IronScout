@@ -198,17 +198,21 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 export function requireApiKey(req: Request, res: Response, next: NextFunction) {
   const apiKey = req.headers['x-api-key'] as string
   const expectedKey = process.env.INTERNAL_API_KEY
-  
+
+  // SECURITY: Fail closed - reject all requests if API key not configured
   if (!expectedKey) {
-    log.warn('INTERNAL_API_KEY not set - API key authentication disabled')
-    return next()
+    log.error('INTERNAL_API_KEY not set - rejecting request (fail-closed)')
+    return res.status(503).json({
+      error: 'Service unavailable',
+      message: 'Internal API key authentication not configured'
+    })
   }
-  
+
   if (apiKey && apiKey === expectedKey) {
     return next()
   }
-  
-  return res.status(401).json({ 
+
+  return res.status(401).json({
     error: 'Unauthorized',
     message: 'Valid API key required'
   })

@@ -195,6 +195,12 @@ export const alerterWorker = new Worker<AlertJobData>(
           continue
         }
 
+        // ADR-011A: Skip alerts for soft-deleted watchlist items
+        if (watchlistItem.deletedAt !== null) {
+          log.debug('WatchlistItem is soft-deleted, skipping', { watchlistItemId: watchlistItem.id })
+          continue
+        }
+
         // ADR-011: Check if notifications are enabled on the watchlist item
         if (!watchlistItem.notificationsEnabled) {
           log.debug('Notifications disabled for watchlist item, skipping', { watchlistItemId: watchlistItem.id })
@@ -314,42 +320,88 @@ export const alerterWorker = new Worker<AlertJobData>(
               },
             })
 
+            // Update lastNotified when queuing to prevent duplicate alerts
+            // for the same price event (BullMQ will retry if job fails)
+            const updateData: Record<string, Date> = {}
+            if (alert.ruleType === 'PRICE_DROP') {
+              updateData.lastPriceNotifiedAt = now
+            } else if (alert.ruleType === 'BACK_IN_STOCK') {
+              updateData.lastStockNotifiedAt = now
+            }
+
+            await prisma.watchlist_items.update({
+              where: { id: watchlistItem.id },
+              data: updateData,
+            })
+
             delayedCount++
           } else {
             // Send immediately for PREMIUM users
-            await sendNotification(alert, triggerReason)
+            // Wrap in try-catch to handle notification failures gracefully
+            try {
+              await sendNotification(alert, triggerReason)
 
-            await prisma.execution_logs.create({
-              data: {
-                executionId,
-                level: 'INFO',
-                event: 'ALERT_NOTIFY',
-                message: `Alert triggered immediately for PREMIUM user ${alert.users.email}: ${triggerReason}`,
-                metadata: {
-                  alertId: alert.id,
-                  userId: alert.userId,
-                  productId: alert.productId,
-                  userTier,
-                  reason: triggerReason,
+              await prisma.execution_logs.create({
+                data: {
+                  executionId,
+                  level: 'INFO',
+                  event: 'ALERT_NOTIFY',
+                  message: `Alert triggered immediately for PREMIUM user ${alert.users.email}: ${triggerReason}`,
+                  metadata: {
+                    alertId: alert.id,
+                    userId: alert.userId,
+                    productId: alert.productId,
+                    userTier,
+                    reason: triggerReason,
+                  },
                 },
-              },
-            })
+              })
 
-            triggeredCount++
+              triggeredCount++
+
+              // ADR-011: Update lastNotified timestamp on WatchlistItem, not Alert
+              // Only update if notification was successfully sent
+              const updateData: Record<string, Date> = {}
+              if (alert.ruleType === 'PRICE_DROP') {
+                updateData.lastPriceNotifiedAt = now
+              } else if (alert.ruleType === 'BACK_IN_STOCK') {
+                updateData.lastStockNotifiedAt = now
+              }
+
+              await prisma.watchlist_items.update({
+                where: { id: watchlistItem.id },
+                data: updateData,
+              })
+            } catch (notifyError) {
+              // Notification failed - log error but don't update lastNotified
+              // This allows the alert to re-trigger on the next price event
+              log.error('Failed to send immediate notification', {
+                alertId: alert.id,
+                userId: alert.userId,
+                email: alert.users.email,
+                error: notifyError instanceof Error ? notifyError.message : 'Unknown error',
+              })
+
+              await prisma.execution_logs.create({
+                data: {
+                  executionId,
+                  level: 'ERROR',
+                  event: 'ALERT_NOTIFY_FAILED',
+                  message: `Failed to send notification to ${alert.users.email}: ${notifyError instanceof Error ? notifyError.message : 'Unknown error'}`,
+                  metadata: {
+                    alertId: alert.id,
+                    userId: alert.userId,
+                    productId: alert.productId,
+                    userTier,
+                    reason: triggerReason,
+                    error: notifyError instanceof Error ? notifyError.message : 'Unknown error',
+                  },
+                },
+              })
+              // Don't increment triggeredCount, don't update lastNotified
+              // Rate limit slot is consumed, but alert can re-fire on next event
+            }
           }
-
-          // ADR-011: Update lastNotified timestamp on WatchlistItem, not Alert
-          const updateData: Record<string, Date> = {}
-          if (alert.ruleType === 'PRICE_DROP') {
-            updateData.lastPriceNotifiedAt = now
-          } else if (alert.ruleType === 'BACK_IN_STOCK') {
-            updateData.lastStockNotifiedAt = now
-          }
-
-          await prisma.watchlist_items.update({
-            where: { id: watchlistItem.id },
-            data: updateData,
-          })
         }
       }
 
@@ -418,6 +470,12 @@ export const delayedNotificationWorker = new Worker<{
       if (!alert.isEnabled) {
         log.debug('Alert no longer enabled, skipping', { alertId })
         return { success: false, reason: 'Alert no longer enabled' }
+      }
+
+      // ADR-011A: Check if watchlist item is soft-deleted
+      if (alert.watchlist_items?.deletedAt !== null && alert.watchlist_items?.deletedAt !== undefined) {
+        log.debug('WatchlistItem is soft-deleted, skipping', { alertId })
+        return { success: false, reason: 'WatchlistItem soft-deleted' }
       }
 
       // ADR-011: Check if notifications are still enabled on watchlist item

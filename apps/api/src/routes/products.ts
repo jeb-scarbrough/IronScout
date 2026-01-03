@@ -387,13 +387,13 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
         lastUpdated: price.createdAt
       })),
       cheapest: cheapest ? {
-        retailers: cheapest.retailer.name,
+        retailers: cheapest.retailers.name,
         price: parseFloat(cheapest.price.toString()),
         inStock: cheapest.inStock,
         url: cheapest.url
       } : null,
       cheapestInStock: cheapestInStock ? {
-        retailers: cheapestInStock.retailer.name,
+        retailers: cheapestInStock.retailers.name,
         price: parseFloat(cheapestInStock.price.toString()),
         url: cheapestInStock.url
       } : null
