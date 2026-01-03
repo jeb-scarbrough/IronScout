@@ -208,7 +208,7 @@ async function getSettingValue(key) {
   }
 
   try {
-    const setting = await prisma.systemSetting.findUnique({
+    const setting = await prisma.system_settings.findUnique({
       where: { key },
     })
 
