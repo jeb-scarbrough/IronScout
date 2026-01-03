@@ -11,7 +11,7 @@ export default function AdminSignInPage({
 }: {
   searchParams: { callbackUrl?: string; error?: string }
 }) {
-  const callbackUrl = searchParams.callbackUrl || '/dealers'
+  const callbackUrl = searchParams.callbackUrl || '/merchants'
   const error = searchParams.error
 
   return (
