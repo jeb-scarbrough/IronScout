@@ -16,7 +16,6 @@ import {
 import { EditMerchantForm } from './edit-form';
 import { ContactsSection } from './contacts-section';
 import { AdminActions } from './admin-actions';
-import { FeedsSection } from './feeds-section';
 import { SubscriptionSection } from './subscription-section';
 import { PaymentSection } from './payment-section';
 import { RetailersSection } from './retailers-section';
@@ -71,15 +70,8 @@ export default async function MerchantDetailPage({
 
   const retailerId = merchantRetailer?.retailerId;
 
-  // Get feeds and SKU counts from the retailer
-  const [retailerFeeds, skuCount, feedCount] = await Promise.all([
-    retailerId
-      ? prisma.retailer_feeds.findMany({
-          where: { retailerId },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        })
-      : Promise.resolve([]),
+  // Get SKU and feed counts from the retailer
+  const [skuCount, feedCount] = await Promise.all([
     retailerId
       ? prisma.retailer_skus.count({ where: { retailerId } })
       : Promise.resolve(0),
@@ -104,21 +96,6 @@ export default async function MerchantDetailPage({
     communicationOptIn: contact.communicationOptIn,
     isAccountOwner: contact.isAccountOwner,
     isActive: contact.isActive,
-  }));
-
-  // Serialize feeds for client component
-  const feeds = retailerFeeds.map(feed => ({
-    id: feed.id,
-    name: feed.name,
-    accessType: feed.accessType,
-    formatType: feed.formatType,
-    url: feed.url,
-    status: feed.status,
-    enabled: feed.enabled,
-    lastSuccessAt: feed.lastSuccessAt,
-    lastFailureAt: feed.lastFailureAt,
-    lastError: feed.lastError,
-    createdAt: feed.createdAt,
   }));
 
   return (
@@ -337,12 +314,6 @@ export default async function MerchantDetailPage({
         </dl>
       </div>
 
-      {/* Feeds Section with Manual Trigger */}
-      <FeedsSection
-        merchantId={merchant.id}
-        feeds={feeds}
-        subscriptionStatus={merchant.subscriptionStatus}
-      />
     </div>
   );
 }
