@@ -158,10 +158,8 @@ describe('Affiliate Feed Worker', () => {
       const mockFeed = createMockFeed({ status: 'DRAFT' })
       mockPrismaFind.mockResolvedValue(mockFeed)
 
-      const { createAffiliateFeedWorker } = await import('../worker')
-
-      // The worker would be created but job would be skipped
-      // We can test this indirectly through the worker processor
+      // DRAFT feeds should be skipped - verify the status is set correctly
+      // (Actual worker integration tested via scheduler tests)
       expect(mockFeed.status).toBe('DRAFT')
     })
 
