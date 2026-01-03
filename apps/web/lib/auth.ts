@@ -266,11 +266,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         // Allow any subdomain of ironscout.ai
-        const allowedDomains = ['ironscout.ai', 'admin.ironscout.ai', 'dealer.ironscout.ai']
+        const allowedDomains = ['ironscout.ai', 'admin.ironscout.ai', 'merchant.ironscout.ai']
 
         const allowedRenderDomains = [
           'ironscout-admin.onrender.com',
-          'ironscout-dealer.onrender.com',
+          'ironscout-merchant.onrender.com',
           'ironscout-web.onrender.com',
         ]
 

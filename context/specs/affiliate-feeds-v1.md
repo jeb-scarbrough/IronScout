@@ -10,7 +10,7 @@
 
 ### 1.1 Purpose
 
-Enable IronScout to ingest product catalog data from affiliate networks (starting with Impact) via scheduled FTP/SFTP file retrieval. This creates a new data source pipeline separate from dealer feeds, managed through the admin portal.
+Enable IronScout to ingest product catalog data from affiliate networks (starting with Impact) via scheduled FTP/SFTP file retrieval. This creates a new data source pipeline separate from merchant feeds, managed through the admin portal.
 
 ### 1.2 Scope
 
@@ -36,7 +36,7 @@ Enable IronScout to ingest product catalog data from affiliate networks (startin
 2. **Fail closed on ambiguity** - Follows ADR-009
 3. **Server-side enforcement** - Follows ADR-002
 4. **Credential security** - Never in Redis, decrypt only at execution
-5. **Reuse existing patterns** - BullMQ, dealer feed infrastructure
+5. **Reuse existing patterns** - BullMQ, merchant feed infrastructure (legacy dealer naming)
 
 ---
 
@@ -2322,7 +2322,7 @@ The same AAD must be passed on both encrypt and decrypt.
 
 ### 10.3 Implementation
 
-Location: `packages/crypto/secrets.ts` (shared utility for affiliate feeds and future dealer credential retrofit)
+Location: `packages/crypto/secrets.ts` (shared utility for affiliate feeds and future Merchant credential retrofit)
 
 ```typescript
 import crypto from "crypto";
@@ -2402,9 +2402,9 @@ Dedicated `CREDENTIAL_CHANGED` audit event type:
 
 No Slack notification for credential changes in v1.
 
-### 10.7 Dealer Credential Retrofit
+### 10.7 Merchant Credential Retrofit (legacy: dealer)
 
-Separate ticket immediately after affiliate feeds ship. The `packages/crypto/secrets.ts` utility is built once and reused for both affiliate and dealer credentials.
+Separate ticket immediately after affiliate feeds ship. The `packages/crypto/secrets.ts` utility is built once and reused for both affiliate and Merchant credentials.
 
 ---
 
@@ -3270,7 +3270,7 @@ This appendix records all architecture decisions made during the specification p
 |----|----------|----------|
 | Q4.1.1 | Encryption Approach | AES-256-GCM with env-based key (`CREDENTIAL_ENCRYPTION_KEY_B64`). Base64-encoded 32-byte key. Ciphertext payload: version(1) + iv(12) + tag(16) + ciphertext. AAD: `feed:{feedId}:v{secretVersion}`. Schema includes `secretKeyId`/`secretVersion` for future KMS. |
 | Q4.1.2 | Decryption Location | Harvester worker only, just before FTP connection. Job data contains `feedId` only. Credentials never in Redis. Hard fail on startup if key invalid. |
-| Q4.1.3 | Dealer Credential Retrofit | Separate ticket after affiliate feeds ship. Utility at `packages/crypto/secrets.ts` built once, used for both. |
+| Q4.1.3 | Merchant Credential Retrofit | Separate ticket after affiliate feeds ship. Utility at `packages/crypto/secrets.ts` built once, used for both. |
 | Q4.2.1 | Audit Logging | Dedicated `CREDENTIAL_CHANGED` audit event. Log field names only (not values), actor, feed, timestamp. No Slack in v1. |
 
 ### A.3 Scheduler Decisions
@@ -3372,7 +3372,7 @@ This appendix records all architecture decisions made during the specification p
 | ADR-001 | Singleton Harvester Scheduler | Uses singleton scheduler loop, not BullMQ repeatable jobs. BullMQ for execution only. |
 | ADR-002 | Server-side enforcement | Tier and eligibility resolved server-side. Client cannot bypass. |
 | ADR-004 | Append-only price history | Price table unchanged. SourceProduct has no `currentPrice` cache. Derive from latest Price record. |
-| ADR-005 | Dealer visibility at query time | Display primary filtering happens in SQL query, not application logic. |
+| ADR-005 | Retailer visibility at query time | Display primary filtering happens in SQL query, not application logic. |
 | ADR-009 | Fail closed on ambiguity | Partial failures keep data but block expiry. Circuit breaker blocks activation on spikes. |
 | ADR-010 | Routine ops without code changes | Feed enable/disable, frequency changes, manual runs all via admin UI. |
 

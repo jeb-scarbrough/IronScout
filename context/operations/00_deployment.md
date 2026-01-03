@@ -44,7 +44,9 @@ Cross-environment access is not permitted.
 IronScout is deployed as multiple independent applications:
 
 - `apps/web` – Consumer-facing UI
-- `apps/dealer` – Dealer portal
+- `apps/dealer` – Merchant portal (legacy path name)
+
+Legacy note: directory name `apps/dealer` is a migration artifact. Functionally this is the Merchant portal.
 - `apps/admin` – Admin portal
 - `apps/api` – Backend API
 - `apps/harvester` – Worker process
@@ -58,7 +60,7 @@ Each app:
 
 ## Deployment Model
 
-### Web Apps (web, dealer, admin)
+### Web Apps (web, dealer [legacy path], admin)
 
 - Deployed as stateless Next.js applications
 - Scaled horizontally if needed
@@ -75,10 +77,11 @@ Requirements:
 
 - Deployed as a stateless Node service
 - Scaled horizontally if needed
-- Responsible for enforcing tier, eligibility, and trust rules
+- Responsible for enforcing tier, eligibility, listing entitlement, and trust rules
 
 Requirements:
 - Must not rely on client-provided identity headers
+- Must enforce consumer visibility predicate (eligibility + listing entitlement; no subscription gating)
 - Must fail closed if auth or tier resolution fails
 
 ---
@@ -177,7 +180,8 @@ Before deploying to production, confirm:
 
 - [ ] Migrations applied successfully
 - [ ] API tier enforcement verified
-- [ ] Dealer eligibility enforcement verified
+- [ ] Retailer eligibility + listing entitlement enforcement verified (query-time predicate)
+- [ ] Delinquency/suspension auto-unlist job/webhook verified
 - [ ] Harvester scheduler mode confirmed
 - [ ] Rollback path verified
 - [ ] Monitoring active

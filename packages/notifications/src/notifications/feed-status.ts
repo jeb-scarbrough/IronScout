@@ -1,7 +1,7 @@
 /**
  * Feed Status Notifications
- * 
- * Sent when dealer feed status changes (failures, warnings, recovered).
+ *
+ * Sent when merchant feed status changes (failures, warnings, recovered).
  */
 
 import {
@@ -30,8 +30,8 @@ import {
 
 export interface FeedInfo {
   id: string;
-  dealerId: string;
-  dealerName: string;
+  merchantId: string;
+  merchantName: string;
   feedType: string;
   feedUrl?: string;
   errorMessage?: string;
@@ -56,13 +56,13 @@ export async function notifyFeedFailed(
   feed: FeedInfo,
   recipients: FeedNotificationRecipient[]
 ): Promise<NotificationResult> {
-  const feedsUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
-  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const feedsUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feeds`;
+  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
 
-  // Send email to dealer contacts
+  // Send email to merchant contacts
   const emailResult = await sendEmail({
     to: recipients.map(r => r.email),
-    subject: `⚠️ Feed Error: ${feed.dealerName} - ${feed.feedType}`,
+    subject: `⚠️ Feed Error: ${feed.merchantName} - ${feed.feedType}`,
     html: wrapEmailTemplate(`
       ${emailInfoBox('<h2 style="margin: 0 0 10px 0; font-size: 18px;">⚠️ Feed Processing Failed</h2><p style="margin: 0;">We encountered an error while processing your product feed.</p>', 'error')}
       
@@ -110,11 +110,11 @@ Need help? Contact support@ironscout.ai`,
 
   // Send Slack notification (to feeds channel if configured)
   const slackResult = await sendSlackMessage({
-    text: `⚠️ Feed failed: ${feed.dealerName} - ${feed.feedType}`,
+    text: `⚠️ Feed failed: ${feed.merchantName} - ${feed.feedType}`,
     blocks: [
       slackHeader('⚠️ Feed Processing Failed'),
       slackFieldsSection({
-        'Dealer': feed.dealerName,
+        'Merchant': feed.merchantName,
         'Feed Type': feed.feedType,
         ...(feed.errorMessage ? { 'Error': feed.errorMessage } : {}),
         'Status': '❌ Failed',
@@ -123,9 +123,9 @@ Need help? Contact support@ironscout.ai`,
       slackActions(
         slackButton('View in Admin', adminFeedUrl, 'primary')
       ),
-      slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.id} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -138,13 +138,13 @@ export async function notifyFeedRecovered(
   feed: FeedInfo,
   recipients: FeedNotificationRecipient[]
 ): Promise<NotificationResult> {
-  const feedsUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
-  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const feedsUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feeds`;
+  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
 
-  // Send email to dealer contacts
+  // Send email to merchant contacts
   const emailResult = await sendEmail({
     to: recipients.map(r => r.email),
-    subject: `✅ Feed Recovered: ${feed.dealerName} - ${feed.feedType}`,
+    subject: `✅ Feed Recovered: ${feed.merchantName} - ${feed.feedType}`,
     html: wrapEmailTemplate(`
       ${emailInfoBox('<h2 style="margin: 0 0 10px 0; font-size: 18px;">✅ Feed Processing Recovered</h2><p style="margin: 0;">Your product feed is now processing successfully again.</p>', 'success')}
       
@@ -175,11 +175,11 @@ View Feed Dashboard: ${feedsUrl}`,
 
   // Send Slack notification
   const slackResult = await sendSlackMessage({
-    text: `✅ Feed recovered: ${feed.dealerName} - ${feed.feedType}`,
+    text: `✅ Feed recovered: ${feed.merchantName} - ${feed.feedType}`,
     blocks: [
       slackHeader('✅ Feed Recovered'),
       slackFieldsSection({
-        'Dealer': feed.dealerName,
+        'Merchant': feed.merchantName,
         'Feed Type': feed.feedType,
         'Status': '✅ Healthy',
       }),
@@ -187,9 +187,9 @@ View Feed Dashboard: ${feedsUrl}`,
       slackActions(
         slackButton('View in Admin', adminFeedUrl)
       ),
-      slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.id} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -203,13 +203,13 @@ export async function notifyFeedWarning(
   warningMessage: string,
   recipients: FeedNotificationRecipient[]
 ): Promise<NotificationResult> {
-  const feedsUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
-  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const feedsUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feeds`;
+  const adminFeedUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
 
-  // Send email to dealer contacts
+  // Send email to merchant contacts
   const emailResult = await sendEmail({
     to: recipients.map(r => r.email),
-    subject: `⚠️ Feed Warning: ${feed.dealerName} - ${feed.feedType}`,
+    subject: `⚠️ Feed Warning: ${feed.merchantName} - ${feed.feedType}`,
     html: wrapEmailTemplate(`
       ${emailInfoBox('<h2 style="margin: 0 0 10px 0; font-size: 18px;">⚠️ Feed Warning</h2><p style="margin: 0;">Your product feed is experiencing issues but is still processing.</p>', 'warning')}
       
@@ -244,11 +244,11 @@ View Feed Settings: ${feedsUrl}`,
 
   // Send Slack notification
   const slackResult = await sendSlackMessage({
-    text: `⚠️ Feed warning: ${feed.dealerName} - ${feed.feedType}`,
+    text: `⚠️ Feed warning: ${feed.merchantName} - ${feed.feedType}`,
     blocks: [
       slackHeader('⚠️ Feed Warning'),
       slackFieldsSection({
-        'Dealer': feed.dealerName,
+        'Merchant': feed.merchantName,
         'Feed Type': feed.feedType,
         'Warning': warningMessage,
         'Status': '⚠️ Warning',
@@ -257,9 +257,9 @@ View Feed Settings: ${feedsUrl}`,
       slackActions(
         slackButton('View in Admin', adminFeedUrl)
       ),
-      slackContext(`Feed ID: ${feed.id} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.id} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }

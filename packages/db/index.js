@@ -112,3 +112,6 @@ export { PrismaClient, Prisma } from './generated/prisma/client.js'
 
 // Re-export system settings utilities
 export * from './system-settings.js'
+
+// Re-export validation utilities
+export * from './validation.js'

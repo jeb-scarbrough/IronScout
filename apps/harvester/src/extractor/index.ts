@@ -51,12 +51,12 @@ export const extractorWorker = new Worker<ExtractJobData>(
       // Get source name for logging context
       log.debug('EXTRACT_LOADING_SOURCE', { sourceId, executionId })
       const sourceLoadStart = Date.now()
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
-        select: { name: true, retailer: { select: { name: true } } },
+        select: { name: true, retailers: { select: { name: true } } },
       })
       const sourceName = source?.name
-      const retailerName = source?.retailer?.name
+      const retailerName = source?.retailers?.name
 
       log.debug('EXTRACT_SOURCE_LOADED', {
         sourceId,
@@ -68,7 +68,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
 
       log.info('EXTRACT_START', { executionId, sourceId, sourceName, retailerName, sourceType, contentBytes })
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -101,7 +101,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
 
       const extractDurationMs = Date.now() - stageStart
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -121,7 +121,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
       })
 
       // Update execution with items found
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: { itemsFound: rawItems.length },
       })
@@ -158,7 +158,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
           })
         }
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -178,7 +178,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
           jobId: `normalize--${executionId}`, // Idempotent: one normalize per execution
         })
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -192,7 +192,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -201,7 +201,7 @@ export const extractorWorker = new Worker<ExtractJobData>(
         },
       })
 
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'FAILED',

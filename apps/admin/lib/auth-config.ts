@@ -165,13 +165,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const allowedDomains = [
           'ironscout.ai',
           'admin.ironscout.ai',
-          'dealer.ironscout.ai',
+          'merchant.ironscout.ai',
         ]
 
         // Also allow Render URLs during development/testing
         const allowedRenderDomains = [
           'ironscout-admin.onrender.com',
-          'ironscout-dealer.onrender.com',
+          'ironscout-merchant.onrender.com',
           'ironscout-web.onrender.com',
         ]
 

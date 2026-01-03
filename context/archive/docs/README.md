@@ -1,5 +1,7 @@
 # IronScout Documentation
 
+> ARCHIVED: This document may use legacy “dealer” terminology. Canonical terminology is Merchant/Retailer per Merchant-and-Retailer-Reference.md.
+
 This folder contains all project documentation organized by category.
 
 ## Structure

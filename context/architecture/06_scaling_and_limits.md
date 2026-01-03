@@ -64,7 +64,7 @@ Postgres is the primary system of record for:
 - History
 - Subscriptions
 - Alerts
-- Dealer inventory
+- Retailer inventory
 
 **Constraints:**
 - Price history is append-only
@@ -140,21 +140,21 @@ If alert volume exceeds capacity:
 
 ---
 
-## Dealer Scaling Limits
+## Merchant Scaling Limits
 
-### Dealer Count
+### Merchant Count
 
 v1 assumes:
-- A limited number of active dealers
+- A limited number of active Merchants
 - Manual review and onboarding
 - Human oversight of feed health
 
 Out of scope for v1:
-- Fully self-serve dealer onboarding
+- Fully self-serve Merchant onboarding
 - Automatic remediation of broken feeds
 - High-frequency competitive analytics
 
-If dealer scale increases:
+If Merchant scale increases:
 - Feed health enforcement must tighten
 - Ingestion concurrency must be revisited
 
@@ -201,7 +201,7 @@ IronScout v1 does **not** aim to support:
 - High-frequency trading-style updates
 - Multi-region deployments
 - Hard uptime SLAs
-- Enterprise-scale dealer networks
+- Enterprise-scale Merchant networks
 - Autonomous agents or pricing automation
 
 Any work toward these goals must be explicitly scoped as post-v1.
@@ -215,7 +215,7 @@ This document must be revisited if:
 - Harvester can no longer keep up with ingestion volume
 - Database query latency materially impacts UX
 - Alert backlog grows uncontrollably
-- Dealer onboarding becomes mostly self-serve
+- Merchant onboarding becomes mostly self-serve
 - Team size grows beyond what manual ops can support
 
 These are **signals to evolve the architecture**, not to patch around limits.

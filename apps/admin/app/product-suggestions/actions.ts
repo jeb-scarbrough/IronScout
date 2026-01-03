@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
 
 /**
- * Approve a product suggestion - creates a new CanonicalSku and maps the dealer's SKU
+ * Approve a product suggestion - creates a new CanonicalSku and maps the merchant's SKU
  */
 export async function approveSuggestion(suggestionId: string) {
   const session = await getAdminSession();
@@ -15,11 +15,11 @@ export async function approveSuggestion(suggestionId: string) {
   }
 
   try {
-    const suggestion = await prisma.productSuggestion.findUnique({
+    const suggestion = await prisma.product_suggestions.findUnique({
       where: { id: suggestionId },
       include: {
-        dealer: { select: { businessName: true } },
-        dealerSku: { select: { id: true, rawUpc: true } },
+        merchants: { select: { businessName: true } },
+        merchant_skus: { select: { id: true, rawUpc: true } },
       },
     });
 
@@ -32,7 +32,7 @@ export async function approveSuggestion(suggestionId: string) {
     }
 
     // Check for duplicate by name/caliber/grain/packSize/brand
-    const existing = await prisma.canonicalSku.findFirst({
+    const existing = await prisma.canonical_skus.findFirst({
       where: {
         OR: [
           // Match by UPC if provided
@@ -57,7 +57,7 @@ export async function approveSuggestion(suggestionId: string) {
     }
 
     // Create the canonical SKU
-    const canonicalSku = await prisma.canonicalSku.create({
+    const canonicalSku = await prisma.canonical_skus.create({
       data: {
         name: suggestion.suggestedName,
         upc: suggestion.suggestedUpc || null,
@@ -71,7 +71,7 @@ export async function approveSuggestion(suggestionId: string) {
     });
 
     // Update the suggestion
-    await prisma.productSuggestion.update({
+    await prisma.product_suggestions.update({
       where: { id: suggestionId },
       data: {
         status: 'APPROVED',
@@ -81,10 +81,10 @@ export async function approveSuggestion(suggestionId: string) {
       },
     });
 
-    // Map the dealer's SKU if one was provided
-    if (suggestion.dealerSkuId) {
-      await prisma.dealerSku.update({
-        where: { id: suggestion.dealerSkuId },
+    // Map the merchant's SKU if one was provided
+    if (suggestion.merchantSkuId) {
+      await prisma.merchant_skus.update({
+        where: { id: suggestion.merchantSkuId },
         data: {
           canonicalSkuId: canonicalSku.id,
           mappingConfidence: 'HIGH',
@@ -100,7 +100,7 @@ export async function approveSuggestion(suggestionId: string) {
       resourceId: suggestionId,
       newValue: {
         canonicalSkuId: canonicalSku.id,
-        dealerSkuId: suggestion.dealerSkuId,
+        merchantSkuId: suggestion.merchantSkuId,
       },
     });
 
@@ -108,7 +108,7 @@ export async function approveSuggestion(suggestionId: string) {
 
     return {
       success: true,
-      message: `Created "${canonicalSku.name}" and mapped dealer SKU`,
+      message: `Created "${canonicalSku.name}" and mapped merchant SKU`,
       canonicalSkuId: canonicalSku.id,
     };
   } catch (error) {
@@ -128,7 +128,7 @@ export async function mergeSuggestion(suggestionId: string, canonicalSkuId: stri
   }
 
   try {
-    const suggestion = await prisma.productSuggestion.findUnique({
+    const suggestion = await prisma.product_suggestions.findUnique({
       where: { id: suggestionId },
     });
 
@@ -140,7 +140,7 @@ export async function mergeSuggestion(suggestionId: string, canonicalSkuId: stri
       return { success: false, error: 'Suggestion already processed' };
     }
 
-    const canonicalSku = await prisma.canonicalSku.findUnique({
+    const canonicalSku = await prisma.canonical_skus.findUnique({
       where: { id: canonicalSkuId },
     });
 
@@ -149,7 +149,7 @@ export async function mergeSuggestion(suggestionId: string, canonicalSkuId: stri
     }
 
     // Update the suggestion
-    await prisma.productSuggestion.update({
+    await prisma.product_suggestions.update({
       where: { id: suggestionId },
       data: {
         status: 'MERGED',
@@ -159,10 +159,10 @@ export async function mergeSuggestion(suggestionId: string, canonicalSkuId: stri
       },
     });
 
-    // Map the dealer's SKU
-    if (suggestion.dealerSkuId) {
-      await prisma.dealerSku.update({
-        where: { id: suggestion.dealerSkuId },
+    // Map the merchant's SKU
+    if (suggestion.merchantSkuId) {
+      await prisma.merchant_skus.update({
+        where: { id: suggestion.merchantSkuId },
         data: {
           canonicalSkuId,
           mappingConfidence: 'HIGH',
@@ -178,7 +178,7 @@ export async function mergeSuggestion(suggestionId: string, canonicalSkuId: stri
       resourceId: suggestionId,
       newValue: {
         canonicalSkuId,
-        dealerSkuId: suggestion.dealerSkuId,
+        merchantSkuId: suggestion.merchantSkuId,
       },
     });
 
@@ -205,7 +205,7 @@ export async function rejectSuggestion(suggestionId: string, reason: string) {
   }
 
   try {
-    const suggestion = await prisma.productSuggestion.findUnique({
+    const suggestion = await prisma.product_suggestions.findUnique({
       where: { id: suggestionId },
     });
 
@@ -217,7 +217,7 @@ export async function rejectSuggestion(suggestionId: string, reason: string) {
       return { success: false, error: 'Suggestion already processed' };
     }
 
-    await prisma.productSuggestion.update({
+    await prisma.product_suggestions.update({
       where: { id: suggestionId },
       data: {
         status: 'REJECTED',

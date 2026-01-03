@@ -26,12 +26,12 @@ import { normalizerWorker } from './normalizer'
 import { writerWorker } from './writer'
 import { alerterWorker, delayedNotificationWorker } from './alerter'
 
-// Dealer Portal Workers
-import { dealerFeedIngestWorker } from './dealer/feed-ingest'
-import { dealerSkuMatchWorker } from './dealer/sku-match'
-import { dealerBenchmarkWorker } from './dealer/benchmark'
-import { dealerInsightWorker } from './dealer/insight'
-import { startDealerScheduler, stopDealerScheduler } from './dealer/scheduler'
+// Merchant Portal Workers
+import { merchantFeedIngestWorker } from './merchant/feed-ingest'
+import { merchantSkuMatchWorker } from './merchant/sku-match'
+import { merchantBenchmarkWorker } from './merchant/benchmark'
+import { merchantInsightWorker } from './merchant/insight'
+import { startMerchantScheduler, stopMerchantScheduler } from './merchant/scheduler'
 
 // Affiliate Feed Workers
 import { createAffiliateFeedWorker, createAffiliateFeedScheduler } from './affiliate'
@@ -131,7 +131,7 @@ log.info('Starting IronScout.ai Harvester Workers', {
     'writer',
     'alerter',
   ],
-  dealerWorkers: [
+  merchantWorkers: [
     'feed-ingest',
     'sku-match',
     'benchmark',
@@ -180,10 +180,10 @@ async function startup() {
   log.info('Starting affiliate feed worker')
   affiliateFeedWorker = createAffiliateFeedWorker()
 
-  // Start harvester/dealer scheduler if enabled
+  // Start harvester/merchant scheduler if enabled
   if (harvesterSchedulerEnabled) {
-    log.info('Starting dealer scheduler')
-    await startDealerScheduler()
+    log.info('Starting merchant scheduler')
+    await startMerchantScheduler()
   }
 
   // Start affiliate feed scheduler only if enabled
@@ -218,8 +218,8 @@ const shutdown = async (signal: string) => {
 
     // 1. Stop scheduling new jobs (if scheduler was enabled)
     if (harvesterSchedulerEnabled) {
-      log.info('Stopping dealer scheduler')
-      stopDealerScheduler()
+      log.info('Stopping merchant scheduler')
+      stopMerchantScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)
@@ -232,11 +232,11 @@ const shutdown = async (signal: string) => {
       writerWorker.close(),
       alerterWorker.close(),
       delayedNotificationWorker.close(),
-      // Dealer workers
-      dealerFeedIngestWorker.close(),
-      dealerSkuMatchWorker.close(),
-      dealerBenchmarkWorker.close(),
-      dealerInsightWorker.close(),
+      // Merchant workers
+      merchantFeedIngestWorker.close(),
+      merchantSkuMatchWorker.close(),
+      merchantBenchmarkWorker.close(),
+      merchantInsightWorker.close(),
       // Affiliate workers (if started)
       affiliateFeedWorker?.close(),
       affiliateFeedScheduler?.close(),

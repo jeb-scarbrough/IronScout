@@ -85,16 +85,16 @@ export async function createAffiliateFeed(data: CreateFeedInput) {
     }
 
     // Verify source exists and doesn't already have a feed
-    const source = await prisma.source.findUnique({
+    const source = await prisma.sources.findUnique({
       where: { id: data.sourceId },
-      include: { affiliateFeed: true },
+      include: { affiliate_feeds: true },
     });
 
     if (!source) {
       return { success: false, error: 'Source not found' };
     }
 
-    if (source.affiliateFeed) {
+    if (source.affiliate_feeds) {
       return { success: false, error: 'Source already has an affiliate feed configured' };
     }
 
@@ -103,7 +103,7 @@ export async function createAffiliateFeed(data: CreateFeedInput) {
     const secretCiphertext = new Uint8Array(encryptedBuffer) as Uint8Array<ArrayBuffer>;
 
     // Create the feed
-    const feed = await prisma.affiliateFeed.create({
+    const feed = await prisma.affiliate_feeds.create({
       data: {
         sourceId: data.sourceId,
         network: data.network,
@@ -127,7 +127,7 @@ export async function createAffiliateFeed(data: CreateFeedInput) {
     });
 
     // Update source to mark as affiliate feed
-    await prisma.source.update({
+    await prisma.sources.update({
       where: { id: data.sourceId },
       data: {
         sourceKind: 'AFFILIATE_FEED',
@@ -166,7 +166,7 @@ export async function updateAffiliateFeed(id: string, data: UpdateFeedInput) {
   }
 
   try {
-    const oldFeed = await prisma.affiliateFeed.findUnique({
+    const oldFeed = await prisma.affiliate_feeds.findUnique({
       where: { id },
     });
 
@@ -214,7 +214,7 @@ export async function updateAffiliateFeed(id: string, data: UpdateFeedInput) {
       updateData.secretVersion = 1;
     }
 
-    const feed = await prisma.affiliateFeed.update({
+    const feed = await prisma.affiliate_feeds.update({
       where: { id },
       data: updateData,
     });
@@ -258,9 +258,9 @@ export async function deleteAffiliateFeed(id: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id },
-      include: { source: true },
+      include: { sources: true },
     });
 
     if (!feed) {
@@ -268,7 +268,7 @@ export async function deleteAffiliateFeed(id: string) {
     }
 
     // Check for active runs
-    const activeRun = await prisma.affiliateFeedRun.findFirst({
+    const activeRun = await prisma.affiliate_feed_runs.findFirst({
       where: { feedId: id, status: 'RUNNING' },
     });
 
@@ -277,12 +277,12 @@ export async function deleteAffiliateFeed(id: string) {
     }
 
     // Delete the feed (cascade will handle runs, errors, etc.)
-    await prisma.affiliateFeed.delete({
+    await prisma.affiliate_feeds.delete({
       where: { id },
     });
 
     // Reset source kind
-    await prisma.source.update({
+    await prisma.sources.update({
       where: { id: feed.sourceId },
       data: {
         sourceKind: 'DIRECT',
@@ -321,7 +321,7 @@ export async function enableFeed(id: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id },
     });
 
@@ -343,7 +343,7 @@ export async function enableFeed(id: string) {
       ? new Date(now.getTime() + feed.scheduleFrequencyHours * 3600000)
       : null;
 
-    const updatedFeed = await prisma.affiliateFeed.update({
+    const updatedFeed = await prisma.affiliate_feeds.update({
       where: { id },
       data: {
         status: 'ENABLED',
@@ -377,7 +377,7 @@ export async function pauseFeed(id: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id },
     });
 
@@ -389,7 +389,7 @@ export async function pauseFeed(id: string) {
       return { success: false, error: 'Can only pause an enabled feed' };
     }
 
-    const updatedFeed = await prisma.affiliateFeed.update({
+    const updatedFeed = await prisma.affiliate_feeds.update({
       where: { id },
       data: {
         status: 'PAUSED',
@@ -422,7 +422,7 @@ export async function reenableFeed(id: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id },
     });
 
@@ -439,7 +439,7 @@ export async function reenableFeed(id: string) {
       ? new Date(now.getTime() + feed.scheduleFrequencyHours * 3600000)
       : null;
 
-    const updatedFeed = await prisma.affiliateFeed.update({
+    const updatedFeed = await prisma.affiliate_feeds.update({
       where: { id },
       data: {
         status: 'ENABLED',
@@ -477,7 +477,7 @@ export async function resetFeedState(feedId: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id: feedId },
     });
 
@@ -488,7 +488,7 @@ export async function resetFeedState(feedId: string) {
     const now = new Date();
 
     // Find any stuck RUNNING runs and mark them as CANCELLED
-    const stuckRuns = await prisma.affiliateFeedRun.findMany({
+    const stuckRuns = await prisma.affiliate_feed_runs.findMany({
       where: { feedId, status: 'RUNNING' },
       select: { id: true, startedAt: true },
     });
@@ -496,7 +496,7 @@ export async function resetFeedState(feedId: string) {
     const cancelledRunIds: string[] = [];
     for (const run of stuckRuns) {
       // Mark as FAILED with admin note (no CANCELLED status in enum)
-      await prisma.affiliateFeedRun.update({
+      await prisma.affiliate_feed_runs.update({
         where: { id: run.id },
         data: {
           status: 'FAILED',
@@ -516,7 +516,7 @@ export async function resetFeedState(feedId: string) {
         ? new Date(now.getTime() + feed.scheduleFrequencyHours * 3600000)
         : null;
 
-    await prisma.affiliateFeed.update({
+    await prisma.affiliate_feeds.update({
       where: { id: feedId },
       data: {
         manualRunPending: false,
@@ -563,7 +563,7 @@ export async function forceReprocess(feedId: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id: feedId },
     });
 
@@ -575,7 +575,7 @@ export async function forceReprocess(feedId: string) {
     // Also clear mtime and size to ensure change detection doesn't skip
     const oldHash = feed.lastContentHash?.slice(0, 16);
 
-    await prisma.affiliateFeed.update({
+    await prisma.affiliate_feeds.update({
       where: { id: feedId },
       data: {
         lastContentHash: null,
@@ -620,7 +620,7 @@ export async function triggerManualRun(feedId: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id: feedId },
     });
 
@@ -633,14 +633,14 @@ export async function triggerManualRun(feedId: string) {
     }
 
     // Check if a run is already in progress
-    const runningRun = await prisma.affiliateFeedRun.findFirst({
+    const runningRun = await prisma.affiliate_feed_runs.findFirst({
       where: { feedId, status: 'RUNNING' },
       select: { id: true },
     });
 
     if (runningRun) {
       // Set flag for follow-up run after current completes
-      await prisma.affiliateFeed.update({
+      await prisma.affiliate_feeds.update({
         where: { id: feedId },
         data: { manualRunPending: true },
       });
@@ -703,9 +703,9 @@ export async function approveActivation(runId: string) {
   }
 
   try {
-    const run = await prisma.affiliateFeedRun.findUnique({
+    const run = await prisma.affiliate_feed_runs.findUnique({
       where: { id: runId },
-      include: { feed: true },
+      include: { affiliate_feeds: true },
     });
 
     if (!run) {
@@ -723,7 +723,7 @@ export async function approveActivation(runId: string) {
     // Check for stale run - block approval if a newer successful run exists
     // Per spec Section 8.7: Approving an old run could resurrect products
     // that should have expired (newer run has different seen set)
-    const newerRunExists = await prisma.affiliateFeedRun.count({
+    const newerRunExists = await prisma.affiliate_feed_runs.count({
       where: {
         feedId: run.feedId,
         status: 'SUCCEEDED',
@@ -739,7 +739,7 @@ export async function approveActivation(runId: string) {
     }
 
     // Per spec §8.7: Acquire advisory lock to prevent race with active ingest
-    const feedLockId = run.feed.feedLockId;
+    const feedLockId = run.affiliate_feeds.feedLockId;
     const lockResult = await prisma.$queryRaw<[{ acquired: boolean }]>`
       SELECT pg_try_advisory_lock(${feedLockId}::bigint) as acquired
     `;
@@ -754,7 +754,7 @@ export async function approveActivation(runId: string) {
 
     try {
       // Mark as approved
-      await prisma.affiliateFeedRun.update({
+      await prisma.affiliate_feed_runs.update({
         where: { id: runId },
         data: {
           expiryApprovedAt: new Date(),
@@ -797,6 +797,130 @@ export async function approveActivation(runId: string) {
 }
 
 // =============================================================================
+// ADR-015: Run Ignore/Unignore Operations
+// =============================================================================
+
+/**
+ * Ignore a run - prices from this run will be excluded from consumer queries
+ * Per ADR-015: Ignored runs are excluded from all user-visible reads
+ */
+export async function ignoreRun(runId: string, reason: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: 'Reason is required (min 3 characters)' };
+  }
+
+  try {
+    const run = await prisma.affiliate_feed_runs.findUnique({
+      where: { id: runId },
+      include: { affiliate_feeds: true },
+    });
+
+    if (!run) {
+      return { success: false, error: 'Run not found' };
+    }
+
+    if (run.ignoredAt) {
+      return { success: false, error: 'Run is already ignored' };
+    }
+
+    // Mark the run as ignored
+    await prisma.affiliate_feed_runs.update({
+      where: { id: runId },
+      data: {
+        ignoredAt: new Date(),
+        ignoredBy: session.email,
+        ignoredReason: reason.trim(),
+      },
+    });
+
+    await logAdminAction(session.userId, 'IGNORE_RUN', {
+      resource: 'AffiliateFeedRun',
+      resourceId: runId,
+      newValue: {
+        ignoredBy: session.email,
+        ignoredReason: reason,
+        feedId: run.feedId,
+      },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath(`/affiliate-feeds/${run.feedId}`);
+
+    return { success: true, message: 'Run ignored. Prices from this run are now hidden from consumers.' };
+  } catch (error) {
+    loggers.feeds.error('Failed to ignore run', { runId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to ignore run' };
+  }
+}
+
+/**
+ * Unignore a run - prices from this run will again be visible to consumers
+ * Per ADR-015: This should trigger recompute jobs (Phase 2.2)
+ */
+export async function unignoreRun(runId: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const run = await prisma.affiliate_feed_runs.findUnique({
+      where: { id: runId },
+      include: { affiliate_feeds: true },
+    });
+
+    if (!run) {
+      return { success: false, error: 'Run not found' };
+    }
+
+    if (!run.ignoredAt) {
+      return { success: false, error: 'Run is not currently ignored' };
+    }
+
+    const oldIgnoreInfo = {
+      ignoredAt: run.ignoredAt,
+      ignoredBy: run.ignoredBy,
+      ignoredReason: run.ignoredReason,
+    };
+
+    // Clear the ignore status
+    await prisma.affiliate_feed_runs.update({
+      where: { id: runId },
+      data: {
+        ignoredAt: null,
+        ignoredBy: null,
+        ignoredReason: null,
+      },
+    });
+
+    await logAdminAction(session.userId, 'UNIGNORE_RUN', {
+      resource: 'AffiliateFeedRun',
+      resourceId: runId,
+      oldValue: oldIgnoreInfo,
+      newValue: {
+        unignoredBy: session.email,
+        feedId: run.feedId,
+      },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath(`/affiliate-feeds/${run.feedId}`);
+
+    return { success: true, message: 'Run un-ignored. Prices from this run are now visible to consumers.' };
+  } catch (error) {
+    loggers.feeds.error('Failed to unignore run', { runId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to unignore run' };
+  }
+}
+
+// =============================================================================
 // Read Operations
 // =============================================================================
 
@@ -808,17 +932,17 @@ export async function getAffiliateFeed(id: string) {
   }
 
   try {
-    const feed = await prisma.affiliateFeed.findUnique({
+    const feed = await prisma.affiliate_feeds.findUnique({
       where: { id },
       include: {
-        source: {
-          include: { retailer: true },
+        sources: {
+          include: { retailers: true },
         },
-        runs: {
+        affiliate_feed_runs: {
           orderBy: { startedAt: 'desc' },
           take: 20,
           include: {
-            _count: { select: { errors: true } },
+            _count: { select: { affiliate_feed_run_errors: true } },
           },
         },
       },
@@ -843,16 +967,16 @@ export async function listAffiliateFeeds() {
   }
 
   try {
-    const feeds = await prisma.affiliateFeed.findMany({
+    const feeds = await prisma.affiliate_feeds.findMany({
       orderBy: [
         { status: 'asc' }, // DRAFT first
         { createdAt: 'desc' },
       ],
       include: {
-        source: {
-          include: { retailer: true },
+        sources: {
+          include: { retailers: true },
         },
-        runs: {
+        affiliate_feed_runs: {
           orderBy: { startedAt: 'desc' },
           take: 1,
         },
@@ -874,17 +998,17 @@ export async function generateRunReport(runId: string) {
   }
 
   try {
-    const run = await prisma.affiliateFeedRun.findUnique({
+    const run = await prisma.affiliate_feed_runs.findUnique({
       where: { id: runId },
       include: {
-        feed: {
+        affiliate_feeds: {
           include: {
-            source: {
-              include: { retailer: true },
+            sources: {
+              include: { retailers: true },
             },
           },
         },
-        errors: {
+        affiliate_feed_run_errors: {
           orderBy: { rowNumber: 'asc' },
         },
       },
@@ -914,16 +1038,16 @@ export async function generateRunReport(runId: string) {
 
       // Feed information
       feed: {
-        id: run.feed.id,
-        sourceName: run.feed.source.name,
-        retailerName: run.feed.source.retailer?.name ?? 'Unknown',
-        network: run.feed.network,
-        transport: run.feed.transport,
-        host: run.feed.host,
-        path: run.feed.path,
-        format: run.feed.format,
-        compression: run.feed.compression,
-        expiryHours: run.feed.expiryHours,
+        id: run.affiliate_feeds.id,
+        sourceName: run.affiliate_feeds.sources.name,
+        retailerName: run.affiliate_feeds.sources.retailers?.name ?? 'Unknown',
+        network: run.affiliate_feeds.network,
+        transport: run.affiliate_feeds.transport,
+        host: run.affiliate_feeds.host,
+        path: run.affiliate_feeds.path,
+        format: run.affiliate_feeds.format,
+        compression: run.affiliate_feeds.compression,
+        expiryHours: run.affiliate_feeds.expiryHours,
       },
 
       // Processing metrics
@@ -980,7 +1104,7 @@ export async function generateRunReport(runId: string) {
       } : null,
 
       // All errors
-      errors: run.errors.map((err) => ({
+      errors: run.affiliate_feed_run_errors.map((err) => ({
         id: err.id,
         code: err.code,
         message: err.message,
@@ -991,8 +1115,8 @@ export async function generateRunReport(runId: string) {
 
       // Summary
       summary: {
-        totalErrors: run.errors.length,
-        errorsByCode: run.errors.reduce((acc, err) => {
+        totalErrors: run.affiliate_feed_run_errors.length,
+        errorsByCode: run.affiliate_feed_run_errors.reduce((acc, err) => {
           acc[err.code] = (acc[err.code] || 0) + 1;
           return acc;
         }, {} as Record<string, number>),
@@ -1021,11 +1145,11 @@ export async function getRunDetails(runId: string) {
   }
 
   try {
-    const run = await prisma.affiliateFeedRun.findUnique({
+    const run = await prisma.affiliate_feed_runs.findUnique({
       where: { id: runId },
       include: {
-        feed: true,
-        errors: {
+        affiliate_feeds: true,
+        affiliate_feed_run_errors: {
           orderBy: { createdAt: 'desc' },
           take: 100,
         },

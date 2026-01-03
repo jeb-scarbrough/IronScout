@@ -14,7 +14,8 @@ If you want machine-level precision, add `openapi.yaml` and treat it as the sour
 ## Core Principles
 
 - All tier enforcement is server-side (ADR-002).
-- Dealer visibility is filtered at query time (ADR-005).
+- Retailer visibility is filtered at query time (ADR-005) using eligibility + listing entitlement; subscription status is not a consumer visibility gate.
+- v1: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
 - Price history is append-only (ADR-004).
 - AI output is assistive only (ADR-003).
 - Fail closed on ambiguity (ADR-009).
@@ -29,10 +30,11 @@ Expected: session or JWT derived from the consumer app auth.
 Server requirements:
 - API must determine user identity from verified auth context.
 - API must not accept `X-User-Id` or similar headers as truth.
+- Consumer queries MUST NOT read or use subscription state; visibility predicate is `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND `merchant_retailers.status = ACTIVE`.
 
-### Dealer
-Expected: dealer portal auth.
-Dealer endpoints must not leak cross-dealer data.
+### Merchant API (portal; legacy path: /dealer/*)
+Expected: merchant portal auth.
+Merchant endpoints must not leak cross-merchant data. Canonical naming is Merchant (not dealer); legacy paths may remain.
 
 ### Admin
 Expected: admin portal auth.
@@ -104,14 +106,14 @@ Query params (typical):
 Response (conceptual):
 - `results[]`: canonical products
   - `product` (canonical fields)
-  - `offers[]` (retailer + eligible dealer offers)
+  - `offers[]` (eligible Retailer offers)
   - optional `historySummary` (tier-shaped)
 - `meta`: paging, query interpretation (optional)
 
 MUST:
-- Enforce dealer eligibility at query time.
+- Enforce Retailer eligibility + listing entitlement at query time (ADR-005 predicate).
 - Enforce tier shaping at response time.
-- Avoid recommendation language or “deal verdict” fields in response for v1.
+- Avoid recommendation language or "deal verdict" fields in response for v1.
 
 ---
 
@@ -129,7 +131,7 @@ Response (conceptual):
 - related products (optional)
 
 MUST:
-- Never include ineligible dealer offers.
+- Never include ineligible or unlisted Retailer offers.
 - If history is missing, do not imply completeness.
 
 ---
@@ -172,7 +174,7 @@ List alerts for authenticated user.
 Delete an alert (owner only).
 
 Alert evaluation (system behavior):
-- Must not trigger from ineligible dealer inventory.
+- Must not trigger from ineligible or unlisted Retailer inventory.
 - Must fail closed on ambiguous eligibility.
 
 ---
@@ -190,9 +192,9 @@ Remove item.
 
 ---
 
-## Dealer (Portal-facing API)
+## Merchant API (portal; legacy path: /dealer/*)
 
-These may live inside `apps/dealer` route handlers or in `apps/api` under `/dealer/*`. Either is fine. Contracts must hold.
+These may live inside `apps/dealer` route handlers or in `apps/api` under `/dealer/*`. Path uses legacy "dealer" naming; semantics are Merchant-scoped.
 
 ### POST /dealer/feeds
 Create/update a feed configuration.
@@ -204,8 +206,9 @@ List feeds and health.
 Quarantine a feed.
 
 MUST:
-- Never expose other dealers’ data.
-- Enforce subscription status for eligibility-related actions.
+- Never expose other Merchants' data.
+- Enforce subscription/tier for premium portal features.
+- Manage listing/entitlement explicitly (list/unlist retailers) rather than gating consumer visibility by subscription.
 
 ---
 
@@ -213,13 +216,13 @@ MUST:
 
 Admin endpoints may live in `apps/admin` route handlers or `apps/api` under `/admin/*`.
 
-### POST /admin/dealers/:id/suspend
-Suspend dealer (removes consumer visibility).
+### POST /admin/dealers/:id/suspend (legacy path)
+Suspend Merchant (affects Retailer visibility for administered Retailers).
 
-### POST /admin/dealers/:id/reactivate
-Reactivate dealer.
+### POST /admin/dealers/:id/reactivate (legacy path)
+Reactivate Merchant.
 
-### POST /admin/dealers/:id/subscription
+### POST /admin/dealers/:id/subscription (legacy path)
 Change tier/status/billing method.
 
 ### GET /admin/rate-limits
@@ -244,6 +247,7 @@ Clear rate limits for a specific IP (unblock).
 MUST:
 - Write audit logs for every mutation.
 - Impersonation must not bypass enforcement.
+- Listing/eligibility overrides must be explicit, auditable, and independent of subscription status.
 
 ---
 

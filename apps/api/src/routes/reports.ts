@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
     const data = createReportSchema.parse(req.body)
 
     // Verify product exists
-    const product = await prisma.product.findUnique({
+    const product = await prisma.products.findUnique({
       where: { id: data.productId }
     })
 
@@ -69,7 +69,7 @@ router.post('/', async (req, res) => {
 
     // If priceId provided, verify it exists and belongs to the product
     if (data.priceId) {
-      const price = await prisma.price.findFirst({
+      const price = await prisma.prices.findFirst({
         where: {
           id: data.priceId,
           productId: data.productId
@@ -82,7 +82,7 @@ router.post('/', async (req, res) => {
     }
 
     // Create the report
-    const report = await prisma.productReport.create({
+    const report = await prisma.product_reports.create({
       data: {
         productId: data.productId,
         userId: data.userId,
@@ -92,23 +92,23 @@ router.post('/', async (req, res) => {
         status: 'PENDING',
       },
       include: {
-        product: {
+        products: {
           select: {
             id: true,
             name: true,
           }
         },
-        price: {
+        prices: {
           select: {
             id: true,
-            retailer: {
+            retailers: {
               select: {
                 name: true,
               }
             }
           }
         },
-        user: {
+        users: {
           select: {
             id: true,
             email: true,
@@ -149,24 +149,24 @@ router.get('/', async (req, res) => {
 
     // Get reports with pagination
     const [reports, total] = await Promise.all([
-      prisma.productReport.findMany({
+      prisma.product_reports.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          product: {
+          products: {
             select: {
               id: true,
               name: true,
               brand: true,
             }
           },
-          price: {
+          prices: {
             select: {
               id: true,
               price: true,
-              retailer: {
+              retailers: {
                 select: {
                   name: true,
                   website: true,
@@ -174,7 +174,7 @@ router.get('/', async (req, res) => {
               }
             }
           },
-          user: {
+          users: {
             select: {
               id: true,
               email: true,
@@ -183,7 +183,7 @@ router.get('/', async (req, res) => {
           }
         }
       }),
-      prisma.productReport.count({ where })
+      prisma.product_reports.count({ where })
     ])
 
     res.json({
@@ -212,10 +212,10 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const report = await prisma.productReport.findUnique({
+    const report = await prisma.product_reports.findUnique({
       where: { id },
       include: {
-        product: {
+        products: {
           select: {
             id: true,
             name: true,
@@ -223,12 +223,12 @@ router.get('/:id', async (req, res) => {
             category: true,
           }
         },
-        price: {
+        prices: {
           select: {
             id: true,
             price: true,
             url: true,
-            retailer: {
+            retailers: {
               select: {
                 name: true,
                 website: true,
@@ -236,7 +236,7 @@ router.get('/:id', async (req, res) => {
             }
           }
         },
-        user: {
+        users: {
           select: {
             id: true,
             email: true,
@@ -269,20 +269,20 @@ router.get('/product/:productId', async (req, res) => {
     const where: any = { productId }
     if (status) where.status = status
 
-    const reports = await prisma.productReport.findMany({
+    const reports = await prisma.product_reports.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        price: {
+        prices: {
           select: {
-            retailer: {
+            retailers: {
               select: {
                 name: true,
               }
             }
           }
         },
-        user: {
+        users: {
           select: {
             name: true,
           }
@@ -307,7 +307,7 @@ router.patch('/:id', async (req, res) => {
     const data = updateReportSchema.parse(req.body)
 
     // Check if report exists
-    const existingReport = await prisma.productReport.findUnique({
+    const existingReport = await prisma.product_reports.findUnique({
       where: { id }
     })
 
@@ -329,19 +329,19 @@ router.patch('/:id', async (req, res) => {
       updateData.resolvedAt = new Date()
     }
 
-    const report = await prisma.productReport.update({
+    const report = await prisma.product_reports.update({
       where: { id },
       data: updateData,
       include: {
-        product: {
+        products: {
           select: {
             id: true,
             name: true,
           }
         },
-        price: {
+        prices: {
           select: {
-            retailer: {
+            retailers: {
               select: {
                 name: true,
               }
@@ -369,7 +369,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    await prisma.productReport.delete({
+    await prisma.product_reports.delete({
       where: { id }
     })
 
@@ -397,16 +397,16 @@ router.get('/stats/summary', async (req, res) => {
       dismissedReports,
       recentReports
     ] = await Promise.all([
-      prisma.productReport.count(),
-      prisma.productReport.count({ where: { status: 'PENDING' } }),
-      prisma.productReport.count({ where: { status: 'UNDER_REVIEW' } }),
-      prisma.productReport.count({ where: { status: 'RESOLVED' } }),
-      prisma.productReport.count({ where: { status: 'DISMISSED' } }),
-      prisma.productReport.findMany({
+      prisma.product_reports.count(),
+      prisma.product_reports.count({ where: { status: 'PENDING' } }),
+      prisma.product_reports.count({ where: { status: 'UNDER_REVIEW' } }),
+      prisma.product_reports.count({ where: { status: 'RESOLVED' } }),
+      prisma.product_reports.count({ where: { status: 'DISMISSED' } }),
+      prisma.product_reports.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         include: {
-          product: {
+          products: {
             select: {
               name: true,
             }
@@ -416,7 +416,7 @@ router.get('/stats/summary', async (req, res) => {
     ])
 
     // Get issue type breakdown
-    const issueTypeBreakdown = await prisma.productReport.groupBy({
+    const issueTypeBreakdown = await prisma.product_reports.groupBy({
       by: ['issueType'],
       _count: true,
     })

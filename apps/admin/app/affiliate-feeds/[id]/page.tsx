@@ -34,13 +34,13 @@ export default async function AffiliateFeedDetailPage({
 }) {
   const { id } = await params;
 
-  const feed = await prisma.affiliateFeed.findUnique({
+  const feed = await prisma.affiliate_feeds.findUnique({
     where: { id },
     include: {
-      source: {
-        include: { retailer: true },
+      sources: {
+        include: { retailers: true },
       },
-      runs: {
+      affiliate_feed_runs: {
         orderBy: { startedAt: 'desc' },
         take: 50,
         select: {
@@ -68,8 +68,12 @@ export default async function AffiliateFeedDetailPage({
           failureCode: true,
           failureMessage: true,
           correlationId: true,
-          _count: { select: { errors: true } },
-          errors: {
+          // ADR-015: Run ignore fields
+          ignoredAt: true,
+          ignoredBy: true,
+          ignoredReason: true,
+          _count: { select: { affiliate_feed_run_errors: true } },
+          affiliate_feed_run_errors: {
             take: 10, // First 10 errors per run
             orderBy: { rowNumber: 'asc' },
             select: {
@@ -93,9 +97,9 @@ export default async function AffiliateFeedDetailPage({
   const StatusIcon = status.icon;
 
   // Calculate stats from runs
-  const successfulRuns = feed.runs.filter(r => r.status === 'SUCCEEDED').length;
-  const failedRuns = feed.runs.filter(r => r.status === 'FAILED').length;
-  const totalProducts = feed.runs[0]?.productsUpserted || 0;
+  const successfulRuns = feed.affiliate_feed_runs.filter(r => r.status === 'SUCCEEDED').length;
+  const failedRuns = feed.affiliate_feed_runs.filter(r => r.status === 'FAILED').length;
+  const totalProducts = feed.affiliate_feed_runs[0]?.productsUpserted || 0;
 
   return (
     <div className="space-y-6">
@@ -110,14 +114,14 @@ export default async function AffiliateFeedDetailPage({
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{feed.source.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{feed.sources.name}</h1>
               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-base font-medium ${status.color}`}>
                 <StatusIcon className="h-5 w-5" />
                 {status.label}
               </span>
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              {feed.source.retailer?.name || 'No retailer'} &middot; {feed.network}
+              {feed.sources.retailers?.name || 'No retailer'} &middot; {feed.network}
             </p>
           </div>
         </div>
@@ -357,7 +361,7 @@ export default async function AffiliateFeedDetailPage({
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">Run History</h2>
         </div>
-        <RunsTable runs={feed.runs} feedId={feed.id} />
+        <RunsTable runs={feed.affiliate_feed_runs} feedId={feed.id} />
       </div>
 
       {/* Metadata */}

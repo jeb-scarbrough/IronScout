@@ -104,7 +104,7 @@ export async function getUserTier(req: Request): Promise<UserTier> {
   }
 
   try {
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       select: { tier: true, status: true }
     })
@@ -172,7 +172,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 
       // Also check database for user with this ID
       if (payload.sub) {
-        const user = await prisma.user.findUnique({
+        const user = await prisma.users.findUnique({
           where: { id: payload.sub },
           select: { email: true, status: true }
         })

@@ -12,19 +12,19 @@ const statusConfig = {
 };
 
 export default async function ProductSuggestionsPage() {
-  const suggestions = await prisma.productSuggestion.findMany({
+  const suggestions = await prisma.product_suggestions.findMany({
     orderBy: [
       { status: 'asc' }, // PENDING first
       { createdAt: 'desc' },
     ],
     include: {
-      dealer: {
+      merchants: {
         select: { businessName: true },
       },
-      dealerSku: {
+      merchant_skus: {
         select: { id: true, rawTitle: true, rawUpc: true, rawPrice: true },
       },
-      canonicalSku: {
+      canonical_skus: {
         select: { id: true, name: true },
       },
     },
@@ -39,7 +39,7 @@ export default async function ProductSuggestionsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Product Suggestions</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Review and approve new product suggestions from dealers
+            Review and approve new product suggestions from merchants
           </p>
         </div>
       </div>
@@ -174,9 +174,9 @@ export default async function ProductSuggestionsPage() {
                           UPC: {suggestion.suggestedUpc}
                         </div>
                       )}
-                      {suggestion.dealerSku && (
-                        <div className="text-xs text-gray-400 mt-1 truncate" title={suggestion.dealerSku.rawTitle}>
-                          From: {suggestion.dealerSku.rawTitle}
+                      {suggestion.merchant_skus && (
+                        <div className="text-xs text-gray-400 mt-1 truncate" title={suggestion.merchant_skus.rawTitle}>
+                          From: {suggestion.merchant_skus.rawTitle}
                         </div>
                       )}
                     </div>
@@ -192,16 +192,16 @@ export default async function ProductSuggestionsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{suggestion.dealer.businessName}</div>
+                    <div className="text-sm text-gray-900">{suggestion.merchants.businessName}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
                       <StatusIcon className="h-3 w-3" />
                       {status.label}
                     </span>
-                    {suggestion.status === 'APPROVED' && suggestion.canonicalSku && (
+                    {suggestion.status === 'APPROVED' && suggestion.canonical_skus && (
                       <div className="text-xs text-gray-500 mt-1">
-                        → {suggestion.canonicalSku.name}
+                        → {suggestion.canonical_skus.name}
                       </div>
                     )}
                     {suggestion.status === 'REJECTED' && suggestion.rejectionNote && (

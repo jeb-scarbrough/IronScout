@@ -45,7 +45,7 @@ export async function evaluateCircuitBreaker(
   log.info('CIRCUIT_BREAKER_START', { runId, feedId, t0: t0.toISOString(), expiryHours })
 
   // Get feed's source ID
-  const feed = await prisma.affiliateFeed.findUnique({
+  const feed = await prisma.affiliate_feeds.findUnique({
     where: { id: feedId },
     select: { sourceId: true },
   })
@@ -299,7 +299,7 @@ export async function getExpiryStatus(
   expiredCount: number
   pendingCount: number
 }> {
-  const feed = await prisma.affiliateFeed.findUnique({
+  const feed = await prisma.affiliate_feeds.findUnique({
     where: { id: feedId },
     select: { sourceId: true, expiryHours: true },
   })
@@ -312,17 +312,17 @@ export async function getExpiryStatus(
   const expiryThreshold = new Date(now.getTime() - feed.expiryHours * 3600000)
 
   // Active: lastSeenSuccessAt within window
-  const activeCount = await prisma.sourceProductPresence.count({
+  const activeCount = await prisma.source_product_presence.count({
     where: {
-      sourceProduct: { sourceId: feed.sourceId },
+      source_products: { sourceId: feed.sourceId },
       lastSeenSuccessAt: { gte: expiryThreshold },
     },
   })
 
   // Expired: lastSeenSuccessAt outside window
-  const expiredCount = await prisma.sourceProductPresence.count({
+  const expiredCount = await prisma.source_product_presence.count({
     where: {
-      sourceProduct: { sourceId: feed.sourceId },
+      source_products: { sourceId: feed.sourceId },
       OR: [
         { lastSeenSuccessAt: { lt: expiryThreshold } },
         { lastSeenSuccessAt: null },

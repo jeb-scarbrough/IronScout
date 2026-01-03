@@ -157,7 +157,7 @@ export function SuggestionActions({ suggestion }: SuggestionActionsProps) {
               <textarea
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Reason for rejection (will be shown to dealer)..."
+                placeholder="Reason for rejection (will be shown to merchant)..."
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm mb-4 h-24"
                 autoFocus
               />

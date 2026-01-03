@@ -40,11 +40,11 @@ function AdminNav({ session }: AdminNavProps) {
 
             <div className="hidden md:flex items-center gap-1">
               <Link
-                href="/dealers"
+                href="/merchants"
                 className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
               >
                 <Users className="h-4 w-4" />
-                Dealers
+                Merchants
               </Link>
               <Link
                 href="/affiliate-feeds"

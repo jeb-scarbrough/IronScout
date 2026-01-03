@@ -17,6 +17,7 @@
  */
 
 import { prisma, Prisma } from '@ironscout/db'
+import { visiblePriceWhere } from '../../config/tiers'
 type Decimal = Prisma.Decimal
 
 // ============================================================================
@@ -163,7 +164,7 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
   const windowStart = new Date()
   windowStart.setDate(windowStart.getDate() - DEFAULT_WINDOW_DAYS)
 
-  const products = await prisma.product.findMany({
+  const products = await prisma.products.findMany({
     where: {
       caliber: { contains: caliber, mode: 'insensitive' },
       roundCount: { not: null, gt: 0 },
@@ -174,6 +175,8 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
         where: {
           inStock: true,
           createdAt: { gte: windowStart },
+          // ADR-015: Filter out prices from ignored runs
+          ...visiblePriceWhere(),
         },
         select: { price: true },
         take: 1,
@@ -184,9 +187,9 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
   })
 
   const pricesPerRound = products
-    .filter(p => p.prices.length > 0 && p.roundCount)
-    .map(p => calculatePricePerRound(p.prices[0].price, p.roundCount))
-    .filter(ppr => ppr > 0 && ppr < 10) // Filter outliers
+    .filter((p) => p.prices.length > 0 && p.roundCount)
+    .map((p) => calculatePricePerRound(p.prices[0].price, p.roundCount))
+    .filter((ppr) => ppr > 0 && ppr < 10) // Filter outliers
     .sort((a, b) => a - b)
 
   if (pricesPerRound.length < MIN_SAMPLES_FOR_CONTEXT) {

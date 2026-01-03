@@ -177,10 +177,10 @@ export const QUEUE_HISTORY_SETTING_MAP: Record<string, string> = {
   normalize: SETTING_KEYS.QUEUE_HISTORY_NORMALIZE,
   write: SETTING_KEYS.QUEUE_HISTORY_WRITE,
   alert: SETTING_KEYS.QUEUE_HISTORY_ALERT,
-  'dealer-feed-ingest': SETTING_KEYS.QUEUE_HISTORY_DEALER_FEED_INGEST,
-  'dealer-sku-match': SETTING_KEYS.QUEUE_HISTORY_DEALER_SKU_MATCH,
-  'dealer-benchmark': SETTING_KEYS.QUEUE_HISTORY_DEALER_BENCHMARK,
-  'dealer-insight': SETTING_KEYS.QUEUE_HISTORY_DEALER_INSIGHT,
+  'merchant-feed-ingest': SETTING_KEYS.QUEUE_HISTORY_DEALER_FEED_INGEST,
+  'merchant-sku-match': SETTING_KEYS.QUEUE_HISTORY_DEALER_SKU_MATCH,
+  'merchant-benchmark': SETTING_KEYS.QUEUE_HISTORY_DEALER_BENCHMARK,
+  'merchant-insight': SETTING_KEYS.QUEUE_HISTORY_DEALER_INSIGHT,
   'affiliate-feed': SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_FEED,
   'affiliate-feed-scheduler': SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_SCHEDULER,
 }
@@ -221,7 +221,7 @@ async function getSettingValue(key: SettingKey): Promise<boolean | number | stri
   }
 
   try {
-    const setting = await prisma.systemSetting.findUnique({
+    const setting = await prisma.system_settings.findUnique({
       where: { key },
     })
 

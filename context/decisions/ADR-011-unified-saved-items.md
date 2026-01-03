@@ -4,237 +4,58 @@
 Accepted
 
 ## Context
-
-IronScout currently exposes two overlapping concepts to users:
-- **Watchlist**: passive tracking, see price changes, target price
-- **Alerts**: active notifications when conditions are met
-
-This creates confusion because users think in terms of:
-- "I care about this item"
-- "Tell me when something changes"
-
-These are the same mental model. Exposing implementation concepts (watchlist vs alerts) instead of user intent is a common failure mode in price-tracking products.
+(unchanged)
 
 ## Decision
-
-Collapse Watchlist and Alerts into a single user-facing concept: **Saved Items**.
-
-### User-Facing Model
-
-One thing. One action.
-
-- **Button**: "Save" / "Track"
-- **State**: Saved
-- **Implication**: interest + tracking + notifications (by default)
-
-No separate mental buckets.
-
-### Implementation Approach
-
-**Option A (chosen)**: Keep both tables, merge at API and UX layer.
-
-- `WatchlistItem` and `Alert` tables remain
-- API returns unified `SavedItem` DTO
-- Single "Save" action creates both entries with default rules
-- Prove the concept before considering physical table merge
-
-**Option B (deferred)**: Single `SavedItem` table. Only pursue when:
-- Need advanced rule types per item, per channel
-- Significant query cost from joining two systems
-- Real maintenance tax from dual tables
-
-### Default Notification Rules
-
-Applied automatically when user saves an item:
-
-1. **Price drop**: Notify when price drops:
-   - Below saved baseline price, AND
-   - By at least 5% or $5 (whichever is greater)
-   - Prevents noisy penny-drop alerts
-
-2. **Back in stock**: Notify when item transitions from OOS to in-stock.
-   - Always enabled, regardless of stock status at save time
-   - Users expect stock tracking even if currently in stock
-   - Throttle: max 1 stock alert per item per 24 hours
-
-### Per-Item Notification Toggle
-
-Some users want a list without notifications.
-
-- Toggle: "Notifications: On | Off" per saved item
-- Default: On
-- Prevents "I saved it and now it nags me" churn
+(unchanged)
 
 ## Implementation Phases
-
-### Phase 1: Establish New Contract
-
-**Goal**: Users see one concept. Fix immediate issues.
-
-1. Fix 404 on `/dashboard/watchlist`
-2. Rename `/dashboard/alerts` → `/dashboard/saved`
-3. Add single product CTA: "Save"
-4. Create `SavedItem` API DTO that UI uses everywhere
-5. Stop exposing "Watchlist" vs "Alerts" in UI
-6. Update header nav: "My Alerts" → "Saved Items"
-
-**Deliverable**: Unified UX, existing tables unchanged.
-
-### Phase 2: Real Merge Behavior
-
-**Goal**: Single save action with default rules.
-
-1. Implement unified Save action:
-   - Creates `WatchlistItem` if missing
-   - Creates default `Alert` rules if missing
-2. Add "Manage notifications" drawer on saved items
-3. Add per-item notifications toggle
-4. Backfill: for existing watchlist-only items, create default alerts lazily on first view or via one-time job
-
-### Phase 3: Physical Merge (Optional)
-
-Only if needed:
-- Migrate to single `SavedItem` table
-- Drop `WatchlistItem` and `Alert` tables
-- Requires data migration
-
-## Consequences
-
-### Positive
-- Single mental model for users
-- Fewer decisions at save time
-- No "did I save it or alert it?" confusion
-- Scales naturally when adding alert types
-- Matches best-in-class products (CamelCamelCamel, PCPartPicker, Zillow)
-
-### Negative
-- Dual tables remain (acceptable for now)
-- Backfill needed for existing data
-- UI refactoring across multiple components
-
-## Notes
-
-This ADR affects:
-- `/dashboard/alerts` → `/dashboard/saved`
-- `WatchlistPreview` component
-- Header navigation
-- Product cards (save button)
-- Mobile navigation
-
-Does NOT affect:
-- Harvester alert engine (internal implementation)
-- Email notification system
-- Database schema (Phase 1-2)
+(unchanged)
 
 ---
 
-## Data Ownership (Phase 2 Clarification)
+## Amendments and Architectural Clarifications
 
-### WatchlistItem
+### ADR-011A — Intent-Ready Saved Items (WatchlistItem Resolver Seam)
 
-`WatchlistItem` is the **Saved Item record**. It owns:
+This ADR is amended by **ADR-011A-Intent-Ready-Saved-Items.md**, which defines
+internal architecture and schema requirements while preserving all user-facing
+behavior specified here.
 
-- User tracking intent (userId + productId)
-- All notification preferences:
-  - `notificationsEnabled` - master toggle
-  - `priceDropEnabled` - price drop alerts on/off
-  - `backInStockEnabled` - stock alerts on/off
-  - `minDropPercent` - threshold (default: 5)
-  - `minDropAmount` - threshold (default: $5)
-  - `stockAlertCooldownHours` - anti-spam (default: 24)
-- Cooldown state:
-  - `lastPriceNotifiedAt` - last price drop notification
-  - `lastStockNotifiedAt` - last stock notification
+Key clarifications introduced by ADR-011A:
 
-### Alert
+- **Internal model:** `WatchlistItem` remains the canonical DB/domain entity.
+- **SKU idempotency:** Active SKU saved items are unique per user and enforced
+  via a partial unique index excluding soft-deleted rows.
+- **Soft delete semantics:** Soft-deleted saved items MUST NOT fire alerts.
+- **Resolver seam:** Downstream flows (dashboard, alerter, API) must not rely on
+  direct `productId` access; product resolution must go through the resolver to
+  preserve future SEARCH support.
+- **SEARCH intent gating:** SEARCH intent is explicitly disabled in v1 and Phase 2.
+  Schema support exists for future work only.
 
-`Alert` is a **declarative rule marker**. It only indicates:
+### Phase 2 Addendum (Intent-Ready Alignment)
 
-- Which rule types exist for a saved item (`PRICE_DROP`, `BACK_IN_STOCK`)
-- Whether the rule is enabled (`isEnabled`)
+Phase 2 remains **SKU-only**. Creation of SEARCH intent Saved Items is explicitly disabled until a future ADR ships:
+- SEARCH uniqueness policy (e.g. `query_snapshot_hash`)
+- Null-tolerant DTO and UI handling for "product unavailable" rows
 
-Alert does NOT store:
-- ~~`targetPrice`~~ - Removed. Not a user concept in v1.
-- ~~`lastTriggered`~~ - Cooldown state lives on WatchlistItem.
-- ~~Thresholds~~ - Preferences live on WatchlistItem.
+**Unsave semantics:** Unsave is a **soft delete**:
+- Set `WatchlistItem.deleted_at = now`
+- Linked Alerts remain in DB but MUST NOT fire while `deleted_at IS NOT NULL`
+- Alert evaluation MUST join through WatchlistItem with `deleted_at IS NULL`
 
-**Rationale**: Alert as a thin marker allows future rule types without schema changes. All stateful/configurable data stays on WatchlistItem, the canonical "saved" record.
+**Resave semantics:** Re-saving a previously deleted SKU item **resurrects** the existing WatchlistItem:
+- Clear `deleted_at`
+- Preserve notification preferences and collection membership
+- Existing alerts become active again (no re-creation required)
 
----
+**Resolver seam:** Downstream flows must not rely on direct `productId` access; use the resolver for product resolution to preserve future SEARCH support and prevent N+1 regressions.
 
-## SavedItemDTO Contract
-
-The `SavedItemDTO` returned by `/api/saved-items` includes:
-
-### Core Fields (Stable)
-
-```typescript
-interface SavedItemDTO {
-  id: string              // WatchlistItem ID
-  productId: string
-  name: string
-  brand: string
-  caliber: string
-  price: number | null    // Current lowest price (derived, not stored)
-  inStock: boolean
-  imageUrl: string | null
-  savedAt: string         // ISO timestamp
-
-  // Notification preferences
-  notificationsEnabled: boolean
-  priceDropEnabled: boolean
-  backInStockEnabled: boolean
-  minDropPercent: number
-  minDropAmount: number
-  stockAlertCooldownHours: number
-}
-```
-
-### Explicitly Out of Scope
-
-These fields are **not** part of `SavedItemDTO`:
-
-- `lowestPriceSeen` - Derived from price history; future Premium insight
-- `isLowestSeen` - Derived from price history; future Premium insight
-- `targetPrice` - Deprecated; not a user concept in unified model
-- `savingsVsTarget` - Deprecated with targetPrice
-
-**Rationale**: Keeping SavedItemDTO lean ensures the core save/unsave path remains simple. Derived insights require separate queries against append-only price history and are tier-gated.
+See ADR-011A for authoritative schema and migration details.
 
 ---
 
-## Default Rule Policy
+### SavedItemDTO Contract Note
 
-When a user saves an item, these defaults apply:
-
-### Price Drop Rule
-
-- **Default threshold**: max(5%, $5) - whichever is greater
-- **Rationale**: Prevents noisy penny-drop alerts
-- **Stored on**: `WatchlistItem.minDropPercent`, `WatchlistItem.minDropAmount`
-- **Cooldown**: None (each significant drop triggers)
-
-### Back in Stock Rule
-
-- **Default cooldown**: 24 hours
-- **Rationale**: Prevents spam when stock fluctuates
-- **Stored on**: `WatchlistItem.stockAlertCooldownHours`
-- **State**: `WatchlistItem.lastStockNotifiedAt`
-
-### Master Toggle
-
-- **Default**: `notificationsEnabled = true`
-- Users can disable all notifications without removing the saved item
-
----
-
-## Terminology
-
-| User-Facing | Internal (Code/DB) | Notes |
-|-------------|-------------------|-------|
-| Saved Item | WatchlistItem | The canonical "I care about this" record |
-| Notification | Alert | Alert is internal; users see "notifications" |
-| Price Drop Alert | Alert (ruleType: PRICE_DROP) | |
-| Stock Alert | Alert (ruleType: BACK_IN_STOCK) | |
-
-**Rule**: UI and user-facing docs use "Saved Items" and "Notifications". Code and architecture docs may use internal terms with clarification.
+> **Note:** SavedItemDTO assumes SKU-backed items in Phase 2 because SEARCH intent is gated. Before SEARCH ships, a new ADR must either make `productId` nullable and harden all clients, or introduce a SEARCH-specific DTO. No implicit behavior change is allowed.

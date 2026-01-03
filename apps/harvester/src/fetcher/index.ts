@@ -135,9 +135,9 @@ export const fetcherWorker = new Worker<FetchJobData>(
       // Get source to check pagination config
       log.debug('FETCH_LOADING_SOURCE', { sourceId, executionId })
       const sourceLoadStart = Date.now()
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
-        include: { retailer: { select: { name: true } } },
+        include: { retailers: { select: { name: true } } },
       })
 
       if (!source) {
@@ -146,7 +146,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
       }
 
       const sourceName = source.name
-      const retailerName = source.retailer?.name
+      const retailerName = source.retailers?.name
 
       log.debug('FETCH_SOURCE_LOADED', {
         sourceId,
@@ -162,7 +162,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
 
       const paginationConfig = source.paginationConfig as PaginationConfig | null
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -253,7 +253,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         totalContentSize += Buffer.byteLength(pageContent, 'utf8')
         if (totalContentSize > MAX_TOTAL_CONTENT_SIZE) {
           log.warn('Total content size limit exceeded, stopping', { totalContentSize, limit: MAX_TOTAL_CONTENT_SIZE })
-          await prisma.executionLog.create({
+          await prisma.execution_logs.create({
             data: {
               executionId,
               level: 'WARN',
@@ -284,7 +284,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
             // Check items limit
             if (allContent.length >= MAX_ITEMS_COLLECTED) {
               log.warn('Max items limit reached, stopping', { itemCount: allContent.length, limit: MAX_ITEMS_COLLECTED })
-              await prisma.executionLog.create({
+              await prisma.execution_logs.create({
                 data: {
                   executionId,
                   level: 'WARN',
@@ -332,7 +332,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
       const fetchDurationMs = Date.now() - stageStart
       const contentBytes = Buffer.byteLength(content, 'utf8')
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -357,7 +357,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
       const contentHash = computeContentHash(content)
 
       if (source.feedHash === contentHash) {
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -368,7 +368,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         })
 
         // Mark execution as complete with no items processed
-        await prisma.execution.update({
+        await prisma.executions.update({
           where: { id: executionId },
           data: {
             status: 'SUCCESS',
@@ -379,7 +379,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
           },
         })
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -392,7 +392,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
       }
 
       // Hash differs or is null - continue with processing
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -412,7 +412,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
 
       if (isFeedType && source.affiliateNetwork) {
         // Route to parser layer for affiliate feeds
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -436,7 +436,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         // Parse the feed content
         const parsedItems = await parser.parse(content)
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -447,7 +447,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
         })
 
         // Update execution with items found
-        await prisma.execution.update({
+        await prisma.executions.update({
           where: { id: executionId },
           data: { itemsFound: parsedItems.length },
         })
@@ -484,7 +484,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
             })
           }
 
-          await prisma.executionLog.create({
+          await prisma.execution_logs.create({
             data: {
               executionId,
               level: 'INFO',
@@ -504,7 +504,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
             jobId: `normalize--${executionId}`, // Idempotent: one normalize per execution
           })
 
-          await prisma.executionLog.create({
+          await prisma.execution_logs.create({
             data: {
               executionId,
               level: 'INFO',
@@ -525,7 +525,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
           jobId: `extract:${executionId}`, // Idempotent: one extract per execution
         })
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
@@ -539,7 +539,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -549,7 +549,7 @@ export const fetcherWorker = new Worker<FetchJobData>(
       })
 
       // Update execution status
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'FAILED',

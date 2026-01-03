@@ -1,95 +1,120 @@
-# ADR-004: Append-Only Price History
+
+# ADR-004 Amendment: Clarification of Append-Only Price History
 
 ## Status
 Accepted
 
-## Context
+## Purpose
+Clarify the meaning of “append-only price history” and formally link ADR-004 to ADR-015, which defines correction, ignore, and current price semantics required for operational safety.
 
-IronScout presents historical price context to consumers and dealers.  
-Trust in this context depends on preserving what was observed at a given time.
+This amendment resolves ambiguity between historical immutability and real-world data quality remediation.
 
-Overwriting or mutating historical price records:
-- Destroys auditability
-- Masks ingestion or normalization errors
-- Makes debugging impossible
-- Undermines user trust
+---
 
-Ingestion pipelines may re-run, retry, or fail partially. The data model must remain resilient under these conditions.
+## Original Invariant (Unchanged)
 
-## Decision
+ADR-004 establishes that **price history is append-only**:
+- Price records are never UPDATEd or DELETEd.
+- Historical facts are preserved for auditability.
 
-All price history in IronScout is **append-only**.
+This invariant remains correct and unchanged.
 
-Specifically:
-- Each observed price is recorded as a new time-series entry
-- “Current price” is derived from the most recent valid record
-- Historical records must not be overwritten silently
-- Corrections must create new records or be explicitly audited
+---
 
-Price history may be filtered, summarized, or shaped at query time, but the underlying data must remain immutable.
+## Clarification: Append-Only ≠ Always Valid
 
-## Alternatives Considered
+Append-only storage **does not imply** that all historical price records are:
+- correct,
+- trustworthy,
+- or safe for user-facing consumption.
 
-### Mutable Price Records
-- Pros: Simpler schema
-- Cons: Loses history, hides errors, breaks trust
+Bad data may be ingested and discovered later.
 
-### Periodic Snapshotting
-- Pros: Reduced storage growth
-- Cons: Loses resolution, complicates alerts and explanations
+Therefore:
+- Append-only is a *storage invariant*.
+- Visibility and correctness are *interpretation concerns*.
 
-## Consequences
+---
 
-### Positive
-- Strong auditability
-- Reliable historical context
-- Easier debugging and incident analysis
-- Safer ingestion retries
+## Authoritative Interpretation Layer
 
-### Negative
-- Increased data volume
-- Requires careful indexing and pruning strategies
+ADR-015: *Price History Immutability, Corrections, and Operational Control* is now the **authoritative definition** of:
 
-These tradeoffs are acceptable for v1 and consistent with scaling assumptions.
+- What constitutes a *visible* price record
+- How ignored runs affect history
+- How corrections are applied
+- How current price is derived
+- How alerts behave under corrections
 
-## Notes
+All user-facing pricing logic **MUST** conform to ADR-015.
 
-This ADR directly supports:
-- historical price charts
-- alert evaluation correctness
-- conservative AI explanations
-- trust-safe rollback and debugging
+ADR-004 alone is insufficient.
 
-## Clarification: Promotional Metadata (2025-12-22)
+---
 
-Price records may include promotional context persisted at ingestion time:
+## Definition of “Valid Record”
 
-- `originalPrice` - MSRP when feed provides it
-- `priceType` - REGULAR, SALE, or CLEARANCE (or null if unknown)
-- `saleStartsAt`, `saleEndsAt` - Sale window timestamps
+Any reference in ADR-004 or downstream code to:
+- “valid price”
+- “most recent valid record”
+- “current price”
 
-**Rules:**
+Is hereby defined as:
 
-1. **No inference** - These fields store what the feed explicitly provides. Do not compute or guess.
-2. **No enforcement** - Sale windows are informational only. Feeds lie. Never use them for access control or filtering.
-3. **No retroactive mutation** - Like all price data, promo metadata is append-only. Do not update historical records to "fix" sale status.
+> A **visible price event** as specified in ADR-015.
 
-If a field is unknown, store `null`. Do not default to REGULAR or compute priceType from originalPrice vs price.
+This includes:
+- exclusion of ignored runs,
+- application of IGNORE and MULTIPLIER corrections,
+- observedAt-based time semantics,
+- lookback window rules.
 
-## Clarification: Derived Insights (2025-12-22)
+---
 
-Certain user-facing insights are **derived** from price history, not stored:
+## Scope of Immutability
 
-- "Lowest price seen" for a saved item
-- "Is this the lowest price?" indicator
-- Price percentile position
+### Immutable
+- `prices`
+- `pricing_snapshots`
 
-**Rules:**
+These are append-only fact tables.
 
-1. **Derive at query time** - These values are computed from append-only price records, not stored on SavedItem or WatchlistItem.
+### Mutable
+- `products`
+- `retailers`
+- `source_products`
+- `merchants`
 
-2. **Tier-gated** - Derived insights like "lowest in 30 days" are Premium features. Free tier sees current price only.
+These are dimension tables and may be upserted or enriched.
 
-3. **Not part of SavedItemDTO core** - The unified Saved Items API (ADR-011) returns core fields only. Derived insights require separate queries or a dedicated insights endpoint.
+ADR-004 immutability applies **only** to price facts.
 
-**Rationale**: Storing derived values would create denormalization risk and stale data. Keeping them query-time ensures consistency with append-only source of truth.
+### Provenance vs Visibility (Separation)
+- Provenance fields are required on price facts (ADR-015): `ingestionRunType`, `ingestionRunId`, `merchantId` (nullable on prices), `retailerId`, `sourceId`, `affiliateId` (nullable).
+- SOURCE correction scope key is `prices.sourceId`; `sourceProductId` is secondary only if `sourceId` is unavailable.
+- Visibility is governed by eligibility + listing + active relationship; subscription state is never a consumer visibility predicate.
+
+---
+
+## Operational Implication
+
+Any system that:
+- reads price history,
+- derives current price,
+- triggers alerts,
+- computes benchmarks,
+
+Must:
+- read from derived “visible” data, or
+- apply ADR-015 correction semantics.
+
+Failing to do so violates ADR-004 as amended.
+
+---
+
+## Final Note
+
+ADR-004 defines **what must never change**.
+ADR-015 defines **how the system remains correct anyway**.
+
+Both are required.

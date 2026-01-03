@@ -10,7 +10,7 @@
  */
 
 import { prisma, AlertRuleType, Prisma } from '@ironscout/db'
-import { visibleDealerPriceWhere } from '../config/tiers'
+import { visiblePriceWhere } from '../config/tiers'
 
 // ============================================================================
 // Types
@@ -78,7 +78,7 @@ export async function saveItem(
   productId: string
 ): Promise<SavedItemDTO> {
   // Verify product exists
-  const product = await prisma.product.findUnique({
+  const product = await prisma.products.findUnique({
     where: { id: productId },
     select: { id: true, name: true, brand: true, caliber: true, imageUrl: true }
   })
@@ -90,7 +90,7 @@ export async function saveItem(
   // Upsert in transaction
   const result = await prisma.$transaction(async (tx) => {
     // Upsert WatchlistItem
-    const watchlistItem = await tx.watchlistItem.upsert({
+    const watchlistItem = await tx.watchlist_items.upsert({
       where: {
         userId_productId: { userId, productId }
       },
@@ -112,7 +112,7 @@ export async function saveItem(
     })
 
     // Upsert PRICE_DROP alert
-    await tx.alert.upsert({
+    await tx.alerts.upsert({
       where: {
         userId_productId_ruleType: {
           userId,
@@ -134,7 +134,7 @@ export async function saveItem(
     })
 
     // Upsert BACK_IN_STOCK alert
-    await tx.alert.upsert({
+    await tx.alerts.upsert({
       where: {
         userId_productId_ruleType: {
           userId,
@@ -171,7 +171,7 @@ export async function unsaveItem(
   userId: string,
   productId: string
 ): Promise<void> {
-  const deleted = await prisma.watchlistItem.deleteMany({
+  const deleted = await prisma.watchlist_items.deleteMany({
     where: { userId, productId }
   })
 
@@ -184,10 +184,10 @@ export async function unsaveItem(
  * Get all saved items for a user
  */
 export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
-  const items = await prisma.watchlistItem.findMany({
+  const items = await prisma.watchlist_items.findMany({
     where: { userId },
     include: {
-      product: {
+      products: {
         select: {
           id: true,
           name: true,
@@ -197,7 +197,7 @@ export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
           prices: {
             where: {
               inStock: true,
-              ...visibleDealerPriceWhere(),
+              ...visiblePriceWhere(),
             },
             orderBy: [{ price: 'asc' }],
             take: 1,
@@ -222,10 +222,10 @@ export async function getSavedItemById(
   userId: string,
   id: string
 ): Promise<SavedItemDTO> {
-  const item = await prisma.watchlistItem.findFirst({
+  const item = await prisma.watchlist_items.findFirst({
     where: { id, userId },
     include: {
-      product: {
+      products: {
         select: {
           id: true,
           name: true,
@@ -235,7 +235,7 @@ export async function getSavedItemById(
           prices: {
             where: {
               inStock: true,
-              ...visibleDealerPriceWhere(),
+              ...visiblePriceWhere(),
             },
             orderBy: [{ price: 'asc' }],
             take: 1,
@@ -263,12 +263,12 @@ export async function getSavedItemByProductId(
   userId: string,
   productId: string
 ): Promise<SavedItemDTO | null> {
-  const item = await prisma.watchlistItem.findUnique({
+  const item = await prisma.watchlist_items.findUnique({
     where: {
       userId_productId: { userId, productId }
     },
     include: {
-      product: {
+      products: {
         select: {
           id: true,
           name: true,
@@ -278,7 +278,7 @@ export async function getSavedItemByProductId(
           prices: {
             where: {
               inStock: true,
-              ...visibleDealerPriceWhere(),
+              ...visiblePriceWhere(),
             },
             orderBy: [{ price: 'asc' }],
             take: 1,
@@ -311,7 +311,7 @@ export async function updateSavedItemPrefs(
   validatePrefs(prefs)
 
   // Find existing item
-  const existing = await prisma.watchlistItem.findUnique({
+  const existing = await prisma.watchlist_items.findUnique({
     where: {
       userId_productId: { userId, productId }
     },
@@ -322,7 +322,7 @@ export async function updateSavedItemPrefs(
   }
 
   // Build update data
-  const updateData: Prisma.WatchlistItemUpdateInput = {}
+  const updateData: Prisma.watchlist_itemsUpdateInput = {}
 
   if (prefs.notificationsEnabled !== undefined) {
     updateData.notificationsEnabled = prefs.notificationsEnabled
@@ -344,7 +344,7 @@ export async function updateSavedItemPrefs(
   }
 
   // Update
-  await prisma.watchlistItem.update({
+  await prisma.watchlist_items.update({
     where: { id: existing.id },
     data: updateData,
   })
@@ -357,7 +357,7 @@ export async function updateSavedItemPrefs(
  * Count saved items for a user
  */
 export async function countSavedItems(userId: string): Promise<number> {
-  return await prisma.watchlistItem.count({
+  return await prisma.watchlist_items.count({
     where: { userId }
   })
 }
@@ -366,9 +366,9 @@ export async function countSavedItems(userId: string): Promise<number> {
 // Helpers
 // ============================================================================
 
-type WatchlistItemWithProduct = Prisma.WatchlistItemGetPayload<{
+type WatchlistItemWithProduct = Prisma.watchlist_itemsGetPayload<{
   include: {
-    product: {
+    products: {
       select: {
         id: true
         name: true
@@ -387,17 +387,17 @@ type WatchlistItemWithProduct = Prisma.WatchlistItemGetPayload<{
 }>
 
 function mapToDTO(item: WatchlistItemWithProduct): SavedItemDTO {
-  const lowestPrice = item.product.prices[0]
+  const lowestPrice = item.products.prices[0]
 
   return {
     id: item.id,
     productId: item.productId,
-    name: item.product.name,
-    brand: item.product.brand || '',
-    caliber: item.product.caliber || '',
+    name: item.products.name,
+    brand: item.products.brand || '',
+    caliber: item.products.caliber || '',
     price: lowestPrice ? parseFloat(lowestPrice.price.toString()) : null,
-    inStock: item.product.prices.length > 0 && lowestPrice?.inStock === true,
-    imageUrl: item.product.imageUrl || null,
+    inStock: item.products.prices.length > 0 && lowestPrice?.inStock === true,
+    imageUrl: item.products.imageUrl || null,
     savedAt: item.createdAt.toISOString(),
 
     notificationsEnabled: item.notificationsEnabled,

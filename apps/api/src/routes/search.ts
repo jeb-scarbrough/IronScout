@@ -677,15 +677,15 @@ router.post('/admin/update-embedding/:productId', requireAdmin, rateLimit({ max:
  */
 router.get('/debug/calibers', async (req: Request, res: Response) => {
   try {
-    const calibers = await prisma.product.groupBy({
+    const calibers = await prisma.products.groupBy({
       by: ['caliber'],
       _count: { caliber: true },
       orderBy: { _count: { caliber: 'desc' } },
       take: 50
     })
-    
+
     res.json({
-      calibers: calibers.map(c => ({ value: c.caliber, count: c._count.caliber }))
+      calibers: calibers.map((c: { caliber: string | null; _count: { caliber: number } }) => ({ value: c.caliber, count: c._count.caliber }))
     })
   } catch (error) {
     log.error('Debug calibers error', {}, error)
@@ -699,15 +699,15 @@ router.get('/debug/calibers', async (req: Request, res: Response) => {
  */
 router.get('/debug/purposes', async (req: Request, res: Response) => {
   try {
-    const purposes = await prisma.product.groupBy({
+    const purposes = await prisma.products.groupBy({
       by: ['purpose'],
       _count: { purpose: true },
       orderBy: { _count: { purpose: 'desc' } },
       take: 50
     })
-    
+
     res.json({
-      purposes: purposes.map(p => ({ value: p.purpose, count: p._count.purpose }))
+      purposes: purposes.map((p: { purpose: string | null; _count: { purpose: number } }) => ({ value: p.purpose, count: p._count.purpose }))
     })
   } catch (error) {
     log.error('Debug purposes error', {}, error)
@@ -721,15 +721,15 @@ router.get('/debug/purposes', async (req: Request, res: Response) => {
  */
 router.get('/debug/bullet-types', async (req: Request, res: Response) => {
   try {
-    const bulletTypes = await prisma.product.groupBy({
+    const bulletTypes = await prisma.products.groupBy({
       by: ['bulletType'],
       _count: { bulletType: true },
       orderBy: { _count: { bulletType: 'desc' } },
       take: 50
     })
-    
+
     res.json({
-      bulletTypes: bulletTypes.map(b => ({ value: b.bulletType, count: b._count.bulletType }))
+      bulletTypes: bulletTypes.map((b: { bulletType: string | null; _count: { bulletType: number } }) => ({ value: b.bulletType, count: b._count.bulletType }))
     })
   } catch (error) {
     log.error('Debug bullet types error', {}, error)

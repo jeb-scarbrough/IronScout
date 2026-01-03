@@ -16,13 +16,13 @@ export const schedulerWorker = new Worker<CrawlJobData>(
 
     try {
       // Update execution status to RUNNING
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: { status: 'RUNNING' },
       })
 
       // Log start
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -32,7 +32,7 @@ export const schedulerWorker = new Worker<CrawlJobData>(
       })
 
       // Get source details
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
       })
 
@@ -54,7 +54,7 @@ export const schedulerWorker = new Worker<CrawlJobData>(
         jobId: `fetch:${executionId}`, // Idempotent: one fetch per execution
       })
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -67,7 +67,7 @@ export const schedulerWorker = new Worker<CrawlJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -76,7 +76,7 @@ export const schedulerWorker = new Worker<CrawlJobData>(
         },
       })
 
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'FAILED',
@@ -107,7 +107,7 @@ function getHourlyWindow(): string {
  */
 export async function scheduleAllCrawls() {
   const schedulingWindow = getHourlyWindow()
-  const sources = await prisma.source.findMany({
+  const sources = await prisma.sources.findMany({
     where: { enabled: true },
   })
 
@@ -132,7 +132,7 @@ export async function scheduleAllCrawls() {
       }
 
       // Create execution record
-      const execution = await prisma.execution.create({
+      const execution = await prisma.executions.create({
         data: {
           sourceId: source.id,
           status: 'PENDING',
@@ -148,7 +148,7 @@ export async function scheduleAllCrawls() {
       })
 
       // Update lastRunAt ONLY AFTER successful enqueue
-      await prisma.source.update({
+      await prisma.sources.update({
         where: { id: source.id },
         data: { lastRunAt: new Date() },
       })

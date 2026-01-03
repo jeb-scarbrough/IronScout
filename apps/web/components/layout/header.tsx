@@ -34,8 +34,8 @@ export function Header() {
             <Link href="/pricing" className="text-sm font-medium hover:text-primary transition-colors">
               Pricing
             </Link>
-            <Link href="/dealers" className="text-sm font-medium hover:text-primary transition-colors">
-              For Dealers
+            <Link href="/retailers" className="text-sm font-medium hover:text-primary transition-colors">
+              For Retailers
             </Link>
             <ThemeToggle />
             {session ? (
@@ -145,11 +145,11 @@ export function Header() {
                 Pricing
               </Link>
               <Link
-                href="/dealers"
+                href="/retailers"
                 className="text-sm font-medium hover:text-primary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
-                For Dealers
+                For Retailers
               </Link>
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium">Theme:</span>

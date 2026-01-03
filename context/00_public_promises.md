@@ -12,6 +12,16 @@ No public-facing statement may exceed what is written here.
 
 If something is not promised in this document, it must be treated as **not guaranteed**.
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any "dealer" wording or `DEALER_*` keys are legacy and must be migrated to "merchant" terminology.
+
+Merchants authenticate and administer Retailers. Retailers do not authenticate.
+
 ---
 
 ## Core Positioning
@@ -87,26 +97,15 @@ Premium increases information density, not certainty.
 
 ---
 
-## Dealer Promises
+## Merchant Promises
 
-IronScout promises that dealers receive:
+- Merchants receive ingestion and normalization for the Retailers they administer.
+- Retailer SKUs are canonically matched where possible.
+- Merchants receive market context and benchmarks appropriate to their plan.
+- Retailer inventory visibility is governed by eligibility and listing policies (query-time predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`).
+- Eligibility applies to Retailer visibility, not Merchant existence. Merchant subscription tier controls portal capabilities, not whether a Retailer can exist or be visible to consumers.
 
-- Visibility of eligible inventory in consumer search
-- Feed ingestion and normalization
-- Canonical matching of dealer SKUs to products
-- Market pricing context appropriate to their plan
-- Historical benchmarks where available and applicable
-
-Eligibility is determined by subscription status, feed health, and platform policies.
-
-IronScout does **not** promise:
-- Guaranteed traffic or clicks
-- Guaranteed conversion rates
-- Pricing recommendations
-- Automated pricing decisions
-- Competitive advantage over other dealers
-
-Visibility and context are provided; outcomes are not guaranteed.
+No guarantees are made about completeness, accuracy, or continuous availability of any Retailer’s prices.
 
 ---
 
@@ -114,7 +113,7 @@ Visibility and context are provided; outcomes are not guaranteed.
 
 IronScout promises to make reasonable efforts to:
 - Keep pricing data current
-- Remove blocked or inactive dealers from visibility
+- Remove blocked, ineligible, or unlisted Retailers from visibility
 - Reflect known availability changes
 
 IronScout does **not** promise:
@@ -136,8 +135,8 @@ IronScout does not provide legal, regulatory, or compliance advice.
 
 These promises are enforced by:
 - Server-side tier gating
-- Dealer visibility rules
-- Subscription enforcement
+- Retailer eligibility + listing rules (query-time predicate)
+- Subscription enforcement for Merchant portal features (not consumer visibility)
 - Conservative UI language
 - Explicit exclusions where guarantees cannot be made
 

@@ -106,16 +106,16 @@ No `update` or `upsert` operations on Price model. New prices are always appende
 
 ---
 
-### ADR-005: Query-Time Dealer Visibility
+### ADR-005: Query-Time Retailer Visibility
 
 **Status:** ⚠️ PARTIAL VIOLATION
 **Severity:** High
 
 **Requirement:**
-Dealer visibility must be filtered at query time. Ineligible dealers must never appear in search, alerts, watchlists, or product views.
+Retailer visibility must be filtered at query time. Ineligible Retailers must never appear in search, alerts, watchlists, or product views.
 
 **Finding:**
-`visibleDealerPriceWhere()` in `apps/api/src/config/tiers.ts:362-383` correctly filters by dealer subscription status and is used in:
+`visibleDealerPriceWhere()` (legacy naming) in `apps/api/src/config/tiers.ts:362-383` correctly filters by Retailer eligibility and is used in:
 - ✅ `apps/api/src/routes/dashboard.ts`
 - ✅ `apps/api/src/routes/products.ts`
 - ✅ `apps/api/src/routes/search.ts`
@@ -125,14 +125,14 @@ Dealer visibility must be filtered at query time. Ineligible dealers must never 
 
 **Fix Applied (2025-12-21):**
 
-`apps/harvester/src/alerter/index.ts` now checks dealer visibility:
+`apps/harvester/src/alerter/index.ts` now checks Retailer visibility:
 
-1. Added `hasVisibleDealerPrice()` function that checks if a product has any prices from eligible dealers
-2. Before evaluating alerts, the alerter verifies the product has visible dealer prices
-3. If no visible prices exist, alerts are skipped with `ALERT_SKIPPED_NO_VISIBLE_DEALER` log event
-4. `sendNotification()` now only fetches prices from visible dealers
+1. Added `hasVisibleDealerPrice()` function (legacy naming) that checks if a product has any prices from eligible Retailers
+2. Before evaluating alerts, the alerter verifies the product has visible Retailer prices
+3. If no visible prices exist, alerts are skipped with `ALERT_SKIPPED_NO_VISIBLE_DEALER` log event (legacy naming)
+4. `sendNotification()` now only fetches prices from visible Retailers
 
-This ensures alerts never fire from suspended/cancelled dealer inventory.
+This ensures alerts never fire from ineligible Retailer inventory.
 
 **No further action required.**
 
@@ -208,7 +208,7 @@ Similar disclaimers in:
 **Status:** ✅ Compliant
 
 **Requirement:**
-Dealer billing is subscription-based only. Usage metrics are internal.
+Merchant billing is subscription-based only. Usage metrics are internal.
 
 **Finding:**
 No usage-based billing UI found. Search for `usage.?based|metered|per.?click` returned no matches in apps.
@@ -268,7 +268,7 @@ None - all high issues resolved.
 | # | ADR | Issue | Fixed |
 |---|-----|-------|-------|
 | 1 | 006 | Remove Best Value Score, verdicts, deal scores, savings claims | 2025-12-21 |
-| 2 | 005 | Add dealer visibility check to alerter | 2025-12-21 |
+| 2 | 005 | Add Retailer visibility check to alerter | 2025-12-21 |
 | 3 | 003 | Remove recommendation language from AI outputs | 2025-12-21 |
 | 4 | 001 | Enforce `HARVESTER_SCHEDULER_ENABLED` in worker.ts | 2025-12-21 |
 

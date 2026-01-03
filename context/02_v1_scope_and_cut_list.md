@@ -9,6 +9,14 @@ This document has higher authority than roadmaps, ideas, or partially implemente
 
 ---
 
+Terminology note:
+- Merchant = portal account, billing, auth boundary.
+- Retailer = consumer storefront, price visibility boundary.
+- v1: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
+All scope items below use this model.
+
+---
+
 ## v1 Definition
 
 v1 is considered successful if IronScout:
@@ -40,17 +48,19 @@ v1 is **not** required to be feature-complete or optimized for scale.
 
 ---
 
-### Dealer Product
+### Merchant Portal (legacy app path: apps/dealer)
 
-- Dealer feed ingestion (CSV, XML, JSON)
+- Merchant-submitted feed ingestion (CSV, XML, JSON)
 - SKU normalization and canonical matching
-- Deterministic eligibility rules for visibility
-- Dealer inventory appearing in consumer search when eligible
+- Deterministic eligibility + listing rules for Retailer visibility
+- Explicit Merchant↔Retailer mapping and listing management (list/unlist) with audit
+- Retailer inventory (administered by the Merchant) appearing in consumer search when eligible AND listed
 - Plan-based access to market pricing context
 - Historical benchmarks where available
-- Dealer subscription enforcement
+- Merchant subscription enforcement
+- Subscription is never a consumer visibility predicate.
 
-Dealer functionality is limited to **visibility and context**, not automation.
+Merchant portal functionality is limited to **visibility and context**, not automation.
 
 ---
 
@@ -59,7 +69,9 @@ Dealer functionality is limited to **visibility and context**, not automation.
 - Admin impersonation for support and troubleshooting
 - Subscription management with audit logging
 - Feed enable/disable and quarantine controls
-- Deterministic dealer visibility enforcement
+- Retailer linking, eligibility flips, and listing overrides with audit
+- Deterministic Retailer visibility enforcement
+- Auto-unlist on delinquency/suspension; explicit relist on recovery
 - Operational dashboards and logs
 - Manual recovery workflows (documented)
 
@@ -71,7 +83,7 @@ Dealer functionality is limited to **visibility and context**, not automation.
 - Idempotent scheduling and job execution
 - Batched database writes
 - Tier enforcement at the API level
-- Dealer visibility enforcement at query time
+- Retailer visibility enforcement at query time (predicate: eligibility + listing; no subscription gating)
 - Conservative, enforced UI language
 - Observability sufficient to debug issues without guesswork
 
@@ -93,14 +105,14 @@ These items must not be shipped, marketed, or implied in v1.
 
 ---
 
-### Dealer Features (Out)
+### Merchant Portal Features (Out)
 
 - Pricing recommendations
 - Automated repricing
 - Usage-based billing UI
 - Guaranteed traffic or click commitments
 - Conversion analytics or attribution
-- Dealer-to-dealer comparisons framed as competition
+- Merchant-to-Merchant comparisons framed as competition (legacy "dealer" phrasing is deprecated)
 - Any feature implying pricing advice
 
 ---
@@ -121,7 +133,7 @@ These items must not be shipped, marketed, or implied in v1.
 - SLAs or uptime guarantees
 - Real-time ingestion guarantees
 - Multi-region deployments
-- Self-serve dealer onboarding without review
+- Self-serve Merchant onboarding without review
 
 ---
 
@@ -129,10 +141,10 @@ These items must not be shipped, marketed, or implied in v1.
 
 These may exist in docs, code, or experiments but must remain disabled or internal.
 
-- Usage-based dealer billing
+- Usage-based Merchant billing
 - Advanced alerting logic
 - Confidence tiering and degradation models
-- Expanded dealer analytics
+- Expanded Merchant analytics
 - Deeper AI explanations tied to confidence scoring
 - Design automation and review agents
 

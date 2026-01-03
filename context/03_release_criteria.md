@@ -38,15 +38,20 @@ All criteria below exist to enforce this rule.
 - Canonical product grouping is stable and deterministic
 - Prices shown to users are tied to a specific source and timestamp
 - Historical price context is derived from stored data, not inference
-- Blocked or ineligible dealers never appear in:
+- Consumer prices are keyed by `retailerId`; benchmarks/pricing_snapshots are keyed by `merchantId`.
+- Blocked, ineligible, or unlisted Retailers never appear in:
   - search results
   - alerts
   - watchlists
   - direct product views
+- Consumer visibility is enforced at the Retailer level via query-time predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`. Merchant subscription status does not directly control consumer visibility.
+- Delinquency/suspension auto-unlists all Merchant listings; recovery does not auto-relist.
 
 ### Must Not Ship If
 
-- Dealers can appear after being blocked or suspended
+- Retailers can appear after being blocked or suspended
+- Retailers can appear while unlisted
+- Delinquent/suspended Merchants retain listed retailers or auto-relist on recovery
 - Duplicate SKUs fragment canonical groupings
 - Price history is missing without explanation
 - Users can see inventory they should not be eligible to see
@@ -68,15 +73,15 @@ All criteria below exist to enforce this rule.
 - Premium behavior is only hidden in the UI
 - Tier logic is duplicated inconsistently across services
 - Admin impersonation bypasses subscription enforcement
-- Dealers receive visibility or context while suspended
+- Merchants receive portal access while suspended, or Retailer visibility is granted while ineligible
 
 ---
 
-## Dealer Ingestion & Harvester Behavior
+## Merchant Ingestion & Harvester Behavior
 
 ### Required
 
-- Feed ingestion respects dealer eligibility and subscription status
+- Feed ingestion respects Merchant subscription status and Retailer eligibility
 - SKIPPED feeds do not produce downstream effects
 - Ingestion jobs are idempotent
 - Duplicate scheduling cannot produce duplicate writes
@@ -146,14 +151,14 @@ All criteria below exist to enforce this rule.
 
 ### Required
 
-- User and dealer data is correctly isolated
+- User and Merchant data is correctly isolated
 - Cross-account access is not possible
 - Sensitive actions require explicit authorization
 - Secrets are not exposed via logs or UI
 
 ### Must Not Ship If
 
-- One dealer can see another dealer’s data
+- One Merchant can see another Merchant's data
 - Admin privileges can be escalated accidentally
 - Sensitive configuration is accessible client-side
 
@@ -166,7 +171,8 @@ Before shipping v1, confirm:
 - [ ] All public copy reviewed against `00_public_promises.md`
 - [ ] All v1 features verified against `02_v1_scope_and_cut_list.md`
 - [ ] Tier enforcement verified via direct API access
-- [ ] Dealer suspension tested end-to-end
+- [ ] Retailer visibility eligibility + listing predicate tested end-to-end
+- [ ] Delinquency auto-unlist and explicit relist flow verified
 - [ ] Harvester duplication tested under concurrency
 - [ ] At least one full rollback completed successfully
 

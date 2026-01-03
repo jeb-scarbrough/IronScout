@@ -69,7 +69,7 @@ export interface AllSettings {
 // =============================================================================
 
 export async function getSystemSetting(key: SettingKey): Promise<SettingValue> {
-  const setting = await prisma.systemSetting.findUnique({
+  const setting = await prisma.system_settings.findUnique({
     where: { key },
   });
 
@@ -365,13 +365,13 @@ async function updateSetting(
   session: { userId: string; email: string }
 ) {
   try {
-    const oldSetting = await prisma.systemSetting.findUnique({
+    const oldSetting = await prisma.system_settings.findUnique({
       where: { key },
     });
 
     const oldValue = oldSetting?.value ?? SETTING_DEFAULTS[key];
 
-    await prisma.systemSetting.upsert({
+    await prisma.system_settings.upsert({
       where: { key },
       create: {
         key,
@@ -444,4 +444,189 @@ export async function getOperationsValue(key: SettingKey): Promise<number> {
 
   const setting = await getSystemSetting(key);
   return setting.value as number;
+}
+
+// =============================================================================
+// Data Integrity Checks
+// =============================================================================
+
+export interface IntegrityCheckResult {
+  name: string;
+  description: string;
+  status: 'ok' | 'warning' | 'error';
+  count: number;
+  message: string;
+  lastChecked: Date;
+}
+
+export interface DataIntegrityResults {
+  checks: IntegrityCheckResult[];
+  overallStatus: 'ok' | 'warning' | 'error';
+  lastChecked: Date;
+}
+
+/**
+ * Run all data integrity checks
+ */
+export async function runDataIntegrityChecks(): Promise<{ success: boolean; error?: string; results?: DataIntegrityResults }> {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const checks: IntegrityCheckResult[] = [];
+    const now = new Date();
+
+    // Check 1: pricing_snapshots retailerId↔merchantId alignment
+    const misalignedSnapshots = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM pricing_snapshots ps
+      WHERE ps."retailerId" IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM merchant_retailers mr
+          WHERE mr."retailerId" = ps."retailerId"
+            AND mr."merchantId" = ps."merchantId"
+            AND mr.status = 'ACTIVE'
+        )
+    `;
+    const misalignedCount = Number(misalignedSnapshots[0]?.count ?? 0);
+    checks.push({
+      name: 'Pricing Snapshots Alignment',
+      description: 'Validates retailerId↔merchantId pairs match merchant_retailers',
+      status: misalignedCount === 0 ? 'ok' : 'warning',
+      count: misalignedCount,
+      message: misalignedCount === 0
+        ? 'All pricing snapshots have valid retailer↔merchant alignment'
+        : `${misalignedCount} snapshots have invalid retailer↔merchant pairs`,
+      lastChecked: now,
+    });
+
+    // Check 2: Orphaned prices (sourceId points to deleted source)
+    const orphanedPrices = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM prices p
+      WHERE p."sourceId" IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM sources s WHERE s.id = p."sourceId"
+        )
+    `;
+    const orphanedPricesCount = Number(orphanedPrices[0]?.count ?? 0);
+    checks.push({
+      name: 'Orphaned Price Records',
+      description: 'Prices with sourceId pointing to non-existent sources',
+      status: orphanedPricesCount === 0 ? 'ok' : 'warning',
+      count: orphanedPricesCount,
+      message: orphanedPricesCount === 0
+        ? 'No orphaned price records found'
+        : `${orphanedPricesCount} prices reference deleted sources`,
+      lastChecked: now,
+    });
+
+    // Check 3: Sources without retailer (should not exist per ADR-016)
+    const sourcesWithoutRetailer = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM sources s
+      WHERE s."retailerId" IS NULL
+    `;
+    const sourcesWithoutRetailerCount = Number(sourcesWithoutRetailer[0]?.count ?? 0);
+    checks.push({
+      name: 'Sources Without Retailer',
+      description: 'Sources must have a retailerId (required field)',
+      status: sourcesWithoutRetailerCount === 0 ? 'ok' : 'error',
+      count: sourcesWithoutRetailerCount,
+      message: sourcesWithoutRetailerCount === 0
+        ? 'All sources have valid retailer associations'
+        : `${sourcesWithoutRetailerCount} sources missing retailerId (data integrity violation)`,
+      lastChecked: now,
+    });
+
+    // Check 4: Alerts with suppressed but still enabled
+    const suppressedEnabledAlerts = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM alerts a
+      WHERE a."suppressedAt" IS NOT NULL
+        AND a."isEnabled" = true
+    `;
+    const suppressedEnabledCount = Number(suppressedEnabledAlerts[0]?.count ?? 0);
+    checks.push({
+      name: 'Suppressed But Enabled Alerts',
+      description: 'Suppressed alerts should typically be disabled',
+      status: suppressedEnabledCount === 0 ? 'ok' : 'warning',
+      count: suppressedEnabledCount,
+      message: suppressedEnabledCount === 0
+        ? 'No conflicting alert states found'
+        : `${suppressedEnabledCount} alerts are both suppressed and enabled`,
+      lastChecked: now,
+    });
+
+    // Check 5: Recent prices missing provenance (ADR-015 requirement)
+    // New writes MUST include ingestionRunType and ingestionRunId
+    const recentPricesWithoutProvenance = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM prices p
+      WHERE p."createdAt" > NOW() - INTERVAL '24 hours'
+        AND (p."ingestionRunType" IS NULL OR p."ingestionRunId" IS NULL)
+    `;
+    const pricesWithoutProvenanceCount = Number(recentPricesWithoutProvenance[0]?.count ?? 0);
+    checks.push({
+      name: 'Recent Prices Without Provenance',
+      description: 'ADR-015: New prices must include ingestionRunType and ingestionRunId',
+      status: pricesWithoutProvenanceCount === 0 ? 'ok' : 'warning',
+      count: pricesWithoutProvenanceCount,
+      message: pricesWithoutProvenanceCount === 0
+        ? 'All recent prices have provenance fields'
+        : `${pricesWithoutProvenanceCount} prices in last 24h missing provenance`,
+      lastChecked: now,
+    });
+
+    // Check 6: Recent pricing_snapshots missing provenance (ADR-015 requirement)
+    const recentSnapshotsWithoutProvenance = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM pricing_snapshots ps
+      WHERE ps."createdAt" > NOW() - INTERVAL '24 hours'
+        AND (ps."ingestionRunType" IS NULL OR ps."ingestionRunId" IS NULL)
+    `;
+    const snapshotsWithoutProvenanceCount = Number(recentSnapshotsWithoutProvenance[0]?.count ?? 0);
+    checks.push({
+      name: 'Recent Snapshots Without Provenance',
+      description: 'ADR-015: New pricing_snapshots must include ingestionRunType and ingestionRunId',
+      status: snapshotsWithoutProvenanceCount === 0 ? 'ok' : 'warning',
+      count: snapshotsWithoutProvenanceCount,
+      message: snapshotsWithoutProvenanceCount === 0
+        ? 'All recent snapshots have provenance fields'
+        : `${snapshotsWithoutProvenanceCount} snapshots in last 24h missing provenance`,
+      lastChecked: now,
+    });
+
+    // Determine overall status
+    let overallStatus: 'ok' | 'warning' | 'error' = 'ok';
+    for (const check of checks) {
+      if (check.status === 'error') {
+        overallStatus = 'error';
+        break;
+      }
+      if (check.status === 'warning') {
+        overallStatus = 'warning';
+      }
+    }
+
+    await logAdminAction(session.userId, 'RUN_DATA_INTEGRITY_CHECKS', {
+      resource: 'DataIntegrity',
+      newValue: { checksRun: checks.length, overallStatus },
+    });
+
+    return {
+      success: true,
+      results: {
+        checks,
+        overallStatus,
+        lastChecked: now,
+      },
+    };
+  } catch (error) {
+    loggers.settings.error('Failed to run data integrity checks', {}, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to run integrity checks' };
+  }
 }

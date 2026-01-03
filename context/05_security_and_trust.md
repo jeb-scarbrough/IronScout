@@ -3,7 +3,7 @@
 This document defines the security, trust, and integrity boundaries for IronScout v1.
 
 Its purpose is to:
-- Protect users and dealers from unintended exposure
+- Protect users and merchants from unintended exposure
 - Ensure claims are enforceable
 - Prevent trust erosion from partial or ambiguous behavior
 - Establish clear boundaries for AI, data, and operations
@@ -12,12 +12,20 @@ If a behavior cannot be secured or explained clearly, it must not be shipped.
 
 ---
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ## Trust Model
 
 IronScout operates on a simple trust model:
 
 - Users trust IronScout to present information honestly and conservatively
-- Dealers trust IronScout to enforce visibility rules fairly
+- Merchants trust IronScout to enforce visibility rules fairly for the Retailers they administer
 - IronScout does not ask users to trust predictions, recommendations, or guarantees
 
 Trust is maintained by:
@@ -32,20 +40,20 @@ Trust is maintained by:
 
 ### Consumers
 
-- Consumer accounts are isolated from dealer and admin data
+- Consumer accounts are isolated from merchant and admin data
 - Consumer identity is used only to personalize access and alerts
-- No consumer can access dealer-only or admin-only data
+- No consumer can access merchant-only or admin-only data
 
 ---
 
-### Dealers
+### Merchants
 
-- Dealer accounts are isolated from other dealers
-- Dealers can only access their own inventory, feeds, and metrics
-- Dealer visibility in consumer experiences is determined server-side
+- Merchant accounts are isolated from other merchants
+- Merchants can only access Retailers, feeds, and metrics they are explicitly permitted to administer
+- Auth boundary = Merchant. Retailers do not authenticate. All access is via Merchant users with explicit Retailer permissions.
 
-Dealer eligibility is enforced by:
-- Subscription state
+Visibility boundary = Retailer. Eligibility and visibility are enforced by:
+- Subscription state (merchant)
 - Feed health
 - Platform policies
 
@@ -57,7 +65,7 @@ Dealer eligibility is enforced by:
 - Admin impersonation exists for support and troubleshooting only
 - Impersonation does not bypass:
   - subscription enforcement
-  - dealer visibility rules
+  - Retailer visibility rules
   - billing logic
 
 All admin actions that affect access, billing, or visibility must be audited.
@@ -67,19 +75,19 @@ All admin actions that affect access, billing, or visibility must be audited.
 ## Data Isolation and Integrity
 
 - Cross-account data access is not permitted
-- Dealer data cannot be accessed by other dealers through any path
-- Consumer data is not shared with dealers except in aggregate where explicitly allowed
+- Merchant data cannot be accessed by other merchants through any path
+- Consumer data is not shared with merchants except in aggregate where explicitly allowed
 - Sensitive fields are never exposed client-side
 
 If isolation cannot be guaranteed, the feature must be removed or restricted.
 
 ---
 
-## Dealer Visibility Enforcement
+## Retailer Visibility Enforcement
 
-- Only eligible dealer inventory may appear in consumer experiences
+- Only eligible Retailer inventory may appear in consumer experiences
 - Eligibility changes propagate deterministically
-- Suspended or blocked dealers must be removed from:
+- Suspended or blocked Merchants lose portal access; ineligible Retailers must be removed from:
   - search results
   - alerts
   - watchlists

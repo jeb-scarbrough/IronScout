@@ -515,7 +515,7 @@ async function batchUpsertSourceProducts(
       const urlHash = computeUrlHash(product.url)
       const normalizedUrlValue = normalizeUrl(product.url)
 
-      const upserted = await tx.sourceProduct.upsert({
+      const upserted = await tx.source_products.upsert({
         where: {
           sourceId_identityType_identityValue: {
             sourceId,
@@ -731,7 +731,10 @@ async function bulkInsertPrices(
       "priceType",
       "affiliateFeedRunId",
       "priceSignatureHash",
-      "createdAt"
+      "createdAt",
+      "observedAt",
+      "ingestionRunType",
+      "ingestionRunId"
     )
     SELECT
       gen_random_uuid(),
@@ -745,7 +748,10 @@ async function bulkInsertPrices(
       unnest(${priceTypes}::text[])::"PriceType",
       unnest(${runIds}::text[]),
       unnest(${signatureHashes}::text[]),
-      ${createdAt}
+      ${createdAt},
+      ${createdAt},
+      'AFFILIATE_FEED'::"IngestionRunType",
+      unnest(${runIds}::text[])
     ON CONFLICT DO NOTHING
   `
 

@@ -22,7 +22,7 @@ It does **not**:
 - Make purchase recommendations
 - Predict prices
 - Guarantee outcomes
-- Automate dealer pricing decisions
+- Automate merchant pricing decisions
 
 Context and constraints live in `context/`.  
 Decisions live in `decisions/`.
@@ -51,7 +51,7 @@ IronScout is a multi-app system:
 
 - `apps/api` — Backend API, enforcement, search, alerts
 - `apps/web` — Consumer UI
-- `apps/dealer` — Dealer portal
+- `apps/merchant` — Merchant portal
 - `apps/admin` — Admin / ops portal
 - `apps/harvester` — Ingestion worker (BullMQ)
 
@@ -65,7 +65,7 @@ Queues live in Redis.
 Agents must **never break** the following:
 
 - Server-side tier enforcement only (ADR-002)
-- Dealer visibility filtered at query time (ADR-005)
+- Retailer visibility filtered at query time (ADR-005)
 - Append-only price history (ADR-004)
 - Fail closed on ambiguity (ADR-009)
 - No recommendations, verdicts, or deal scores (ADR-006)

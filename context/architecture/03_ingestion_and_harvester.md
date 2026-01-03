@@ -4,6 +4,14 @@ This document describes how data ingestion works in IronScout as implemented tod
 
 This document is intentionally operational and conservative. It describes **what the harvester actually does**, not what it could do in the future.
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ---
 
 ## Purpose of the Harvester
@@ -12,7 +20,7 @@ The harvester exists to:
 - Ingest pricing and availability data from external sources
 - Normalize inconsistent inputs into a canonical schema
 - Preserve historical price data
-- Feed search, alerts, and dealer visibility with predictable inputs
+- Feed search, alerts, and Retailer visibility with predictable inputs
 
 The harvester is designed for **correctness, traceability, and idempotency**, not real-time guarantees.
 
@@ -27,14 +35,17 @@ The harvester is designed for **correctness, traceability, and idempotency**, no
 - Writes directly to Postgres via Prisma
 - Runs multiple pipelines in the same worker process:
   - Retailer / affiliate ingestion
-  - Dealer feed ingestion
-  - Dealer benchmarks and insights
+  - Merchant-portal feed ingestion (legacy dealer naming)
+  - Merchant-portal benchmarks and insights (legacy dealer naming)
 
 This architecture favors simplicity over isolation in v1.
 
 ---
 
 ## Ingestion Pipelines
+
+This pipeline processes Merchant-configured ingestion to produce Retailer-keyed consumer prices (`prices.retailerId`).
+All consumer price outputs are keyed by `retailerId`, regardless of which Merchant configured or submitted the feed.
 
 ### 1) Retailer / Affiliate Ingestion
 
@@ -96,25 +107,25 @@ Source (config) → Fetch → ParsedProduct (ephemeral) → Normalize → Price 
 
 ---
 
-### 2) Dealer Feed Ingestion
+### 2) Merchant Portal Feed Ingestion (legacy dealer naming)
 
-Dealer feeds are ingested through a separate pipeline.
+Merchant feeds are ingested through a separate pipeline (legacy dealer-* naming).
 
 **High-level stages:**
-1. Dealer feed scheduling
+1. Merchant feed scheduling
 2. Fetch and parse feed
 3. Validate feed health
 4. Normalize SKUs
 5. Match SKUs to canonical products
-6. Write dealer inventory and prices
-7. Generate benchmarks and insights (if eligible)
+6. Write Retailer price data
+7. Generate benchmarks and insights (pricing_snapshots) if eligible
 
 **Key components (observed):**
-- `dealer/feed-ingest.ts`
-- `dealer/sku-match.ts`
-- `dealer/benchmark.ts`
-- `dealer/insight.ts`
-- `dealer/scheduler.ts`
+- `dealer/feed-ingest.ts` (legacy naming)
+- `dealer/sku-match.ts` (legacy naming)
+- `dealer/benchmark.ts` (legacy naming)
+- `dealer/insight.ts` (legacy naming)
+- `dealer/scheduler.ts` (legacy naming)
 
 ---
 
@@ -122,7 +133,7 @@ Dealer feeds are ingested through a separate pipeline.
 
 ### Current State
 
-- Dealer scheduling uses `setInterval` inside the worker process.
+- Merchant feed scheduling uses `setInterval` inside the worker process (legacy dealer naming).
 - Retailer scheduling appears to follow a similar in-process pattern.
 
 ### Implication
@@ -188,9 +199,9 @@ For v1, one of the following must be explicitly chosen and documented:
 - History must not be overwritten silently
 - “Current price” is derived, not stored as a single mutable field
 
-### Dealer Inventory
+### Retailer Inventory (administered by Merchants)
 
-- Dealer SKUs anchor dealer offers
+- Retailer SKUs anchor Retailer offers
 - SKU-to-product mapping must be stable
 - Failed mappings must be visible to ops
 
@@ -201,12 +212,12 @@ For v1, one of the following must be explicitly chosen and documented:
 
 ---
 
-## Dealer Eligibility and SKIPPED Executions
+## Retailer Eligibility and SKIPPED Executions
 
 ### Required Behavior
 
-- Dealer feeds must respect subscription status
-- If a dealer is ineligible:
+- Merchant feeds must respect Merchant subscription status and Retailer eligibility
+- If a Retailer is ineligible:
   - Execution is marked SKIPPED
   - No downstream jobs run
   - No benchmarks or insights are generated
@@ -293,8 +304,8 @@ These must be resolved or explicitly accepted before scaling:
 
 - Ingestion must fail safely
 - Bad data must not propagate silently
-- Dealer eligibility must be enforced before visibility
-- Historical data must not be destroyed to “fix” bugs
+- Retailer eligibility must be enforced before visibility
+- Historical data must not be destroyed to "fix" bugs
 
 ---
 

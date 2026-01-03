@@ -1,5 +1,5 @@
-import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
+import { Worker, Job } from 'bullmq'
 import { redisConnection } from '../config/redis'
 import { logger } from '../config/logger'
 import { alertQueue, WriteJobData, NormalizedProduct } from '../config/queues'
@@ -22,44 +22,9 @@ interface BatchResult {
   errors: Array<{ item: NormalizedProduct; error: string }>
 }
 
-interface RetailerMap {
-  [website: string]: { id: string; name: string }
-}
-
 // ============================================================================
 // BATCH PROCESSING HELPERS
 // ============================================================================
-
-/**
- * Upsert retailers in batch - get or create all unique retailers
- */
-async function batchUpsertRetailers(
-  items: NormalizedProduct[]
-): Promise<RetailerMap> {
-  // Get unique retailers
-  const uniqueRetailers = new Map<string, string>()
-  for (const item of items) {
-    if (!uniqueRetailers.has(item.retailerWebsite)) {
-      uniqueRetailers.set(item.retailerWebsite, item.retailerName)
-    }
-  }
-
-  const retailerMap: RetailerMap = {}
-
-  // Batch upsert in a single transaction
-  await prisma.$transaction(async (tx) => {
-    for (const [website, name] of uniqueRetailers) {
-      const retailer = await tx.retailer.upsert({
-        where: { website },
-        create: { name, website, tier: 'STANDARD' },
-        update: { name },
-      })
-      retailerMap[website] = { id: retailer.id, name: retailer.name }
-    }
-  })
-
-  return retailerMap
-}
 
 /**
  * Upsert products in batch using transaction
@@ -72,7 +37,7 @@ async function batchUpsertProducts(
   // Process in transaction
   await prisma.$transaction(async (tx) => {
     for (const item of items) {
-      const product = await tx.product.upsert({
+      const product = await tx.products.upsert({
         where: { id: item.productId },
         create: {
           id: item.productId,
@@ -112,7 +77,9 @@ async function batchUpsertProducts(
  */
 export async function batchProcessPrices(
   items: NormalizedProduct[],
-  retailerMap: RetailerMap
+  retailerId: string,
+  sourceId: string,
+  executionId: string
 ): Promise<{ upsertedCount: number; priceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> }> {
   let upsertedCount = 0
   const priceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> = []
@@ -120,20 +87,11 @@ export async function batchProcessPrices(
   // Build lookup keys for existing prices
   const priceKeys = items.map((item) => ({
     productId: item.productId,
-    retailerId: retailerMap[item.retailerWebsite]?.id,
-  })).filter((k) => k.retailerId)
-
-  // Short-circuit if no valid price keys (prevents Prisma "OR must not be empty" error)
-  if (priceKeys.length === 0) {
-    log.warn('No valid price keys - all items missing retailer mapping', {
-      itemCount: items.length,
-      retailerMapSize: Object.keys(retailerMap).length,
-    })
-    return { upsertedCount, priceChanges }
-  }
+    retailerId,
+  }))
 
   // Fetch all existing prices in one query
-  const existingPrices = await prisma.price.findMany({
+  const existingPrices = await prisma.prices.findMany({
     where: {
       OR: priceKeys.map((k) => ({
         productId: k.productId,
@@ -154,10 +112,19 @@ export async function batchProcessPrices(
     })
   }
 
+  // ADR-015: Capture observation time for all prices in this batch
+  // This is the canonical timestamp for correction matching and provenance
+  const observedAt = new Date()
+
   // Collect prices to create
   const pricesToCreate: Array<{
     productId: string
     retailerId: string
+    merchantId?: string
+    sourceId: string
+    ingestionRunType: 'SCRAPE' | 'AFFILIATE_FEED' | 'MERCHANT_FEED' | 'MANUAL'
+    ingestionRunId: string
+    observedAt: Date
     price: number
     currency: string
     url: string
@@ -165,10 +132,7 @@ export async function batchProcessPrices(
   }> = []
 
   for (const item of items) {
-    const retailer = retailerMap[item.retailerWebsite]
-    if (!retailer) continue
-
-    const key = `${item.productId}:${retailer.id}`
+    const key = `${item.productId}:${retailerId}`
     const existing = existingPriceMap.get(key)
     const newPrice = parseFloat(item.price.toFixed(2))
 
@@ -176,7 +140,12 @@ export async function batchProcessPrices(
     if (!existing || existing.price !== newPrice || existing.inStock !== item.inStock) {
       pricesToCreate.push({
         productId: item.productId,
-        retailerId: retailer.id,
+        retailerId,
+        merchantId: undefined, // Derive later from merchant_retailers if needed
+        sourceId,
+        ingestionRunType: 'SCRAPE',
+        ingestionRunId: executionId,
+        observedAt,
         price: newPrice,
         currency: item.currency,
         url: item.url,
@@ -196,7 +165,7 @@ export async function batchProcessPrices(
 
   // Batch create prices
   if (pricesToCreate.length > 0) {
-    await prisma.price.createMany({
+    await prisma.prices.createMany({
       data: pricesToCreate,
     })
     upsertedCount = pricesToCreate.length
@@ -210,19 +179,18 @@ export async function batchProcessPrices(
  */
 async function processBatch(
   items: NormalizedProduct[],
-  executionId: string
+  executionId: string,
+  retailerId: string,
+  sourceId: string
 ): Promise<BatchResult> {
   const errors: Array<{ item: NormalizedProduct; error: string }> = []
 
   try {
-    // Step 1: Batch upsert retailers
-    const retailerMap = await batchUpsertRetailers(items)
-
-    // Step 2: Batch upsert products
+    // Step 1: Batch upsert products
     await batchUpsertProducts(items)
 
-    // Step 3: Batch process prices
-    const { upsertedCount, priceChanges } = await batchProcessPrices(items, retailerMap)
+    // Step 2: Batch process prices
+    const { upsertedCount, priceChanges } = await batchProcessPrices(items, retailerId, sourceId, executionId)
 
     return { upsertedCount, priceChanges, errors }
   } catch (error) {
@@ -232,17 +200,13 @@ async function processBatch(
     let upsertedCount = 0
     const priceChanges: Array<{ productId: string; oldPrice?: number; newPrice: number }> = []
 
+    // ADR-015: Capture observation time for fallback processing
+    const observedAt = new Date()
+
     for (const item of items) {
       try {
-        // Upsert retailer
-        const retailer = await prisma.retailer.upsert({
-          where: { website: item.retailerWebsite },
-          create: { name: item.retailerName, website: item.retailerWebsite, tier: 'STANDARD' },
-          update: { name: item.retailerName },
-        })
-
         // Upsert product
-        await prisma.product.upsert({
+        await prisma.products.upsert({
           where: { id: item.productId },
           create: {
             id: item.productId,
@@ -266,8 +230,8 @@ async function processBatch(
         })
 
         // Check existing price
-        const existingPrice = await prisma.price.findFirst({
-          where: { productId: item.productId, retailerId: retailer.id },
+        const existingPrice = await prisma.prices.findFirst({
+          where: { productId: item.productId, retailerId },
           orderBy: { createdAt: 'desc' },
         })
 
@@ -275,10 +239,14 @@ async function processBatch(
         const oldPrice = existingPrice ? parseFloat(existingPrice.price.toString()) : undefined
 
         if (!existingPrice || oldPrice !== newPrice || existingPrice.inStock !== item.inStock) {
-          await prisma.price.create({
+          await prisma.prices.create({
             data: {
               productId: item.productId,
-              retailerId: retailer.id,
+              retailerId,
+              sourceId,
+              ingestionRunType: 'SCRAPE',
+              ingestionRunId: executionId,
+              observedAt,
               price: newPrice,
               currency: item.currency,
               url: item.url,
@@ -333,33 +301,38 @@ export const writerWorker = new Worker<WriteJobData>(
     const allErrors: Array<{ item: NormalizedProduct; error: string }> = []
 
     try {
-      // Get source name for logging context
+      // Get source for retailer context
       log.debug('WRITE_LOADING_SOURCE', { sourceId, executionId })
       const sourceLoadStart = Date.now()
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
-        select: { name: true, retailer: { select: { name: true } } },
+        select: { id: true, name: true, retailerId: true, retailers: { select: { name: true } } },
       })
-      const sourceName = source?.name
-      const retailerName = source?.retailer?.name
+
+      if (!source || !source.retailerId) {
+        throw new Error('Source missing retailerId; cannot write without explicit retailer mapping')
+      }
+
+      const retailerId = source.retailerId
 
       log.debug('WRITE_SOURCE_LOADED', {
         sourceId,
-        sourceName,
-        retailerName,
+        sourceName: source?.name,
+        retailerName: source?.retailers?.name,
+        retailerId,
         executionId,
         loadDurationMs: Date.now() - sourceLoadStart,
       })
 
-      log.info('WRITE_START', { executionId, sourceId, sourceName, retailerName, totalItems, batchCount })
+      log.info('WRITE_START', { executionId, sourceId, sourceName: source?.name, retailerName: source?.retailers?.name, totalItems, batchCount })
       // Log start (summary only)
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
           event: 'WRITE_START',
           message: `Starting batched write: ${totalItems} items in ${batchCount} batches`,
-          metadata: { totalItems, batchCount, batchSize: BATCH_SIZE },
+          metadata: { totalItems, batchCount, batchSize: BATCH_SIZE, retailerId },
         },
       })
 
@@ -368,7 +341,7 @@ export const writerWorker = new Worker<WriteJobData>(
         const batchNum = Math.floor(i / BATCH_SIZE) + 1
         const batch = normalizedItems.slice(i, i + BATCH_SIZE)
 
-        const result = await processBatch(batch, executionId)
+        const result = await processBatch(batch, executionId, retailerId, sourceId)
 
         totalUpserted += result.upsertedCount
         allPriceChanges.push(...result.priceChanges)
@@ -382,7 +355,7 @@ export const writerWorker = new Worker<WriteJobData>(
 
       // Log errors (item-level logging only for failures)
       if (allErrors.length > 0) {
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'WARN',
@@ -403,7 +376,7 @@ export const writerWorker = new Worker<WriteJobData>(
 
       // Update execution status
       const duration = Date.now() - new Date(job.timestamp).getTime()
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'SUCCESS',
@@ -415,7 +388,7 @@ export const writerWorker = new Worker<WriteJobData>(
 
       // Update feed hash if provided
       if (contentHash) {
-        await prisma.source.update({
+        await prisma.sources.update({
           where: { id: sourceId },
           data: { feedHash: contentHash },
         })
@@ -424,7 +397,7 @@ export const writerWorker = new Worker<WriteJobData>(
       // Summary log (single entry for entire write operation)
       const writeDurationMs = Date.now() - stageStart
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -441,6 +414,7 @@ export const writerWorker = new Worker<WriteJobData>(
             batchCount,
             // Context
             sourceId,
+            retailerId,
             contentHashUpdated: !!contentHash,
           },
         },
@@ -460,12 +434,13 @@ export const writerWorker = new Worker<WriteJobData>(
         }))
         await alertQueue.addBulk(alertJobs)
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
             event: 'ALERT_QUEUED',
             message: `Queued ${allPriceChanges.length} alert evaluations`,
+            metadata: { retailerId },
           },
         })
       }
@@ -474,7 +449,7 @@ export const writerWorker = new Worker<WriteJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -484,7 +459,7 @@ export const writerWorker = new Worker<WriteJobData>(
         },
       })
 
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'FAILED',

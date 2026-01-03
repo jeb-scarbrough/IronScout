@@ -1,8 +1,8 @@
 /**
  * Subscription Expired Notifications
  *
- * Sent when a dealer's subscription has expired and feed ingestion is skipped.
- * Rate-limited to once per day per dealer.
+ * Sent when a merchant's subscription has expired and feed ingestion is skipped.
+ * Rate-limited to once per day per merchant.
  */
 
 import {
@@ -30,7 +30,7 @@ import {
 // =============================================================================
 
 export interface SubscriptionExpiredInfo {
-  dealerId: string;
+  merchantId: string;
   businessName: string;
   tier: string;
   expiresAt: Date | null;
@@ -38,7 +38,7 @@ export interface SubscriptionExpiredInfo {
   daysOverdue: number;
   feedId: string;
   feedName: string;
-  dealerEmails: string[];
+  merchantEmails: string[];
 }
 
 export interface NotificationResult {
@@ -51,14 +51,14 @@ export interface NotificationResult {
 // =============================================================================
 
 /**
- * Notify dealer and IronScout staff that a subscription has expired
+ * Notify merchant and IronScout staff that a subscription has expired
  * and feed ingestion was skipped.
  */
-export async function notifyDealerSubscriptionExpired(
+export async function notifyMerchantSubscriptionExpired(
   info: SubscriptionExpiredInfo
 ): Promise<NotificationResult> {
-  const renewUrl = `${EMAIL_CONFIG.dealerPortalUrl}/settings/billing`;
-  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${info.dealerId}`;
+  const renewUrl = `${EMAIL_CONFIG.merchantPortalUrl}/settings/billing`;
+  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${info.merchantId}`;
 
   const expiryDate = info.expiresAt
     ? new Date(info.expiresAt).toLocaleDateString('en-US', {
@@ -78,12 +78,12 @@ export async function notifyDealerSubscriptionExpired(
     ? 'Subscription Expiring - Feed Processing Paused'
     : 'Subscription Expired - Feed Processing Suspended';
 
-  // Send emails to all opted-in dealer contacts
+  // Send emails to all opted-in merchant contacts
   const emailResults: EmailResult[] = [];
 
-  for (const dealerEmail of info.dealerEmails) {
+  for (const merchantEmail of info.merchantEmails) {
     const emailResult = await sendEmail({
-      to: dealerEmail,
+      to: merchantEmail,
       subject: `${subjectPrefix} ${subjectText}`,
       html: wrapEmailTemplate(`
         ${emailInfoBox(
@@ -172,7 +172,7 @@ Questions? Contact support@ironscout.ai`,
     {
       text: `${subjectPrefix} Subscription expired: ${info.businessName} - Feed skipped`,
       blocks: [
-        slackHeader(`${subjectPrefix} Dealer Subscription Expired`),
+        slackHeader(`${subjectPrefix} Merchant Subscription Expired`),
         slackFieldsSection({
           Business: info.businessName,
           Plan: info.tier,
@@ -188,18 +188,18 @@ Questions? Contact support@ironscout.ai`,
           text: {
             type: 'mrkdwn',
             text: info.isInGracePeriod
-              ? '_Dealer has been notified. Feed processing paused until renewal._'
+              ? '_Merchant has been notified. Feed processing paused until renewal._'
               : '_Feed processing suspended. Manual override available in admin portal._',
           },
         },
         slackActions(
-          slackButton('View Dealer', adminDetailUrl, 'primary'),
+          slackButton('View Merchant', adminDetailUrl, 'primary'),
           slackButton('Trigger Feed Manually', `${adminDetailUrl}#feeds`)
         ),
-        slackContext(`Dealer ID: ${info.dealerId} • Feed ID: ${info.feedId}`),
+        slackContext(`Merchant ID: ${info.merchantId} • Feed ID: ${info.feedId}`),
       ],
     },
-    SLACK_CONFIG.dealerOpsWebhookUrl
+    SLACK_CONFIG.merchantOpsWebhookUrl
   );
 
   return { email: emailResults, slack: slackResult };

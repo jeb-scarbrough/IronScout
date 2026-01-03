@@ -44,7 +44,7 @@ export async function validateTransportAsync(transport: string): Promise<void> {
 
     // Check database setting
     const { prisma } = await import('@ironscout/db');
-    const setting = await prisma.systemSetting.findUnique({
+    const setting = await prisma.system_settings.findUnique({
       where: { key: 'AFFILIATE_FEED_ALLOW_PLAIN_FTP' },
     });
 

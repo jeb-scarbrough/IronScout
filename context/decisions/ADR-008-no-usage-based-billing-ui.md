@@ -7,7 +7,7 @@ Accepted
 Usage-based billing increases complexity and dispute risk in v1.
 
 ## Decision
-Dealer billing is subscription-based only. Usage metrics are internal and not exposed.
+Merchant billing is subscription-based only. Usage metrics are internal and not exposed.
 
 ## Alternatives Considered
 - Usage-based billing

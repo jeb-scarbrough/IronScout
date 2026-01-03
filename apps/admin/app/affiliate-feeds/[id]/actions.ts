@@ -41,7 +41,7 @@ export async function testFeedConnection(
     return { success: false, error: 'Unauthorized' };
   }
 
-  const feed = await prisma.affiliateFeed.findUnique({
+  const feed = await prisma.affiliate_feeds.findUnique({
     where: { id: feedId },
   });
 

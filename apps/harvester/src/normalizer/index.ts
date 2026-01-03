@@ -27,9 +27,9 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
       // Get source info to determine retailer (moved up for logging context)
       log.debug('NORMALIZE_LOADING_SOURCE', { sourceId, executionId })
       const sourceLoadStart = Date.now()
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
-        include: { retailer: { select: { name: true } } },
+        include: { retailers: { select: { name: true } } },
       })
 
       if (!source) {
@@ -38,7 +38,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
       }
 
       const sourceName = source.name
-      const retailerName = source.retailer?.name
+      const retailerName = source.retailers?.name
 
       log.debug('NORMALIZE_SOURCE_LOADED', {
         sourceId,
@@ -50,7 +50,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
 
       log.info('NORMALIZE_START', { executionId, sourceId, sourceName, retailerName, itemCount: rawItems.length })
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -73,7 +73,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-          await prisma.executionLog.create({
+          await prisma.execution_logs.create({
             data: {
               executionId,
               level: 'WARN',
@@ -88,7 +88,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
       const normalizeDurationMs = Date.now() - stageStart
       const skippedCount = rawItems.length - normalizedItems.length
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -117,7 +117,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
         jobId: `write:${executionId}`, // Idempotent: one write per execution
       })
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -130,7 +130,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -139,7 +139,7 @@ export const normalizerWorker = new Worker<NormalizeJobData>(
         },
       })
 
-      await prisma.execution.update({
+      await prisma.executions.update({
         where: { id: executionId },
         data: {
           status: 'FAILED',

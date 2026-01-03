@@ -139,10 +139,10 @@ $services = @(
         HealthCheck = "http://localhost:3002"
     },
     @{
-        Name = "dealer"
+        Name = "merchant"
         Port = 3003
-        DevCommand = "pnpm --filter @ironscout/dealer dev"
-        ProdCommand = "pnpm --filter @ironscout/dealer start"
+        DevCommand = "pnpm --filter @ironscout/merchant dev"
+        ProdCommand = "pnpm --filter @ironscout/merchant start"
         HealthCheck = "http://localhost:3003"
     },
     @{

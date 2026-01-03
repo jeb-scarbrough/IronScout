@@ -39,7 +39,7 @@ const DOC_MAP = {
     web: 'docs/apps/web.md',
     harvester: 'docs/apps/harvester.md',
     admin: 'docs/apps/admin.md',
-    dealer: 'docs/apps/dealer.md',
+    merchant: 'docs/apps/merchant.md',
   },
   product: [
     'docs/product/consumer-tiers.md',
@@ -165,14 +165,14 @@ function analyze(files: string[], message: string): { hits: HeuristicHit[]; docs
     DOC_MAP.apps.web,
     DOC_MAP.apps.harvester,
     DOC_MAP.apps.admin,
-    DOC_MAP.apps.dealer,
+    DOC_MAP.apps.merchant,
   ])
 
   // Deployment / env / config
   hitFiles('Deployment/env/config change', patterns.deployment, DOC_MAP.deployment)
 
   // Auth/roles/impersonation
-  hitFiles('Auth/roles/impersonation change', patterns.auth, [DOC_MAP.apps.web, DOC_MAP.apps.admin, DOC_MAP.apps.dealer])
+  hitFiles('Auth/roles/impersonation change', patterns.auth, [DOC_MAP.apps.web, DOC_MAP.apps.admin, DOC_MAP.apps.merchant])
 
   // Alerts/notifications/email
   hitFiles('Alerts/notifications change', patterns.alerts, [DOC_MAP.deployment[3], DOC_MAP.apps.harvester, DOC_MAP.apps.api])
@@ -184,7 +184,7 @@ function analyze(files: string[], message: string): { hits: HeuristicHit[]; docs
   hitFiles('Search/ranking/indexing change', patterns.searchRanking, [DOC_MAP.arch[1], DOC_MAP.arch[2], DOC_MAP.apps.api])
 
   // Data lifecycle/visibility
-  hitFiles('Data lifecycle/visibility change', patterns.dataLifecycle, [DOC_MAP.product[2], DOC_MAP.apps.dealer, DOC_MAP.apps.admin])
+  hitFiles('Data lifecycle/visibility change', patterns.dataLifecycle, [DOC_MAP.product[2], DOC_MAP.apps.merchant, DOC_MAP.apps.admin])
 
   // Deployment/infra
   hitFiles('Deployment/infra change', patterns.deploymentInfra, DOC_MAP.deployment)
@@ -226,7 +226,7 @@ function analyze(files: string[], message: string): { hits: HeuristicHit[]; docs
     addHit('Commit message mentions auth/roles/admin/impersonation', ['<message>'], [
       DOC_MAP.apps.web,
       DOC_MAP.apps.admin,
-      DOC_MAP.apps.dealer,
+      DOC_MAP.apps.merchant,
     ])
   }
 

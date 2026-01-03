@@ -1,10 +1,36 @@
-# Subscription and Billing
+# Subscription and Billing (Merchant-scoped)
 
 This document describes how subscriptions and billing are modeled and enforced in IronScout **as implemented today**, with explicit callouts where behavior, documentation, or code paths require decisions or tightening.
 
 This document defines **mechanics and enforcement**, not pricing language. Pricing promises live in `context/04_pricing_and_tiers.md`.
 
----
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
+## Subscription and Billing (Merchant-scoped)
+
+Subscriptions apply to **Merchants** (B2B portal accounts). Merchants authenticate. Retailers do not.
+
+- Subscription is Merchant-level: it gates portal capabilities and premium Merchant features (feeds configuration, benchmarking depth, analytics, support levels).
+- Billing unit = per Retailer listing (entitlement). Merchants pay per Retailer listing.
+- Pricing and consumer visibility are per-Retailer listing (entitlement) and eligibility, not subscription.
+- Eligibility applies to **Retailer visibility**, not Merchant existence. Listing is an explicit Merchant↔Retailer entitlement.
+- v1 constraint: each Retailer belongs to exactly one Merchant.
+
+
+## Data model mapping
+
+- Consumer prices: `prices` (immutable) keyed by `retailerId`.
+- Merchant benchmarks: `pricing_snapshots` (immutable) keyed by `merchantId`.
+- Source/Feed identifies how consumer prices were obtained. It is not a Merchant.
+- Entitlement: `merchant_retailers.listingStatus` (LISTED | UNLISTED) and relationship `status` (ACTIVE | SUSPENDED) gate whether a Merchant’s retailer can appear to consumers once eligible.
+
+> Legacy note: some code paths, env vars, queues, or folders may still use the prefix `dealer` during migration. This is naming only. The canonical concept is Merchant.
 
 ## Goals (v1)
 
@@ -66,59 +92,58 @@ If tier cannot be verified, default to `FREE`.
 
 ---
 
-## Dealer Subscriptions
+## Merchant Subscriptions
 
 ### Model
 
-Dealers have:
+Merchants have:
 - A subscription tier (e.g. STARTER, STANDARD, PRO)
 - A subscription status (ACTIVE, EXPIRED, SUSPENDED, CANCELLED)
 - A billing method (e.g. platform billing, invoice)
 
-Subscription state governs:
-- Ingestion eligibility
-- Visibility in consumer experiences
-- Access to dealer-facing context
+Subscription state governs portal feature access (depth, speed, analytics) and operational actions. Consumer visibility is governed by:
+- Retailer eligibility (`retailers.visibilityStatus = ELIGIBLE`)
+- Merchant↔Retailer entitlement (`listingStatus = LISTED` and relationship `status = ACTIVE`)
+- No subscription gating in consumer queries.
 
 ---
 
-### Dealer Subscription States
+### Merchant Subscription States
 
 #### ACTIVE
-- Full access to tier-appropriate features
-- Inventory eligible for consumer visibility
+- Full access to tier-appropriate Merchant features
+- Administered Retailers may be listed/unlisted; consumer visibility still depends on eligibility + listing
 
 #### EXPIRED (Grace)
 - Access may be partially retained for a limited period
-- Eligibility rules must be explicit and documented
+- Consumer visibility unchanged: eligibility + listing predicate still applies
 
 #### SUSPENDED / CANCELLED
-- No consumer visibility
-- Ingestion must be SKIPPED
-- Dealer portal access may be restricted
+- Merchant portal access allowed for remediation; premium features gated by tier/status.
+- Consumer visibility is controlled by entitlement: delinquency/suspension should auto-unlist listings; recovery remains unlisted until explicitly listed.
 
 **Required invariant**
-- A suspended dealer must never appear in consumer search, alerts, or watchlists.
+- Suspension/delinquency triggers auto-unlist of all Merchant listings; recovery does not relist automatically.
 
 ---
 
-## Enforcement Surfaces (Dealer)
+## Enforcement Surfaces (Merchant/Retailer)
 
-Dealer subscription state must be enforced in **all** of the following places:
+Consumer visibility is enforced by eligibility + entitlement, not subscription. Subscription affects Merchant feature access and listing lifecycle automation (auto-unlist on delinquency).
 
 1. **Harvester**
-   - Skip ingestion when ineligible
-   - Do not enqueue downstream jobs
+   - Ingestion continues for portal access (even if delinquent) but writes must capture provenance.
+   - Auto-unlist or quarantine outputs if delinquent/suspended per policy.
 
 2. **API Query Layer**
-   - Filter dealer inventory at query time
+   - Filter Retailer inventory at query time based on eligibility + listing entitlement (ADR-005)
    - Do not rely on ingestion-time filtering alone
 
 3. **Alerts**
-   - Dealer inventory must not trigger alerts when ineligible
+   - Retailer inventory must not trigger alerts when Retailer is ineligible or unlisted
 
-4. **Dealer Portal**
-   - Restrict access to context based on tier and status
+4. **Merchant Portal**
+   - Restrict premium features based on tier/status; keep access for remediation even when delinquent/suspended.
 
 Failure at any one surface is a trust violation.
 
@@ -136,15 +161,15 @@ No metered billing exists for consumers in v1.
 
 ---
 
-### Dealer Billing
+### Merchant Billing
 
-- Dealers may be billed via:
+- Merchants may be billed via:
   - platform billing
   - invoice / purchase order
 - Billing method must be mutually exclusive
 
 **Required invariant**
-- A dealer must not simultaneously have:
+- A Merchant must not simultaneously have:
   - invoice billing, and
   - active platform billing identifiers
 
@@ -193,7 +218,7 @@ must:
 
 ### Allowed
 
-- View dealer portal as the dealer
+- View Merchant portal as the Merchant
 - Troubleshoot UI and configuration issues
 
 ### Not Allowed
@@ -212,7 +237,7 @@ Impersonation must be explicit in session context and must not elevate privilege
 
 If subscription or billing state is unclear:
 - Default to restricted access
-- Do not expose dealer inventory
+- Do not expose Retailer inventory
 - Do not enable Premium features
 
 ### Manual Overrides
@@ -256,3 +281,4 @@ Silent overrides are not acceptable.
 ## Guiding Principle
 
 > Billing exists to gate access, not to explain value.
+

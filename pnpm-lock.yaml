@@ -179,7 +179,92 @@ importers:
         specifier: ^4.0.16
         version: 4.0.16(@types/node@25.0.3)(@vitest/ui@4.0.16)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
-  apps/dealer:
+  apps/harvester:
+    dependencies:
+      '@bull-board/api':
+        specifier: ^6.16.2
+        version: 6.16.2(@bull-board/ui@6.16.2)
+      '@bull-board/express':
+        specifier: ^6.16.2
+        version: 6.16.2
+      '@ironscout/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
+      '@ironscout/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@ironscout/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@ironscout/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
+      axios:
+        specifier: ^1.13.2
+        version: 1.13.2
+      basic-ftp:
+        specifier: ^5.1.0
+        version: 5.1.0
+      bullmq:
+        specifier: ^5.66.4
+        version: 5.66.4
+      cheerio:
+        specifier: ^1.1.2
+        version: 1.1.2
+      csv-parse:
+        specifier: ^6.1.0
+        version: 6.1.0
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      fast-xml-parser:
+        specifier: ^5.3.3
+        version: 5.3.3
+      ioredis:
+        specifier: ^5.8.2
+        version: 5.8.2
+      resend:
+        specifier: ^6.6.0
+        version: 6.6.0(@react-email/render@1.1.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
+      ssh2:
+        specifier: ^1.17.0
+        version: 1.17.0
+    devDependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.71.2
+        version: 0.71.2(zod@4.2.1)
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/node':
+        specifier: ^25.0.3
+        version: 25.0.3
+      '@types/ssh2':
+        specifier: ^1.15.5
+        version: 1.15.5
+      '@vitest/coverage-v8':
+        specifier: ^4.0.16
+        version: 4.0.16(vitest@4.0.16)
+      '@vitest/ui':
+        specifier: ^4.0.16
+        version: 4.0.16(vitest@4.0.16)
+      puppeteer:
+        specifier: ^24.34.0
+        version: 24.34.0(typescript@5.9.3)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.16(@types/node@25.0.3)(@vitest/ui@4.0.16)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+
+  apps/merchant:
     dependencies:
       '@ironscout/db':
         specifier: workspace:*
@@ -269,91 +354,6 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
-
-  apps/harvester:
-    dependencies:
-      '@bull-board/api':
-        specifier: ^6.16.2
-        version: 6.16.2(@bull-board/ui@6.16.2)
-      '@bull-board/express':
-        specifier: ^6.16.2
-        version: 6.16.2
-      '@ironscout/crypto':
-        specifier: workspace:*
-        version: link:../../packages/crypto
-      '@ironscout/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@ironscout/logger':
-        specifier: workspace:*
-        version: link:../../packages/logger
-      '@ironscout/notifications':
-        specifier: workspace:*
-        version: link:../../packages/notifications
-      axios:
-        specifier: ^1.13.2
-        version: 1.13.2
-      basic-ftp:
-        specifier: ^5.1.0
-        version: 5.1.0
-      bullmq:
-        specifier: ^5.66.4
-        version: 5.66.4
-      cheerio:
-        specifier: ^1.1.2
-        version: 1.1.2
-      csv-parse:
-        specifier: ^6.1.0
-        version: 6.1.0
-      dotenv:
-        specifier: ^17.2.3
-        version: 17.2.3
-      express:
-        specifier: ^5.2.1
-        version: 5.2.1
-      fast-xml-parser:
-        specifier: ^5.3.3
-        version: 5.3.3
-      ioredis:
-        specifier: ^5.8.2
-        version: 5.8.2
-      resend:
-        specifier: ^6.6.0
-        version: 6.6.0(@react-email/render@1.1.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
-      ssh2:
-        specifier: ^1.17.0
-        version: 1.17.0
-    devDependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.71.2
-        version: 0.71.2(zod@4.2.1)
-      '@types/express':
-        specifier: ^5.0.6
-        version: 5.0.6
-      '@types/node':
-        specifier: ^25.0.3
-        version: 25.0.3
-      '@types/ssh2':
-        specifier: ^1.15.5
-        version: 1.15.5
-      '@vitest/coverage-v8':
-        specifier: ^4.0.16
-        version: 4.0.16(vitest@4.0.16)
-      '@vitest/ui':
-        specifier: ^4.0.16
-        version: 4.0.16(vitest@4.0.16)
-      puppeteer:
-        specifier: ^24.34.0
-        version: 24.34.0(typescript@5.9.3)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.16
-        version: 4.0.16(@types/node@25.0.3)(@vitest/ui@4.0.16)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   apps/web:
     dependencies:
@@ -7509,7 +7509,7 @@ snapshots:
       eslint: 9.39.2(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1))
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-react: 7.37.5(eslint@9.39.2(jiti@2.6.1))
       eslint-plugin-react-hooks: 7.0.1(eslint@9.39.2(jiti@2.6.1))
@@ -7542,7 +7542,7 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
@@ -7557,7 +7557,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@2.6.1)):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1)))(eslint@9.39.2(jiti@2.6.1)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9

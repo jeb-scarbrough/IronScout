@@ -28,7 +28,7 @@ const updateSourceSchema = z.object({
 // GET /api/sources - List all sources
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const sources = await prisma.source.findMany({
+    const sources = await prisma.sources.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -49,7 +49,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const source = await prisma.source.findUnique({
+    const source = await prisma.sources.findUnique({
       where: { id },
       include: {
         executions: {
@@ -75,7 +75,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const data = createSourceSchema.parse(req.body)
 
-    const source = await prisma.source.create({
+    const source = await prisma.sources.create({
       data,
     })
 
@@ -95,7 +95,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params
     const data = updateSourceSchema.parse(req.body)
 
-    const source = await prisma.source.update({
+    const source = await prisma.sources.update({
       where: { id },
       data,
     })
@@ -115,7 +115,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    await prisma.source.delete({
+    await prisma.sources.delete({
       where: { id },
     })
 
@@ -131,7 +131,7 @@ router.post('/:id/toggle', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const source = await prisma.source.findUnique({
+    const source = await prisma.sources.findUnique({
       where: { id },
     })
 
@@ -139,7 +139,7 @@ router.post('/:id/toggle', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Source not found' })
     }
 
-    const updated = await prisma.source.update({
+    const updated = await prisma.sources.update({
       where: { id },
       data: { enabled: !source.enabled },
     })

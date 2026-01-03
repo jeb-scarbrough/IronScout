@@ -37,10 +37,10 @@ import {
   normalizeQueue,
   writeQueue,
   alertQueue,
-  dealerFeedIngestQueue,
-  dealerSkuMatchQueue,
-  dealerBenchmarkQueue,
-  dealerInsightQueue,
+  merchantFeedIngestQueue,
+  merchantSkuMatchQueue,
+  merchantBenchmarkQueue,
+  merchantInsightQueue,
   affiliateFeedQueue,
   affiliateFeedSchedulerQueue,
 } from '../config/queues'
@@ -111,11 +111,11 @@ createBullBoard({
     new BullMQAdapter(normalizeQueue),
     new BullMQAdapter(writeQueue),
     new BullMQAdapter(alertQueue),
-    // Dealer portal queues
-    new BullMQAdapter(dealerFeedIngestQueue),
-    new BullMQAdapter(dealerSkuMatchQueue),
-    new BullMQAdapter(dealerBenchmarkQueue),
-    new BullMQAdapter(dealerInsightQueue),
+    // Merchant (dealer) portal queues
+    new BullMQAdapter(merchantFeedIngestQueue),
+    new BullMQAdapter(merchantSkuMatchQueue),
+    new BullMQAdapter(merchantBenchmarkQueue),
+    new BullMQAdapter(merchantInsightQueue),
     // Affiliate feed queues
     new BullMQAdapter(affiliateFeedQueue),
     new BullMQAdapter(affiliateFeedSchedulerQueue),

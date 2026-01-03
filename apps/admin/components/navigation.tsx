@@ -18,7 +18,7 @@ interface NavigationProps {
 }
 
 const navItems = [
-  { name: 'Dealers', href: '/dealers', icon: Users },
+  { name: 'Merchants', href: '/merchants', icon: Users },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
   { name: 'Product Suggestions', href: '/product-suggestions', icon: Package },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

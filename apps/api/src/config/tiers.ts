@@ -324,27 +324,30 @@ export function shapePriceHistory(
 }
 
 // ============================================================================
-// DEALER VISIBILITY FILTERS
+// RETAILER VISIBILITY FILTERS
 // ============================================================================
 
+export function visibleDealerPriceWhere(): Prisma.pricesWhereInput {
+  // DEPRECATED: Use visibleRetailerPriceWhere() instead
+  // This function uses the legacy dealer relation which is being phased out
+  return visibleRetailerPriceWhere()
+}
+
 /**
- * Prisma where clause to filter prices by visible dealer subscription status.
+ * Prisma where clause to filter prices by retailer visibility.
  *
- * Dealers are visible to consumers if their subscriptionStatus is:
- * - ACTIVE: Paying and in good standing
- * - EXPIRED: Recently expired, within grace period (still shows but may be stale)
- *
- * Dealers are hidden if their subscriptionStatus is:
- * - SUSPENDED: Blocked for policy violations
- * - CANCELLED: No longer a dealer
+ * Per ADR-005 and Merchant-and-Retailer-Reference:
+ * Consumer visibility = retailers.visibilityStatus=ELIGIBLE
+ *                    AND merchant_retailers.listingStatus=LISTED
+ *                    AND merchant_retailers.status=ACTIVE
  *
  * IMPORTANT: Apply this filter to ALL consumer-facing queries that include prices.
- * This prevents blocked/cancelled dealers from appearing in search, alerts, watchlist, etc.
+ * This prevents ineligible or unlisted retailers from appearing in search, alerts, watchlist, etc.
  *
  * Usage in Prisma queries:
  * ```ts
  * prices: {
- *   where: visibleDealerPriceWhere(),
+ *   where: visibleRetailerPriceWhere(),
  *   ...
  * }
  * ```
@@ -354,30 +357,93 @@ export function shapePriceHistory(
  * prisma.price.findMany({
  *   where: {
  *     ...otherConditions,
- *     ...visibleDealerPriceWhere(),
+ *     ...visibleRetailerPriceWhere(),
  *   }
  * })
  * ```
  */
-export function visibleDealerPriceWhere(): Prisma.PriceWhereInput {
+export function visibleRetailerPriceWhere(): Prisma.pricesWhereInput {
   return {
-    retailer: {
+    retailers: {
       is: {
-        OR: [
-          // Retailer has no dealer (direct retailer, not a dealer-linked retailer)
-          { dealer: { is: null } },
-          // Retailer's dealer is in a visible status
-          {
-            dealer: {
-              is: {
-                subscriptionStatus: {
-                  in: ['ACTIVE', 'EXPIRED'],
-                },
-              },
-            },
+        // Policy-level visibility check (data quality, compliance, etc.)
+        visibilityStatus: 'ELIGIBLE',
+        merchant_retailers: {
+          some: {
+            listingStatus: 'LISTED',
+            status: 'ACTIVE',
           },
-        ],
+        },
       },
     },
+  }
+}
+
+// ============================================================================
+// ADR-015: RUN IGNORE FILTERS
+// ============================================================================
+
+/**
+ * Prisma where clause to exclude prices from ignored runs.
+ *
+ * Per ADR-015: Ignored runs are excluded from all user-visible reads.
+ * This filters out prices where:
+ * - affiliateFeedRunId points to an ignored affiliate_feed_run
+ *
+ * Note: For SCRAPE and MERCHANT_FEED run types, the relation is via
+ * ingestionRunId which requires raw SQL for efficient filtering.
+ * For now, we focus on affiliate feeds which are the primary source.
+ *
+ * Usage: Combine with visibleRetailerPriceWhere() for complete filtering:
+ * ```ts
+ * prices: {
+ *   where: {
+ *     ...visibleRetailerPriceWhere(),
+ *     ...nonIgnoredRunPriceWhere(),
+ *   }
+ * }
+ * ```
+ */
+export function nonIgnoredRunPriceWhere(): Prisma.pricesWhereInput {
+  return {
+    // For affiliate-sourced prices, filter via the relation
+    OR: [
+      // No affiliate run link (legacy scrape data, manual, etc.)
+      { affiliateFeedRunId: null },
+      // Affiliate run exists but is NOT ignored
+      {
+        affiliate_feed_runs: {
+          is: {
+            ignoredAt: null,
+          },
+        },
+      },
+    ],
+  }
+}
+
+/**
+ * Complete visibility filter for consumer-facing price queries.
+ *
+ * Combines:
+ * - ADR-005: Retailer visibility (ELIGIBLE + LISTED + ACTIVE)
+ * - ADR-015: Run ignore semantics (exclude ignored runs)
+ *
+ * IMPORTANT: Use this for ALL consumer-facing price queries.
+ *
+ * Usage:
+ * ```ts
+ * prices: {
+ *   where: visiblePriceWhere(),
+ *   ...
+ * }
+ * ```
+ */
+export function visiblePriceWhere(): Prisma.pricesWhereInput {
+  return {
+    AND: [
+      visibleRetailerPriceWhere(),
+      nonIgnoredRunPriceWhere(),
+    ],
   }
 }

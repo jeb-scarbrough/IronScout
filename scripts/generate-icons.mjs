@@ -6,7 +6,7 @@
  *   node scripts/generate-icons.mjs           # Generate all icons
  *   node scripts/generate-icons.mjs --web     # Web app only
  *   node scripts/generate-icons.mjs --admin   # Admin portal only
- *   node scripts/generate-icons.mjs --dealer  # Dealer portal only
+ *   node scripts/generate-icons.mjs --merchant  # Merchant portal only
  *
  * Source SVGs should be placed in apps/{app}/public/:
  *   - logo-dark.svg   (icon for dark backgrounds / PWA)
@@ -43,9 +43,9 @@ const CONFIG = {
     sizes: [16, 32, 192, 512],
     generateFavicon: true,
   },
-  dealer: {
-    name: 'Dealer Portal',
-    publicDir: join(rootDir, 'apps', 'dealer', 'public'),
+  merchant: {
+    name: 'Merchant Portal',
+    publicDir: join(rootDir, 'apps', 'merchant', 'public'),
     svgSource: 'logo-dark.svg',
     backgroundColor: '#121418',
     sizes: [16, 32, 192, 512],
@@ -139,8 +139,8 @@ async function main() {
     appsToProcess = ['web'];
   } else if (args.includes('--admin')) {
     appsToProcess = ['admin'];
-  } else if (args.includes('--dealer')) {
-    appsToProcess = ['dealer'];
+  } else if (args.includes('--merchant')) {
+    appsToProcess = ['merchant'];
   } else if (args.includes('--help') || args.includes('-h')) {
     console.log(`
 IronScout Icon Generator
@@ -149,7 +149,7 @@ Usage:
   node scripts/generate-icons.mjs           # Generate all icons
   node scripts/generate-icons.mjs --web     # Web app only
   node scripts/generate-icons.mjs --admin   # Admin portal only
-  node scripts/generate-icons.mjs --dealer  # Dealer portal only
+  node scripts/generate-icons.mjs --merchant  # Merchant portal only
 
 Source SVGs should be placed in apps/{app}/public/:
   - logo-dark.svg   (used for PWA icons)

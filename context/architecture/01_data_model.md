@@ -1,18 +1,30 @@
 # Data Model
 
-This document describes IronScout’s current data model as represented in the existing documentation and reflected by how the apps behave (API search, harvester ingestion, dealer feeds, subscriptions).
+This document describes IronScout's current data model as represented in the existing documentation and reflected by how the apps behave (API search, harvester ingestion, merchant feeds, subscriptions).
 
 **Source of truth note:** the only Prisma schema we have in the provided materials is the excerpt in `database.md`, and it contains `...` placeholders. That means some fields and relations are intentionally omitted. Before treating this as final, the repo should expose the actual Prisma schema (e.g. `prisma/schema.prisma` or `packages/db/prisma/schema.prisma`) and this document should be reconciled against it.
+
+---
+
+## Canonical Terminology (Required)
+
+Per `reference/Merchant-and-Retailer-Reference.md`:
+
+- **Merchant**: B2B portal account with authentication, billing, and subscription. Merchants may administer one or more Retailers.
+- **Retailer**: Consumer-facing storefront whose prices appear in search results. Prices are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of price data. Explains provenance, not ownership.
+- **Eligibility**: Applies to Retailer visibility, not Merchant existence or portal access.
+- **Benchmarks**: `pricing_snapshots` keyed by `merchantId`. Not consumer-visible by default.
 
 ---
 
 ## Data Model Goals (v1)
 
 - Represent ammunition products in a canonical, comparable way.
-- Represent multiple offer sources (retailers and dealers) without mixing identities.
+- Represent consumer-facing Retailers whose prices appear in search results.
 - Track price history in a queryable, tier-shapeable format.
 - Support alerts and watchlists without cross-account leakage.
-- Support dealer ingestion, feed health, benchmarking, and insights.
+- Support merchant ingestion, feed health, benchmarking, and insights.
 - Support subscription enforcement and admin auditability.
 
 ---
@@ -22,13 +34,15 @@ This document describes IronScout’s current data model as represented in the e
 At a high level:
 
 - **Product** is the canonical unit (what a consumer is searching for).
-- **Retailer** and **Dealer** are sources of offers.
-- **Price** is the time-series record of an offer price (by source + product or SKU mapping).
+- **Retailer** is the consumer-facing storefront whose prices appear in search results.
+- **Merchant** is the B2B portal account that may administer Retailers.
+- **Price** is the time-series record of a consumer price (keyed by `retailerId` + `productId`).
 - **Alert** is a user-defined trigger referencing product/filters.
-- **DealerFeed / DealerSku** model dealer ingestion and mapping to canonical products.
-- **MarketBenchmark / DealerInsight** model “context” for dealers (not recommendations).
+- **MerchantFeed / MerchantSku** model merchant inventory ingestion and mapping to canonical products.
+- **MarketBenchmark / MerchantInsight** model "context" for merchants (not recommendations).
 - **Source / Execution** model harvester ingestion operations.
 - **AdminAuditLog** captures privileged actions.
+- v1 constraint: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
 
 ---
 
@@ -73,39 +87,46 @@ Invariants:
 - Normalized attributes should be the only ones used for filtering/ranking logic.
 
 **Decision to confirm**
-- Whether “Offer” is a first-class entity or whether `Price` represents offers directly. Current docs show `Price` but do not show a separate `Offer` model. If API returns “offers”, it is likely derived from latest `Price` records.
+- Whether "Offer" is a first-class entity or whether `Price` represents offers directly. Current docs show `Price` but do not show a separate `Offer` model. If API returns "offers", it is likely derived from latest `Price` records.
 
 ---
 
 ### Retailer
-Represents a non-dealer source (affiliate retailer, marketplace, etc.).
+Represents a consumer-facing storefront whose prices appear in IronScout search results.
 
 Key responsibilities:
-- Anchor for retailer offers and tracking.
+- Consumer price visibility (prices are keyed by `retailerId`).
 - Link to harvester sources.
+- May be administered by one or more Merchants.
 
 Invariants:
-- Retailer identity must not overlap dealer identity.
-- Retailer visibility rules differ from dealer eligibility rules.
+- **Retailers do not authenticate directly.**
+- Retailer eligibility/listing determine consumer visibility.
+- Eligibility is enforced at query time (ADR-005).
+- `visibilityStatus` (ELIGIBLE | INELIGIBLE | SUSPENDED) is the authoritative eligibility flag.
+- Product↔Retailer linkage for consumer offers is expressed through `prices` only (no implicit foreign keys elsewhere).
+- Consumer visibility predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`; subscription state is never part of this predicate.
 
 ---
 
 ### Price (Offer Time Series)
-Represents a time series record for a product price from a source.
+Represents a time series record for a consumer price from a Retailer.
 
 Key responsibilities:
-- Support “current price” (latest record) and “historical context” (series).
+- Support "current price" (latest record) and "historical context" (series).
 - Support tier-based history shaping (free sees less).
 - Support alert evaluation.
 
 **Important design constraint**
 - Price records should be append-only or near-append-only. If you overwrite price history you destroy trust and debugging ability.
+- **Consumer prices are keyed by `retailerId`**, not merchantId.
+- Provenance fields (ADR-015) are required: `ingestionRunType`, `ingestionRunId`, `merchantId` (nullable), `sourceId`, `affiliateId` (nullable), `retailerId`.
 
 **Decision to confirm**
 - Uniqueness and indexing strategy:
-  - Expected query patterns are “latest by product+source”, “history by product+source”, and “market summary by caliber/product”.
-  - This implies indexes on `(productId, retailerId, createdAt)` and/or `(productId, dealerSkuId, createdAt)`.
-- If you need dedupe, use a content hash and a “no-op if unchanged” strategy rather than overwriting.
+  - Expected query patterns are "latest by product+retailer", "history by product+retailer", and "market summary by caliber/product".
+  - This implies indexes on `(productId, retailerId, createdAt)` and/or `(productId, merchantSkuId, createdAt)`.
+- If you need dedupe, use a content hash and a "no-op if unchanged" strategy rather than overwriting.
 
 ---
 
@@ -118,22 +139,26 @@ Key responsibilities:
 
 Invariants:
 - Alerts must be isolated to the owning user.
-- Alerts should evaluate against data that matches the user’s tier limits.
+- Alerts should evaluate against data that matches the user's tier limits.
 - Alert language must remain conservative (signals, not advice).
 
 ---
 
-## Dealer Domain Model
+## Merchant Domain Model
 
-### Dealer
-Represents a dealer organization.
+### Merchant
+Represents a B2B portal account (subscription, billing, auth boundary).
 
 Key responsibilities:
-- Dealer identity, eligibility state, plan/tier, billing mode.
-- Determines whether dealer inventory is visible to consumers.
+- Merchant identity, subscription status, plan/tier, billing mode.
+- Has authenticated users.
+- Submits data via the portal (feeds, pricing snapshots).
+- May administer one or more Retailer identities.
 
-**Required invariant**
-- Dealer eligibility must be enforced server-side at query time for all consumer paths (search, product view, alerts, watchlists).
+**Canonical statements (required):**
+- **Merchants authenticate; Retailers do not.**
+- **Benchmarks/snapshots are keyed by `merchantId`.**
+- **Eligibility applies to Retailer visibility, not Merchant existence.**
 
 **Doc excerpt indicates**
 - subscription status and tier exist (details are in subscription management docs).
@@ -141,36 +166,48 @@ Key responsibilities:
 
 ---
 
-### DealerUser and DealerContact
-- **DealerUser**: authenticated portal users tied to a dealer.
-- **DealerContact**: operational contact info.
+### MerchantUser and MerchantContact
+- **MerchantUser**: authenticated portal users tied to a Merchant.
+- **MerchantContact**: operational contact info.
 
 Invariants:
-- Dealer portal data must not leak across dealers.
-- Dealer portal permissions should be explicit (if you have roles).
+- Merchant portal data must not leak across Merchants.
+- Merchant portal permissions should be explicit (if you have roles).
+
+### Merchant ↔ Retailer Relationship (Entitlement)
+Represents the explicit mapping between a Merchant and the Retailers it administers.
+
+Key responsibilities:
+- Encode which Retailers a Merchant may list.
+- Carry listing controls (`listingStatus`: LISTED | UNLISTED) and relationship status (ACTIVE | SUSPENDED).
+- Enable per-user, per-retailer permissions (e.g., `merchant_user_retailers`).
+
+Invariants:
+- Mapping is explicit (v1: UNIQUE(retailerId) per Merchant) and auditable.
+- Consumer visibility predicate includes `visibilityStatus = ELIGIBLE` AND `listingStatus = LISTED` AND relationship `status = ACTIVE`.
 
 ---
 
-### DealerFeed
-Represents a configured feed for a dealer.
+### MerchantFeed
+Represents a configured feed for a Merchant (submitted inventory).
 
 Key responsibilities:
 - Store feed URL/type, parsing config, status, health, last run.
 - Support quarantine/disable behavior.
 
 Operational invariants:
-- Feed health affects eligibility for visibility (per public promises).
-- If a feed is “SKIPPED” due to subscription status, it must not produce downstream outputs (benchmarks/insights).
+- Feed health affects Retailer eligibility for visibility (per public promises).
+- If a feed is "SKIPPED" due to subscription status, it must not produce downstream outputs (benchmarks/insights).
 
 ---
 
-### DealerSku
-Represents a dealer-provided SKU row (their inventory unit) and its mapping to canonical products.
+### MerchantSku
+Represents a merchant-provided SKU row (their inventory unit) and its mapping to canonical products.
 
 Key responsibilities:
-- Preserve dealer SKU identity and metadata.
+- Preserve merchant SKU identity and metadata.
 - Map to canonical `Product` when possible.
-- Serve as the anchor for dealer “offer” visibility.
+- Serve as the anchor for merchant inventory submission.
 
 Invariants:
 - Mapping must be deterministic and explainable enough for ops.
@@ -191,16 +228,28 @@ Invariants:
 
 ---
 
-### DealerInsight
-Represents dealer-facing “context” derived from benchmarks and dealer inventory.
+### MerchantInsight
+Represents merchant-facing "context" derived from benchmarks and merchant inventory.
 
 Key responsibilities:
-- Plan-appropriate “you are above/below market” style context.
+- Plan-appropriate "you are above/below market" style context.
 - Historical context and trend summaries.
 
 Invariants:
-- No prescriptive “recommended price” fields in v1.
+- No prescriptive "recommended price" fields in v1.
 - If you compute recommendation-like fields internally, they must be stripped from API/UI until explicitly enabled later.
+
+---
+
+### PricingSnapshot
+Represents merchant-submitted or benchmark data.
+
+Key responsibilities:
+- Immutable facts.
+- **Keyed by `merchantId`.**
+- Not consumer-visible by default.
+
+Publishing merchant data into consumer prices requires an explicit mapping to a Retailer.
 
 ---
 
@@ -212,6 +261,7 @@ Represents a crawlable/ingestable source for the harvester (retailer feed/page).
 Key responsibilities:
 - Configuration and enable/disable state.
 - Links to executions.
+- Explains provenance (how we got the data), not ownership.
 
 ---
 
@@ -235,16 +285,16 @@ Represents an auditable record of privileged changes.
 
 Required coverage:
 - Subscription changes
-- Dealer eligibility changes
+- Retailer eligibility changes
 - Feed enable/disable/quarantine
 - Any override that changes visibility or billing state
 
 Invariants:
-- If a privileged action can’t be audited, it shouldn’t exist.
-- Audit log must capture “before” and “after” values (JSON is fine).
+- If a privileged action can't be audited, it shouldn't exist.
+- Audit log must capture "before" and "after" values (JSON is fine).
 
 **Potential inconsistency needing code change**
-- Ensure all admin mutations are wrapped in a transaction that writes audit logs alongside the mutation, not “best effort”.
+- Ensure all admin mutations are wrapped in a transaction that writes audit logs alongside the mutation, not "best effort".
 
 ---
 
@@ -253,12 +303,12 @@ Invariants:
 From `database.md`, the model relies on enums such as:
 - `UserTier`: FREE, PREMIUM
 - Ammo attribute enums (bullet type, casing, pressure, etc.)
-- Dealer subscription and tier enums (documented elsewhere)
+- Merchant subscription and tier enums (documented elsewhere)
 
 **Decision to confirm**
 - Ensure all tier/eligibility enums are centralized and referenced consistently across:
   - API shaping
-  - dealer portal
+  - merchant portal
   - admin portal
   - harvester SKIPPED logic
 
@@ -268,16 +318,16 @@ From `database.md`, the model relies on enums such as:
 
 1. **No cross-account access**
    - user-to-user
-   - dealer-to-dealer
-   - consumer-to-dealer sensitive data
+   - merchant-to-merchant
+   - consumer-to-merchant sensitive data
 
 2. **Tier enforcement is server-side**
    - history depth
    - explanation visibility
    - advanced features
 
-3. **Dealer visibility is deterministic**
-   - blocked dealers never appear in consumer flows
+3. **Retailer visibility is deterministic**
+   - ineligible Retailers never appear in consumer flows
 
 4. **Append-only time series**
    - preserve price history
@@ -285,6 +335,18 @@ From `database.md`, the model relies on enums such as:
 
 5. **Idempotent ingestion**
    - schedulers and workers cannot create duplicates under concurrency
+
+---
+
+## Canonical Statements (Required)
+
+This document explicitly supports:
+- **Merchants authenticate; Retailers do not**
+- **Consumer prices are keyed by `retailerId`**
+- **Benchmarks/pricing_snapshots are keyed by `merchantId`**
+- **Eligibility applies to Retailer visibility, not Merchant existence**
+- **Merchant↔Retailer mapping is explicit (v1 UNIQUE(retailerId)); per-retailer listing/permissions gate visibility**
+- **Consumer visibility predicate: visibilityStatus = ELIGIBLE AND listingStatus = LISTED AND relationship status = ACTIVE (no subscription gating)**
 
 ---
 
@@ -298,14 +360,14 @@ These need explicit decisions and may require code changes:
 
 2. **Offer representation**
    - Docs show `Price` but do not show `Offer`.
-   - Decision: confirm whether “offer” is derived (latest Price) or a first-class model.
+   - Decision: confirm whether "offer" is derived (latest Price) or a first-class model.
 
-3. **Dealer eligibility fields**
-   - Public promises require eligibility based on subscription, feed health, and policies.
+3. **Retailer eligibility fields**
+   - Public promises require eligibility based on feed health and policies.
    - Decision: confirm which fields encode feed health and how they affect visibility.
 
 4. **Index strategy for price history**
-   - Decision: define indexes for “latest offer” and “history slice” queries so v1 performance is stable.
+   - Decision: define indexes for "latest offer" and "history slice" queries so v1 performance is stable.
 
 ---
 

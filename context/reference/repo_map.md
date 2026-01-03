@@ -4,6 +4,14 @@ This document is a machine-usable map of the IronScout repository. It is written
 
 If this document conflicts with the actual repo layout, the repo wins. Update this file.
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any "dealer" wording or `DEALER_*` keys are legacy and must be migrated to "merchant" terminology.
+
 ---
 
 ## Top-Level
@@ -11,7 +19,7 @@ If this document conflicts with the actual repo layout, the repo wins. Update th
 - `apps/`
   - `api/` Backend API (Node, Express)
   - `web/` Consumer Next.js app (App Router)
-  - `dealer/` Dealer Next.js app (App Router)
+  - `dealer/` Merchant portal Next.js app (legacy path)
   - `admin/` Admin Next.js app (App Router)
   - `harvester/` Worker app (Node + BullMQ)
 - `context/` Authoritative product and system documentation
@@ -27,7 +35,7 @@ Primary responsibilities:
 - Product endpoints (canonical product + offers + history)
 - Alerts/watchlists endpoints
 - Tier shaping and enforcement
-- Dealer visibility filtering at query time
+- Retailer visibility filtering at query time
 - AI search integration (intent parsing, embeddings, optional explanations)
 
 Likely structure (verify in repo):
@@ -41,7 +49,7 @@ Likely structure (verify in repo):
 
 Hot paths:
 - Search query path
-- Dealer eligibility enforcement path
+- Retailer eligibility enforcement path
 - Tier shaping path
 
 ---
@@ -65,19 +73,21 @@ Note:
 
 ---
 
-## apps/dealer (Dealer Portal)
+## apps/dealer (Merchant Portal - legacy path)
+
+> Legacy note: directory name `apps/dealer` is a migration artifact. Functionally this is the Merchant portal.
 
 Primary responsibilities:
-- Dealer authentication
+- Merchant authentication
 - Feed configuration
 - Feed health visibility
 - SKU match visibility
-- Dealer context (benchmarks) by plan
-- Explicit enforcement of “no recommendations” stance in UI
+- Merchant context (benchmarks) by plan
+- Explicit enforcement of "no recommendations" stance in UI
 
-Likely structure:
+Likely structure (legacy path `apps/dealer/`):
 - `apps/dealer/app/` App Router routes
-- `apps/dealer/app/api/` dealer portal API routes (feed ops, status)
+- `apps/dealer/app/api/` Merchant portal API routes (feed ops, status)
 - `apps/dealer/components/`
 
 ---
@@ -85,7 +95,7 @@ Likely structure:
 ## apps/admin (Admin Portal)
 
 Primary responsibilities:
-- Dealer lifecycle actions (approve, suspend, reactivate)
+- Merchant lifecycle actions (approve, suspend, reactivate)
 - Subscription tier and status changes
 - Billing method management
 - Audit visibility
@@ -101,9 +111,10 @@ Likely structure:
 
 Primary responsibilities:
 - Retailer ingestion pipeline (fetch → extract → normalize → write)
-- Dealer ingestion pipeline (feed ingest → sku match → benchmarks → insights)
+- Merchant ingestion pipeline (legacy dealer naming: feed ingest → sku match → benchmarks → insights)
 - BullMQ queues orchestration
 - Execution records + logs generation
+- Legacy queue names may be prefixed `dealer-*`; treat as Merchant ingestion queues only (consumer outputs remain Retailer-keyed).
 
 Likely structure:
 - `apps/harvester/src/`
@@ -113,7 +124,7 @@ Likely structure:
   - `normalizer/` ammo normalization
   - `writer/` DB writes
   - `alerter/` alert triggers
-  - `dealer/` dealer pipeline modules
+  - `dealer/` Merchant pipeline modules (legacy naming)
   - `config/queues.ts` queue definitions
 
 Critical constraint:
@@ -145,7 +156,7 @@ If code changes violate any ADR, write a new ADR or fix the code.
 ## Invariants Agents Must Not Break
 
 - Server-side tier enforcement (ADR-002)
-- Dealer visibility filtered at query time (ADR-005)
+- Retailer visibility filtered at query time (ADR-005)
 - Append-only price history (ADR-004)
 - Fail closed on ambiguity (ADR-009)
 - No recommendations or verdicts (ADR-006)

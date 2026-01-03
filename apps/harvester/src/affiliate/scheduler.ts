@@ -181,7 +181,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
           const nextRunAt = new Date(
             now.getTime() + feed.scheduleFrequencyHours * 3600000
           )
-          await tx.affiliateFeed.update({
+          await tx.affiliate_feeds.update({
             where: { id: feed.id },
             data: { nextRunAt },
           })
@@ -252,7 +252,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
     // Also check for manual run pending feeds
     // Manual runs don't need atomic claiming - they use the manualRunPending flag
     log.debug('AFFILIATE_SCHEDULER_CHECK_MANUAL_PENDING')
-    const manualPendingFeeds = await prisma.affiliateFeed.findMany({
+    const manualPendingFeeds = await prisma.affiliate_feeds.findMany({
       where: {
         manualRunPending: true,
         status: { in: ['ENABLED', 'PAUSED', 'DISABLED'] },
@@ -346,14 +346,14 @@ export async function getSchedulerStatus(): Promise<{
   // Check if scheduler is enabled from database setting
   const enabled = await isAffiliateSchedulerEnabled()
 
-  const dueFeeds = await prisma.affiliateFeed.count({
+  const dueFeeds = await prisma.affiliate_feeds.count({
     where: {
       status: 'ENABLED',
       nextRunAt: { lte: now },
     },
   })
 
-  const pendingManualRuns = await prisma.affiliateFeed.count({
+  const pendingManualRuns = await prisma.affiliate_feeds.count({
     where: { manualRunPending: true },
   })
 
@@ -397,7 +397,7 @@ async function cleanupOldRuns(): Promise<{ deleted: number }> {
 
     do {
       // Find runs to delete (only terminal statuses)
-      const runsToDelete = await prisma.affiliateFeedRun.findMany({
+      const runsToDelete = await prisma.affiliate_feed_runs.findMany({
         where: {
           finishedAt: { lt: cutoff },
           status: { in: ['SUCCEEDED', 'FAILED'] },
@@ -412,7 +412,7 @@ async function cleanupOldRuns(): Promise<{ deleted: number }> {
 
       // Delete batch (cascades to AffiliateFeedRunError and SourceProductSeen)
       // Price.affiliateFeedRunId is SET NULL (prices preserved per ADR-004)
-      const result = await prisma.affiliateFeedRun.deleteMany({
+      const result = await prisma.affiliate_feed_runs.deleteMany({
         where: {
           id: { in: runsToDelete.map((r) => r.id) },
         },

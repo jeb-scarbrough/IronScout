@@ -10,7 +10,7 @@ import {
 } from './premium-ranking'
 import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
-import { visibleDealerPriceWhere } from '../../config/tiers'
+import { visiblePriceWhere } from '../../config/tiers'
 import { loggers } from '../../config/logger'
 
 const log = loggers.ai
@@ -161,18 +161,18 @@ export async function aiSearch(
       vectorSearchUsed = true
       // For vector search, count using base where clause
       // Note: Can't filter on embedding field since it's Unsupported("vector") in Prisma
-      total = await prisma.product.count({ where })
+      total = await prisma.products.count({ where })
       log.debug('Vector search returned', { productsCount: products.length, total })
     } catch (error) {
       log.warn('Vector search failed, falling back to standard search', { error })
       products = await standardSearch(where, skip, limit * 2, isPremium)
-      total = await prisma.product.count({ where })
+      total = await prisma.products.count({ where })
     }
   } else {
     // Use standard Prisma search with explicit filters
     log.debug('Using standard search', { hasExplicitFilters })
     products = await standardSearch(where, skip, limit * 2, isPremium)
-    total = await prisma.product.count({ where })
+    total = await prisma.products.count({ where })
     log.debug('Standard search returned', { productsCount: products.length, total })
   }
 
@@ -529,7 +529,7 @@ function addCondition(where: any, condition: any): void {
  * Standard Prisma-based search
  */
 async function standardSearch(where: any, skip: number, take: number, includePremiumFields: boolean): Promise<any[]> {
-  return prisma.product.findMany({
+  return prisma.products.findMany({
     where,
     skip,
     take,
@@ -565,12 +565,12 @@ async function standardSearch(where: any, skip: number, take: number, includePre
         metadata: true,
       } : {}),
       prices: {
-        where: visibleDealerPriceWhere(),
+        where: visiblePriceWhere(),
         include: {
-          retailer: true
+          retailers: true
         },
         orderBy: [
-          { retailer: { tier: 'desc' } },
+          { retailers: { tier: 'desc' } },
           { price: 'asc' }
         ]
       }
@@ -669,7 +669,7 @@ async function vectorEnhancedSearch(
   }
   
   // Fetch full product details
-  const products = await prisma.product.findMany({
+  const products = await prisma.products.findMany({
     where: {
       id: { in: productIds.map(p => p.id) }
     },
@@ -705,12 +705,12 @@ async function vectorEnhancedSearch(
         metadata: true,
       } : {}),
       prices: {
-        where: visibleDealerPriceWhere(),
+        where: visiblePriceWhere(),
         include: {
-          retailer: true
+          retailers: true
         },
         orderBy: [
-          { retailer: { tier: 'desc' } },
+          { retailers: { tier: 'desc' } },
           { price: 'asc' }
         ]
       }
@@ -721,12 +721,12 @@ async function vectorEnhancedSearch(
   const similarityMap = new Map(productIds.map(p => [p.id, p.similarity]))
   
   return products
-    .map(p => ({
+    .map((p: { id: string; [key: string]: unknown }) => ({
       ...p,
       _relevanceScore: Math.round((similarityMap.get(p.id) || 0) * 100),
       _vectorSimilarity: similarityMap.get(p.id) || 0
     }))
-    .sort((a, b) => b._vectorSimilarity - a._vectorSimilarity)
+    .sort((a: { _vectorSimilarity: number }, b: { _vectorSimilarity: number }) => b._vectorSimilarity - a._vectorSimilarity)
 }
 
 /**
@@ -992,7 +992,7 @@ async function buildFacets(where: any, isPremium: boolean): Promise<Record<strin
     selectFields.isSubsonic = true
   }
   
-  const allProducts = await prisma.product.findMany({
+  const allProducts = await prisma.products.findMany({
     where,
     select: selectFields
   })

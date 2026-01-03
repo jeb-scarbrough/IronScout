@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-IronScout relies on a background ingestion system (“Harvester”) to ingest retailer and dealer data.  
+IronScout relies on a background ingestion system ("Harvester") to ingest Retailer and Merchant feed data.  
 In the current implementation, scheduling logic runs inside the Harvester process using in-process timers (`setInterval`).
 
 Running multiple Harvester instances with independent schedulers introduces a high risk of:
@@ -54,5 +54,5 @@ This decision may be revisited post-v1 if ingestion volume or team size increase
 
 This decision directly supports:
 - append-only price history
-- deterministic dealer eligibility enforcement
+- deterministic Retailer eligibility enforcement
 - trust preservation in consumer-facing data

@@ -3,6 +3,12 @@
 
 -- First, check if required enums exist and create them if not
 DO $$ BEGIN
+    CREATE TYPE "AffiliateNetwork" AS ENUM ('IMPACT', 'AVANTLINK', 'SHAREASALE', 'CJ', 'RAKUTEN');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
     CREATE TYPE "AffiliateFeedStatus" AS ENUM ('DRAFT', 'PENDING_ACTIVATION', 'ENABLED', 'PAUSED', 'FAILED', 'DISABLED');
 EXCEPTION
     WHEN duplicate_object THEN null;
@@ -70,9 +76,14 @@ ALTER TABLE "alerts" DROP COLUMN IF EXISTS "lastTriggered";
 ALTER TABLE "alerts" DROP COLUMN IF EXISTS "targetPrice";
 
 -- AlterTable: watchlist_items - drop old columns if they exist
-ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "lowestPriceSeen";
-ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "lowestPriceSeenAt";
-ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "targetPrice";
+-- Only run if watchlist_items table exists (may not exist in shadow database)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watchlist_items') THEN
+        ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "lowestPriceSeen";
+        ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "lowestPriceSeenAt";
+        ALTER TABLE "watchlist_items" DROP COLUMN IF EXISTS "targetPrice";
+    END IF;
+END $$;
 
 -- AlterTable: prices - add new columns
 ALTER TABLE "prices" ADD COLUMN IF NOT EXISTS "affiliateFeedRunId" TEXT;
@@ -291,7 +302,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS "source_product_seen_runId_sourceProductId_key
 -- CreateIndex: alerts
 CREATE INDEX IF NOT EXISTS "alerts_userId_idx" ON "alerts"("userId");
 CREATE INDEX IF NOT EXISTS "alerts_productId_idx" ON "alerts"("productId");
-CREATE INDEX IF NOT EXISTS "alerts_watchlistItemId_idx" ON "alerts"("watchlistItemId");
+-- Only create watchlistItemId index if the column exists (may not exist in shadow database)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'alerts' AND column_name = 'watchlistItemId') THEN
+        CREATE INDEX IF NOT EXISTS "alerts_watchlistItemId_idx" ON "alerts"("watchlistItemId");
+    END IF;
+END $$;
 
 -- CreateIndex: prices
 CREATE INDEX IF NOT EXISTS "prices_sourceProductId_idx" ON "prices"("sourceProductId");
@@ -317,14 +333,21 @@ END $$;
 
 -- Clean up orphaned alerts before adding FK constraint
 -- Set watchlistItemId to NULL for alerts referencing non-existent watchlist items
-UPDATE "alerts" SET "watchlistItemId" = NULL
-WHERE "watchlistItemId" IS NOT NULL
-  AND "watchlistItemId" NOT IN (SELECT id FROM "watchlist_items");
-
--- AddForeignKey: alerts -> watchlist_items
+-- Only run if watchlist_items table exists (may not exist in shadow database)
 DO $$ BEGIN
-    ALTER TABLE "alerts" ADD CONSTRAINT "alerts_watchlistItemId_fkey"
-    FOREIGN KEY ("watchlistItemId") REFERENCES "watchlist_items"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watchlist_items') THEN
+        UPDATE "alerts" SET "watchlistItemId" = NULL
+        WHERE "watchlistItemId" IS NOT NULL
+          AND "watchlistItemId" NOT IN (SELECT id FROM "watchlist_items");
+    END IF;
+END $$;
+
+-- AddForeignKey: alerts -> watchlist_items (only if table exists)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watchlist_items') THEN
+        ALTER TABLE "alerts" ADD CONSTRAINT "alerts_watchlistItemId_fkey"
+        FOREIGN KEY ("watchlistItemId") REFERENCES "watchlist_items"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

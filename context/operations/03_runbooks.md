@@ -13,7 +13,7 @@ If an incident occurs and there is no applicable runbook, that is a documentatio
 
 Runbooks exist to:
 - Restore correct behavior quickly
-- Minimize user and dealer impact
+- Minimize user and merchant impact
 - Prevent data corruption
 - Preserve trust boundaries
 
@@ -42,7 +42,7 @@ Apply these principles to all incidents:
 
 ### SEV-1: Trust or Security Violation
 Examples:
-- Ineligible dealer inventory visible to consumers
+- Ineligible Retailer inventory visible to consumers
 - Cross-account data exposure
 - Tier enforcement bypass
 - Billing or eligibility corruption
@@ -82,21 +82,22 @@ Examples:
 
 ## Core Runbooks
 
-### Runbook: Ineligible Dealer Inventory Visible
+### Runbook: Ineligible Retailer Inventory Visible
 
 **Symptoms**
-- Dealer inventory appears despite suspension or feed quarantine
-- Alerts triggered from ineligible dealer offers
+- Retailer inventory appears in consumer search despite feed quarantine or policy violation
+- Alerts triggered from ineligible Retailer prices
 
 **Immediate Actions**
-1. Suspend the dealer via Admin app
-2. Disable or quarantine affected feeds
-3. Verify eligibility enforcement in API queries
-4. Verify alert suppression
+1. Set `retailers.visibilityStatus` to INELIGIBLE if policy violation is confirmed.
+2. Set `merchant_retailers.listingStatus` to UNLISTED (and/or relationship `status` to SUSPENDED) for the affected pairing.
+3. Disable/quarantine the Retailer's feed(s) and ignore the offending ingestion run(s) (ADR-015).
+4. Verify query-time filtering uses eligibility + listing predicate in API/search.
+5. Verify alert suppression for affected Retailer.
 
 **Verification**
-- Search no longer returns dealer inventory
-- No new alerts fire from dealer data
+- Search no longer returns ineligible/unlisted Retailer inventory
+- No new alerts fire from ineligible/unlisted Retailer data
 
 **Follow-Up**
 - Audit ingestion logs
@@ -169,6 +170,30 @@ Examples:
 - Remove client-side enforcement paths
 - Add server-side checks
 - Add monitoring for recurrence
+
+---
+
+### Runbook: Billing Delinquency Unlisting
+
+**Symptoms**
+- Merchant delinquency/suspension did not auto-unlist Retailer listings
+- Retailers became visible again immediately after recovery without explicit relist
+
+**Immediate Actions**
+1. Confirm subscription status transition event/webhook was received.
+2. Manually set `merchant_retailers.listingStatus` to UNLISTED for affected pairings; set relationship `status` to SUSPENDED if required.
+3. Verify `retailers.visibilityStatus` is still ELIGIBLE/INELIGIBLE as appropriate (do not change unless policy violation).
+4. Verify query-time predicate excludes unlisted retailers.
+
+**Verification**
+- Auto-unlist job/webhook executed or manual unlist in place.
+- Search, product, dashboard, alerts show no offers from unlisted retailers.
+- After payment recovery, listings remain UNLISTED until explicitly relisted.
+
+**Follow-Up**
+- Fix delinquency webhook/job that triggers unlisting.
+- Add monitoring for listing status changes on subscription events.
+- Add test coverage for delinquency/recovery flows.
 
 ---
 

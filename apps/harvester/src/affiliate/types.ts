@@ -4,23 +4,30 @@
  */
 
 import type {
-  AffiliateFeed,
-  AffiliateFeedRun,
-  SourceProduct,
-  SourceProductPresence,
-  Source,
-  Retailer,
+  affiliate_feeds,
+  affiliate_feed_runs,
+  source_products,
+  source_product_presence,
+  sources,
+  retailers,
 } from '@ironscout/db/generated/prisma'
 
 // Re-export Prisma types for convenience
-export type { AffiliateFeed, AffiliateFeedRun, SourceProduct, SourceProductPresence }
+export type { affiliate_feeds, affiliate_feed_runs, source_products, source_product_presence }
+
+// Type aliases for backwards compatibility
+export type AffiliateFeed = affiliate_feeds
+export type AffiliateFeedRun = affiliate_feed_runs
+export type SourceProduct = source_products
+export type SourceProductPresence = source_product_presence
 
 /**
  * Feed with included relations for worker context
+ * Note: Relation field names use snake_case per Prisma schema
  */
-export type AffiliateFeedWithRelations = AffiliateFeed & {
-  source: Source & {
-    retailer: Retailer | null
+export type AffiliateFeedWithRelations = affiliate_feeds & {
+  sources: sources & {
+    retailers: retailers | null
   }
 }
 

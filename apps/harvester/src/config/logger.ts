@@ -20,7 +20,7 @@ export const logger = {
   normalizer: rootLogger.child('normalizer'),
   writer: rootLogger.child('writer'),
   alerter: rootLogger.child('alerter'),
-  dealer: rootLogger.child('dealer'),
+  merchant: rootLogger.child('merchant'),
   affiliate: rootLogger.child('affiliate'),
 }
 

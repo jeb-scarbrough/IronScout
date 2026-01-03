@@ -2,11 +2,21 @@
 
 This document covers operational procedures for monitoring, debugging, and maintaining the IronScout harvester and background job infrastructure.
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ---
 
 ## Bull Board - Queue Monitoring Dashboard
 
 Bull Board provides a web UI for monitoring all BullMQ queues in the harvester. It shows job status, timing, errors, and allows manual job management.
+
+> Legacy note: queue names prefixed `dealer-*` are legacy naming for Merchant ingestion and portal workflows. Consumer outputs remain Retailer-keyed (`retailerId`).
 
 ### Queues Monitored
 
@@ -18,10 +28,10 @@ Bull Board provides a web UI for monitoring all BullMQ queues in the harvester. 
 | `normalize` | Data normalization and validation |
 | `write` | Database writes and price updates |
 | `alert` | Price/availability alert triggers |
-| `dealer-feed-ingest` | Dealer product feed ingestion |
-| `dealer-sku-match` | SKU matching to canonical products |
-| `dealer-benchmark` | Market benchmark calculations |
-| `dealer-insight` | Dealer competitive insights |
+| `dealer-feed-ingest` | Merchant product feed ingestion (legacy queue name) |
+| `dealer-sku-match` | SKU matching to canonical products (legacy queue name) |
+| `dealer-benchmark` | Market benchmark calculations (legacy queue name) |
+| `dealer-insight` | Merchant competitive insights (legacy queue name) |
 | `affiliate-feed` | Affiliate feed processing (FTP/SFTP) |
 | `affiliate-feed-scheduler` | Affiliate feed scheduling ticks |
 

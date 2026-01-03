@@ -60,12 +60,12 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
     }
 
     // Create retailer if it doesn't exist
-    let retailer = await prisma.retailer.findFirst({
+    let retailer = await prisma.retailers.findFirst({
       where: { name: { equals: data.retailerName, mode: 'insensitive' } },
     });
 
     if (!retailer) {
-      retailer = await prisma.retailer.create({
+      retailer = await prisma.retailers.create({
         data: {
           name: data.retailerName,
           website: data.websiteUrl!,
@@ -74,7 +74,7 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
     }
 
     // Create source for the affiliate feed
-    const source = await prisma.source.create({
+    const source = await prisma.sources.create({
       data: {
         name: data.sourceName,
         type: 'FEED_CSV',
@@ -90,7 +90,7 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
     const secretCiphertext = new Uint8Array(encryptedBuffer) as Uint8Array<ArrayBuffer>;
 
     // Create the affiliate feed
-    const feed = await prisma.affiliateFeed.create({
+    const feed = await prisma.affiliate_feeds.create({
       data: {
         sourceId: source.id,
         network: 'IMPACT',

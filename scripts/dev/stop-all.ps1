@@ -112,7 +112,7 @@ if ($nodeProcesses) {
                 $cmdLine -match "IronScout" -or
                 $cmdLine -match "ironscout" -or
                 $cmdLine -match "@ironscout" -or
-                $cmdLine -match "apps[\\/](web|api|admin|dealer|harvester)" -or
+                $cmdLine -match "apps[\\/](web|api|admin|merchant|harvester)" -or
                 $cmdLine -match "dist[\\/]index\.js" -or   # API server
                 $cmdLine -match "dist[\\/]worker\.js"      # Harvester worker
             )) {
@@ -121,7 +121,7 @@ if ($nodeProcesses) {
                            elseif ($cmdLine -match "apps[\\/]web" -or $cmdLine -match "next dev") { "Web" }
                            elseif ($cmdLine -match "apps[\\/]api" -or $cmdLine -match "dist[\\/]index\.js") { "API" }
                            elseif ($cmdLine -match "apps[\\/]admin") { "Admin" }
-                           elseif ($cmdLine -match "apps[\\/]dealer") { "Dealer" }
+                           elseif ($cmdLine -match "apps[\\/]merchant") { "Merchant" }
                            else { "Node" }
 
                 Write-Info "Stopping $appName node process (PID: $($proc.Id))..."
@@ -152,7 +152,7 @@ Write-Info "Checking background jobs..."
 
 try {
     $jobs = Get-Job | Where-Object {
-        $_.Name -in @("api", "web", "admin", "dealer", "harvester") -or
+        $_.Name -in @("api", "web", "admin", "merchant", "harvester") -or
         $_.Command -match "IronScout|ironscout"
     }
     if ($jobs) {

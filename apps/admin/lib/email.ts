@@ -20,7 +20,7 @@ function getResendClient(): Resend {
 }
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>';
-const DEALER_URL = process.env.NEXT_PUBLIC_DEALER_URL || 'https://dealer.ironscout.ai';
+const MERCHANT_URL = process.env.NEXT_PUBLIC_MERCHANT_URL || process.env.NEXT_PUBLIC_DEALER_URL || 'https://merchant.ironscout.ai';
 
 export interface SendEmailResult {
   success: boolean;
@@ -29,7 +29,7 @@ export interface SendEmailResult {
 }
 
 /**
- * Send approval notification email to dealer
+ * Send approval notification email to merchant
  */
 export async function sendApprovalEmail(
   email: string,
@@ -39,7 +39,7 @@ export async function sendApprovalEmail(
   
   emailLogger.info('Sending approval notification email');
   
-  const loginUrl = `${DEALER_URL}/login`;
+  const loginUrl = `${MERCHANT_URL}/login`;
   
   try {
     const resend = getResendClient();
@@ -47,7 +47,7 @@ export async function sendApprovalEmail(
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: 'Your IronScout Dealer account is approved',
+      subject: 'Your IronScout Merchant account is approved',
       html: `
 <!DOCTYPE html>
 <html>
@@ -58,12 +58,12 @@ export async function sendApprovalEmail(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="text-align: center; margin-bottom: 30px;">
     <h1 style="color: #111; font-size: 24px; margin: 0;">IronScout</h1>
-    <p style="color: #666; font-size: 14px; margin: 5px 0 0 0;">Dealer Portal</p>
+    <p style="color: #666; font-size: 14px; margin: 5px 0 0 0;">Merchant Portal</p>
   </div>
   
   <div style="background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
     <h2 style="color: #065f46; font-size: 20px; margin: 0 0 15px 0;">${businessName} - Account Approved</h2>
-    <p style="margin: 0; color: #047857;">Your IronScout Founding Dealer account has been approved.</p>
+    <p style="margin: 0; color: #047857;">Your IronScout Founding Merchant account has been approved.</p>
   </div>
   
   <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
@@ -86,7 +86,7 @@ export async function sendApprovalEmail(
 </body>
 </html>
       `,
-      text: `${businessName} - Account Approved\n\nYour IronScout Founding Dealer account has been approved.\n\nLog in to get started: ${loginUrl}`,
+      text: `${businessName} - Account Approved\n\nYour IronScout Founding Merchant account has been approved.\n\nLog in to get started: ${loginUrl}`,
     });
 
     if (error) {

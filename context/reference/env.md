@@ -7,6 +7,16 @@ Rules:
 - Do not reuse credentials across environments.
 - If a value is missing or ambiguous, default to restricted behavior (fail closed).
 
+> Legacy note: `DEALER_*` environment variables are legacy naming and will migrate to `MERCHANT_*`. They refer to Merchant portal accounts, not Retailers.
+
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ---
 
 ## Global Conventions
@@ -57,7 +67,7 @@ Required:
 - `PORT` (default 8000)
 - `DATABASE_URL`
 - `REDIS_URL` (if API enqueues jobs or reads queue state)
-- `JWT_SECRET` - **Required for auth**. Must match `JWT_SECRET` used by web/dealer/admin apps.
+- `JWT_SECRET` - **Required for auth**. Must match `JWT_SECRET` used by web/dealer [legacy path]/admin apps.
 
 Auth:
 - API signs and verifies JWTs using `JWT_SECRET`
@@ -96,14 +106,14 @@ Stripe (client):
 
 ---
 
-## apps/dealer
+## apps/dealer (Merchant portal, legacy path)
 
 Required:
-- `NEXT_PUBLIC_API_URL` or dealer-specific API URL (if separate)
+- `NEXT_PUBLIC_API_URL` or Merchant-specific API URL (if separate)
 - `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
 
 Optional:
-- Dealer onboarding keys if dealer feeds are pulled from private endpoints
+- Merchant onboarding keys if Merchant feeds are pulled from private endpoints
 
 ---
 
@@ -160,8 +170,8 @@ Bull Board (Queue Monitor):
 - `DATABASE_URL`
 - `REDIS_URL`
 - `OPENAI_API_KEY` (if AI search is enabled locally)
-- `JWT_SECRET` - Same value across all apps (api, web, dealer, admin)
-- `NEXT_PUBLIC_API_URL` (for web/dealer/admin)
+- `JWT_SECRET` - Same value across all apps (api, web, dealer [legacy path], admin)
+- `NEXT_PUBLIC_API_URL` (for web/dealer [legacy path]/admin)
 
 ---
 

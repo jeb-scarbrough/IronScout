@@ -18,10 +18,10 @@ import {
   resetFeedState,
   forceReprocess,
 } from '../actions';
-import type { AffiliateFeed } from '@ironscout/db/generated/prisma';
+import type { affiliate_feeds } from '@ironscout/db/generated/prisma';
 
 interface FeedStatusActionsProps {
-  feed: AffiliateFeed;
+  feed: affiliate_feeds;
 }
 
 export function FeedStatusActions({ feed }: FeedStatusActionsProps) {

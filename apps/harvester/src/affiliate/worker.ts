@@ -106,9 +106,9 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   // Load feed configuration (use cached feedLockId on retry if available)
   log.debug('Loading feed configuration', { feedId })
   const feedLoadStart = Date.now()
-  const feed = await prisma.affiliateFeed.findUnique({
+  const feed = await prisma.affiliate_feeds.findUnique({
     where: { id: feedId },
-    include: { source: { include: { retailer: true } } },
+    include: { sources: { include: { retailers: true } } },
   })
   log.debug('Feed configuration loaded', {
     feedId,
@@ -132,8 +132,8 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   // Log feed configuration details
   log.debug('Feed configuration details', {
     feedId,
-    sourceName: feed.source.name,
-    retailerName: feed.source.retailer?.name,
+    sourceName: feed.sources.name,
+    retailerName: feed.sources.retailers?.name,
     status: feed.status,
     transport: feed.transport,
     format: feed.format,
@@ -151,8 +151,8 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   if (feed.status === 'DRAFT') {
     log.warn('Skipping draft feed - not yet activated', {
       feedId,
-      sourceName: feed.source.name,
-      retailerName: feed.source.retailer?.name,
+      sourceName: feed.sources.name,
+      retailerName: feed.sources.retailers?.name,
       decision: 'SKIP',
       reason: 'DRAFT_STATUS',
     })
@@ -172,8 +172,8 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   if (feed.status === 'DISABLED' && trigger !== 'MANUAL' && trigger !== 'ADMIN_TEST') {
     log.warn('Skipping disabled feed - only manual/admin triggers allowed', {
       feedId,
-      sourceName: feed.source.name,
-      retailerName: feed.source.retailer?.name,
+      sourceName: feed.sources.name,
+      retailerName: feed.sources.retailers?.name,
       trigger,
       decision: 'SKIP',
       reason: 'DISABLED_STATUS',
@@ -203,7 +203,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   // Per spec §6.4.1: These steps must be atomic with job.updateData()
   // ═══════════════════════════════════════════════════════════════════════════
 
-  let run: Awaited<ReturnType<typeof prisma.affiliateFeedRun.findUniqueOrThrow>>
+  let run: Awaited<ReturnType<typeof prisma.affiliate_feed_runs.findUniqueOrThrow>>
   let lockAcquired: boolean
 
   if (existingRunId) {
@@ -213,7 +213,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     // ═══════════════════════════════════════════════════════════════════════
     log.debug('Retry: reusing existing run', { runId: existingRunId, feedId })
 
-    run = await prisma.affiliateFeedRun.findUniqueOrThrow({
+    run = await prisma.affiliate_feed_runs.findUniqueOrThrow({
       where: { id: existingRunId },
     })
 
@@ -297,7 +297,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     log.debug('ADVISORY_LOCK_ACQUIRED', { feedLockId: feedLockId.toString(), feedId })
 
     // Step 2: Create run record (now holds lock, safe to create)
-    run = await prisma.affiliateFeedRun.create({
+    run = await prisma.affiliate_feed_runs.create({
       data: {
         feedId,
         sourceId: feed.sourceId,
@@ -320,8 +320,8 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     log.info('RUN_START', {
       runId: run.id,
       feedId,
-      sourceName: feed.source.name,
-      retailerName: feed.source.retailer?.name,
+      sourceName: feed.sources.name,
+      retailerName: feed.sources.retailers?.name,
       trigger,
       workerPid: process.pid,
     })
@@ -334,7 +334,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     run,
     t0,
     sourceId: feed.sourceId,
-    retailerId: feed.source.retailerId,
+    retailerId: feed.sources.retailerId,
   }
 
   // Track whether we should enqueue follow-up (read while holding lock)
@@ -345,7 +345,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     log.debug('Starting Phase 1: Download → Parse → Process', {
       feedId: feed.id,
       runId: run.id,
-      sourceName: feed.source.name,
+      sourceName: feed.sources.name,
     })
     const phase1Start = Date.now()
     const result = await executePhase1(context)
@@ -489,7 +489,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     // Per spec §6.4: Read manualRunPending WHILE HOLDING the advisory lock.
     // Moving this read AFTER unlock introduces a lost-run race.
     // ═══════════════════════════════════════════════════════════════════════
-    const feedState = await prisma.affiliateFeed.findUnique({
+    const feedState = await prisma.affiliate_feeds.findUnique({
       where: { id: feedId },
       select: { manualRunPending: true, status: true },
     })
@@ -523,7 +523,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     // Step 7: Clear manualRunPending AFTER successfully enqueueing follow-up
     // Per spec §6.4: This ensures we don't lose the follow-up if we crash between
     // reading the flag and enqueueing the job.
-    await prisma.affiliateFeed.update({
+    await prisma.affiliate_feeds.update({
       where: { id: feedId },
       data: { manualRunPending: false },
     })
@@ -573,8 +573,8 @@ interface Phase1Result {
  */
 async function executePhase1(context: FeedRunContext): Promise<Phase1Result> {
   const { feed, run } = context
-  const sourceName = feed.source.name
-  const retailerName = feed.source.retailer?.name
+  const sourceName = feed.sources.name
+  const retailerName = feed.sources.retailers?.name
 
   // Download
   log.info('Phase 1: Downloading feed', { feedId: feed.id, runId: run.id, sourceName, retailerName })
@@ -616,7 +616,7 @@ async function executePhase1(context: FeedRunContext): Promise<Phase1Result> {
 
   // Log parse errors
   if (parseResult.errors.length > 0) {
-    await prisma.affiliateFeedRunError.createMany({
+    await prisma.affiliate_feed_run_errors.createMany({
       data: parseResult.errors.slice(0, 100).map((err) => ({
         runId: run.id,
         code: err.code,
@@ -633,7 +633,7 @@ async function executePhase1(context: FeedRunContext): Promise<Phase1Result> {
 
   // Log processing errors
   if (processResult.errors.length > 0) {
-    await prisma.affiliateFeedRunError.createMany({
+    await prisma.affiliate_feed_run_errors.createMany({
       data: processResult.errors.slice(0, 100).map((err) => ({
         runId: run.id,
         code: err.code,
@@ -681,8 +681,8 @@ async function executePhase2(
   phase1Result: Phase1Result
 ): Promise<Phase2Result> {
   const { feed, run, t0 } = context
-  const sourceName = feed.source.name
-  const retailerName = feed.source.retailer?.name
+  const sourceName = feed.sources.name
+  const retailerName = feed.sources.retailers?.name
 
   // Evaluate circuit breaker
   log.info('Phase 2: Evaluating circuit breaker', { feedId: feed.id, runId: run.id, sourceName, retailerName })
@@ -696,7 +696,7 @@ async function executePhase2(
   )
 
   // Update run with circuit breaker metrics
-  await prisma.affiliateFeedRun.update({
+  await prisma.affiliate_feed_runs.update({
     where: { id: run.id },
     data: {
       activeCountBefore: cbResult.metrics.activeCountBefore,
@@ -717,7 +717,7 @@ async function executePhase2(
       metrics: cbResult.metrics,
     })
 
-    await prisma.affiliateFeedRun.update({
+    await prisma.affiliate_feed_runs.update({
       where: { id: run.id },
       data: {
         expiryBlocked: true,
@@ -729,10 +729,10 @@ async function executePhase2(
     notifyCircuitBreakerTriggered(
       {
         feedId: feed.id,
-        feedName: feed.source.name,  // Use source name as feed identifier
+        feedName: feed.sources.name,  // Use source name as feed identifier
         sourceId: feed.sourceId,
-        sourceName: feed.source.name,
-        retailerName: feed.source.retailer?.name,
+        sourceName: feed.sources.name,
+        retailerName: feed.sources.retailers?.name,
         network: feed.network,
         runId: run.id,
       },
@@ -773,7 +773,7 @@ async function finalizeRun(
 
   // Update run record
   // Per spec: Use actual DB rowCount for pricesWritten and productsPromoted
-  await prisma.affiliateFeedRun.update({
+  await prisma.affiliate_feed_runs.update({
     where: { id: run.id },
     data: {
       status,
@@ -837,10 +837,10 @@ async function finalizeRun(
       notifyAffiliateFeedRecovered(
         {
           feedId: feed.id,
-          feedName: feed.source.name,  // Use source name as feed identifier
+          feedName: feed.sources.name,  // Use source name as feed identifier
           sourceId: feed.sourceId,
-          sourceName: feed.source.name,
-          retailerName: feed.source.retailer?.name,
+          sourceName: feed.sources.name,
+          retailerName: feed.sources.retailers?.name,
           network: feed.network,
           runId: run.id,
         },
@@ -860,10 +860,10 @@ async function finalizeRun(
     notifyAffiliateFeedRunFailed(
       {
         feedId: feed.id,
-        feedName: feed.source.name,  // Use source name as feed identifier
+        feedName: feed.sources.name,  // Use source name as feed identifier
         sourceId: feed.sourceId,
-        sourceName: feed.source.name,
-        retailerName: feed.source.retailer?.name,
+        sourceName: feed.sources.name,
+        retailerName: feed.sources.retailers?.name,
         network: feed.network,
         runId: run.id,
         correlationId: metrics.correlationId as string | undefined,
@@ -877,8 +877,8 @@ async function finalizeRun(
       log.warn('Auto-disabling feed after consecutive failures', {
         feedId: feed.id,
         runId: run.id,
-        sourceName: feed.source.name,
-        retailerName: feed.source.retailer?.name,
+        sourceName: feed.sources.name,
+        retailerName: feed.sources.retailers?.name,
         failures: newFailureCount,
       })
       updateData.status = 'DISABLED'
@@ -888,10 +888,10 @@ async function finalizeRun(
       notifyAffiliateFeedAutoDisabled(
         {
           feedId: feed.id,
-          feedName: feed.source.name,  // Use source name as feed identifier
+          feedName: feed.sources.name,  // Use source name as feed identifier
           sourceId: feed.sourceId,
-          sourceName: feed.source.name,
-          retailerName: feed.source.retailer?.name,
+          sourceName: feed.sources.name,
+          retailerName: feed.sources.retailers?.name,
           network: feed.network,
           runId: run.id,
           correlationId: metrics.correlationId as string | undefined,
@@ -909,7 +909,7 @@ async function finalizeRun(
     }
   }
 
-  await prisma.affiliateFeed.update({
+  await prisma.affiliate_feeds.update({
     where: { id: feed.id },
     data: updateData,
   })
@@ -917,8 +917,8 @@ async function finalizeRun(
   log.info('RUN_COMPLETE', {
     feedId: feed.id,
     runId: run.id,
-    sourceName: feed.source.name,
-    retailerName: feed.source.retailer?.name,
+    sourceName: feed.sources.name,
+    retailerName: feed.sources.retailers?.name,
     status,
     startedAt: t0.toISOString(),
     finishedAt: finishedAt.toISOString(),

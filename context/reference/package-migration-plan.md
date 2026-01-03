@@ -72,7 +72,7 @@ export default defineConfig({
 
 ## 2. Zod (3.x → 4.x)
 
-**Affected:** `@ironscout/api`, `@ironscout/dealer`, `@ironscout/web`
+**Affected:** `@ironscout/api`, `@ironscout/dealer` (Merchant portal, legacy package name), `@ironscout/web`
 
 ### Breaking Changes
 - `.parse()` now returns `readonly` arrays
@@ -97,14 +97,14 @@ const { priceId, userId, successUrl, cancelUrl } = createCheckoutSchema.parse(re
 ### Files to Audit
 ```
 apps/api/src/routes/*.ts        (17 files)
-apps/dealer/app/api/**/*.ts     (multiple)
+apps/dealer/app/api/**/*.ts     (Merchant portal, legacy path)
 apps/web/                       (likely validation)
 ```
 
 ### Migration Steps
 1. Install zod v4:
    ```bash
-   pnpm add zod@4 --filter @ironscout/api --filter @ironscout/dealer --filter @ironscout/web
+   pnpm add zod@4 --filter @ironscout/api --filter @ironscout/dealer --filter @ironscout/web  # dealer = Merchant portal (legacy name)
    ```
 
 2. Run TypeScript compiler to find type errors:
@@ -213,7 +213,7 @@ const session = event.data.object as Stripe.Checkout.Session
 
 #### Phase 4: Admin (apps/admin)
 1. Update stripe in admin app
-2. Test dealer billing actions
+2. Test Merchant billing actions
 
 ### Risk Assessment
 - **High risk** - Critical payment infrastructure
@@ -279,7 +279,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 ## 5. Tailwind CSS (3.x → 4.x)
 
-**Affected:** `apps/web`, `apps/admin`, `apps/dealer`
+**Affected:** `apps/web`, `apps/admin`, `apps/dealer` (legacy path)
 
 ### Breaking Changes (Major Rewrite)
 - **CSS-first configuration** - no more `tailwind.config.js`

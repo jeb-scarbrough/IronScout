@@ -29,16 +29,16 @@ const runStatusConfig = {
 };
 
 export default async function AffiliateFeedsPage() {
-  const feeds = await prisma.affiliateFeed.findMany({
+  const feeds = await prisma.affiliate_feeds.findMany({
     orderBy: [
       { status: 'asc' },
       { createdAt: 'desc' },
     ],
     include: {
-      source: {
-        include: { retailer: true },
+      sources: {
+        include: { retailers: true },
       },
-      runs: {
+      affiliate_feed_runs: {
         orderBy: { startedAt: 'desc' },
         take: 1,
       },
@@ -201,7 +201,7 @@ export default async function AffiliateFeedsPage() {
             {feeds.map((feed) => {
               const status = statusConfig[feed.status];
               const StatusIcon = status.icon;
-              const lastRun = feed.runs[0];
+              const lastRun = feed.affiliate_feed_runs[0];
               const lastRunStatus = lastRun ? runStatusConfig[lastRun.status] : null;
 
               const rowBgClass = feed.status === 'DISABLED'
@@ -215,10 +215,10 @@ export default async function AffiliateFeedsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Link href={`/affiliate-feeds/${feed.id}`} className="hover:underline">
                       <div className="text-sm font-medium text-gray-900">
-                        {feed.source.name}
+                        {feed.sources.name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {feed.source.retailer?.name || 'No retailer'}
+                        {feed.sources.retailers?.name || 'No retailer'}
                       </div>
                     </Link>
                   </td>

@@ -71,7 +71,7 @@ They do **not** define user-facing promises.
 ### `apps/`
 User-facing behavior by surface:
 - Consumer
-- Dealer
+- Merchant (legacy path: apps/dealer)
 - Admin
 - Harvester
 
@@ -106,7 +106,7 @@ Reference docs explain *how to interface with the system*, not how to use it as 
 
 ### `examples/`
 Copy-pasteable examples:
-- Dealer feeds
+- Merchant feeds (legacy naming)
 - API queries
 - Webhook payloads
 - Alert configurations

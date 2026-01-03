@@ -235,7 +235,7 @@ model Source {
 ```
 
 **Research Findings:**
-- These fields already exist in dealer pipeline
+- These fields already exist in Merchant pipeline (legacy dealer naming)
 - Affiliate feeds go through Source → Price, not DealerSku
 - May need equivalent for affiliate-sourced products
 
@@ -252,7 +252,7 @@ model Source {
 **Existing Primitives (sufficient for now):**
 - `Source.lastRunAt` + execution logs for run boundaries
 - `Price.createdAt` for presence and recency
-- `DealerSku.lastSeenAt/missingCount` for dealer pipeline (SKU-level lifecycle)
+- `DealerSku.lastSeenAt/missingCount` for Merchant pipeline (legacy model name, SKU-level lifecycle)
 
 **Rationale:**
 - `productStatus` for affiliate ingestion is usually derived, not trustworthy from feed
@@ -296,7 +296,7 @@ This mirrors DealerSku cleanly without polluting Price.
 | Conversion rate | Post-click metric, Impact provides |
 | EPC (earnings per click) | Network provides this |
 | Commission amount | Network provides this |
-| Dealer quality scores | Policy/bias risk |
+| Merchant quality scores | Policy/bias risk |
 | Trust/reliability metrics | ADR-006 violation |
 
 **Recommendation:** `CONFIRMED - DO NOT ADD`

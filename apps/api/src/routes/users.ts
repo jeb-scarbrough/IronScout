@@ -51,7 +51,7 @@ async function requireAuth(req: AuthenticatedRequest, res: Response, next: () =>
     const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; email: string }
 
     // Verify user exists and is not deleted
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: decoded.sub },
       select: { id: true, email: true, status: true }
     })
@@ -88,7 +88,7 @@ router.get('/me/deletion-eligibility', requireAuth, async (req: AuthenticatedReq
     const eligibility = await checkDeletionEligibility(userId)
 
     // Also get current deletion status if pending
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       select: {
         status: true,

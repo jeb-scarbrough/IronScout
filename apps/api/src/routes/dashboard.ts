@@ -9,7 +9,7 @@ import {
   hasPriceHistoryAccess,
   getPriceHistoryDays,
   shapePriceHistory,
-  visibleDealerPriceWhere
+  visiblePriceWhere
 } from '../config/tiers'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
@@ -37,14 +37,14 @@ router.get('/pulse', async (req: Request, res: Response) => {
     const maxCalibers = getMaxMarketPulseCalibers(userTier)
 
     // Get user's calibers from saved items (watchlist)
-    const watchlistItems = await prisma.watchlistItem.findMany({
+    const watchlistItems = await prisma.watchlist_items.findMany({
       where: { userId },
-      include: { product: { select: { caliber: true } } }
+      include: { products: { select: { caliber: true } } }
     })
 
     // Extract unique calibers
     const calibersSet = new Set<string>()
-    watchlistItems.forEach(w => w.product.caliber && calibersSet.add(w.product.caliber))
+    watchlistItems.forEach((w: { products: { caliber: string | null } }) => w.products.caliber && calibersSet.add(w.products.caliber))
 
     // Default calibers if user has none tracked
     if (calibersSet.size === 0) {
@@ -66,11 +66,11 @@ router.get('/pulse', async (req: Request, res: Response) => {
     const pulseData = await Promise.all(
       calibers.map(async caliber => {
         // Get current average price for this caliber
-        const currentPrices = await prisma.price.findMany({
+        const currentPrices = await prisma.prices.findMany({
           where: {
-            product: { caliber },
+            products: { caliber },
             inStock: true,
-            ...visibleDealerPriceWhere(),
+            ...visiblePriceWhere(),
           },
           select: { price: true },
           orderBy: { createdAt: 'desc' },
@@ -101,11 +101,11 @@ router.get('/pulse', async (req: Request, res: Response) => {
         const sevenDaysAgo = new Date()
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-        const historicalPrices = await prisma.price.findMany({
+        const historicalPrices = await prisma.prices.findMany({
           where: {
-            product: { caliber },
+            products: { caliber },
             createdAt: { lt: sevenDaysAgo },
-            ...visibleDealerPriceWhere(),
+            ...visiblePriceWhere(),
           },
           select: { price: true },
           take: 50
@@ -187,18 +187,18 @@ router.get('/deals', async (req: Request, res: Response) => {
     const showExplanations = hasFeature(userTier, 'aiExplanations')
 
     // Get user's calibers from saved items (watchlist) for personalization
-    const watchlistItems = await prisma.watchlistItem.findMany({
+    const watchlistItems = await prisma.watchlist_items.findMany({
       where: { userId },
-      include: { product: { select: { caliber: true, id: true } } }
+      include: { products: { select: { caliber: true, id: true } } }
     })
 
     // Extract calibers and product IDs for personalization
     const calibersSet = new Set<string>()
     const watchedProductIds = new Set<string>()
 
-    watchlistItems.forEach(w => {
-      if (w.product.caliber) calibersSet.add(w.product.caliber)
-      watchedProductIds.add(w.product.id)
+    watchlistItems.forEach((w: { products: { caliber: string | null; id: string } }) => {
+      if (w.products.caliber) calibersSet.add(w.products.caliber)
+      watchedProductIds.add(w.products.id)
     })
 
     const calibers = Array.from(calibersSet)
@@ -206,18 +206,18 @@ router.get('/deals', async (req: Request, res: Response) => {
     // Build where clause - prioritize user's calibers if they have any
     const whereClause: any = {
       inStock: true,
-      ...visibleDealerPriceWhere(),
+      ...visiblePriceWhere(),
     }
 
     if (calibers.length > 0) {
-      whereClause.product = { caliber: { in: calibers } }
+      whereClause.products = { caliber: { in: calibers } }
     }
 
     // Get deals with best prices
-    const prices = await prisma.price.findMany({
+    const prices = await prisma.prices.findMany({
       where: whereClause,
       include: {
-        product: {
+        products: {
           select: {
             id: true,
             name: true,
@@ -228,7 +228,7 @@ router.get('/deals', async (req: Request, res: Response) => {
             grainWeight: true
           }
         },
-        retailer: {
+        retailers: {
           select: {
             id: true,
             name: true,
@@ -237,7 +237,7 @@ router.get('/deals', async (req: Request, res: Response) => {
           }
         }
       },
-      orderBy: [{ retailer: { tier: 'desc' } }, { price: 'asc' }],
+      orderBy: [{ retailers: { tier: 'desc' } }, { price: 'asc' }],
       take: maxDeals * 2 // Fetch extra for deduplication
     })
 
@@ -245,16 +245,16 @@ router.get('/deals', async (req: Request, res: Response) => {
     const seenProducts = new Set<string>()
     const deals = prices
       .filter(p => {
-        // Skip prices without a productId or product
-        if (!p.productId || !p.product) return false
+        // Skip prices without a productId or products
+        if (!p.productId || !p.products) return false
         if (seenProducts.has(p.productId)) return false
         seenProducts.add(p.productId)
         return true
       })
       .slice(0, maxDeals)
       .map(price => {
-        // price.product is guaranteed non-null by the filter above
-        const product = price.product!
+        // price.products is guaranteed non-null by the filter above
+        const product = price.products!
         const pricePerRound =
           product.roundCount && product.roundCount > 0
             ? parseFloat(price.price.toString()) / product.roundCount
@@ -263,7 +263,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         const deal: any = {
           id: price.id,
           product: product,
-          retailer: price.retailer,
+          retailer: price.retailers,
           price: parseFloat(price.price.toString()),
           pricePerRound: pricePerRound ? Math.round(pricePerRound * 1000) / 1000 : null,
           url: price.url,
@@ -409,11 +409,11 @@ router.get('/price-history/:caliber', async (req: Request, res: Response) => {
     startDate.setDate(startDate.getDate() - effectiveDays)
 
     // Get price history aggregated by day
-    const prices = await prisma.price.findMany({
+    const prices = await prisma.prices.findMany({
       where: {
-        product: { caliber: decodeURIComponent(caliber) },
+        products: { caliber: decodeURIComponent(caliber) },
         createdAt: { gte: startDate },
-        ...visibleDealerPriceWhere(),
+        ...visiblePriceWhere(),
       },
       select: {
         price: true,

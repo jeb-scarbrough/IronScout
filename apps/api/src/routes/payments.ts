@@ -10,38 +10,41 @@ const router: any = Router()
 // System user ID for Stripe webhook-initiated changes
 const STRIPE_SYSTEM_USER = 'STRIPE_WEBHOOK'
 
+// Legacy compatibility: accept old portal type identifier while migrating to merchant-only naming
+const isMerchantPortalRequest = (type?: string) => type === 'merchant' || type === 'dealer'
+
 /**
  * Log a subscription change from Stripe webhook to admin audit log.
  * Uses STRIPE_WEBHOOK as adminUserId to distinguish from manual admin actions.
  */
 async function logStripeSubscriptionChange(
-  dealerId: string,
+  merchantId: string,
   action: string,
   oldValue: Record<string, unknown>,
   newValue: Record<string, unknown>,
   stripeEventId?: string
 ): Promise<void> {
   try {
-    await prisma.adminAuditLog.create({
+    await prisma.admin_audit_logs.create({
       data: {
         adminUserId: STRIPE_SYSTEM_USER,
-        dealerId,
+        merchantId,
         action,
-        resource: 'Dealer',
-        resourceId: dealerId,
+        resource: 'Merchant',
+        resourceId: merchantId,
         oldValue: oldValue ? JSON.parse(JSON.stringify(oldValue)) : null,
         newValue: JSON.parse(JSON.stringify({ ...newValue, stripeEventId })),
       },
     })
     log('DEBUG', 'Subscription audit log created', {
       action: 'audit_log_created',
-      dealerId,
+      merchantId,
       auditAction: action
     })
   } catch (error) {
     log('ERROR', 'Failed to create subscription audit log', {
       action: 'audit_log_error',
-      dealerId,
+      merchantId,
       auditAction: action,
       error: error instanceof Error ? error.message : 'Unknown error'
     })
@@ -60,7 +63,7 @@ async function logConsumerSubscriptionChange(
   stripeEventId?: string
 ): Promise<void> {
   try {
-    await prisma.adminAuditLog.create({
+    await prisma.admin_audit_logs.create({
       data: {
         adminUserId: STRIPE_SYSTEM_USER,
         action,
@@ -89,6 +92,123 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-12-15.clover' })
   : null
 
+// =============================================================================
+// Retailer Visibility Management
+// =============================================================================
+
+/**
+ * Delinquency reasons that trigger auto-unlist.
+ * Per Merchant-and-Retailer-Reference.md:
+ * - Delinquency auto-UNLISTs all Retailers
+ * - Recovery does NOT auto-relist (requires explicit merchant/admin action)
+ */
+type UnlistReason =
+  | 'billing_payment_failed'
+  | 'billing_subscription_past_due'
+  | 'billing_subscription_unpaid'
+  | 'billing_subscription_paused'
+  | 'billing_subscription_cancelled'
+  | 'billing_subscription_deleted'
+  | 'policy_violation'
+  | 'manual'
+
+/**
+ * Unlists all retailers for a merchant due to delinquency or other reasons.
+ *
+ * Per Merchant-and-Retailer-Reference.md:
+ * - Consumer visibility = retailers.visibilityStatus=ELIGIBLE AND
+ *   merchant_retailers.listingStatus=LISTED AND merchant_retailers.status=ACTIVE
+ * - Delinquency auto-UNLISTs all Retailers
+ * - Recovery does NOT auto-relist
+ *
+ * This function is IDEMPOTENT - only updates rows where listingStatus='LISTED'.
+ *
+ * @param merchantId - The merchant whose retailers should be unlisted
+ * @param reason - The reason for unlisting (for audit trail)
+ * @param actor - Who initiated the unlist ('system' for webhooks, or admin user ID)
+ * @returns The number of retailers that were unlisted
+ */
+async function unlistAllRetailersForMerchant(
+  merchantId: string,
+  reason: UnlistReason,
+  actor: string = 'system'
+): Promise<{ unlistedCount: number; retailerIds: string[] }> {
+  const now = new Date()
+
+  // Find all currently LISTED retailers for this merchant
+  const listedRetailers = await prisma.merchant_retailers.findMany({
+    where: {
+      merchantId,
+      listingStatus: 'LISTED',
+    },
+    select: {
+      id: true,
+      retailerId: true,
+      retailers: { select: { name: true } },
+    },
+  })
+
+  if (listedRetailers.length === 0) {
+    log('DEBUG', 'No listed retailers to unlist for merchant', {
+      action: 'unlist_retailers_noop',
+      merchantId,
+      reason,
+    })
+    return { unlistedCount: 0, retailerIds: [] }
+  }
+
+  const retailerIds = listedRetailers.map((r) => r.retailerId)
+
+  // Batch update all listed retailers to unlisted
+  const result = await prisma.merchant_retailers.updateMany({
+    where: {
+      merchantId,
+      listingStatus: 'LISTED',
+    },
+    data: {
+      listingStatus: 'UNLISTED',
+      unlistedAt: now,
+      unlistedBy: actor,
+      unlistedReason: reason,
+    },
+  })
+
+  // Create audit log entries for each unlisted retailer
+  const auditPromises = listedRetailers.map((mr) =>
+    prisma.admin_audit_logs.create({
+      data: {
+        adminUserId: actor,
+        merchantId,
+        action: 'RETAILER_AUTO_UNLISTED',
+        resource: 'MerchantRetailer',
+        resourceId: mr.id,
+        oldValue: { listingStatus: 'LISTED' },
+        newValue: {
+          listingStatus: 'UNLISTED',
+          unlistedAt: now.toISOString(),
+          unlistedBy: actor,
+          unlistedReason: reason,
+          retailerId: mr.retailerId,
+          retailerName: mr.retailers?.name,
+        },
+      },
+    })
+  )
+
+  await Promise.all(auditPromises)
+
+  log('WARN', `Auto-unlisted ${result.count} retailers for merchant due to ${reason}`, {
+    action: 'unlist_retailers_complete',
+    merchantId,
+    reason,
+    actor,
+    unlistedCount: result.count,
+    retailerIds,
+  })
+
+  return { unlistedCount: result.count, retailerIds }
+}
+
 // Helper to get current_period_end from subscription (Stripe v20 moved this to items)
 function getSubscriptionPeriodEnd(subscription: Stripe.Subscription): number {
   return subscription.items.data[0]?.current_period_end ?? 0
@@ -102,7 +222,7 @@ type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG'
 
 interface LogContext {
   action: string
-  dealerId?: string
+  merchantId?: string
   userId?: string
   subscriptionId?: string
   customerId?: string
@@ -160,9 +280,9 @@ const createCheckoutSchema = z.object({
   cancelUrl: z.string()
 })
 
-const createDealerCheckoutSchema = z.object({
+const createMerchantCheckoutSchema = z.object({
   priceId: z.string(),
-  dealerId: z.string(),
+  merchantId: z.string(),
   successUrl: z.string(),
   cancelUrl: z.string()
 })
@@ -195,17 +315,17 @@ router.get('/health', async (req: Request, res: Response) => {
 
     // Check database connectivity
     let dbStatus = 'unknown'
-    let activeDealerSubscriptions = 0
+    let activeMerchantSubscriptions = 0
     let activeConsumerSubscriptions = 0
 
     try {
-      // Count active dealer subscriptions
-      activeDealerSubscriptions = await prisma.dealer.count({
+      // Count active merchant subscriptions
+      activeMerchantSubscriptions = await prisma.merchants.count({
         where: { subscriptionStatus: 'ACTIVE' }
       })
 
       // Count active consumer subscriptions (users with PREMIUM tier)
-      activeConsumerSubscriptions = await prisma.user.count({
+      activeConsumerSubscriptions = await prisma.users.count({
         where: { tier: 'PREMIUM' }
       })
 
@@ -232,13 +352,13 @@ router.get('/health', async (req: Request, res: Response) => {
         priceIds: {
           premiumMonthly: !!process.env.STRIPE_PRICE_ID_PREMIUM_MONTHLY,
           premiumAnnually: !!process.env.STRIPE_PRICE_ID_PREMIUM_ANNUALLY,
-          dealerStandard: !!process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY,
-          dealerPro: !!process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY
+          merchantStandard: !!(process.env.STRIPE_PRICE_ID_MERCHANT_STANDARD_MONTHLY || process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY),
+          merchantPro: !!(process.env.STRIPE_PRICE_ID_MERCHANT_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY)
         }
       },
       database: {
         status: dbStatus,
-        activeDealerSubscriptions,
+        activeMerchantSubscriptions,
         activeConsumerSubscriptions
       },
       webhooks: {
@@ -383,26 +503,26 @@ router.post('/create-checkout', async (req: Request, res: Response) => {
 })
 
 // =============================================================================
-// Dealer Checkout
+// Merchant Checkout
 // =============================================================================
 
-router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
+router.post('/merchant/create-checkout', async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {
-    const { priceId, dealerId, successUrl, cancelUrl } = createDealerCheckoutSchema.parse(req.body)
+    const { priceId, merchantId, successUrl, cancelUrl } = createMerchantCheckoutSchema.parse(req.body)
 
-    log('INFO', 'Dealer checkout initiated', {
-      action: 'dealer_checkout_start',
-      dealerId,
+    log('INFO', 'Merchant checkout initiated', {
+      action: 'merchant_checkout_start',
+      merchantId,
       priceId
     })
 
     if (!stripe) {
-      const mockSessionId = `mock_dealer_session_${Date.now()}`
+      const mockSessionId = `mock_merchant_session_${Date.now()}`
       log('WARN', 'Stripe not configured - returning mock session', {
-        action: 'dealer_checkout_mock',
-        dealerId,
+        action: 'merchant_checkout_mock',
+        merchantId,
         sessionId: mockSessionId
       })
 
@@ -412,52 +532,52 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
       })
     }
 
-    // Get dealer info for Stripe customer
-    const dealer = await prisma.dealer.findUnique({
-      where: { id: dealerId },
+    // Get merchant info for Stripe customer
+    const merchant = await prisma.merchants.findUnique({
+      where: { id: merchantId },
       include: {
-        users: {
+        merchant_users: {
           where: { role: 'OWNER' },
           take: 1,
         },
       },
     })
 
-    if (!dealer) {
-      log('WARN', 'Dealer not found for checkout', {
-        action: 'dealer_checkout_not_found',
-        dealerId
+    if (!merchant) {
+      log('WARN', 'Merchant not found for checkout', {
+        action: 'merchant_checkout_not_found',
+        merchantId
       })
-      return res.status(404).json({ error: 'Dealer not found' })
+      return res.status(404).json({ error: 'Merchant not found' })
     }
 
-    const ownerEmail = dealer.users[0]?.email
+    const ownerEmail = merchant.merchant_users[0]?.email
 
     // Create or retrieve Stripe customer
-    let customerId = dealer.stripeCustomerId
+    let customerId = merchant.stripeCustomerId
     let customerCreated = false
 
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: ownerEmail,
-        name: dealer.businessName,
+        name: merchant.businessName,
         metadata: {
-          dealerId: dealer.id,
-          type: 'dealer',
+          merchantId: merchant.id,
+          type: 'merchant',
         },
       })
       customerId = customer.id
       customerCreated = true
 
-      // Save customer ID to dealer record
-      await prisma.dealer.update({
-        where: { id: dealerId },
+      // Save customer ID to merchant record
+      await prisma.merchants.update({
+        where: { id: merchantId },
         data: { stripeCustomerId: customerId },
       })
 
-      log('INFO', 'Stripe customer created for dealer', {
-        action: 'dealer_customer_created',
-        dealerId,
+      log('INFO', 'Stripe customer created for merchant', {
+        action: 'merchant_customer_created',
+        merchantId,
         customerId
       })
     }
@@ -474,15 +594,15 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      client_reference_id: dealerId,
+      client_reference_id: merchantId,
       metadata: {
-        type: 'dealer',
-        dealerId: dealerId,
+        type: 'merchant',
+        merchantId: merchantId,
       },
       subscription_data: {
         metadata: {
-          type: 'dealer',
-          dealerId: dealerId,
+          type: 'merchant',
+          merchantId: merchantId,
         },
       },
     })
@@ -491,9 +611,9 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
     endpointStats.checkoutCreated++
     endpointStats.lastCheckoutAt = new Date()
 
-    log('INFO', 'Dealer checkout session created', {
-      action: 'dealer_checkout_success',
-      dealerId,
+    log('INFO', 'Merchant checkout session created', {
+      action: 'merchant_checkout_success',
+      merchantId,
       priceId,
       customerId,
       sessionId: session.id,
@@ -509,53 +629,53 @@ router.post('/dealer/create-checkout', async (req: Request, res: Response) => {
     const duration = Date.now() - startTime
     endpointStats.checkoutFailed++
 
-    log('ERROR', 'Dealer checkout failed', {
-      action: 'dealer_checkout_error',
+    log('ERROR', 'Merchant checkout failed', {
+      action: 'merchant_checkout_error',
       error: error instanceof Error ? error.message : 'Unknown error',
       duration
     })
 
-    res.status(500).json({ error: 'Failed to create dealer checkout session' })
+    res.status(500).json({ error: 'Failed to create merchant checkout session' })
   }
 })
 
 // =============================================================================
-// Dealer Customer Portal
+// Merchant Customer Portal
 // =============================================================================
 
-router.post('/dealer/create-portal-session', async (req: Request, res: Response) => {
+router.post('/merchant/create-portal-session', async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {
-    const { dealerId, returnUrl } = req.body
+    const { merchantId, returnUrl } = req.body
 
-    log('INFO', 'Dealer portal session initiated', {
-      action: 'dealer_portal_start',
-      dealerId
+    log('INFO', 'Merchant portal session initiated', {
+      action: 'merchant_portal_start',
+      merchantId
     })
 
     if (!stripe) {
       log('WARN', 'Stripe not configured - returning to return URL', {
-        action: 'dealer_portal_mock',
-        dealerId
+        action: 'merchant_portal_mock',
+        merchantId
       })
       return res.json({ url: returnUrl })
     }
 
-    const dealer = await prisma.dealer.findUnique({
-      where: { id: dealerId },
+    const merchant = await prisma.merchants.findUnique({
+      where: { id: merchantId },
     })
 
-    if (!dealer?.stripeCustomerId) {
-      log('WARN', 'No billing account found for dealer', {
-        action: 'dealer_portal_no_customer',
-        dealerId
+    if (!merchant?.stripeCustomerId) {
+      log('WARN', 'No billing account found for merchant', {
+        action: 'merchant_portal_no_customer',
+        merchantId
       })
       return res.status(400).json({ error: 'No billing account found' })
     }
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: dealer.stripeCustomerId,
+      customer: merchant.stripeCustomerId,
       return_url: returnUrl,
     })
 
@@ -563,10 +683,10 @@ router.post('/dealer/create-portal-session', async (req: Request, res: Response)
     endpointStats.portalCreated++
     endpointStats.lastPortalAt = new Date()
 
-    log('INFO', 'Dealer portal session created', {
-      action: 'dealer_portal_success',
-      dealerId,
-      customerId: dealer.stripeCustomerId,
+    log('INFO', 'Merchant portal session created', {
+      action: 'merchant_portal_success',
+      merchantId,
+      customerId: merchant.stripeCustomerId,
       duration
     })
 
@@ -575,8 +695,8 @@ router.post('/dealer/create-portal-session', async (req: Request, res: Response)
     const duration = Date.now() - startTime
     endpointStats.portalFailed++
 
-    log('ERROR', 'Dealer portal session failed', {
-      action: 'dealer_portal_error',
+    log('ERROR', 'Merchant portal session failed', {
+      action: 'merchant_portal_error',
       error: error instanceof Error ? error.message : 'Unknown error',
       duration
     })
@@ -629,8 +749,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         const session = event.data.object as Stripe.Checkout.Session
         const metadata = session.metadata || {}
 
-        if (metadata.type === 'dealer') {
-          await handleDealerCheckoutCompleted(session)
+        // Handle merchant portal sessions (legacy metadata supported for compatibility)
+        if (isMerchantPortalRequest(metadata.type)) {
+          await handleMerchantCheckoutCompleted(session)
         } else {
           await handleConsumerCheckoutCompleted(session)
         }
@@ -652,8 +773,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId)
           const metadata = subscription.metadata || {}
 
-          if (metadata.type === 'dealer') {
-            await handleDealerInvoicePaid(invoice, subscription)
+          // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+          if (isMerchantPortalRequest(metadata.type)) {
+            await handleMerchantInvoicePaid(invoice, subscription)
           } else {
             await handleConsumerInvoicePaid(invoice, subscription)
           }
@@ -676,8 +798,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId)
           const metadata = subscription.metadata || {}
 
-          if (metadata.type === 'dealer') {
-            await handleDealerPaymentFailed(invoice, subscription)
+          // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+          if (isMerchantPortalRequest(metadata.type)) {
+            await handleMerchantPaymentFailed(invoice, subscription)
           } else {
             await handleConsumerPaymentFailed(invoice, subscription)
           }
@@ -692,8 +815,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         const subscription = event.data.object as Stripe.Subscription
         const metadata = subscription.metadata || {}
 
-        if (metadata.type === 'dealer') {
-          await handleDealerSubscriptionUpdated(subscription)
+        // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+        if (isMerchantPortalRequest(metadata.type)) {
+          await handleMerchantSubscriptionUpdated(subscription)
         } else {
           await handleConsumerSubscriptionUpdated(subscription)
         }
@@ -707,8 +831,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         const subscription = event.data.object as Stripe.Subscription
         const metadata = subscription.metadata || {}
 
-        if (metadata.type === 'dealer') {
-          await handleDealerSubscriptionDeleted(subscription)
+        // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+        if (isMerchantPortalRequest(metadata.type)) {
+          await handleMerchantSubscriptionDeleted(subscription)
         } else {
           await handleConsumerSubscriptionDeleted(subscription)
         }
@@ -722,8 +847,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         const subscription = event.data.object as Stripe.Subscription
         const metadata = subscription.metadata || {}
 
-        if (metadata.type === 'dealer') {
-          await handleDealerSubscriptionPaused(subscription)
+        // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+        if (isMerchantPortalRequest(metadata.type)) {
+          await handleMerchantSubscriptionPaused(subscription)
         }
         break
       }
@@ -735,8 +861,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         const subscription = event.data.object as Stripe.Subscription
         const metadata = subscription.metadata || {}
 
-        if (metadata.type === 'dealer') {
-          await handleDealerSubscriptionResumed(subscription)
+        // Handle both 'merchant' (new) and 'dealer' (legacy) for backwards compatibility
+        if (isMerchantPortalRequest(metadata.type)) {
+          await handleMerchantSubscriptionResumed(subscription)
         }
         break
       }
@@ -787,32 +914,33 @@ router.post('/webhook', async (req: Request, res: Response) => {
 })
 
 // =============================================================================
-// Dealer Webhook Handlers
+// Merchant Webhook Handlers
 // =============================================================================
 
-async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const dealerId = session.metadata?.dealerId || session.client_reference_id
+async function handleMerchantCheckoutCompleted(session: Stripe.Checkout.Session) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = session.metadata?.merchantId || session.metadata?.dealerId || session.client_reference_id
   const subscriptionId = session.subscription as string
   const customerId = session.customer as string
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in checkout session', {
-      action: 'dealer_checkout_completed_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in checkout session', {
+      action: 'merchant_checkout_completed_error',
       sessionId: session.id
     })
     return
   }
 
-  log('INFO', 'Processing dealer checkout completed', {
-    action: 'dealer_checkout_completed_start',
-    dealerId,
+  log('INFO', 'Processing merchant checkout completed', {
+    action: 'merchant_checkout_completed_start',
+    merchantId,
     subscriptionId,
     customerId
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       subscriptionExpiresAt: true,
@@ -827,8 +955,8 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
   const subscription = await stripe!.subscriptions.retrieve(subscriptionId)
   const currentPeriodEnd = new Date(getSubscriptionPeriodEnd(subscription) * 1000)
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       stripeSubscriptionId: subscriptionId,
       stripeCustomerId: customerId,
@@ -841,9 +969,9 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_CHECKOUT_COMPLETED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd.toISOString(),
@@ -854,9 +982,9 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   )
 
-  log('INFO', 'Dealer subscription activated', {
-    action: 'dealer_checkout_completed_success',
-    dealerId,
+  log('INFO', 'Merchant subscription activated', {
+    action: 'merchant_checkout_completed_success',
+    merchantId,
     subscriptionId,
     customerId,
     expiresAt: currentPeriodEnd.toISOString(),
@@ -864,31 +992,32 @@ async function handleDealerCheckoutCompleted(session: Stripe.Checkout.Session) {
   })
 }
 
-async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantInvoicePaid(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
   const invoiceId = invoice.id
   const amount = invoice.amount_paid
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_invoice_paid_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_invoice_paid_error',
       subscriptionId: subscription.id,
       invoiceId
     })
     return
   }
 
-  log('INFO', 'Processing dealer invoice paid', {
-    action: 'dealer_invoice_paid_start',
-    dealerId,
+  log('INFO', 'Processing merchant invoice paid', {
+    action: 'merchant_invoice_paid_start',
+    merchantId,
     subscriptionId: subscription.id,
     invoiceId,
     amount
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       subscriptionExpiresAt: true,
@@ -897,8 +1026,8 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
 
   const currentPeriodEnd = new Date(getSubscriptionPeriodEnd(subscription) * 1000)
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd,
@@ -907,9 +1036,9 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
 
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_INVOICE_PAID',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd.toISOString(),
@@ -918,9 +1047,9 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
     }
   )
 
-  log('INFO', 'Dealer subscription renewed', {
-    action: 'dealer_invoice_paid_success',
-    dealerId,
+  log('INFO', 'Merchant subscription renewed', {
+    action: 'merchant_invoice_paid_success',
+    merchantId,
     subscriptionId: subscription.id,
     invoiceId,
     amount,
@@ -928,31 +1057,32 @@ async function handleDealerInvoicePaid(invoice: Stripe.Invoice, subscription: St
   })
 }
 
-async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantPaymentFailed(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
   const invoiceId = invoice.id
   const attemptCount = invoice.attempt_count
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_payment_failed_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_payment_failed_error',
       subscriptionId: subscription.id,
       invoiceId
     })
     return
   }
 
-  log('WARN', 'Dealer payment failed', {
-    action: 'dealer_payment_failed_start',
-    dealerId,
+  log('WARN', 'Merchant payment failed', {
+    action: 'merchant_payment_failed_start',
+    merchantId,
     subscriptionId: subscription.id,
     invoiceId,
     attemptCount
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       subscriptionExpiresAt: true,
@@ -960,61 +1090,71 @@ async function handleDealerPaymentFailed(invoice: Stripe.Invoice, subscription: 
   })
 
   // Set to EXPIRED to trigger grace period
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus: 'EXPIRED',
       // Keep existing expiration date - grace period calculated from there
     },
   })
 
+  // AUTO-UNLIST: Per Merchant-and-Retailer-Reference, delinquency auto-unlists all retailers
+  const unlistResult = await unlistAllRetailersForMerchant(
+    merchantId,
+    'billing_payment_failed',
+    STRIPE_SYSTEM_USER
+  )
+
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_PAYMENT_FAILED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'EXPIRED',
       invoiceId,
       attemptCount,
       reason: 'Payment failed - entering grace period',
+      retailersUnlisted: unlistResult.unlistedCount,
     }
   )
 
-  log('WARN', 'Dealer subscription marked as EXPIRED', {
-    action: 'dealer_payment_failed_processed',
-    dealerId,
+  log('WARN', 'Merchant subscription marked as EXPIRED', {
+    action: 'merchant_payment_failed_processed',
+    merchantId,
     subscriptionId: subscription.id,
     invoiceId,
     attemptCount,
-    status: 'EXPIRED'
+    status: 'EXPIRED',
+    retailersUnlisted: unlistResult.unlistedCount,
   })
 }
 
-async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantSubscriptionUpdated(subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
   const stripeStatus = subscription.status
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_subscription_updated_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_subscription_updated_error',
       subscriptionId: subscription.id,
       stripeStatus
     })
     return
   }
 
-  log('INFO', 'Processing dealer subscription update', {
-    action: 'dealer_subscription_updated_start',
-    dealerId,
+  log('INFO', 'Processing merchant subscription update', {
+    action: 'merchant_subscription_updated_start',
+    merchantId,
     subscriptionId: subscription.id,
     stripeStatus,
     cancelAtPeriodEnd: subscription.cancel_at_period_end
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       subscriptionExpiresAt: true,
@@ -1045,8 +1185,8 @@ async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription
       break
   }
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus,
       subscriptionExpiresAt: currentPeriodEnd,
@@ -1054,50 +1194,70 @@ async function handleDealerSubscriptionUpdated(subscription: Stripe.Subscription
     },
   })
 
+  // AUTO-UNLIST: Per Merchant-and-Retailer-Reference, delinquency auto-unlists all retailers
+  // past_due and unpaid are delinquency states that trigger unlist
+  let unlistResult = { unlistedCount: 0, retailerIds: [] as string[] }
+  if (subscription.status === 'past_due') {
+    unlistResult = await unlistAllRetailersForMerchant(
+      merchantId,
+      'billing_subscription_past_due',
+      STRIPE_SYSTEM_USER
+    )
+  } else if (subscription.status === 'unpaid') {
+    unlistResult = await unlistAllRetailersForMerchant(
+      merchantId,
+      'billing_subscription_unpaid',
+      STRIPE_SYSTEM_USER
+    )
+  }
+
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_SUBSCRIPTION_UPDATED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus,
       subscriptionExpiresAt: currentPeriodEnd.toISOString(),
       autoRenew: !subscription.cancel_at_period_end,
       stripeStatus,
+      retailersUnlisted: unlistResult.unlistedCount,
     }
   )
 
-  log('INFO', 'Dealer subscription updated', {
-    action: 'dealer_subscription_updated_success',
-    dealerId,
+  log('INFO', 'Merchant subscription updated', {
+    action: 'merchant_subscription_updated_success',
+    merchantId,
     subscriptionId: subscription.id,
     stripeStatus,
     localStatus: subscriptionStatus,
     expiresAt: currentPeriodEnd.toISOString(),
-    autoRenew: !subscription.cancel_at_period_end
+    autoRenew: !subscription.cancel_at_period_end,
+    retailersUnlisted: unlistResult.unlistedCount,
   })
 }
 
-async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantSubscriptionDeleted(subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_subscription_deleted_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_subscription_deleted_error',
       subscriptionId: subscription.id
     })
     return
   }
 
-  log('WARN', 'Processing dealer subscription deletion', {
-    action: 'dealer_subscription_deleted_start',
-    dealerId,
+  log('WARN', 'Processing merchant subscription deletion', {
+    action: 'merchant_subscription_deleted_start',
+    merchantId,
     subscriptionId: subscription.id
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       stripeSubscriptionId: true,
@@ -1105,8 +1265,8 @@ async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription
     },
   })
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus: 'CANCELLED',
       stripeSubscriptionId: null,
@@ -1114,98 +1274,118 @@ async function handleDealerSubscriptionDeleted(subscription: Stripe.Subscription
     },
   })
 
+  // AUTO-UNLIST: Per Merchant-and-Retailer-Reference, subscription deletion is terminal delinquency
+  const unlistResult = await unlistAllRetailersForMerchant(
+    merchantId,
+    'billing_subscription_deleted',
+    STRIPE_SYSTEM_USER
+  )
+
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_SUBSCRIPTION_DELETED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'CANCELLED',
       stripeSubscriptionId: null,
       autoRenew: false,
       reason: 'Subscription cancelled in Stripe',
+      retailersUnlisted: unlistResult.unlistedCount,
     }
   )
 
-  log('WARN', 'Dealer subscription cancelled', {
-    action: 'dealer_subscription_deleted_success',
-    dealerId,
+  log('WARN', 'Merchant subscription cancelled', {
+    action: 'merchant_subscription_deleted_success',
+    merchantId,
     subscriptionId: subscription.id,
-    status: 'CANCELLED'
+    status: 'CANCELLED',
+    retailersUnlisted: unlistResult.unlistedCount,
   })
 }
 
-async function handleDealerSubscriptionPaused(subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantSubscriptionPaused(subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_subscription_paused_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_subscription_paused_error',
       subscriptionId: subscription.id
     })
     return
   }
 
-  log('WARN', 'Processing dealer subscription pause', {
-    action: 'dealer_subscription_paused_start',
-    dealerId,
+  log('WARN', 'Processing merchant subscription pause', {
+    action: 'merchant_subscription_paused_start',
+    merchantId,
     subscriptionId: subscription.id
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
     },
   })
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus: 'SUSPENDED',
     },
   })
 
+  // AUTO-UNLIST: Per Merchant-and-Retailer-Reference, subscription pause is delinquency
+  const unlistResult = await unlistAllRetailersForMerchant(
+    merchantId,
+    'billing_subscription_paused',
+    STRIPE_SYSTEM_USER
+  )
+
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_SUBSCRIPTION_PAUSED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'SUSPENDED',
       reason: 'Subscription paused in Stripe',
+      retailersUnlisted: unlistResult.unlistedCount,
     }
   )
 
-  log('WARN', 'Dealer subscription suspended', {
-    action: 'dealer_subscription_paused_success',
-    dealerId,
+  log('WARN', 'Merchant subscription suspended', {
+    action: 'merchant_subscription_paused_success',
+    merchantId,
     subscriptionId: subscription.id,
-    status: 'SUSPENDED'
+    status: 'SUSPENDED',
+    retailersUnlisted: unlistResult.unlistedCount,
   })
 }
 
-async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription) {
-  const dealerId = subscription.metadata?.dealerId
+async function handleMerchantSubscriptionResumed(subscription: Stripe.Subscription) {
+  // Support both merchantId (new) and dealerId (legacy) metadata keys
+  const merchantId = subscription.metadata?.merchantId || subscription.metadata?.dealerId
 
-  if (!dealerId) {
-    log('ERROR', 'No dealerId in subscription metadata', {
-      action: 'dealer_subscription_resumed_error',
+  if (!merchantId) {
+    log('ERROR', 'No merchantId in subscription metadata', {
+      action: 'merchant_subscription_resumed_error',
       subscriptionId: subscription.id
     })
     return
   }
 
-  log('INFO', 'Processing dealer subscription resume', {
-    action: 'dealer_subscription_resumed_start',
-    dealerId,
+  log('INFO', 'Processing merchant subscription resume', {
+    action: 'merchant_subscription_resumed_start',
+    merchantId,
     subscriptionId: subscription.id
   })
 
-  // Get current dealer state for audit log
-  const oldDealer = await prisma.dealer.findUnique({
-    where: { id: dealerId },
+  // Get current merchant state for audit log
+  const oldMerchant = await prisma.merchants.findUnique({
+    where: { id: merchantId },
     select: {
       subscriptionStatus: true,
       subscriptionExpiresAt: true,
@@ -1214,8 +1394,8 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
 
   const currentPeriodEnd = new Date(getSubscriptionPeriodEnd(subscription) * 1000)
 
-  await prisma.dealer.update({
-    where: { id: dealerId },
+  await prisma.merchants.update({
+    where: { id: merchantId },
     data: {
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd,
@@ -1224,9 +1404,9 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
 
   // Audit log
   await logStripeSubscriptionChange(
-    dealerId,
+    merchantId,
     'STRIPE_SUBSCRIPTION_RESUMED',
-    oldDealer || {},
+    oldMerchant || {},
     {
       subscriptionStatus: 'ACTIVE',
       subscriptionExpiresAt: currentPeriodEnd.toISOString(),
@@ -1234,9 +1414,9 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
     }
   )
 
-  log('INFO', 'Dealer subscription resumed', {
-    action: 'dealer_subscription_resumed_success',
-    dealerId,
+  log('INFO', 'Merchant subscription resumed', {
+    action: 'merchant_subscription_resumed_success',
+    merchantId,
     subscriptionId: subscription.id,
     expiresAt: currentPeriodEnd.toISOString(),
     status: 'ACTIVE'
@@ -1252,11 +1432,11 @@ async function handleDealerSubscriptionResumed(subscription: Stripe.Subscription
  * Helper to find user by Stripe subscription ID
  */
 async function findUserByStripeSubscription(stripeSubscriptionId: string) {
-  const subscription = await prisma.subscription.findUnique({
+  const subscription = await prisma.subscriptions.findUnique({
     where: { stripeId: stripeSubscriptionId },
-    include: { user: true }
+    include: { users: true }
   })
-  return subscription?.user || null
+  return subscription?.users || null
 }
 
 /**
@@ -1306,7 +1486,7 @@ async function handleConsumerCheckoutCompleted(session: Stripe.Checkout.Session)
   })
 
   // Get current user state for audit log
-  const oldUser = await prisma.user.findUnique({
+  const oldUser = await prisma.users.findUnique({
     where: { id: userId },
     select: { tier: true }
   })
@@ -1328,7 +1508,7 @@ async function handleConsumerCheckoutCompleted(session: Stripe.Checkout.Session)
   // Use transaction for atomicity
   await prisma.$transaction(async (tx) => {
     // 1. Create or update Subscription record
-    await tx.subscription.upsert({
+    await tx.subscriptions.upsert({
       where: { stripeId: subscriptionId },
       create: {
         userId,
@@ -1347,7 +1527,7 @@ async function handleConsumerCheckoutCompleted(session: Stripe.Checkout.Session)
     })
 
     // 2. Upgrade user tier to PREMIUM
-    await tx.user.update({
+    await tx.users.update({
       where: { id: userId },
       data: { tier: 'PREMIUM' }
     })
@@ -1388,7 +1568,7 @@ async function handleConsumerInvoicePaid(invoice: Stripe.Invoice, subscription: 
   const amount = invoice.amount_paid
 
   // Try to find user by metadata first, then by subscription lookup
-  let user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null
+  let user = userId ? await prisma.users.findUnique({ where: { id: userId } }) : null
   if (!user) {
     user = await findUserByStripeSubscription(subscription.id)
   }
@@ -1415,7 +1595,7 @@ async function handleConsumerInvoicePaid(invoice: Stripe.Invoice, subscription: 
 
   // Update subscription and ensure user is PREMIUM
   await prisma.$transaction(async (tx) => {
-    await tx.subscription.update({
+    await tx.subscriptions.update({
       where: { stripeId: subscription.id },
       data: {
         status: 'ACTIVE',
@@ -1425,7 +1605,7 @@ async function handleConsumerInvoicePaid(invoice: Stripe.Invoice, subscription: 
 
     // Ensure user is PREMIUM (handles edge cases)
     if (user!.tier !== 'PREMIUM') {
-      await tx.user.update({
+      await tx.users.update({
         where: { id: user!.id },
         data: { tier: 'PREMIUM' }
       })
@@ -1463,7 +1643,7 @@ async function handleConsumerInvoicePaid(invoice: Stripe.Invoice, subscription: 
 async function handleConsumerPaymentFailed(invoice: Stripe.Invoice, subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.userId
 
-  let user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null
+  let user = userId ? await prisma.users.findUnique({ where: { id: userId } }) : null
   if (!user) {
     user = await findUserByStripeSubscription(subscription.id)
   }
@@ -1515,7 +1695,7 @@ async function handleConsumerPaymentFailed(invoice: Stripe.Invoice, subscription
 async function handleConsumerSubscriptionUpdated(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.userId
 
-  let user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null
+  let user = userId ? await prisma.users.findUnique({ where: { id: userId } }) : null
   if (!user) {
     user = await findUserByStripeSubscription(subscription.id)
   }
@@ -1546,7 +1726,7 @@ async function handleConsumerSubscriptionUpdated(subscription: Stripe.Subscripti
 
   await prisma.$transaction(async (tx) => {
     // Update subscription record
-    await tx.subscription.update({
+    await tx.subscriptions.update({
       where: { stripeId: subscription.id },
       data: {
         status: subscriptionStatus,
@@ -1556,7 +1736,7 @@ async function handleConsumerSubscriptionUpdated(subscription: Stripe.Subscripti
 
     // Update user tier if changed
     if (user!.tier !== newTier) {
-      await tx.user.update({
+      await tx.users.update({
         where: { id: user!.id },
         data: { tier: newTier }
       })
@@ -1595,7 +1775,7 @@ async function handleConsumerSubscriptionUpdated(subscription: Stripe.Subscripti
 async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.userId
 
-  let user = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null
+  let user = userId ? await prisma.users.findUnique({ where: { id: userId } }) : null
   if (!user) {
     user = await findUserByStripeSubscription(subscription.id)
   }
@@ -1618,7 +1798,7 @@ async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscripti
 
   await prisma.$transaction(async (tx) => {
     // Mark subscription as cancelled
-    await tx.subscription.update({
+    await tx.subscriptions.update({
       where: { stripeId: subscription.id },
       data: {
         status: 'CANCELLED',
@@ -1627,7 +1807,7 @@ async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscripti
     })
 
     // Downgrade user to FREE
-    await tx.user.update({
+    await tx.users.update({
       where: { id: user!.id },
       data: { tier: 'FREE' }
     })
@@ -1714,12 +1894,12 @@ router.get('/plans', async (req: Request, res: Response) => {
   }
 })
 
-// Dealer plans endpoint
-router.get('/dealer/plans', async (req: Request, res: Response) => {
+// Merchant plans endpoint
+router.get('/merchant/plans', async (req: Request, res: Response) => {
   try {
-    const dealerPlans = [
+    const merchantPlans = [
       {
-        id: process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY || 'price_dealer_standard',
+        id: process.env.STRIPE_PRICE_ID_MERCHANT_STANDARD_MONTHLY || process.env.STRIPE_PRICE_ID_DEALER_STANDARD_MONTHLY || 'price_dealer_standard',
         name: 'Standard',
         tier: 'STANDARD',
         price: 99,
@@ -1736,7 +1916,7 @@ router.get('/dealer/plans', async (req: Request, res: Response) => {
         ]
       },
       {
-        id: process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY || 'price_dealer_pro',
+        id: process.env.STRIPE_PRICE_ID_MERCHANT_PRO_MONTHLY || process.env.STRIPE_PRICE_ID_DEALER_PRO_MONTHLY || 'price_dealer_pro',
         name: 'Pro',
         tier: 'PRO',
         price: 299,
@@ -1756,11 +1936,10 @@ router.get('/dealer/plans', async (req: Request, res: Response) => {
       }
     ]
 
-    res.json(dealerPlans)
+    res.json(merchantPlans)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch dealer plans' })
+    res.status(500).json({ error: 'Failed to fetch merchant plans' })
   }
 })
 
 export { router as paymentsRouter }
-

@@ -38,20 +38,20 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     const [logs, total] = await Promise.all([
-      prisma.executionLog.findMany({
+      prisma.execution_logs.findMany({
         where,
         skip,
         take: limitNum,
         orderBy: { timestamp: 'desc' },
         include: {
-          execution: {
+          executions: {
             include: {
-              source: true,
+              sources: true,
             },
           },
         },
       }),
-      prisma.executionLog.count({ where }),
+      prisma.execution_logs.count({ where }),
     ])
 
     res.json({
@@ -72,7 +72,7 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/logs/events - Get list of unique events
 router.get('/events', async (req: Request, res: Response) => {
   try {
-    const events = await prisma.executionLog.findMany({
+    const events = await prisma.execution_logs.findMany({
       select: {
         event: true,
       },

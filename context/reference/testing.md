@@ -46,10 +46,10 @@ These tests should:
 
 ---
 
-### 2. Dealer Eligibility Tests
+### 2. Retailer Eligibility Tests
 
 Must verify:
-- Suspended dealers never appear in search
+- Ineligible Retailers never appear in search
 - Ineligible inventory does not trigger alerts
 - Eligibility changes propagate immediately at query time
 
@@ -106,7 +106,7 @@ Do not waste test budget here.
 ## Test Data Rules
 
 - Use synthetic data only
-- Never use real dealer or user data
+- Never use real Merchant or user data
 - Make eligibility and tier state explicit in fixtures
 
 Tests must be reproducible from scratch.
@@ -138,7 +138,7 @@ If a test does not protect a release criterion or ADR, question its value.
 Before shipping v1:
 
 - [ ] Tier enforcement tested via API
-- [ ] Dealer suspension tested end-to-end
+- [ ] Merchant suspension → Retailer visibility tested end-to-end
 - [ ] Harvester SKIPPED execution tested
 - [ ] Alert suppression tested
 - [ ] Fail-closed behavior tested

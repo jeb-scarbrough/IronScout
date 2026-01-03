@@ -19,11 +19,11 @@ export async function sendPasswordResetEmail(
   businessName: string,
   resetToken: string
 ): Promise<EmailResult> {
-  const resetUrl = `${EMAIL_CONFIG.dealerPortalUrl}/reset-password?token=${resetToken}`;
+  const resetUrl = `${EMAIL_CONFIG.merchantPortalUrl}/reset-password?token=${resetToken}`;
 
   return sendEmail({
     to: email,
-    subject: 'Reset your IronScout Dealer password',
+    subject: 'Reset your IronScout Merchant password',
     html: wrapEmailTemplate(`
       <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
         <h2 style="color: #111; font-size: 20px; margin: 0 0 15px 0;">Password Reset Request</h2>
@@ -42,7 +42,7 @@ export async function sendPasswordResetEmail(
     `),
     text: `Password Reset Request
 
-Hi ${businessName}, we received a request to reset your IronScout Dealer Portal password.
+Hi ${businessName}, we received a request to reset your IronScout Merchant Portal password.
 
 Click the link below to choose a new password:
 ${resetUrl}

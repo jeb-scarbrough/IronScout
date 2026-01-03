@@ -38,7 +38,7 @@ Each deployed app must expose basic health signals:
 Applies to:
 - `apps/api`
 - `apps/web`
-- `apps/dealer`
+- `apps/dealer` (legacy path, Merchant portal)
 - `apps/admin`
 - `apps/harvester`
 
@@ -53,7 +53,7 @@ Required API signals:
 - Error rate by endpoint
 - Authentication and authorization failures
 - Tier enforcement failures
-- Dealer eligibility filter hits
+- Retailer eligibility filter hits
 
 These signals help answer:
 - “Is the API up?”
@@ -68,7 +68,7 @@ Harvester is a trust-critical system and requires deeper visibility.
 
 Required signals:
 - Job counts (enqueued, processing, completed, failed)
-- Execution status per source and dealer feed
+- Execution status per source and Merchant feed (legacy naming)
 - SKIPPED execution counts and reasons
 - Write counts (prices, inventory, benchmarks)
 - Error summaries by stage (fetch, normalize, write)
@@ -116,7 +116,7 @@ Logs should include:
 - Environment
 - App name
 - Request ID or execution ID
-- Relevant entity IDs (user, dealer, feed, execution)
+- Relevant entity IDs (user, merchant, feed, execution)
 
 Harvester logs must include execution identifiers consistently.
 
@@ -149,7 +149,7 @@ Required checks:
 - Count of results filtered due to ineligibility
 - Count of alerts suppressed due to eligibility
 - Attempts to access Premium features by Free users
-- Attempts by suspended dealers to ingest data
+- Attempts by suspended Merchants to ingest data
 
 Unexpected spikes in these signals indicate bugs or abuse.
 

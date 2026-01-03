@@ -100,7 +100,7 @@ export async function logAdminAction(
   adminUserId: string,
   action: string,
   {
-    dealerId,
+    merchantId,
     resource,
     resourceId,
     oldValue,
@@ -108,7 +108,7 @@ export async function logAdminAction(
     ipAddress,
     userAgent,
   }: {
-    dealerId?: string;
+    merchantId?: string;
     resource?: string;
     resourceId?: string;
     oldValue?: unknown;
@@ -117,13 +117,13 @@ export async function logAdminAction(
     userAgent?: string;
   }
 ): Promise<void> {
-  logger.debug('Creating admin audit log', { adminUserId, action, dealerId, resource });
+  logger.debug('Creating admin audit log', { adminUserId, action, merchantId, resource });
 
   try {
-    await prisma.adminAuditLog.create({
+    await prisma.admin_audit_logs.create({
       data: {
         adminUserId,
-        dealerId,
+        merchantId,
         action,
         resource,
         resourceId,

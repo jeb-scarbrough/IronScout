@@ -1,7 +1,7 @@
 /**
  * Feed Alert Notifications
- * 
- * Sent when dealer product feeds fail or recover.
+ *
+ * Sent when merchant product feeds fail or recover.
  */
 
 import {
@@ -31,9 +31,9 @@ import {
 export interface FeedAlertInfo {
   feedId: string;
   feedType: string;
-  dealerId: string;
+  merchantId: string;
   businessName: string;
-  dealerEmail: string;
+  merchantEmail: string;
   errorMessage?: string;
   lastSuccessAt?: Date | null;
 }
@@ -48,16 +48,16 @@ export interface NotificationResult {
 // =============================================================================
 
 export async function notifyFeedFailed(feed: FeedAlertInfo): Promise<NotificationResult> {
-  const dealerPortalUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
-  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const merchantPortalUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feeds`;
+  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
   
   const lastSuccess = feed.lastSuccessAt 
     ? new Date(feed.lastSuccessAt).toLocaleString()
     : 'Never';
 
-  // Send email to dealer
+  // Send email to merchant
   const emailResult = await sendEmail({
-    to: feed.dealerEmail,
+    to: feed.merchantEmail,
     subject: `⚠️ Feed Alert: ${feed.feedType} feed failed`,
     html: wrapEmailTemplate(`
       ${emailInfoBox(`
@@ -84,7 +84,7 @@ export async function notifyFeedFailed(feed: FeedAlertInfo): Promise<Notificatio
         </table>
       </div>
       
-      ${emailButton('View Feed Status', dealerPortalUrl)}
+      ${emailButton('View Feed Status', merchantPortalUrl)}
       
       <div style="text-align: center; color: #888; font-size: 12px; margin-top: 20px;">
         <p style="margin: 0;">Need help? Contact support@ironscout.ai</p>
@@ -97,7 +97,7 @@ Your ${feed.feedType} product feed encountered an error.
 Feed Type: ${feed.feedType}
 Last Success: ${lastSuccess}${feed.errorMessage ? `\nError: ${feed.errorMessage}` : ''}
 
-View feed status: ${dealerPortalUrl}
+View feed status: ${merchantPortalUrl}
 
 Need help? Contact support@ironscout.ai`,
   });
@@ -117,9 +117,9 @@ Need help? Contact support@ironscout.ai`,
       slackActions(
         slackButton('View in Admin', adminDetailUrl, 'danger')
       ),
-      slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.feedId} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -136,14 +136,14 @@ export async function notifyFeedWarning(
   feed: FeedAlertInfo,
   stats: { quarantineCount: number; indexedCount: number; quarantineRate: number }
 ): Promise<NotificationResult> {
-  const dealerPortalUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feed/quarantine`;
-  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const merchantPortalUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feed/quarantine`;
+  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
 
   const ratePercent = Math.round(stats.quarantineRate * 100);
 
-  // Send email to dealer
+  // Send email to merchant
   const emailResult = await sendEmail({
-    to: feed.dealerEmail,
+    to: feed.merchantEmail,
     subject: `⚠️ Feed Warning: ${ratePercent}% of records quarantined`,
     html: wrapEmailTemplate(`
       ${emailInfoBox(`
@@ -173,7 +173,7 @@ export async function notifyFeedWarning(
         You can add corrections to fix these records.
       </p>
 
-      ${emailButton('Review Quarantine Queue', dealerPortalUrl)}
+      ${emailButton('Review Quarantine Queue', merchantPortalUrl)}
     `),
     text: `Feed Warning - High Quarantine Rate
 
@@ -186,7 +186,7 @@ Quarantined: ${stats.quarantineCount} records
 Records are quarantined when they're missing a valid UPC code.
 You can add corrections to fix these records.
 
-Review quarantine queue: ${dealerPortalUrl}`,
+Review quarantine queue: ${merchantPortalUrl}`,
   });
 
   // Send Slack notification
@@ -204,9 +204,9 @@ Review quarantine queue: ${dealerPortalUrl}`,
       slackActions(
         slackButton('View in Admin', adminDetailUrl, 'danger')
       ),
-      slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.feedId} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }
@@ -216,12 +216,12 @@ Review quarantine queue: ${dealerPortalUrl}`,
 // =============================================================================
 
 export async function notifyFeedRecovered(feed: FeedAlertInfo): Promise<NotificationResult> {
-  const dealerPortalUrl = `${EMAIL_CONFIG.dealerPortalUrl}/feeds`;
-  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/dealers/${feed.dealerId}`;
+  const merchantPortalUrl = `${EMAIL_CONFIG.merchantPortalUrl}/feeds`;
+  const adminDetailUrl = `${EMAIL_CONFIG.adminPortalUrl}/merchants/${feed.merchantId}`;
 
-  // Send email to dealer
+  // Send email to merchant
   const emailResult = await sendEmail({
-    to: feed.dealerEmail,
+    to: feed.merchantEmail,
     subject: `✅ Feed Recovered: ${feed.feedType} feed is healthy`,
     html: wrapEmailTemplate(`
       ${emailInfoBox(`
@@ -242,7 +242,7 @@ export async function notifyFeedRecovered(feed: FeedAlertInfo): Promise<Notifica
         </table>
       </div>
       
-      ${emailButton('View Feed Status', dealerPortalUrl)}
+      ${emailButton('View Feed Status', merchantPortalUrl)}
     `),
     text: `Feed Recovered
 
@@ -251,7 +251,7 @@ Your ${feed.feedType} product feed is processing successfully again.
 Feed Type: ${feed.feedType}
 Status: HEALTHY
 
-View feed status: ${dealerPortalUrl}`,
+View feed status: ${merchantPortalUrl}`,
   });
 
   // Send Slack notification
@@ -268,9 +268,9 @@ View feed status: ${dealerPortalUrl}`,
       slackActions(
         slackButton('View in Admin', adminDetailUrl)
       ),
-      slackContext(`Feed ID: ${feed.feedId} • Dealer ID: ${feed.dealerId}`),
+      slackContext(`Feed ID: ${feed.feedId} • Merchant ID: ${feed.merchantId}`),
     ],
-  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl);
+  }, SLACK_CONFIG.feedsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl);
 
   return { email: emailResult, slack: slackResult };
 }

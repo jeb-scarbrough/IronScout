@@ -41,7 +41,7 @@ router.post('/trigger', async (req: Request, res: Response) => {
     let sources
 
     if (sourceId) {
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: sourceId },
       })
 
@@ -56,7 +56,7 @@ router.post('/trigger', async (req: Request, res: Response) => {
       sources = [source]
     } else {
       // Get all enabled sources
-      sources = await prisma.source.findMany({
+      sources = await prisma.sources.findMany({
         where: { enabled: true },
       })
 
@@ -70,13 +70,13 @@ router.post('/trigger', async (req: Request, res: Response) => {
 
     for (const source of sources) {
       // Create execution record
-      const execution = await prisma.execution.create({
+      const execution = await prisma.executions.create({
         data: {
           sourceId: source.id,
           status: 'PENDING',
         },
         include: {
-          source: true,
+          sources: true,
         },
       })
 
@@ -108,19 +108,19 @@ router.post('/trigger', async (req: Request, res: Response) => {
 router.get('/status', async (req: Request, res: Response) => {
   try {
     // Check for running executions
-    const runningCount = await prisma.execution.count({
+    const runningCount = await prisma.executions.count({
       where: { status: 'RUNNING' },
     })
 
-    const pendingCount = await prisma.execution.count({
+    const pendingCount = await prisma.executions.count({
       where: { status: 'PENDING' },
     })
 
     // Get last execution time
-    const lastExecution = await prisma.execution.findFirst({
+    const lastExecution = await prisma.executions.findFirst({
       orderBy: { startedAt: 'desc' },
       include: {
-        source: true,
+        sources: true,
       },
     })
 
@@ -131,7 +131,7 @@ router.get('/status', async (req: Request, res: Response) => {
       lastExecution: lastExecution
         ? {
             id: lastExecution.id,
-            source: lastExecution.source.name,
+            source: lastExecution.sources.name,
             status: lastExecution.status,
             startedAt: lastExecution.startedAt,
           }

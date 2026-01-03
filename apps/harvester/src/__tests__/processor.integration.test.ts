@@ -43,14 +43,14 @@ describeIntegration('Processor Integration Tests', () => {
 
     beforeEach(async () => {
       // Create test retailer and source
-      const retailer = await prisma.retailer.create({
+      const retailer = await prisma.retailers.create({
         data: {
           name: `Test Retailer ${Date.now()}`,
           website: `https://test-${Date.now()}.example.com`,
         },
       })
 
-      const source = await prisma.source.create({
+      const source = await prisma.sources.create({
         data: {
           name: `Test Source ${Date.now()}`,
           url: 'https://test.example.com/feed',
@@ -62,7 +62,7 @@ describeIntegration('Processor Integration Tests', () => {
       testSourceId = source.id
 
       // Create test source product
-      const sourceProduct = await prisma.sourceProduct.create({
+      const sourceProduct = await prisma.source_products.create({
         data: {
           sourceId: testSourceId,
           identityType: 'SKU',
@@ -88,7 +88,7 @@ describeIntegration('Processor Integration Tests', () => {
       `
 
       // Verify it was inserted
-      const presence = await prisma.sourceProductPresence.findUnique({
+      const presence = await prisma.source_product_presence.findUnique({
         where: { sourceProductId: testSourceProductId },
       })
 
@@ -98,7 +98,7 @@ describeIntegration('Processor Integration Tests', () => {
 
     it('should insert into source_product_seen with correct columns', async () => {
       // Create a test feed and run
-      const feed = await prisma.affiliateFeed.create({
+      const feed = await prisma.affiliate_feeds.create({
         data: {
           sourceId: testSourceId,
           network: 'IMPACT',
@@ -116,7 +116,7 @@ describeIntegration('Processor Integration Tests', () => {
         },
       })
 
-      const run = await prisma.affiliateFeedRun.create({
+      const run = await prisma.affiliate_feed_runs.create({
         data: {
           feedId: feed.id,
           sourceId: testSourceId,
@@ -135,7 +135,7 @@ describeIntegration('Processor Integration Tests', () => {
       `
 
       // Verify it was inserted
-      const seen = await prisma.sourceProductSeen.findFirst({
+      const seen = await prisma.source_product_seen.findFirst({
         where: { runId: run.id, sourceProductId: testSourceProductId },
       })
 
@@ -144,7 +144,7 @@ describeIntegration('Processor Integration Tests', () => {
 
     it('should insert prices with correct columns', async () => {
       // Create test feed and run first
-      const feed = await prisma.affiliateFeed.create({
+      const feed = await prisma.affiliate_feeds.create({
         data: {
           sourceId: testSourceId,
           network: 'IMPACT',
@@ -162,7 +162,7 @@ describeIntegration('Processor Integration Tests', () => {
         },
       })
 
-      const run = await prisma.affiliateFeedRun.create({
+      const run = await prisma.affiliate_feed_runs.create({
         data: {
           feedId: feed.id,
           sourceId: testSourceId,
@@ -172,15 +172,16 @@ describeIntegration('Processor Integration Tests', () => {
         },
       })
 
-      const source = await prisma.source.findUnique({
+      const source = await prisma.sources.findUnique({
         where: { id: testSourceId },
-        include: { retailer: true },
+        include: { retailers: true },
       })
 
       const priceSignatureHash = 'test-hash-123'
       const createdAt = new Date()
 
       // This is similar to the batch price insert in processor.ts
+      // ADR-015: Include provenance fields for all new price writes
       await prisma.$executeRaw`
         INSERT INTO prices (
           "id",
@@ -194,7 +195,10 @@ describeIntegration('Processor Integration Tests', () => {
           "inStock",
           "originalPrice",
           "priceType",
-          "createdAt"
+          "createdAt",
+          "observedAt",
+          "ingestionRunType",
+          "ingestionRunId"
         )
         VALUES (
           gen_random_uuid(),
@@ -208,18 +212,78 @@ describeIntegration('Processor Integration Tests', () => {
           true,
           ${24.99},
           'SALE',
-          ${createdAt}
+          ${createdAt},
+          ${createdAt},
+          'AFFILIATE_FEED'::"IngestionRunType",
+          ${run.id}
         )
         ON CONFLICT DO NOTHING
       `
 
       // Verify
-      const price = await prisma.price.findFirst({
+      const price = await prisma.prices.findFirst({
         where: { sourceProductId: testSourceProductId },
       })
 
       expect(price).toBeTruthy()
       expect(Number(price?.price)).toBe(19.99)
+    })
+
+    it('should verify ADR-015 provenance fields are set on new prices', async () => {
+      // ADR-015 requires all new price writes to have provenance fields set
+      // This test verifies the pattern used in all writers
+      const source = await prisma.sources.findUnique({
+        where: { id: testSourceId },
+      })
+
+      const observedAt = new Date()
+      const ingestionRunId = `test-run-${Date.now()}`
+
+      // Create a price with provenance (as all writers should)
+      await prisma.$executeRaw`
+        INSERT INTO prices (
+          "id",
+          "retailerId",
+          "sourceProductId",
+          "price",
+          "currency",
+          "url",
+          "inStock",
+          "createdAt",
+          "observedAt",
+          "ingestionRunType",
+          "ingestionRunId"
+        )
+        VALUES (
+          gen_random_uuid(),
+          ${source!.retailerId},
+          ${testSourceProductId},
+          ${29.99},
+          'USD',
+          'https://test.example.com/product2',
+          true,
+          ${observedAt},
+          ${observedAt},
+          'SCRAPE'::"IngestionRunType",
+          ${ingestionRunId}
+        )
+        ON CONFLICT DO NOTHING
+      `
+
+      // Verify provenance is set
+      const price = await prisma.prices.findFirst({
+        where: { ingestionRunId },
+        select: {
+          ingestionRunType: true,
+          ingestionRunId: true,
+          observedAt: true,
+        },
+      })
+
+      expect(price).toBeTruthy()
+      expect(price?.ingestionRunType).toBe('SCRAPE')
+      expect(price?.ingestionRunId).toBe(ingestionRunId)
+      expect(price?.observedAt).toBeInstanceOf(Date)
     })
   })
 

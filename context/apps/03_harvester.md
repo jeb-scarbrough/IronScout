@@ -14,6 +14,14 @@ If Harvester behavior contradicts those documents, this document is wrong.
 
 ---
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ## Purpose of the Harvester App
 
 The Harvester app exists to:
@@ -33,7 +41,7 @@ It is an operational system whose correctness directly affects trust.
 
 Harvester is responsible for ingesting:
 - Retailer and affiliate sources
-- Dealer inventory feeds
+- Merchant-submitted feeds that produce Retailer price data
 
 Responsibilities include:
 - Fetching external data
@@ -71,42 +79,33 @@ Harvester is the primary writer of:
 Invariants:
 - Historical data must not be overwritten silently
 - Corrections must create new records or be explicitly audited
-- “Current price” is derived, not mutated
+- "Current price" is derived, not mutated
 
 If data cannot be trusted, it must not be written.
 
 ---
 
-## Dealer-Specific Responsibilities
+## Eligibility and Visibility (Retailer-scoped)
 
-### Eligibility Enforcement
+Eligibility applies to **Retailer visibility**, not Merchant existence.
 
-Before writing dealer data, Harvester must enforce:
-- Subscription status
-- Feed health
-- Platform policies
+- **Merchants** authenticate and administer one or more Retailers.
+- **Retailers** are the consumer-facing storefronts shown in search results.
+- Consumer `prices` are keyed by `retailerId`.
+- Merchant benchmarks (`pricing_snapshots`) are keyed by `merchantId`.
 
-If a dealer is ineligible:
-- Execution must be marked **SKIPPED**
-- No downstream jobs may run
-- No data may propagate to consumer surfaces
+### What eligibility does
+If a **Retailer is ineligible**, its consumer-facing price events are excluded from user-visible reads and from alert evaluation.
 
-Eligibility enforcement in Harvester is **mandatory**, even if enforced elsewhere.
+### What eligibility does not do
+Eligibility does not delete data and does not disable a Merchant account. Merchant access to the portal is governed by Merchant subscription and account status.
 
----
+### Feeds vs outputs
+Merchants may configure or submit feeds, but ingestion outputs are:
+- Consumer prices → `prices` (keyed by `retailerId`)
+- Merchant-submitted benchmarks → `pricing_snapshots` (keyed by `merchantId`)
 
-### Benchmarks and Insights
-
-Harvester may generate:
-- Market benchmarks
-- Dealer-specific context
-
-Constraints:
-- Only generated for eligible dealers
-- Must be descriptive, not prescriptive
-- Must not generate recommendation fields in v1
-
-If eligibility is unclear, benchmarks and insights must not run.
+Any remaining `dealer-*` pipeline names or folders are legacy naming only and must not be interpreted as “dealer == storefront.”
 
 ---
 
@@ -155,7 +154,7 @@ Harvester must not require:
 ### Unacceptable Failures
 
 - Duplicate ingestion due to scheduling errors
-- Writing data for ineligible dealers
+- Writing Retailer price data for ineligible retailers
 - Silent data corruption
 - Downstream effects from failed or skipped executions
 

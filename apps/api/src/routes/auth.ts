@@ -137,7 +137,7 @@ router.post('/signup', authRateLimits.signup, async (req: Request, res: Response
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.users.findUnique({
       where: { email: emailLower },
     })
 
@@ -151,7 +151,7 @@ router.post('/signup', authRateLimits.signup, async (req: Request, res: Response
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create user
-    const user = await prisma.user.create({
+    const user = await prisma.users.create({
       data: {
         email: emailLower,
         name: name || null,
@@ -209,7 +209,7 @@ router.post('/signin', authRateLimits.signin, async (req: Request, res: Response
     }
 
     // Find user
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { email: emailLower },
       select: {
         id: true,
@@ -311,7 +311,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
         },
       },
       include: {
-        user: {
+        users: {
           select: {
             id: true,
             email: true,
@@ -326,7 +326,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
     })
 
     if (existingAccount) {
-      const existingUser = existingAccount.user
+      const existingUser = existingAccount.users
 
       // Block deleted accounts
       if (existingUser.status === 'DELETED') {
@@ -350,7 +350,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
     }
 
     // Check if user with this email exists
-    let user = await prisma.user.findUnique({
+    let user = await prisma.users.findUnique({
       where: { email: emailLower },
       select: {
         id: true,
@@ -408,14 +408,14 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
     }
 
     // Create new user with OAuth account
-    const newUser = await prisma.user.create({
+    const newUser = await prisma.users.create({
       data: {
         email: emailLower,
         name: name || null,
         image: image || null,
         emailVerified: new Date(), // OAuth emails are verified
         tier: 'FREE',
-        accounts: {
+        Account: {
           create: {
             type: 'oauth',
             provider,
@@ -527,7 +527,7 @@ router.get('/session', async (req: Request, res: Response) => {
     }
 
     // Get fresh user data
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: decoded.sub },
       select: {
         id: true,
@@ -572,7 +572,7 @@ router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Respon
     }
 
     // Verify user still exists
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: decoded.sub },
       select: { id: true, email: true },
     })
@@ -620,7 +620,7 @@ router.get('/user/:id', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied' })
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id },
       select: {
         id: true,
@@ -629,7 +629,7 @@ router.get('/user/:id', async (req: Request, res: Response) => {
         tier: true,
         image: true,
         createdAt: true,
-        accounts: {
+        Account: {
           select: {
             provider: true,
             providerAccountId: true,
@@ -674,7 +674,7 @@ router.patch('/user/:id', async (req: Request, res: Response) => {
 
     const { name, image } = req.body
 
-    const user = await prisma.user.update({
+    const user = await prisma.users.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),

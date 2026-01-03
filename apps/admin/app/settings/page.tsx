@@ -1,9 +1,10 @@
-import { AlertTriangle, Flag, Sliders, Database } from 'lucide-react';
+import { AlertTriangle, Flag, Sliders, Database, ShieldCheck } from 'lucide-react';
 import { getAllSettings } from './actions';
 import { DangerZoneSettings } from './danger-zone-settings';
 import { OperationsSettings } from './operations-settings';
 import { FeatureFlagsSettings } from './feature-flags-settings';
 import { QueueHistorySettings } from './queue-history-settings';
+import { DataIntegritySettings } from './data-integrity-settings';
 
 export default async function SettingsPage() {
   const { settings, error } = await getAllSettings();
@@ -80,6 +81,22 @@ export default async function SettingsPage() {
           ) : (
             <p className="text-gray-500">Loading...</p>
           )}
+        </div>
+      </div>
+
+      {/* Data Integrity */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-emerald-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Data Integrity</h2>
+          </div>
+          <p className="mt-1 text-sm text-gray-600">
+            Run integrity checks to validate data consistency across the platform.
+          </p>
+        </div>
+        <div className="p-6">
+          <DataIntegritySettings />
         </div>
       </div>
 

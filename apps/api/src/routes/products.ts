@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory, visibleDealerPriceWhere } from '../config/tiers'
+import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory, visiblePriceWhere } from '../config/tiers'
 import { getUserTier } from '../middleware/auth'
 import { loggers } from '../config/logger'
 
@@ -105,7 +105,7 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     // Get total count
-    const total = await prisma.product.count({ where })
+    const total = await prisma.products.count({ where })
 
     // Determine sort order
     let orderBy: any
@@ -128,19 +128,19 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     // Fetch products with prices and retailers
-    let products = await prisma.product.findMany({
+    let products = await prisma.products.findMany({
       where,
       skip,
       take: limitNum,
       include: {
         prices: {
-          where: visibleDealerPriceWhere(),
+          where: visiblePriceWhere(),
           include: {
-            retailer: true
+            retailers: true
           },
           orderBy: [
             // Sort by retailer tier (PREMIUM first, then STANDARD)
-            { retailer: { tier: 'desc' } },
+            { retailers: { tier: 'desc' } },
             // Then by price ascending
             { price: 'asc' }
           ]
@@ -180,11 +180,11 @@ router.get('/search', async (req: Request, res: Response) => {
         currency: price.currency,
         url: price.url,
         inStock: price.inStock,
-        retailer: {
-          id: price.retailer.id,
-          name: price.retailer.name,
-          tier: price.retailer.tier,
-          logoUrl: price.retailer.logoUrl
+        retailers: {
+          id: price.retailers.id,
+          name: price.retailers.name,
+          tier: price.retailers.tier,
+          logoUrl: price.retailers.logoUrl
         }
       }))
     }))
@@ -193,7 +193,7 @@ router.get('/search', async (req: Request, res: Response) => {
     const facets: any = {}
 
     // Get unique values for each filterable field
-    const allProducts = await prisma.product.findMany({
+    const allProducts = await prisma.products.findMany({
       where,
       select: {
         caliber: true,
@@ -259,17 +259,17 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const product = await prisma.product.findUnique({
+    const product = await prisma.products.findUnique({
       where: { id },
       include: {
         prices: {
-          where: visibleDealerPriceWhere(),
+          where: visiblePriceWhere(),
           include: {
-            retailer: true
+            retailers: true
           },
           orderBy: [
             // Sort by retailer tier (PREMIUM first, then STANDARD)
-            { retailer: { tier: 'desc' } },
+            { retailers: { tier: 'desc' } },
             // Then by price ascending
             { price: 'asc' }
           ]
@@ -295,11 +295,11 @@ router.get('/:id', async (req: Request, res: Response) => {
         currency: price.currency,
         url: price.url,
         inStock: price.inStock,
-        retailer: {
-          id: price.retailer.id,
-          name: price.retailer.name,
-          tier: price.retailer.tier,
-          logoUrl: price.retailer.logoUrl
+        retailers: {
+          id: price.retailers.id,
+          name: price.retailers.name,
+          tier: price.retailers.tier,
+          logoUrl: price.retailers.logoUrl
         }
       }))
     }
@@ -316,7 +316,7 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const product = await prisma.product.findUnique({
+    const product = await prisma.products.findUnique({
       where: { id },
       include: {
         prices: {
@@ -325,10 +325,10 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
               // Get latest price from each retailer (within last 7 days)
               gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
             },
-            ...visibleDealerPriceWhere(),
+            ...visiblePriceWhere(),
           },
           include: {
-            retailer: true
+            retailers: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -378,22 +378,22 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
         roundCount: product.roundCount
       },
       prices: sortedPrices.map(price => ({
-        retailer: price.retailer.name,
+        retailers: price.retailers.name,
         retailerId: price.retailerId,
         price: parseFloat(price.price.toString()),
         inStock: price.inStock,
         url: price.url,
-        tier: price.retailer.tier,
+        tier: price.retailers.tier,
         lastUpdated: price.createdAt
       })),
       cheapest: cheapest ? {
-        retailer: cheapest.retailer.name,
+        retailers: cheapest.retailer.name,
         price: parseFloat(cheapest.price.toString()),
         inStock: cheapest.inStock,
         url: cheapest.url
       } : null,
       cheapestInStock: cheapestInStock ? {
-        retailer: cheapestInStock.retailer.name,
+        retailers: cheapestInStock.retailer.name,
         price: parseFloat(cheapestInStock.price.toString()),
         url: cheapestInStock.url
       } : null
@@ -429,21 +429,21 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     const daysNum = Math.min(requestedDays, maxDays)
     const startDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
 
-    // Build where clause with dealer visibility filter
+    // Build where clause with retailer visibility filter
     const where: any = {
       productId: id,
       createdAt: { gte: startDate },
-      ...visibleDealerPriceWhere(),
+      ...visiblePriceWhere(),
     }
 
     if (retailerId) {
       where.retailerId = retailerId as string
     }
 
-    const prices = await prisma.price.findMany({
+    const prices = await prisma.prices.findMany({
       where,
       include: {
-        retailer: {
+        retailers: {
           select: {
             id: true,
             name: true,
@@ -476,7 +476,7 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     }))
 
     // Get product info
-    const product = await prisma.product.findUnique({
+    const product = await prisma.products.findUnique({
       where: { id },
       select: {
         id: true,

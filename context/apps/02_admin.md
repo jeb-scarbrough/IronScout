@@ -15,11 +15,19 @@ If admin behavior conflicts with those documents, this document is wrong.
 
 ---
 
+## Terminology (Canonical)
+
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
+- **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
+- **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
+- **Legacy**: Any “dealer” wording or `DEALER_*` keys are legacy and must be migrated to “merchant” terminology.
+
 ## Purpose of the Admin App
 
 The admin app exists to:
 - Support operations and troubleshooting
-- Manage dealer lifecycle and subscriptions
+- Manage merchant lifecycle and subscriptions
 - Safely intervene when automated systems fail
 - Preserve system integrity and trust
 
@@ -35,7 +43,7 @@ Admin power is constrained power.
 ## Admin Access and Identity
 
 - Admin access is explicit and restricted
-- Admin users are authenticated separately from consumers and dealers
+- Admin users are authenticated separately from consumers and merchants
 - Admin permissions are not inferred implicitly
 
 Admin roles (if present) must be explicit.  
@@ -45,12 +53,12 @@ If roles are not implemented, all admins are assumed fully privileged but audite
 
 ## Core Admin Capabilities (v1)
 
-### Dealer Lifecycle Management
+### Merchant Lifecycle Management
 
 Admins may:
-- Approve or onboard dealers
-- Suspend or reactivate dealers
-- Change dealer subscription tier
+- Approve or onboard merchants
+- Suspend or reactivate merchants
+- Change merchant subscription tier
 - Extend or modify subscription expiration
 - Change billing method (e.g. invoice vs platform billing)
 
@@ -59,12 +67,25 @@ All lifecycle changes must:
 - Be reversible
 - Be auditable
 
+### Retailer Linking, Eligibility, and Listing
+
+Admins may:
+- Link/unlink Merchants to Retailers (manage `merchant_retailers`)
+- Set `listingStatus` (LISTED/UNLISTED) and relationship `status` (ACTIVE/SUSPENDED)
+- Flip `retailers.visibilityStatus` (ELIGIBLE/INELIGIBLE/SUSPENDED) per policy
+
+Constraints:
+- All actions must be audited with before/after values.
+- Subscription status is not a consumer visibility gate; listing/eligibility changes must be explicit.
+- Overrides must be reversible and fail closed.
+- Billing unit is per Retailer listing; v1 constraint: each Retailer belongs to exactly one Merchant.
+
 ---
 
 ### Feed and Ingestion Control
 
 Admins may:
-- Enable or disable dealer feeds
+- Enable or disable Merchant-configured feeds (for administered Retailers)
 - Quarantine broken feeds
 - View feed execution history and errors
 - Stop propagation of bad data
@@ -78,10 +99,10 @@ Admins must not:
 ### Impersonation
 
 Admins may impersonate:
-- Dealer users (for support and troubleshooting)
+- Merchant user sessions (for support and troubleshooting)
 
 Impersonation allows:
-- Viewing the dealer portal as the dealer
+- Viewing the merchant portal as that user
 - Diagnosing configuration or UI issues
 
 Impersonation must not:
@@ -122,7 +143,7 @@ If subscription or billing state becomes ambiguous:
 
 Audit logs must capture:
 - Admin identity
-- Target entity (dealer, subscription, feed)
+- Target entity (Merchant portal access, Retailer visibility, subscription, feed)
 - Action performed
 - Before and after values
 - Timestamp
@@ -130,7 +151,7 @@ Audit logs must capture:
 
 Actions that require audit logging include:
 - Subscription changes
-- Dealer eligibility changes
+- Merchant or Retailer eligibility changes
 - Feed enable/disable
 - Billing method changes
 - Any override affecting visibility or access
@@ -173,7 +194,7 @@ Bulk operations (if any) must:
 
 These are intentional limitations:
 
-- No bulk dealer imports without review
+- No bulk Merchant imports without review
 - No automated corrective actions without admin approval
 - No silent overrides of eligibility or billing
 - No admin-triggered pricing automation

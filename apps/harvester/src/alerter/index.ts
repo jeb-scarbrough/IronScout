@@ -16,34 +16,29 @@ const TIER_ALERT_DELAY_MS = {
 }
 
 /**
- * Check if a product has any visible (eligible) dealer prices.
+ * Check if a product has any consumer-visible retailer prices.
  *
- * ADR-005: Dealer visibility must be checked at query time.
- * Alerts must not fire from ineligible dealer inventory.
+ * Consumer visibility per Merchant-and-Retailer-Reference:
+ * retailers.visibilityStatus = ELIGIBLE
+ * merchant_retailers.listingStatus = LISTED
+ * merchant_retailers.status = ACTIVE
  *
- * A price is visible if:
- * - It comes from a retailer with no linked dealer (direct retailer), OR
- * - It comes from a dealer with subscriptionStatus in ['ACTIVE', 'EXPIRED']
- *
- * Dealers with SUSPENDED or CANCELLED status are hidden.
+ * Subscription state MUST NOT gate consumer visibility.
  */
-async function hasVisibleDealerPrice(productId: string): Promise<boolean> {
-  const visiblePrice = await prisma.price.findFirst({
+async function hasVisibleRetailerPrice(productId: string): Promise<boolean> {
+  const visiblePrice = await prisma.prices.findFirst({
     where: {
       productId,
-      retailer: {
-        OR: [
-          // Direct retailer (no dealer linked)
-          { dealer: null },
-          // Dealer in visible status
-          {
-            dealer: {
-              subscriptionStatus: {
-                in: ['ACTIVE', 'EXPIRED'],
-              },
+      retailers: {
+        is: {
+          visibilityStatus: 'ELIGIBLE',
+          merchant_retailers: {
+            some: {
+              listingStatus: 'LISTED',
+              status: 'ACTIVE',
             },
           },
-        ],
+        },
       },
     },
     select: { id: true },
@@ -123,7 +118,7 @@ export const alerterWorker = new Worker<AlertJobData>(
     if (!alertProcessingEnabled) {
       log.info('Alert processing disabled via admin settings, skipping', { productId })
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -139,27 +134,27 @@ export const alerterWorker = new Worker<AlertJobData>(
     log.info('Evaluating alerts', { productId, oldPrice, newPrice, inStock })
 
     try {
-      // ADR-005: Check dealer visibility before evaluating alerts
-      // Alerts must not fire from ineligible dealer inventory
-      const hasVisiblePrice = await hasVisibleDealerPrice(productId)
+      // ADR-005: Check retailer visibility before evaluating alerts
+      // Alerts must not fire from ineligible or unlisted retailer inventory
+      const hasVisiblePrice = await hasVisibleRetailerPrice(productId)
 
       if (!hasVisiblePrice) {
-        log.debug('No visible dealer prices, skipping alerts', { productId })
+        log.debug('No visible retailer prices, skipping alerts', { productId })
 
-        await prisma.executionLog.create({
+        await prisma.execution_logs.create({
           data: {
             executionId,
             level: 'INFO',
-            event: 'ALERT_SKIPPED_NO_VISIBLE_DEALER',
-            message: `Skipped alert evaluation - no visible dealer prices for product ${productId}`,
+            event: 'ALERT_SKIPPED_NO_VISIBLE_RETAILER',
+            message: `Skipped alert evaluation - no visible retailer prices for product ${productId}`,
             metadata: { productId, oldPrice, newPrice, inStock },
           },
         })
 
-        return { success: true, triggeredCount: 0, delayedCount: 0, skipped: 'no_visible_dealer' }
+        return { success: true, triggeredCount: 0, delayedCount: 0, skipped: 'no_visible_retailer' }
       }
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -171,13 +166,13 @@ export const alerterWorker = new Worker<AlertJobData>(
 
       // Find all enabled alerts for this product with user tier info and watchlist preferences
       // ADR-011: Alert is a rule marker; all preferences/state live on WatchlistItem
-      const alerts = await prisma.alert.findMany({
+      const alerts = await prisma.alerts.findMany({
         where: {
           productId,
           isEnabled: true,
         },
         include: {
-          user: {
+          users: {
             select: {
               id: true,
               email: true,
@@ -185,8 +180,8 @@ export const alerterWorker = new Worker<AlertJobData>(
               tier: true, // Include tier for delay calculation
             }
           },
-          product: true,
-          watchlistItem: true, // ADR-011: preferences and cooldown state
+          products: true,
+          watchlist_items: true, // ADR-011: preferences and cooldown state
         },
       })
 
@@ -194,7 +189,7 @@ export const alerterWorker = new Worker<AlertJobData>(
       let delayedCount = 0
 
       for (const alert of alerts) {
-        const watchlistItem = alert.watchlistItem
+        const watchlistItem = alert.watchlist_items
         if (!watchlistItem) {
           log.debug('Alert has no watchlistItem, skipping', { alertId: alert.id })
           continue
@@ -264,7 +259,7 @@ export const alerterWorker = new Worker<AlertJobData>(
           if (!canSend) {
             log.info('Alert suppressed due to per-user caps', { userId: alert.userId, alertId: alert.id })
 
-            await prisma.executionLog.create({
+            await prisma.execution_logs.create({
               data: {
                 executionId,
                 level: 'INFO',
@@ -283,7 +278,7 @@ export const alerterWorker = new Worker<AlertJobData>(
           }
 
           // Get user tier and calculate delay
-          const userTier = (alert.user.tier || 'FREE') as keyof typeof TIER_ALERT_DELAY_MS
+          const userTier = (alert.users.tier || 'FREE') as keyof typeof TIER_ALERT_DELAY_MS
           const delayMs = TIER_ALERT_DELAY_MS[userTier] || TIER_ALERT_DELAY_MS.FREE
 
           if (delayMs > 0) {
@@ -301,14 +296,14 @@ export const alerterWorker = new Worker<AlertJobData>(
               }
             )
 
-            log.info('Queued delayed notification', { email: alert.user.email, delayMinutes: delayMs / 60000, userTier })
+            log.info('Queued delayed notification', { email: alert.users.email, delayMinutes: delayMs / 60000, userTier })
 
-            await prisma.executionLog.create({
+            await prisma.execution_logs.create({
               data: {
                 executionId,
                 level: 'INFO',
                 event: 'ALERT_DELAYED',
-                message: `Alert queued with ${delayMs / 60000} minute delay for ${alert.user.email} (${userTier} tier)`,
+                message: `Alert queued with ${delayMs / 60000} minute delay for ${alert.users.email} (${userTier} tier)`,
                 metadata: {
                   alertId: alert.id,
                   userId: alert.userId,
@@ -324,12 +319,12 @@ export const alerterWorker = new Worker<AlertJobData>(
             // Send immediately for PREMIUM users
             await sendNotification(alert, triggerReason)
 
-            await prisma.executionLog.create({
+            await prisma.execution_logs.create({
               data: {
                 executionId,
                 level: 'INFO',
                 event: 'ALERT_NOTIFY',
-                message: `Alert triggered immediately for PREMIUM user ${alert.user.email}: ${triggerReason}`,
+                message: `Alert triggered immediately for PREMIUM user ${alert.users.email}: ${triggerReason}`,
                 metadata: {
                   alertId: alert.id,
                   userId: alert.userId,
@@ -351,14 +346,14 @@ export const alerterWorker = new Worker<AlertJobData>(
             updateData.lastStockNotifiedAt = now
           }
 
-          await prisma.watchlistItem.update({
+          await prisma.watchlist_items.update({
             where: { id: watchlistItem.id },
             data: updateData,
           })
         }
       }
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
@@ -372,7 +367,7 @@ export const alerterWorker = new Worker<AlertJobData>(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'ERROR',
@@ -405,12 +400,12 @@ export const delayedNotificationWorker = new Worker<{
 
     try {
       // Fetch the alert with user, product, and watchlist info
-      const alert = await prisma.alert.findUnique({
+      const alert = await prisma.alerts.findUnique({
         where: { id: alertId },
         include: {
-          user: true,
-          product: true,
-          watchlistItem: true,
+          users: true,
+          products: true,
+          watchlist_items: true,
         },
       })
 
@@ -426,7 +421,7 @@ export const delayedNotificationWorker = new Worker<{
       }
 
       // ADR-011: Check if notifications are still enabled on watchlist item
-      if (alert.watchlistItem && !alert.watchlistItem.notificationsEnabled) {
+      if (alert.watchlist_items && !alert.watchlist_items.notificationsEnabled) {
         log.debug('Notifications disabled for watchlist item, skipping', { alertId })
         return { success: false, reason: 'Notifications disabled' }
       }
@@ -434,12 +429,12 @@ export const delayedNotificationWorker = new Worker<{
       // Send the notification
       await sendNotification(alert, triggerReason)
 
-      await prisma.executionLog.create({
+      await prisma.execution_logs.create({
         data: {
           executionId,
           level: 'INFO',
           event: 'ALERT_DELAYED_SENT',
-          message: `Delayed alert notification sent to ${alert.user.email}`,
+          message: `Delayed alert notification sent to ${alert.users.email}`,
           metadata: {
             alertId: alert.id,
             userId: alert.userId,
@@ -476,27 +471,32 @@ async function sendNotification(alert: any, reason: string) {
   }
 
   log.info('Sending notification', {
-    email: alert.user.email,
-    productName: alert.product.name,
+    email: alert.users.email,
+    productName: alert.products.name,
     ruleType: alert.ruleType,
-    userTier: alert.user.tier,
+    userTier: alert.users.tier,
     reason,
   })
 
   try {
-    // Get the latest price for the product from a visible dealer
-    // ADR-005: Only show prices from eligible dealers
-    const latestPrice = await prisma.price.findFirst({
+    // Get the latest price for the product from a visible retailer
+    // ADR-005: Only show prices from ELIGIBLE + LISTED + ACTIVE relationships
+    const latestPrice = await prisma.prices.findFirst({
       where: {
         productId: alert.productId,
-        retailer: {
-          OR: [
-            { dealer: null },
-            { dealer: { subscriptionStatus: { in: ['ACTIVE', 'EXPIRED'] } } },
-          ],
+        retailers: {
+          is: {
+            visibilityStatus: 'ELIGIBLE',
+            merchant_retailers: {
+              some: {
+                listingStatus: 'LISTED',
+                status: 'ACTIVE',
+              },
+            },
+          },
         },
       },
-      include: { retailer: true },
+      include: { retailers: true },
       orderBy: { createdAt: 'desc' }
     })
 
@@ -510,49 +510,49 @@ async function sendNotification(alert: any, reason: string) {
 
     if (alert.ruleType === 'PRICE_DROP') {
       const html = generatePriceDropEmailHTML({
-        userName: alert.user.name || 'there',
-        productName: alert.product.name,
+        userName: alert.users.name || 'there',
+        productName: alert.products.name,
         productUrl,
-        productImageUrl: alert.product.imageUrl,
+        productImageUrl: alert.products.imageUrl,
         currentPrice,
-        retailerName: latestPrice.retailer.name,
+        retailerName: latestPrice.retailers.name,
         retailerUrl: latestPrice.url,
-        userTier: alert.user.tier,
+        userTier: alert.users.tier,
       })
 
       if (resend) {
         await resend.emails.send({
           from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
-          to: [alert.user.email],
-          subject: `🎉 Price Drop Alert: ${alert.product.name}`,
+          to: [alert.users.email],
+          subject: `🎉 Price Drop Alert: ${alert.products.name}`,
           html
         })
-        log.info('Price drop email sent', { email: alert.user.email })
+        log.info('Price drop email sent', { email: alert.users.email })
       } else {
-        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.user.email, type: 'price_drop' })
+        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.users.email, type: 'price_drop' })
       }
     } else if (alert.ruleType === 'BACK_IN_STOCK') {
       const html = generateBackInStockEmailHTML({
-        userName: alert.user.name || 'there',
-        productName: alert.product.name,
+        userName: alert.users.name || 'there',
+        productName: alert.products.name,
         productUrl,
-        productImageUrl: alert.product.imageUrl,
+        productImageUrl: alert.products.imageUrl,
         currentPrice,
-        retailerName: latestPrice.retailer.name,
+        retailerName: latestPrice.retailers.name,
         retailerUrl: latestPrice.url,
-        userTier: alert.user.tier,
+        userTier: alert.users.tier,
       })
 
       if (resend) {
         await resend.emails.send({
           from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
-          to: [alert.user.email],
-          subject: `✨ Back in Stock: ${alert.product.name}`,
+          to: [alert.users.email],
+          subject: `✨ Back in Stock: ${alert.products.name}`,
           html
         })
-        log.info('Back in stock email sent', { email: alert.user.email })
+        log.info('Back in stock email sent', { email: alert.users.email })
       } else {
-        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.user.email, type: 'back_in_stock' })
+        log.debug('Email sending disabled (no RESEND_API_KEY)', { email: alert.users.email, type: 'back_in_stock' })
       }
     }
   } catch (error) {

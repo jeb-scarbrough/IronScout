@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Search canonical SKUs by name, caliber, brand, or UPC
-    const results = await prisma.canonicalSku.findMany({
+    const results = await prisma.canonical_skus.findMany({
       where: {
         OR: [
           { name: { contains: query, mode: 'insensitive' } },

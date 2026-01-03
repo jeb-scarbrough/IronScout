@@ -50,8 +50,8 @@ export function Footer() {
             <h3 className="text-sm font-semibold">Business</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/dealers" className="text-muted-foreground hover:text-primary">
-                  For Dealers
+                <Link href="/retailers" className="text-muted-foreground hover:text-primary">
+                  For Retailers
                 </Link>
               </li>
             </ul>

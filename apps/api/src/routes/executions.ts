@@ -29,19 +29,19 @@ router.get('/', async (req: Request, res: Response) => {
     if (sourceId) where.sourceId = sourceId
 
     const [executions, total] = await Promise.all([
-      prisma.execution.findMany({
+      prisma.executions.findMany({
         where,
         skip,
         take: limitNum,
         orderBy: { startedAt: 'desc' },
         include: {
-          source: true,
+          sources: true,
           _count: {
-            select: { logs: true },
+            select: { execution_logs: true },
           },
         },
       }),
-      prisma.execution.count({ where }),
+      prisma.executions.count({ where }),
     ])
 
     res.json({
@@ -63,17 +63,17 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     const [total, successful, failed, running, activeSources] = await Promise.all([
-      prisma.execution.count(),
-      prisma.execution.count({ where: { status: 'SUCCESS' } }),
-      prisma.execution.count({ where: { status: 'FAILED' } }),
-      prisma.execution.count({ where: { status: 'RUNNING' } }),
-      prisma.source.count({ where: { enabled: true } }),
+      prisma.executions.count(),
+      prisma.executions.count({ where: { status: 'SUCCESS' } }),
+      prisma.executions.count({ where: { status: 'FAILED' } }),
+      prisma.executions.count({ where: { status: 'RUNNING' } }),
+      prisma.sources.count({ where: { enabled: true } }),
     ])
 
     const successRate = total > 0 ? ((successful / total) * 100).toFixed(1) : '0.0'
 
     // Get total items harvested
-    const itemsResult = await prisma.execution.aggregate({
+    const itemsResult = await prisma.executions.aggregate({
       _sum: {
         itemsUpserted: true,
       },
@@ -104,11 +104,11 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    const execution = await prisma.execution.findUnique({
+    const execution = await prisma.executions.findUnique({
       where: { id },
       include: {
-        source: true,
-        logs: {
+        sources: true,
+        execution_logs: {
           orderBy: { timestamp: 'asc' },
         },
       },
@@ -135,7 +135,7 @@ router.get('/:id/logs', async (req: Request, res: Response) => {
     if (level) where.level = level
     if (event) where.event = event
 
-    const logs = await prisma.executionLog.findMany({
+    const logs = await prisma.execution_logs.findMany({
       where,
       orderBy: { timestamp: 'asc' },
     })
@@ -152,7 +152,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
-    await prisma.execution.delete({
+    await prisma.executions.delete({
       where: { id },
     })
 

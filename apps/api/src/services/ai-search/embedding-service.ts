@@ -116,7 +116,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
  * Update embedding for a single product
  */
 export async function updateProductEmbedding(productId: string): Promise<void> {
-  const product = await prisma.product.findUnique({
+  const product = await prisma.products.findUnique({
     where: { id: productId },
   })
   

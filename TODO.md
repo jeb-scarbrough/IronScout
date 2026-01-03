@@ -2,43 +2,43 @@
 
 ## High Priority
 
-### Dealer Subscription Enforcement
+### merchant Subscription Enforcement
 **Status:** Partially Complete (Feed Ingestion Done)
 **Target:** TBD
 
-Implement subscription-based access control for dealers:
+Implement subscription-based access control for merchants:
 
 1. **Portal Access Control** *(Complete)*
-   - ✅ Enforce login restrictions based on dealer subscription status
-   - ✅ If subscription is inactive/expired, restrict access to dealer portal
+   - ✅ Enforce login restrictions based on merchant subscription status
+   - ✅ If subscription is inactive/expired, restrict access to merchant portal
    - ✅ Show appropriate messaging for expired subscriptions (renewal prompt, contact support, etc.)
    - ✅ Grace period support with warning banners
    - ✅ Dedicated pages for expired/suspended/cancelled states
 
 2. **Feed Ingestion Automation** *(Complete)*
-   - ✅ Skip automatic feed ingestion for dealers with inactive/expired subscriptions
-   - ✅ Modify `DealerFeedIngest` worker to check subscription status before processing
+   - ✅ Skip automatic feed ingestion for merchants with inactive/expired subscriptions
+   - ✅ Modify `merchantFeedIngest` worker to check subscription status before processing
    - ✅ Feeds remain configured but not processed until subscription is active
    - ✅ Rate-limited notifications (once per day) for expired subscriptions
-   - ✅ Email + Slack notifications to dealer and IronScout staff
+   - ✅ Email + Slack notifications to merchant and IronScout staff
 
 3. **Admin Override Capability** *(Complete)*
-   - ✅ Admin UI to manually trigger feed update for any dealer
+   - ✅ Admin UI to manually trigger feed update for any merchant
    - ✅ Bypass subscription check when admin initiates manual feed run
    - ✅ Audit log the manual trigger with admin identity
    - ✅ Visual indicator when subscription is expired in admin portal
 
 4. **Stripe Integration for Payment Sync** *(Complete)*
-   - ✅ Added Stripe fields to Dealer model (`paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`)
-   - ✅ Created `DealerPaymentMethod` enum (STRIPE, PURCHASE_ORDER)
-   - ✅ Dealer checkout endpoint creates/retrieves Stripe customer
-   - ✅ Dealer customer portal endpoint for billing management
-   - ✅ Webhook handlers for all dealer subscription lifecycle events
+   - ✅ Added Stripe fields to merchant model (`paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`)
+   - ✅ Created `merchantPaymentMethod` enum (STRIPE, PURCHASE_ORDER)
+   - ✅ merchant checkout endpoint creates/retrieves Stripe customer
+   - ✅ merchant customer portal endpoint for billing management
+   - ✅ Webhook handlers for all merchant subscription lifecycle events
    - ✅ Status mapping: Stripe status → local SubscriptionStatus
-   - ✅ Migration: `20251215_add_dealer_stripe_fields.sql`
+   - ✅ Migration: `20251215_add_merchant_stripe_fields.sql`
 
 **Remaining Work:**
-- ~~Dealer portal billing UI (checkout flow, plan selection)~~ ✅ Complete
+- ~~merchant portal billing UI (checkout flow, plan selection)~~ ✅ Complete
 - ~~Admin visibility for payment method and Stripe IDs~~ ✅ Complete
 - Stripe reconciliation report (email report comparing Stripe vs local subscription status, detect drift from missed webhooks)
 
@@ -87,11 +87,11 @@ Implement subscription-based access control for end users (consumers):
 The 10-worker pipeline is architected. **MVP focuses on structured feeds only** - web crawling deferred to post-1.0.
 
 **MVP Scope (Structured Feeds Only):**
-1. **Dealer Feed Pipeline**
-   - Test DealerFeedIngest worker with real dealer feeds (CSV, XML, JSON)
-   - Validate DealerSkuMatch matching algorithm
-   - Test DealerBenchmark price calculations
-   - Verify DealerInsight generation quality
+1. **merchant Feed Pipeline**
+   - Test merchantFeedIngest worker with real merchant feeds (CSV, XML, JSON)
+   - Validate merchantSkuMatch matching algorithm
+   - Test merchantBenchmark price calculations
+   - Verify merchantInsight generation quality
 
 2. **Affiliate Feed Pipeline**
    - Test Impact, AvantLink, ShareASale parsers
@@ -140,16 +140,16 @@ Improve AI-powered search capabilities:
 
 ---
 
-### Dealer Portal Features
+### merchant Portal Features
 **Status:** Partially Started
 **Target:** TBD
 
-Complete dealer self-service dashboard:
+Complete merchant self-service dashboard:
 
 1. **Feed Management UI**
    - Feed configuration wizard
    - Feed health status dashboard
-   - Manual feed trigger from dealer portal
+   - Manual feed trigger from merchant portal
    - Feed error diagnostics
 
 2. **Market Insights Dashboard**
@@ -178,7 +178,7 @@ Audit and finalize documentation for 1.0:
 2. API routes and feature gating reflected in docs (tiers, limits, alerts)
 3. Deployment runbooks (health checks, env validation, migrations/indexes)
 4. Operations playbooks (harvester queues, alerting, reconciliation tasks)
-5. Product docs (dealer/consumer offerings, pricing, subscription flows) up to date
+5. Product docs (merchant/consumer offerings, pricing, subscription flows) up to date
 
 ---
 
@@ -216,10 +216,10 @@ Enhance end-user experience:
 
 Improve administrative capabilities:
 
-1. **Dealer Management Workflows**
-   - Dealer approval/rejection flow
-   - Bulk dealer actions
-   - Dealer communication tools
+1. **merchant Management Workflows**
+   - merchant approval/rejection flow
+   - Bulk merchant actions
+   - merchant communication tools
 
 2. **Feed Health Monitoring**
    - Dashboard showing all feed statuses
@@ -301,18 +301,18 @@ Create actual pages for footer links that were removed as placeholders:
 
 ## Completed
 
-### Dealer Feed Subscription Enforcement (December 13, 2025)
-- Added subscription fields to Dealer model (subscriptionStatus, subscriptionExpiresAt, subscriptionGraceDays, lastSubscriptionNotifyAt)
+### merchant Feed Subscription Enforcement (December 13, 2025)
+- Added subscription fields to merchant model (subscriptionStatus, subscriptionExpiresAt, subscriptionGraceDays, lastSubscriptionNotifyAt)
 - Created subscription check utility with grace period support
-- Modified DealerFeedIngest worker to check subscription before processing
+- Modified merchantFeedIngest worker to check subscription before processing
 - Added SKIPPED status to FeedRunStatus enum
 - Created subscription expiry notification (email + Slack) with once-per-day rate limiting
 - Added admin override capability for manual feed triggers
 - Created FeedsSection component in admin portal with "Run (Override)" button
-- FOUNDING tier dealers have lifetime access (no expiration check)
+- FOUNDING tier merchants have lifetime access (no expiration check)
 
-### Dealer Portal Access Control (December 15, 2025)
-- Created `apps/dealer/lib/subscription.ts` with full subscription status checking
+### merchant Portal Access Control (December 15, 2025)
+- Created `apps/merchant/lib/subscription.ts` with full subscription status checking
 - Implemented grace period support with configurable days
 - Added subscription banner component for warning/error states
 - Created dedicated pages: `/subscription-expired`, `/subscription-suspended`, `/subscription-cancelled`
@@ -320,18 +320,18 @@ Create actual pages for footer links that were removed as placeholders:
 - Admin impersonation bypasses subscription checks
 
 ### Signout Redirect to Main Site (December 15, 2025)
-- Updated dealer portal logout (`/api/auth/logout`) to redirect to `https://dealer.ironscout.ai`
+- Updated merchant portal logout (`/api/auth/logout`) to redirect to `https://merchant.ironscout.ai`
 - Added GET handler for link-based logout with automatic redirect
 - Created admin portal logout route (`/api/auth/logout`) redirecting to `https://admin.ironscout.ai`
 - Updated admin portal "Sign Out" link to use logout route
 
-### Dealer Stripe Integration (December 15, 2025)
-- Added Stripe payment fields to Dealer model: `paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`
-- Created `DealerPaymentMethod` enum: STRIPE (automated billing), PURCHASE_ORDER (manual invoicing)
-- Created migration: `packages/db/migrations/20251215_add_dealer_stripe_fields.sql`
-- Implemented dealer checkout endpoint: `POST /api/payments/dealer/create-checkout`
-- Implemented dealer portal endpoint: `POST /api/payments/dealer/create-portal-session`
-- Implemented dealer plans endpoint: `GET /api/payments/dealer/plans`
+### merchant Stripe Integration (December 15, 2025)
+- Added Stripe payment fields to merchant model: `paymentMethod`, `stripeCustomerId`, `stripeSubscriptionId`, `autoRenew`
+- Created `merchantPaymentMethod` enum: STRIPE (automated billing), PURCHASE_ORDER (manual invoicing)
+- Created migration: `packages/db/migrations/20251215_add_merchant_stripe_fields.sql`
+- Implemented merchant checkout endpoint: `POST /api/payments/merchant/create-checkout`
+- Implemented merchant portal endpoint: `POST /api/payments/merchant/create-portal-session`
+- Implemented merchant plans endpoint: `GET /api/payments/merchant/plans`
 - Added comprehensive webhook handlers in `apps/api/src/routes/payments.ts`:
   - `checkout.session.completed` - Activates subscription, stores Stripe IDs
   - `invoice.paid` - Updates expiration date on renewal
@@ -340,11 +340,11 @@ Create actual pages for footer links that were removed as placeholders:
   - `customer.subscription.deleted` - Sets status to CANCELLED
   - `customer.subscription.paused` - Sets status to SUSPENDED
   - `customer.subscription.resumed` - Reactivates subscription
-- Webhook routing based on metadata (`type: 'dealer'` vs `type: 'consumer'`)
+- Webhook routing based on metadata (`type: 'merchant'` vs `type: 'consumer'`)
 
-### Dealer Portal Billing UI (December 15, 2025)
-- Created `/settings/billing` page in dealer portal for subscription management
-- Server component (`page.tsx`) fetches dealer billing data with role-based access
+### merchant Portal Billing UI (December 15, 2025)
+- Created `/settings/billing` page in merchant portal for subscription management
+- Server component (`page.tsx`) fetches merchant billing data with role-based access
 - Client component (`billing-settings.tsx`) displays:
   - Current subscription status with color-coded badges
   - Plan cards (Standard $99/mo, Pro $299/mo) with feature lists
@@ -356,14 +356,14 @@ Create actual pages for footer links that were removed as placeholders:
   - `createPortalSession()` - Opens Stripe billing portal
 - Permission model: Only OWNER/ADMIN roles can manage billing
 - Added Billing section to Settings hub with dynamic status display
-- Updated docs: `docs/deployment/stripe.md`, `docs/apps/dealer.md`
+- Updated docs: `docs/deployment/stripe.md`, `docs/apps/merchant.md`
 
 ### Admin Payment Visibility (December 15, 2025)
-- Created `payment-section.tsx` component for dealer detail page
+- Created `payment-section.tsx` component for merchant detail page
 - Shows payment method (Stripe/Purchase Order), auto-renew status
 - Displays Stripe Customer ID and Subscription ID with direct links to Stripe Dashboard
-- Info banners for Purchase Order billing and dealers without payment method
-- Added Payment column to dealers list page (`/dealers`)
+- Info banners for Purchase Order billing and merchants without payment method
+- Added Payment column to merchants list page (`/merchants`)
 - Updated admin documentation (`docs/apps/admin.md`)
 
 ---

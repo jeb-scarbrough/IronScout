@@ -2,7 +2,7 @@
  * Account Deletion Service
  *
  * Handles the full account deletion lifecycle:
- * 1. Eligibility check (blocks if Premium active, open invoices, dealer owner)
+ * 1. Eligibility check (blocks if Premium active, open invoices, merchant owner)
  * 2. Initiate deletion (soft-delete with 14-day cooling-off)
  * 3. Cancel deletion (if within cooling-off period)
  * 4. Finalize deletion (scrub PII after 14 days)
@@ -43,7 +43,7 @@ export async function checkDeletionEligibility(userId: string): Promise<Deletion
   const blockers: DeletionBlocker[] = []
 
   // Get user with subscription info
-  const user = await prisma.user.findUnique({
+  const user = await prisma.users.findUnique({
     where: { id: userId },
     include: {
       subscriptions: {
@@ -83,29 +83,29 @@ export async function checkDeletionEligibility(userId: string): Promise<Deletion
     })
   }
 
-  // Check if user is a dealer owner or admin
-  const dealerUser = await prisma.dealerUser.findFirst({
+  // Check if user is a merchant owner or admin
+  const merchantUser = await prisma.merchant_users.findFirst({
     where: {
       email: user.email.toLowerCase(),
       role: { in: ['OWNER', 'ADMIN'] }
     },
     include: {
-      dealer: true
+      merchants: true
     }
   })
 
-  if (dealerUser) {
-    if (dealerUser.role === 'OWNER') {
+  if (merchantUser) {
+    if (merchantUser.role === 'OWNER') {
       blockers.push({
-        code: 'DEALER_OWNER',
-        message: 'You are the owner of a dealer account',
+        code: 'MERCHANT_OWNER',
+        message: 'You are the owner of a merchant account',
         resolution: 'Transfer ownership to another team member before deleting your account'
       })
-    } else if (dealerUser.role === 'ADMIN') {
+    } else if (merchantUser.role === 'ADMIN') {
       blockers.push({
-        code: 'DEALER_ADMIN',
-        message: 'You are an admin of a dealer account',
-        resolution: 'Contact your dealer account owner to remove your admin access first'
+        code: 'MERCHANT_ADMIN',
+        message: 'You are an admin of a merchant account',
+        resolution: 'Contact your merchant account owner to remove your admin access first'
       })
     }
   }
@@ -130,7 +130,7 @@ export async function initiateAccountDeletion(userId: string): Promise<{ success
     }
   }
 
-  const user = await prisma.user.findUnique({
+  const user = await prisma.users.findUnique({
     where: { id: userId },
     select: { id: true, email: true, name: true }
   })
@@ -145,7 +145,7 @@ export async function initiateAccountDeletion(userId: string): Promise<{ success
   // Use transaction to ensure atomicity
   await prisma.$transaction(async (tx) => {
     // 1. Mark user as pending deletion
-    await tx.user.update({
+    await tx.users.update({
       where: { id: userId },
       data: {
         status: 'PENDING_DELETION',
@@ -165,7 +165,7 @@ export async function initiateAccountDeletion(userId: string): Promise<{ success
     })
 
     // 4. Create audit log entry
-    await tx.adminAuditLog.create({
+    await tx.admin_audit_logs.create({
       data: {
         adminUserId: userId, // Self-initiated
         action: 'ACCOUNT_DELETION_REQUESTED',
@@ -202,7 +202,7 @@ export async function initiateAccountDeletion(userId: string): Promise<{ success
  * Cancel a pending account deletion (within cooling-off period)
  */
 export async function cancelAccountDeletion(userId: string): Promise<{ success: boolean; error?: string }> {
-  const user = await prisma.user.findUnique({
+  const user = await prisma.users.findUnique({
     where: { id: userId },
     select: { id: true, status: true, deletionScheduledFor: true }
   })
@@ -222,7 +222,7 @@ export async function cancelAccountDeletion(userId: string): Promise<{ success: 
 
   await prisma.$transaction(async (tx) => {
     // Restore user status
-    await tx.user.update({
+    await tx.users.update({
       where: { id: userId },
       data: {
         status: 'ACTIVE',
@@ -232,7 +232,7 @@ export async function cancelAccountDeletion(userId: string): Promise<{ success: 
     })
 
     // Create audit log
-    await tx.adminAuditLog.create({
+    await tx.admin_audit_logs.create({
       data: {
         adminUserId: userId,
         action: 'ACCOUNT_DELETION_CANCELLED',
@@ -253,7 +253,7 @@ export async function cancelAccountDeletion(userId: string): Promise<{ success: 
  * Finalize account deletion - scrub PII (called by scheduled job)
  */
 export async function finalizeAccountDeletion(userId: string): Promise<{ success: boolean; error?: string }> {
-  const user = await prisma.user.findUnique({
+  const user = await prisma.users.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -280,28 +280,28 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
 
   await prisma.$transaction(async (tx) => {
     // 1. Delete all watchlist items (cascade deletes alerts)
-    await tx.watchlistItem.deleteMany({ where: { userId } })
+    await tx.watchlist_items.deleteMany({ where: { userId } })
 
     // 2. Delete watchlist collections
-    await tx.watchlistCollection.deleteMany({ where: { userId } })
+    await tx.watchlist_collections.deleteMany({ where: { userId } })
 
     // 3. Delete data subscriptions (API keys)
-    await tx.dataSubscription.deleteMany({ where: { userId } })
+    await tx.data_subscriptions.deleteMany({ where: { userId } })
 
     // 4. Anonymize product reports (keep for data integrity)
-    await tx.productReport.updateMany({
+    await tx.product_reports.updateMany({
       where: { userId },
       data: { userId: null }
     })
 
     // 5. Delete consumer subscriptions (keep Stripe customer intact per requirements)
-    await tx.subscription.deleteMany({
+    await tx.subscriptions.deleteMany({
       where: { userId, type: 'USER_PREMIUM' }
     })
 
     // 6. Scrub PII from user record
     const scrubId = `deleted_${userId.substring(0, 8)}_${Date.now()}`
-    await tx.user.update({
+    await tx.users.update({
       where: { id: userId },
       data: {
         email: `${scrubId}@deleted.ironscout.local`,
@@ -317,7 +317,7 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
     })
 
     // 7. Create final audit log
-    await tx.adminAuditLog.create({
+    await tx.admin_audit_logs.create({
       data: {
         adminUserId: 'SYSTEM_DELETION_JOB',
         action: 'ACCOUNT_DELETION_FINALIZED',
@@ -345,7 +345,7 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
  * Get pending deletions that are ready to be finalized
  */
 export async function getPendingDeletionsToFinalize(): Promise<{ id: string; email: string; deletionScheduledFor: Date }[]> {
-  const users = await prisma.user.findMany({
+  const users = await prisma.users.findMany({
     where: {
       status: 'PENDING_DELETION',
       deletionScheduledFor: {

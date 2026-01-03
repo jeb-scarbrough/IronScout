@@ -8,7 +8,7 @@
  * 2. Create a new app or select existing
  * 3. Enable "Incoming Webhooks"
  * 4. Add webhook to desired channel
- * 5. Copy webhook URL to SLACK_DEALER_OPS_WEBHOOK_URL env var
+ * 5. Copy webhook URL to SLACK_MERCHANT_OPS_WEBHOOK_URL env var (legacy: SLACK_DEALER_OPS_WEBHOOK_URL)
  * 
  * Optional: Use SLACK_FEEDS_WEBHOOK_URL for a separate feed alerts channel
  */
@@ -92,10 +92,14 @@ export interface SlackMessage {
 // Configuration
 // =============================================================================
 
+const merchantOpsWebhookUrl = process.env.SLACK_MERCHANT_OPS_WEBHOOK_URL || process.env.SLACK_DEALER_OPS_WEBHOOK_URL;
+
 export const SLACK_CONFIG = {
-  dealerOpsWebhookUrl: process.env.SLACK_DEALER_OPS_WEBHOOK_URL,
+  merchantOpsWebhookUrl,
+  /** @deprecated Use merchantOpsWebhookUrl instead */
+  dealerOpsWebhookUrl: merchantOpsWebhookUrl,
   feedsWebhookUrl: process.env.SLACK_FEEDS_WEBHOOK_URL,
-  enabled: !!process.env.SLACK_DEALER_OPS_WEBHOOK_URL,
+  enabled: !!merchantOpsWebhookUrl,
   adminPortalUrl: process.env.ADMIN_PORTAL_URL || 'https://admin.ironscout.ai',
 };
 
@@ -107,7 +111,7 @@ export async function sendSlackMessage(
   message: SlackMessage,
   webhookUrl?: string
 ): Promise<SlackResult> {
-  const url = webhookUrl || SLACK_CONFIG.dealerOpsWebhookUrl;
+  const url = webhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl;
   
   if (!url) {
     console.log('[Slack] Webhook URL not configured, skipping notification');

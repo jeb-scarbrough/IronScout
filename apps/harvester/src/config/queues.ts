@@ -10,11 +10,11 @@ export const QUEUE_NAMES = {
   NORMALIZE: 'normalize',
   WRITE: 'write',
   ALERT: 'alert',
-  // Dealer Portal queues
-  DEALER_FEED_INGEST: 'dealer-feed-ingest',
-  DEALER_SKU_MATCH: 'dealer-sku-match',
-  DEALER_BENCHMARK: 'dealer-benchmark',
-  DEALER_INSIGHT: 'dealer-insight',
+  // Merchant Portal queues
+  MERCHANT_FEED_INGEST: 'merchant-feed-ingest',
+  MERCHANT_SKU_MATCH: 'merchant-sku-match',
+  MERCHANT_BENCHMARK: 'merchant-benchmark',
+  MERCHANT_INSIGHT: 'merchant-insight',
   // Affiliate Feed queues
   AFFILIATE_FEED: 'affiliate-feed',
   AFFILIATE_FEED_SCHEDULER: 'affiliate-feed-scheduler',
@@ -135,10 +135,10 @@ export async function initQueueSettings(): Promise<void> {
         normalize: true,
         write: true,
         alert: true,
-        'dealer-feed-ingest': true,
-        'dealer-sku-match': true,
-        'dealer-benchmark': true,
-        'dealer-insight': true,
+        'merchant-feed-ingest': true,
+        'merchant-sku-match': true,
+        'merchant-benchmark': true,
+        'merchant-insight': true,
         'affiliate-feed': true,
         'affiliate-feed-scheduler': true,
       },
@@ -181,11 +181,11 @@ export const alertQueue = new Queue<AlertJobData>(QUEUE_NAMES.ALERT, {
 })
 
 // ============================================================================
-// DEALER PORTAL QUEUES
+// MERCHANT PORTAL QUEUES
 // ============================================================================
 
-export interface DealerFeedIngestJobData {
-  dealerId: string
+export interface MerchantFeedIngestJobData {
+  merchantId: string
   feedId: string
   feedRunId: string
   accessType: 'URL' | 'AUTH_URL' | 'FTP' | 'SFTP' | 'UPLOAD'
@@ -198,34 +198,34 @@ export interface DealerFeedIngestJobData {
   adminId?: string // For audit logging
 }
 
-export interface DealerSkuMatchJobData {
-  dealerId: string
+export interface MerchantSkuMatchJobData {
+  merchantId: string
   feedRunId: string
-  dealerSkuIds: string[] // Batch of SKU IDs to process
+  merchantSkuIds: string[] // Batch of SKU IDs to process
 }
 
-export interface DealerBenchmarkJobData {
+export interface MerchantBenchmarkJobData {
   canonicalSkuIds?: string[] // Optional: specific SKUs to recalculate
   fullRecalc?: boolean // If true, recalculate all benchmarks
 }
 
-export interface DealerInsightJobData {
-  dealerId: string
-  dealerSkuIds?: string[] // Optional: specific SKUs to analyze
+export interface MerchantInsightJobData {
+  merchantId: string
+  merchantSkuIds?: string[] // Optional: specific SKUs to analyze
 }
 
-export const dealerFeedIngestQueue = new Queue<DealerFeedIngestJobData>(
-  QUEUE_NAMES.DEALER_FEED_INGEST,
-  { connection: redisConnection, defaultJobOptions: getJobOptions('dealer-feed-ingest') }
+export const merchantFeedIngestQueue = new Queue<MerchantFeedIngestJobData>(
+  QUEUE_NAMES.MERCHANT_FEED_INGEST,
+  { connection: redisConnection, defaultJobOptions: getJobOptions('merchant-feed-ingest') }
 )
 
-export const dealerSkuMatchQueue = new Queue<DealerSkuMatchJobData>(
-  QUEUE_NAMES.DEALER_SKU_MATCH,
-  { connection: redisConnection, defaultJobOptions: getJobOptions('dealer-sku-match') }
+export const merchantSkuMatchQueue = new Queue<MerchantSkuMatchJobData>(
+  QUEUE_NAMES.MERCHANT_SKU_MATCH,
+  { connection: redisConnection, defaultJobOptions: getJobOptions('merchant-sku-match') }
 )
 
-export const dealerBenchmarkQueue = new Queue<DealerBenchmarkJobData>(
-  QUEUE_NAMES.DEALER_BENCHMARK,
+export const merchantBenchmarkQueue = new Queue<MerchantBenchmarkJobData>(
+  QUEUE_NAMES.MERCHANT_BENCHMARK,
   {
     connection: redisConnection,
     defaultJobOptions: {
@@ -234,14 +234,14 @@ export const dealerBenchmarkQueue = new Queue<DealerBenchmarkJobData>(
         type: 'exponential',
         delay: 5000, // 5s, 15s, 45s
       },
-      ...getJobOptions('dealer-benchmark'),
+      ...getJobOptions('merchant-benchmark'),
     },
   }
 )
 
-export const dealerInsightQueue = new Queue<DealerInsightJobData>(
-  QUEUE_NAMES.DEALER_INSIGHT,
-  { connection: redisConnection, defaultJobOptions: getJobOptions('dealer-insight') }
+export const merchantInsightQueue = new Queue<MerchantInsightJobData>(
+  QUEUE_NAMES.MERCHANT_INSIGHT,
+  { connection: redisConnection, defaultJobOptions: getJobOptions('merchant-insight') }
 )
 
 // ============================================================================
@@ -292,11 +292,11 @@ export const queues = {
   normalize: normalizeQueue,
   write: writeQueue,
   alert: alertQueue,
-  // Dealer queues
-  dealerFeedIngest: dealerFeedIngestQueue,
-  dealerSkuMatch: dealerSkuMatchQueue,
-  dealerBenchmark: dealerBenchmarkQueue,
-  dealerInsight: dealerInsightQueue,
+  // Merchant queues
+  merchantFeedIngest: merchantFeedIngestQueue,
+  merchantSkuMatch: merchantSkuMatchQueue,
+  merchantBenchmark: merchantBenchmarkQueue,
+  merchantInsight: merchantInsightQueue,
   // Affiliate queues
   affiliateFeed: affiliateFeedQueue,
   affiliateFeedScheduler: affiliateFeedSchedulerQueue,

@@ -28,7 +28,7 @@ $scriptsDir = Split-Path -Parent $scriptDir
 $projectRoot = Split-Path -Parent $scriptsDir
 $logsDir = "$projectRoot\logs"
 
-$services = @("api", "web", "admin", "dealer", "harvester")
+$services = @("api", "web", "admin", "merchant", "harvester")
 
 # Check for background jobs first
 function Get-ServiceLogs {

@@ -130,7 +130,7 @@ This document lists potential ammunition retailers for the IronScout harvester, 
 
 ### Tier 1: Major Retailers (High Volume, Established)
 
-These are well-known retailers with significant inventory - ideal for dealer portal partnerships:
+These are well-known retailers with significant inventory - ideal for Merchant portal partnerships:
 
 - Midway USA
 - Palmetto State Armory

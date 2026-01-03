@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-IronScout offers multiple consumer and dealer tiers with different access levels.  
+IronScout offers multiple consumer and Merchant tiers with different access levels.  
 Early implementations included client-provided signals (e.g. headers) to infer tier or identity.
 
 Relying on client-provided context creates:
@@ -22,7 +22,7 @@ All tier and eligibility enforcement in IronScout must be **server-side and auth
 
 Specifically:
 - Tier is resolved from verified authentication context only
-- Dealer eligibility is enforced at query time
+- Retailer eligibility is enforced at query time
 - UI hiding alone is not sufficient
 - Ambiguous state defaults to restricted access
 
@@ -56,5 +56,5 @@ This decision is foundational and non-negotiable.
 
 This ADR underpins:
 - pricing and tier guarantees
-- dealer visibility rules
+- Retailer visibility rules
 - admin impersonation boundaries

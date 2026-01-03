@@ -70,6 +70,10 @@ const SCHEMA: Record<string, string[]> = {
     'originalPrice',
     'priceType',
     'createdAt',
+    // ADR-015 provenance columns
+    'observedAt',
+    'ingestionRunType',
+    'ingestionRunId',
   ],
 }
 
