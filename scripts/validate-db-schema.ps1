@@ -293,11 +293,10 @@ try {
     Write-Host "`n5. Validating key table columns..." -ForegroundColor White
 
     # Check critical columns exist in actual database schema
+    # Note: Only check tables that exist in schema.prisma
     $criticalChecks = @(
         @{ Table = "prices"; Column = "productId"; Required = $true },
         @{ Table = "pricing_snapshots"; Column = "merchantId"; Required = $true },
-        @{ Table = "merchant_feeds"; Column = "merchantId"; Required = $true },
-        @{ Table = "merchant_skus"; Column = "merchantId"; Required = $true },
         @{ Table = "alerts"; Column = "userId"; Required = $true },
         @{ Table = "watchlist_items"; Column = "userId"; Required = $true }
     )

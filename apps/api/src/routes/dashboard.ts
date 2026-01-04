@@ -13,25 +13,102 @@ import {
 } from '../config/tiers'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import {
+  resolveDashboardState,
+  getWatchlistPreview,
+  type DashboardState,
+  type DashboardStateContext
+} from '../services/dashboard-state'
 
 const log = loggers.dashboard
 
 const router: any = Router()
 
 // ============================================================================
+// DASHBOARD STATE ENDPOINT (v4)
+// Returns resolved dashboard state for state-driven UI rendering
+// Per dashboard-product-spec.md: state resolution is server-side
+// ============================================================================
+
+router.get('/state', async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req)
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const stateContext = await resolveDashboardState(userId)
+
+    res.json(stateContext)
+  } catch (error) {
+    log.error('Dashboard state error', { error }, error as Error)
+    res.status(500).json({ error: 'Failed to resolve dashboard state' })
+  }
+})
+
+// ============================================================================
+// WATCHLIST PREVIEW ENDPOINT (v4)
+// Returns subset of watchlist items for dashboard preview
+// Limit varies by state: 3 for most, 7 for POWER_USER
+// ============================================================================
+
+const watchlistPreviewSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(10).default(3)
+})
+
+router.get('/watchlist-preview', async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req)
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const { limit } = watchlistPreviewSchema.parse(req.query)
+    const items = await getWatchlistPreview(userId, limit)
+
+    res.json({
+      items,
+      _meta: {
+        itemsReturned: items.length,
+        limit
+      }
+    })
+  } catch (error) {
+    log.error('Watchlist preview error', { error }, error as Error)
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid parameters', details: error.issues })
+    }
+    res.status(500).json({ error: 'Failed to fetch watchlist preview' })
+  }
+})
+
+// ============================================================================
 // MARKET PULSE ENDPOINT
 // Returns price context indicators for user's top calibers
-// Free: 2 calibers max, current price + 7-day trend
+// Free: 2 calibers max, current price + trend
 // Premium: All calibers, price timing signal (1-100), charts
+//
+// Query params:
+//   windowDays=1|7 (default 7) - trend comparison window
 // ============================================================================
+
+const pulseQuerySchema = z.object({
+  windowDays: z.enum(['1', '7']).default('7').transform(v => parseInt(v, 10) as 1 | 7)
+})
 
 router.get('/pulse', async (req: Request, res: Response) => {
   try {
+    // Parse and validate query params
+    const { windowDays } = pulseQuerySchema.parse(req.query)
+
     // Get authenticated user from JWT
     const userId = getAuthenticatedUserId(req)
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' })
     }
+
+    // Anchor timestamp for consistency across all caliber calculations
+    const asOf = new Date()
 
     const userTier = await getUserTier(req)
     const maxCalibers = getMaxMarketPulseCalibers(userTier)
@@ -89,9 +166,9 @@ router.get('/pulse', async (req: Request, res: Response) => {
             priceTimingSignal: showPriceTimingSignal ? null : undefined,
             priceContext: 'INSUFFICIENT_DATA' as const,
             contextMeta: {
-              windowDays: 7,
+              windowDays,
               sampleCount: 0,
-              asOf: new Date().toISOString()
+              asOf: asOf.toISOString()
             }
           }
         }
@@ -100,14 +177,14 @@ router.get('/pulse', async (req: Request, res: Response) => {
           currentPrices.reduce((sum, p) => sum + parseFloat(p.price.toString()), 0) /
           currentPrices.length
 
-        // Get 7-day historical average for trend
-        const sevenDaysAgo = new Date()
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        // Get historical average for trend based on windowDays
+        const windowStart = new Date(asOf)
+        windowStart.setDate(windowStart.getDate() - windowDays)
 
         const historicalPrices = await prisma.prices.findMany({
           where: {
             products: { caliber },
-            createdAt: { lt: sevenDaysAgo },
+            createdAt: { lt: windowStart },
             ...visiblePriceWhere(),
           },
           select: { price: true },
@@ -146,24 +223,33 @@ router.get('/pulse', async (req: Request, res: Response) => {
           priceContext,
           // Context metadata for transparency
           contextMeta: {
-            windowDays: 7,
+            windowDays,
             sampleCount: currentPrices.length,
-            asOf: new Date().toISOString()
+            asOf: asOf.toISOString()
           }
         }
       })
     )
+
+    // Cache for 5 minutes, keyed by windowDays (handled by CDN/proxy via Vary header)
+    res.set('Cache-Control', 'private, max-age=300')
+    res.set('Vary', 'Authorization')
 
     res.json({
       pulse: pulseData,
       _meta: {
         tier: userTier,
         calibersShown: calibers.length,
-        calibersLimit: maxCalibers
+        calibersLimit: maxCalibers,
+        windowDays,
+        asOf: asOf.toISOString()
       }
     })
   } catch (error) {
     log.error('Market pulse error', { error }, error as Error)
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid parameters', details: error.issues })
+    }
     res.status(500).json({ error: 'Failed to fetch market pulse' })
   }
 })
@@ -173,48 +259,83 @@ router.get('/pulse', async (req: Request, res: Response) => {
 // Returns personalized items based on alerts/watchlist
 // Free: 5 items max, basic ranking
 // Premium: 20 items, stock indicators, relative value context
+//
+// Query params:
+//   scope=global  - Non-personalized, all calibers (for Best Prices section)
+//   scope=watchlist - Personalized based on user's watchlist (default)
+//   limit=N - Override max items returned (for global scope only)
 // ============================================================================
+
+const dealsQuerySchema = z.object({
+  scope: z.enum(['global', 'watchlist']).default('watchlist'),
+  limit: z.coerce.number().int().min(1).max(20).optional()
+})
 
 router.get('/deals', async (req: Request, res: Response) => {
   try {
-    // Get authenticated user from JWT
+    // Parse query params
+    const { scope, limit: queryLimit } = dealsQuerySchema.parse(req.query)
+    const isGlobalScope = scope === 'global'
+
+    // For global scope, auth is optional (public endpoint)
+    // For watchlist scope, auth is required
     const userId = getAuthenticatedUserId(req)
-    if (!userId) {
+    if (!isGlobalScope && !userId) {
       return res.status(401).json({ error: 'Authentication required' })
     }
 
-    const userTier = await getUserTier(req)
-    const maxDeals = getMaxDealsForYou(userTier)
-    const showPricePosition = hasFeature(userTier, 'pricePositionIndex')
-    const showStockIndicators = hasFeature(userTier, 'stockIndicators')
-    const showExplanations = hasFeature(userTier, 'aiExplanations')
+    const userTier = userId ? await getUserTier(req) : 'FREE'
 
-    // Get user's calibers from saved items (watchlist) for personalization
-    // Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
-    const watchlistItems = await prisma.watchlist_items.findMany({
-      where: { userId, deletedAt: null },
-      include: { products: { select: { caliber: true, id: true } } }
-    })
+    // Determine max deals
+    // For global scope: use limit param (default 5), cap at 20
+    // For watchlist scope: use tier-based limit
+    const maxDeals = isGlobalScope
+      ? Math.min(queryLimit ?? 5, 20)
+      : getMaxDealsForYou(userTier)
 
-    // Extract calibers and product IDs for personalization
-    const calibersSet = new Set<string>()
-    const watchedProductIds = new Set<string>()
+    const showPricePosition = !isGlobalScope && hasFeature(userTier, 'pricePositionIndex')
+    const showStockIndicators = !isGlobalScope && hasFeature(userTier, 'stockIndicators')
+    const showExplanations = !isGlobalScope && hasFeature(userTier, 'aiExplanations')
 
-    // Products may be null for SEARCH intent items; filter safely
-    watchlistItems.forEach((w) => {
-      if (w.products?.caliber) calibersSet.add(w.products.caliber)
-      if (w.products?.id) watchedProductIds.add(w.products.id)
-    })
+    // For global scope: no personalization
+    // For watchlist scope: personalize based on user's watchlist
+    let calibers: string[] = []
+    let watchedProductIds = new Set<string>()
 
-    const calibers = Array.from(calibersSet)
+    if (!isGlobalScope && userId) {
+      // Get user's calibers from saved items (watchlist) for personalization
+      // Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
+      const watchlistItems = await prisma.watchlist_items.findMany({
+        where: { userId, deletedAt: null },
+        include: { products: { select: { caliber: true, id: true } } }
+      })
 
-    // Build where clause - prioritize user's calibers if they have any
+      // Extract calibers and product IDs for personalization
+      const calibersSet = new Set<string>()
+
+      // Products may be null for SEARCH intent items; filter safely
+      watchlistItems.forEach((w) => {
+        if (w.products?.caliber) calibersSet.add(w.products.caliber)
+        if (w.products?.id) watchedProductIds.add(w.products.id)
+      })
+
+      calibers = Array.from(calibersSet)
+    }
+
+    // Build where clause
+    // Global: all in-stock items, sorted by price per round (best deals)
+    // Watchlist: prioritize user's calibers if they have any
     const whereClause: any = {
       inStock: true,
       ...visiblePriceWhere(),
     }
 
-    if (calibers.length > 0) {
+    // For global scope, add freshness filter (< 24h based on observedAt)
+    if (isGlobalScope) {
+      const twentyFourHoursAgo = new Date()
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
+      whereClause.observedAt = { gte: twentyFourHoursAgo }
+    } else if (calibers.length > 0) {
       whereClause.products = { caliber: { in: calibers } }
     }
 
@@ -242,7 +363,9 @@ router.get('/deals', async (req: Request, res: Response) => {
           }
         }
       },
-      orderBy: [{ retailers: { tier: 'desc' } }, { price: 'asc' }],
+      orderBy: isGlobalScope
+        ? [{ price: 'asc' }]  // Global: purely by price
+        : [{ retailers: { tier: 'desc' } }, { price: 'asc' }],  // Watchlist: prefer premium retailers
       take: maxDeals * 2 // Fetch extra for deduplication
     })
 
@@ -273,28 +396,34 @@ router.get('/deals', async (req: Request, res: Response) => {
           pricePerRound: pricePerRound ? Math.round(pricePerRound * 1000) / 1000 : null,
           url: price.url,
           inStock: price.inStock,
-          isWatched: price.productId ? watchedProductIds.has(price.productId) : false
+          updatedAt: price.observedAt?.toISOString() ?? null
         }
 
-        // Premium features: Price Position Index
-        // Normalized price position vs. reference set (0-100 scale)
-        // 0 = at or above 90th percentile of reference prices
-        // 100 = at or below 10th percentile of reference prices
-        // This is a descriptive position, not a value judgment
-        if (showPricePosition) {
-          // TODO: Implement actual calculation using reference set
-          // Formula: 100 - ((currentPrice - minRef) / (maxRef - minRef) * 100)
-          // For now, return null to indicate not yet calculated
-          deal.pricePosition = {
-            index: null, // number 0-100 when calculated
-            basis: 'SKU_MARKET_7D' as const, // Reference: same SKU across retailers, last 7 days
-            referenceSampleSize: 0, // Number of price observations in reference set
-            calculatedAt: null // ISO timestamp when last calculated
+        // For watchlist scope, include user-specific fields
+        // For global scope, omit them entirely
+        if (!isGlobalScope) {
+          deal.isWatched = price.productId ? watchedProductIds.has(price.productId) : false
+
+          // Premium features: Price Position Index
+          // Normalized price position vs. reference set (0-100 scale)
+          // 0 = at or above 90th percentile of reference prices
+          // 100 = at or below 10th percentile of reference prices
+          // This is a descriptive position, not a value judgment
+          if (showPricePosition) {
+            // TODO: Implement actual calculation using reference set
+            // Formula: 100 - ((currentPrice - minRef) / (maxRef - minRef) * 100)
+            // For now, return null to indicate not yet calculated
+            deal.pricePosition = {
+              index: null, // number 0-100 when calculated
+              basis: 'SKU_MARKET_7D' as const, // Reference: same SKU across retailers, last 7 days
+              referenceSampleSize: 0, // Number of price observations in reference set
+              calculatedAt: null // ISO timestamp when last calculated
+            }
           }
-        }
 
-        if (showExplanations && deal.isWatched) {
-          deal.explanation = 'Matches your watchlist preferences'
+          if (showExplanations && deal.isWatched) {
+            deal.explanation = 'Matches your watchlist preferences'
+          }
         }
 
         return deal
@@ -303,11 +432,12 @@ router.get('/deals', async (req: Request, res: Response) => {
     res.json({
       items: deals,
       _meta: {
-        tier: userTier,
+        scope,
+        tier: isGlobalScope ? null : userTier,
         itemsShown: deals.length,
         itemsLimit: maxDeals,
-        personalized: calibers.length > 0,
-        calibersUsed: calibers
+        personalized: !isGlobalScope && calibers.length > 0,
+        ...(isGlobalScope ? {} : { calibersUsed: calibers })
       }
     })
   } catch (error) {

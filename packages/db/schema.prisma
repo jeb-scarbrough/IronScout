@@ -174,6 +174,7 @@ model affiliate_feeds {
   updatedAt              DateTime              @updatedAt
   createdBy              String?
   affiliate_feed_runs    affiliate_feed_runs[]
+  product_suggestions    product_suggestions[]
   sources                sources               @relation(fields: [sourceId], references: [id])
 
   @@index([nextRunAt])
@@ -858,30 +859,36 @@ model product_reports {
 }
 
 model product_suggestions {
-  id             String                  @id @default(cuid())
-  merchantId     String
-  retailerSkuId  String?
-  status         ProductSuggestionStatus @default(PENDING)
-  suggestedName  String
-  suggestedUpc   String?
-  caliber        String
-  grain          Int?
-  packSize       Int?
-  brand          String?
-  bulletType     String?
-  caseType       String?
-  resolvedAt     DateTime?
-  resolvedBy     String?
-  rejectionNote  String?
-  canonicalSkuId String?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-  canonical_skus canonical_skus?         @relation(fields: [canonicalSkuId], references: [id])
-  merchants      merchants               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  retailer_skus  retailer_skus?          @relation(fields: [retailerSkuId], references: [id])
+  id              String                        @id @default(cuid())
+  sourceType      ProductSuggestionSourceType   @default(MERCHANT)
+  merchantId      String?
+  affiliateFeedId String?
+  sourceName      String?                       // For INTERNAL sources or custom display name
+  retailerSkuId   String?
+  status          ProductSuggestionStatus       @default(PENDING)
+  suggestedName   String
+  suggestedUpc    String?
+  caliber         String
+  grain           Int?
+  packSize        Int?
+  brand           String?
+  bulletType      String?
+  caseType        String?
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  rejectionNote   String?
+  canonicalSkuId  String?
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+  canonical_skus  canonical_skus?               @relation(fields: [canonicalSkuId], references: [id])
+  merchants       merchants?                    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  affiliate_feeds affiliate_feeds?              @relation(fields: [affiliateFeedId], references: [id], onDelete: SetNull)
+  retailer_skus   retailer_skus?                @relation(fields: [retailerSkuId], references: [id])
 
   @@index([createdAt])
   @@index([merchantId])
+  @@index([affiliateFeedId])
+  @@index([sourceType])
   @@index([status])
 }
 
@@ -1147,6 +1154,13 @@ model watchlist_items {
   stockAlertCooldownHours Int                    @default(24)
   lastStockNotifiedAt     DateTime?
   lastPriceNotifiedAt     DateTime?
+
+  /// Two-phase notification claim fields (prevents duplicate sends under concurrency)
+  /// Claim is stale after 5 minutes (allows retry if worker crashes)
+  priceNotificationClaimedAt  DateTime?          @map("price_notification_claimed_at")
+  priceNotificationClaimKey   String?            @map("price_notification_claim_key")
+  stockNotificationClaimedAt  DateTime?          @map("stock_notification_claimed_at")
+  stockNotificationClaimKey   String?            @map("stock_notification_claim_key")
 
   /// Relations
   alerts                  alerts[]
@@ -1484,6 +1498,12 @@ enum ProductSuggestionStatus {
   APPROVED
   REJECTED
   MERGED
+}
+
+enum ProductSuggestionSourceType {
+  MERCHANT
+  AFFILIATE
+  INTERNAL
 }
 
 enum QuarantineStatus {

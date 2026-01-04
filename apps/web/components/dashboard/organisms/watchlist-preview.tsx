@@ -45,7 +45,7 @@ export function SavedItemsPreview({ isPremium = false, maxItems = 5 }: SavedItem
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg font-semibold">
             <Bookmark className="h-5 w-5 text-primary" />
-            Saved Items
+            Your Watchlist
           </CardTitle>
           <Link href="/dashboard/saved">
             <Button variant="ghost" size="sm" className="text-xs h-7">
@@ -130,7 +130,7 @@ export function SavedItemsPreview({ isPremium = false, maxItems = 5 }: SavedItem
                   <Lock className="h-4 w-4 text-muted-foreground mt-0.5" />
                   <div className="text-xs text-muted-foreground">
                     <p>
-                      Saved {data._meta.itemCount} of {data._meta.itemLimit} items
+                      {data._meta.itemCount} of {data._meta.itemLimit} items
                     </p>
                     <p className="mt-1 text-primary">{UPGRADE_COPY.WATCHLIST_LIMIT}</p>
                   </div>

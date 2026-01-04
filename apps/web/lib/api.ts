@@ -3,6 +3,17 @@ import { logger } from './logger'
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 /**
+ * Custom error class for authentication failures (401)
+ * Hooks can check for this to trigger re-authentication
+ */
+export class AuthError extends Error {
+  constructor(message: string = 'Session expired. Please sign in again.') {
+    super(message)
+    this.name = 'AuthError'
+  }
+}
+
+/**
  * Build headers with authentication token
  * All authenticated API calls should use this to pass the JWT
  */
@@ -14,6 +25,18 @@ function buildAuthHeaders(token?: string): Record<string, string> {
     headers['Authorization'] = `Bearer ${token}`
   }
   return headers
+}
+
+/**
+ * Handle API response, throwing AuthError on 401
+ */
+async function handleAuthResponse(response: Response, errorMessage: string): Promise<void> {
+  if (response.status === 401) {
+    throw new AuthError()
+  }
+  if (!response.ok) {
+    throw new Error(errorMessage)
+  }
 }
 
 /**
@@ -681,9 +704,7 @@ export async function getMarketPulse(token: string): Promise<MarketPulseResponse
   const response = await fetch(`${API_BASE_URL}/api/dashboard/pulse`, {
     headers: buildAuthHeaders(token),
   })
-  if (!response.ok) {
-    throw new Error('Failed to fetch market pulse')
-  }
+  await handleAuthResponse(response, 'Failed to fetch market pulse')
   return response.json()
 }
 
@@ -696,8 +717,126 @@ export async function getDealsForYou(token: string): Promise<DealsResponse> {
   const response = await fetch(`${API_BASE_URL}/api/dashboard/deals`, {
     headers: buildAuthHeaders(token),
   })
+  await handleAuthResponse(response, 'Failed to fetch deals')
+  return response.json()
+}
+
+// ============================================================================
+// Dashboard v4 State API
+// ============================================================================
+
+/**
+ * Dashboard state context for v4 state-driven rendering
+ */
+export interface DashboardStateContext {
+  state: 'BRAND_NEW' | 'NEW' | 'NEEDS_ALERTS' | 'HEALTHY' | 'RETURNING' | 'POWER_USER'
+  watchlistCount: number
+  alertsConfigured: number
+  alertsMissing: number
+  priceDropsThisWeek: number
+}
+
+/**
+ * Watchlist preview item for dashboard display
+ */
+export interface WatchlistPreviewItem {
+  id: string
+  productId: string
+  name: string
+  caliber: string | null
+  brand: string | null
+  price: number | null
+  pricePerRound: number | null
+  inStock: boolean
+  imageUrl: string | null
+  notificationsEnabled: boolean
+  createdAt: string
+}
+
+export interface WatchlistPreviewResponse {
+  items: WatchlistPreviewItem[]
+  _meta: {
+    itemsReturned: number
+    limit: number
+  }
+}
+
+/**
+ * Best price item for non-personalized deals
+ */
+export interface BestPriceItem {
+  id: string
+  product: {
+    id: string
+    name: string
+    caliber: string | null
+    brand: string | null
+    imageUrl: string | null
+    roundCount: number | null
+    grainWeight: number | null
+  }
+  retailer: {
+    id: string
+    name: string
+    logoUrl: string | null
+  }
+  price: number
+  pricePerRound: number | null
+  url: string
+  inStock: boolean
+  updatedAt: string | null
+}
+
+export interface BestPricesResponse {
+  items: BestPriceItem[]
+  _meta: {
+    scope: 'global'
+    tier: null
+    itemsShown: number
+    itemsLimit: number
+    personalized: false
+  }
+}
+
+/**
+ * Get dashboard state for v4 state-driven rendering
+ * State resolution is server-side per dashboard-product-spec.md
+ */
+export async function getDashboardState(token: string): Promise<DashboardStateContext> {
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/state`, {
+    headers: buildAuthHeaders(token),
+  })
+  await handleAuthResponse(response, 'Failed to fetch dashboard state')
+  return response.json()
+}
+
+/**
+ * Get watchlist preview for dashboard display
+ */
+export async function getWatchlistPreview(
+  token: string,
+  limit: number = 3
+): Promise<WatchlistPreviewResponse> {
+  const params = new URLSearchParams({ limit: limit.toString() })
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/watchlist-preview?${params}`, {
+    headers: buildAuthHeaders(token),
+  })
+  await handleAuthResponse(response, 'Failed to fetch watchlist preview')
+  return response.json()
+}
+
+/**
+ * Get best prices (non-personalized deals) for dashboard
+ * Uses scope=global to get non-user-specific deals
+ */
+export async function getBestPrices(limit: number = 5): Promise<BestPricesResponse> {
+  const params = new URLSearchParams({
+    scope: 'global',
+    limit: limit.toString(),
+  })
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/deals?${params}`)
   if (!response.ok) {
-    throw new Error('Failed to fetch deals')
+    throw new Error('Failed to fetch best prices')
   }
   return response.json()
 }
@@ -711,9 +850,7 @@ export async function getSavings(token: string): Promise<SavingsResponse> {
   const response = await fetch(`${API_BASE_URL}/api/dashboard/savings`, {
     headers: buildAuthHeaders(token),
   })
-  if (!response.ok) {
-    throw new Error('Failed to fetch savings')
-  }
+  await handleAuthResponse(response, 'Failed to fetch savings')
   return response.json()
 }
 
@@ -752,9 +889,7 @@ export async function getWatchlist(token: string): Promise<WatchlistResponse> {
   const response = await fetch(`${API_BASE_URL}/api/watchlist`, {
     headers: buildAuthHeaders(token),
   })
-  if (!response.ok) {
-    throw new Error('Failed to fetch watchlist')
-  }
+  await handleAuthResponse(response, 'Failed to fetch watchlist')
   return response.json()
 }
 

@@ -60,10 +60,14 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 // Queue for delayed notifications
+// Job data includes metadata for idempotent timestamp updates
 const delayedNotificationQueue = new Queue<{
   alertId: string
+  watchlistItemId: string
+  ruleType: 'PRICE_DROP' | 'BACK_IN_STOCK'
   triggerReason: string
   executionId: string
+  jobCreatedAt: string // ISO timestamp for idempotency guard
 }>('delayed-notification', { connection: redisConnection })
 
 // Rate limit constants (alerts_policy_v1)
@@ -71,6 +75,227 @@ const USER_LIMIT_6H = 1
 const USER_LIMIT_24H = 3
 const SIX_HOURS_SECONDS = 6 * 60 * 60
 const DAY_SECONDS = 24 * 60 * 60
+
+// Two-phase claim/commit constants
+const CLAIM_STALE_MS = 5 * 60 * 1000 // 5 minutes - claim expires, allowing retry
+const COOLDOWN_HOURS = 168 // 7 days per alerts_policy_v1
+
+/**
+ * Two-phase notification claim/commit protocol
+ *
+ * Prevents duplicate notification sends under worker concurrency.
+ * Works for both delayed (FREE) and immediate (PREMIUM) paths.
+ *
+ * Phase 1 - Claim:
+ *   Atomic conditional update that sets claimedAt=now and claimKey=unique
+ *   Only succeeds if: not in cooldown AND (no claim OR claim is stale)
+ *
+ * Phase 2 - Commit (after successful send):
+ *   Update lastNotifiedAt=now, clear claim fields
+ *   Guarded by claimKey so only the owner commits
+ *
+ * On failure:
+ *   Clear claim fields (guarded by claimKey) so another worker can retry
+ */
+
+type RuleType = 'PRICE_DROP' | 'BACK_IN_STOCK'
+
+interface ClaimResult {
+  claimed: boolean
+  reason?: string
+}
+
+/**
+ * Attempt to claim a notification slot for a watchlist item.
+ * Returns true if claim was successful, false if another worker owns it or cooldown applies.
+ */
+async function claimNotificationSlot(
+  watchlistItemId: string,
+  ruleType: RuleType,
+  claimKey: string,
+  stockCooldownHours?: number
+): Promise<ClaimResult> {
+  const now = new Date()
+  const cooldownHours = ruleType === 'BACK_IN_STOCK' ? (stockCooldownHours ?? COOLDOWN_HOURS) : COOLDOWN_HOURS
+  const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
+  const staleClaimThreshold = new Date(now.getTime() - CLAIM_STALE_MS)
+
+  try {
+    if (ruleType === 'PRICE_DROP') {
+      // Atomic claim: only succeeds if not in cooldown AND (no claim OR stale claim)
+      const result = await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          // Not in cooldown
+          OR: [
+            { lastPriceNotifiedAt: null },
+            { lastPriceNotifiedAt: { lt: cooldownThreshold } },
+          ],
+          // No existing claim OR stale claim
+          AND: [
+            {
+              OR: [
+                { priceNotificationClaimKey: null },
+                { priceNotificationClaimedAt: { lt: staleClaimThreshold } },
+              ],
+            },
+          ],
+        },
+        data: {
+          priceNotificationClaimedAt: now,
+          priceNotificationClaimKey: claimKey,
+        },
+      })
+
+      if (result.count === 0) {
+        // Check why claim failed
+        const item = await prisma.watchlist_items.findUnique({
+          where: { id: watchlistItemId },
+          select: { lastPriceNotifiedAt: true, priceNotificationClaimKey: true, priceNotificationClaimedAt: true },
+        })
+
+        if (item?.lastPriceNotifiedAt && item.lastPriceNotifiedAt >= cooldownThreshold) {
+          return { claimed: false, reason: 'in_cooldown' }
+        }
+        if (item?.priceNotificationClaimKey && item.priceNotificationClaimedAt && item.priceNotificationClaimedAt >= staleClaimThreshold) {
+          return { claimed: false, reason: 'claimed_by_another' }
+        }
+        return { claimed: false, reason: 'unknown' }
+      }
+
+      return { claimed: true }
+    } else {
+      // BACK_IN_STOCK
+      const result = await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          OR: [
+            { lastStockNotifiedAt: null },
+            { lastStockNotifiedAt: { lt: cooldownThreshold } },
+          ],
+          AND: [
+            {
+              OR: [
+                { stockNotificationClaimKey: null },
+                { stockNotificationClaimedAt: { lt: staleClaimThreshold } },
+              ],
+            },
+          ],
+        },
+        data: {
+          stockNotificationClaimedAt: now,
+          stockNotificationClaimKey: claimKey,
+        },
+      })
+
+      if (result.count === 0) {
+        const item = await prisma.watchlist_items.findUnique({
+          where: { id: watchlistItemId },
+          select: { lastStockNotifiedAt: true, stockNotificationClaimKey: true, stockNotificationClaimedAt: true },
+        })
+
+        if (item?.lastStockNotifiedAt && item.lastStockNotifiedAt >= cooldownThreshold) {
+          return { claimed: false, reason: 'in_cooldown' }
+        }
+        if (item?.stockNotificationClaimKey && item.stockNotificationClaimedAt && item.stockNotificationClaimedAt >= staleClaimThreshold) {
+          return { claimed: false, reason: 'claimed_by_another' }
+        }
+        return { claimed: false, reason: 'unknown' }
+      }
+
+      return { claimed: true }
+    }
+  } catch (error) {
+    log.error('Claim notification slot failed', { watchlistItemId, ruleType, error })
+    return { claimed: false, reason: 'error' }
+  }
+}
+
+/**
+ * Commit a successful notification send.
+ * Updates lastNotifiedAt and clears claim fields.
+ * Only succeeds if we still own the claim (claimKey matches).
+ */
+async function commitNotificationSend(
+  watchlistItemId: string,
+  ruleType: RuleType,
+  claimKey: string
+): Promise<boolean> {
+  const now = new Date()
+
+  try {
+    if (ruleType === 'PRICE_DROP') {
+      const result = await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          priceNotificationClaimKey: claimKey, // Only owner can commit
+        },
+        data: {
+          lastPriceNotifiedAt: now,
+          priceNotificationClaimedAt: null,
+          priceNotificationClaimKey: null,
+        },
+      })
+      return result.count > 0
+    } else {
+      const result = await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          stockNotificationClaimKey: claimKey,
+        },
+        data: {
+          lastStockNotifiedAt: now,
+          stockNotificationClaimedAt: null,
+          stockNotificationClaimKey: null,
+        },
+      })
+      return result.count > 0
+    }
+  } catch (error) {
+    log.error('Commit notification send failed', { watchlistItemId, ruleType, error })
+    return false
+  }
+}
+
+/**
+ * Release a claim without committing (on send failure).
+ * Clears claim fields so another worker can retry.
+ * Only succeeds if we still own the claim.
+ */
+async function releaseNotificationClaim(
+  watchlistItemId: string,
+  ruleType: RuleType,
+  claimKey: string
+): Promise<void> {
+  try {
+    if (ruleType === 'PRICE_DROP') {
+      await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          priceNotificationClaimKey: claimKey,
+        },
+        data: {
+          priceNotificationClaimedAt: null,
+          priceNotificationClaimKey: null,
+        },
+      })
+    } else {
+      await prisma.watchlist_items.updateMany({
+        where: {
+          id: watchlistItemId,
+          stockNotificationClaimKey: claimKey,
+        },
+        data: {
+          stockNotificationClaimedAt: null,
+          stockNotificationClaimKey: null,
+        },
+      })
+    }
+  } catch (error) {
+    log.error('Release notification claim failed', { watchlistItemId, ruleType, error })
+    // Non-fatal - claim will become stale and be claimable anyway
+  }
+}
 
 /**
  * Reserve a user alert slot respecting per-user caps:
@@ -225,8 +450,9 @@ export const alerterWorker = new Worker<AlertJobData>(
               // ADR-011: Check thresholds from WatchlistItem
               if (dropPercent >= minDropPercent || dropAmount >= minDropAmount) {
                 // Check cooldown from WatchlistItem
+                // Per spec: suppress alerts if delivered in last 7 days
                 if (watchlistItem.lastPriceNotifiedAt) {
-                  const cooldownHours = 24 // Default cooldown for price drops
+                  const cooldownHours = 168 // 7 days per alerts_policy_v1
                   const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
                   if (watchlistItem.lastPriceNotifiedAt > cooldownThreshold) {
                     log.debug('Price drop alert in cooldown period, skipping', { alertId: alert.id })
@@ -245,7 +471,8 @@ export const alerterWorker = new Worker<AlertJobData>(
             }
             if (inStock === true) {
               // Check cooldown from WatchlistItem
-              const cooldownHours = watchlistItem.stockAlertCooldownHours || 24
+              // Per spec: suppress alerts if delivered in last 7 days
+              const cooldownHours = watchlistItem.stockAlertCooldownHours || 168 // 7 days default per alerts_policy_v1
               if (watchlistItem.lastStockNotifiedAt) {
                 const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
                 if (watchlistItem.lastStockNotifiedAt > cooldownThreshold) {
@@ -289,20 +516,33 @@ export const alerterWorker = new Worker<AlertJobData>(
 
           if (delayMs > 0) {
             // Queue delayed notification for FREE users
+            // Use hourly time bucket for dedupe: prevents rapid re-fires within same hour
+            // but allows new alerts in next hour if price changes again
+            const hourBucket = Math.floor(now.getTime() / (60 * 60 * 1000))
+            const dedupeJobId = `delayed-${watchlistItem.id}-${alert.ruleType}-${hourBucket}`
+
             await delayedNotificationQueue.add(
               'send-notification',
               {
                 alertId: alert.id,
+                watchlistItemId: watchlistItem.id,
+                ruleType: alert.ruleType as 'PRICE_DROP' | 'BACK_IN_STOCK',
                 triggerReason,
                 executionId,
+                jobCreatedAt: now.toISOString(),
               },
               {
                 delay: delayMs,
-                jobId: `alert-${alert.id}-${Date.now()}`, // Unique job ID
+                jobId: dedupeJobId, // Dedupe: only one job per item+ruleType per hour
               }
             )
 
-            log.info('Queued delayed notification', { userId: alert.userId, delayMinutes: delayMs / 60000, userTier })
+            log.info('Queued delayed notification', {
+              userId: alert.userId,
+              delayMinutes: delayMs / 60000,
+              userTier,
+              dedupeJobId,
+            })
 
             await prisma.execution_logs.create({
               data: {
@@ -316,65 +556,87 @@ export const alerterWorker = new Worker<AlertJobData>(
                   userTier,
                   delayMinutes: delayMs / 60000,
                   reason: triggerReason,
+                  dedupeJobId,
                 },
               },
             })
 
-            // Update lastNotified when queuing to prevent duplicate alerts
-            // for the same price event (BullMQ will retry if job fails)
-            const updateData: Record<string, Date> = {}
-            if (alert.ruleType === 'PRICE_DROP') {
-              updateData.lastPriceNotifiedAt = now
-            } else if (alert.ruleType === 'BACK_IN_STOCK') {
-              updateData.lastStockNotifiedAt = now
-            }
-
-            await prisma.watchlist_items.update({
-              where: { id: watchlistItem.id },
-              data: updateData,
-            })
+            // DO NOT update lastNotified here - only update after successful send
+            // This prevents "silent failure + long suppression" if the delayed job fails
+            // The delayed worker will update the timestamp after successful delivery
 
             delayedCount++
           } else {
-            // Send immediately for PREMIUM users
-            // Wrap in try-catch to handle notification failures gracefully
-            try {
-              await sendNotification(alert, triggerReason)
+            // Send immediately for PREMIUM users using two-phase claim/commit
+            const claimKey = `immed-${watchlistItem.id}-${alert.ruleType}-${now.getTime()}`
+            const ruleType = alert.ruleType as RuleType
+            const stockCooldownHours = watchlistItem.stockAlertCooldownHours || undefined
+
+            // Phase 1: Claim (atomic, handles concurrency)
+            const claimResult = await claimNotificationSlot(
+              watchlistItem.id,
+              ruleType,
+              claimKey,
+              stockCooldownHours
+            )
+
+            if (!claimResult.claimed) {
+              log.info('Failed to claim notification slot', {
+                alertId: alert.id,
+                watchlistItemId: watchlistItem.id,
+                reason: claimResult.reason,
+              })
 
               await prisma.execution_logs.create({
                 data: {
                   executionId,
                   level: 'INFO',
-                  event: 'ALERT_NOTIFY',
-              message: `Alert triggered immediately for PREMIUM user ${alert.userId}: ${triggerReason}`,
-              metadata: {
-                alertId: alert.id,
-                userId: alert.userId,
-                productId: alert.productId,
-                userTier,
-                    reason: triggerReason,
+                  event: 'ALERT_CLAIM_FAILED',
+                  message: `Notification claim failed for user ${alert.userId}: ${claimResult.reason}`,
+                  metadata: {
+                    alertId: alert.id,
+                    userId: alert.userId,
+                    productId: alert.productId,
+                    ruleType,
+                    reason: claimResult.reason,
                   },
                 },
               })
 
-              triggeredCount++
+              continue
+            }
 
-              // ADR-011: Update lastNotified timestamp on WatchlistItem, not Alert
-              // Only update if notification was successfully sent
-              const updateData: Record<string, Date> = {}
-              if (alert.ruleType === 'PRICE_DROP') {
-                updateData.lastPriceNotifiedAt = now
-              } else if (alert.ruleType === 'BACK_IN_STOCK') {
-                updateData.lastStockNotifiedAt = now
+            // Phase 2: Send
+            try {
+              await sendNotification(alert, triggerReason)
+
+              // Phase 3: Commit (atomic, guarded by claimKey)
+              const committed = await commitNotificationSend(watchlistItem.id, ruleType, claimKey)
+
+              if (committed) {
+                await prisma.execution_logs.create({
+                  data: {
+                    executionId,
+                    level: 'INFO',
+                    event: 'ALERT_NOTIFY',
+                    message: `Alert triggered immediately for PREMIUM user ${alert.userId}: ${triggerReason}`,
+                    metadata: {
+                      alertId: alert.id,
+                      userId: alert.userId,
+                      productId: alert.productId,
+                      userTier,
+                      reason: triggerReason,
+                    },
+                  },
+                })
+                triggeredCount++
+              } else {
+                log.warn('Commit failed - claim may have been stolen', { alertId: alert.id, claimKey })
               }
-
-              await prisma.watchlist_items.update({
-                where: { id: watchlistItem.id },
-                data: updateData,
-              })
             } catch (notifyError) {
-              // Notification failed - log error but don't update lastNotified
-              // This allows the alert to re-trigger on the next price event
+              // Send failed - release claim so another worker can retry
+              await releaseNotificationClaim(watchlistItem.id, ruleType, claimKey)
+
               log.error('Failed to send immediate notification', {
                 alertId: alert.id,
                 userId: alert.userId,
@@ -438,16 +700,21 @@ export const alerterWorker = new Worker<AlertJobData>(
 )
 
 // Worker for processing delayed notifications
+// Uses two-phase claim/commit protocol for concurrency safety
 export const delayedNotificationWorker = new Worker<{
   alertId: string
+  watchlistItemId: string
+  ruleType: 'PRICE_DROP' | 'BACK_IN_STOCK'
   triggerReason: string
   executionId: string
+  jobCreatedAt: string
 }>(
   'delayed-notification',
   async (job) => {
-    const { alertId, triggerReason, executionId } = job.data
+    const { alertId, watchlistItemId, ruleType, triggerReason, executionId, jobCreatedAt } = job.data
+    const claimKey = `delayed-${alertId}-${jobCreatedAt}`
 
-    log.info('Processing delayed notification', { alertId })
+    log.info('Processing delayed notification', { alertId, watchlistItemId, ruleType, claimKey })
 
     try {
       // Fetch the alert with user, product, and watchlist info
@@ -471,37 +738,121 @@ export const delayedNotificationWorker = new Worker<{
         return { success: false, reason: 'Alert no longer enabled' }
       }
 
+      const watchlistItem = alert.watchlist_items
+
       // ADR-011A: Check if watchlist item is soft-deleted
-      if (alert.watchlist_items?.deletedAt !== null && alert.watchlist_items?.deletedAt !== undefined) {
+      if (watchlistItem?.deletedAt !== null && watchlistItem?.deletedAt !== undefined) {
         log.debug('WatchlistItem is soft-deleted, skipping', { alertId })
         return { success: false, reason: 'WatchlistItem soft-deleted' }
       }
 
       // ADR-011: Check if notifications are still enabled on watchlist item
-      if (alert.watchlist_items && !alert.watchlist_items.notificationsEnabled) {
+      if (watchlistItem && !watchlistItem.notificationsEnabled) {
         log.debug('Notifications disabled for watchlist item, skipping', { alertId })
         return { success: false, reason: 'Notifications disabled' }
       }
 
-      // Send the notification
-      await sendNotification(alert, triggerReason)
+      if (!watchlistItem) {
+        log.warn('WatchlistItem not found, skipping', { alertId })
+        return { success: false, reason: 'WatchlistItem not found' }
+      }
 
-      await prisma.execution_logs.create({
-        data: {
-          executionId,
-          level: 'INFO',
-          event: 'ALERT_DELAYED_SENT',
-          message: `Delayed alert notification sent`,
-          metadata: {
-            alertId: alert.id,
-            userId: alert.userId,
-            productId: alert.productId,
-            reason: triggerReason,
+      // Phase 1: Claim (atomic, handles concurrency and cooldown)
+      const stockCooldownHours = watchlistItem.stockAlertCooldownHours || undefined
+      const claimResult = await claimNotificationSlot(
+        watchlistItemId,
+        ruleType,
+        claimKey,
+        stockCooldownHours
+      )
+
+      if (!claimResult.claimed) {
+        log.info('Failed to claim notification slot for delayed job', {
+          alertId,
+          watchlistItemId,
+          reason: claimResult.reason,
+          claimKey,
+        })
+
+        await prisma.execution_logs.create({
+          data: {
+            executionId,
+            level: 'INFO',
+            event: 'ALERT_DELAYED_CLAIM_FAILED',
+            message: `Delayed notification claim failed: ${claimResult.reason}`,
+            metadata: {
+              alertId,
+              watchlistItemId,
+              ruleType,
+              reason: claimResult.reason,
+            },
           },
-        },
-      })
+        })
 
-      return { success: true }
+        return { success: false, reason: claimResult.reason }
+      }
+
+      // Phase 2: Send
+      try {
+        await sendNotification(alert, triggerReason)
+
+        // Phase 3: Commit (atomic, guarded by claimKey)
+        const committed = await commitNotificationSend(watchlistItemId, ruleType, claimKey)
+
+        if (committed) {
+          await prisma.execution_logs.create({
+            data: {
+              executionId,
+              level: 'INFO',
+              event: 'ALERT_DELAYED_SENT',
+              message: `Delayed alert notification sent`,
+              metadata: {
+                alertId: alert.id,
+                userId: alert.userId,
+                productId: alert.productId,
+                reason: triggerReason,
+                watchlistItemId,
+                ruleType,
+              },
+            },
+          })
+
+          return { success: true }
+        } else {
+          log.warn('Commit failed for delayed notification - claim may have been stolen', {
+            alertId,
+            claimKey,
+          })
+          return { success: false, reason: 'Commit failed' }
+        }
+      } catch (sendError) {
+        // Send failed - release claim so another worker can retry
+        await releaseNotificationClaim(watchlistItemId, ruleType, claimKey)
+
+        log.error('Failed to send delayed notification', {
+          alertId,
+          watchlistItemId,
+          error: sendError instanceof Error ? sendError.message : 'Unknown error',
+        })
+
+        await prisma.execution_logs.create({
+          data: {
+            executionId,
+            level: 'ERROR',
+            event: 'ALERT_DELAYED_SEND_FAILED',
+            message: `Delayed notification send failed: ${sendError instanceof Error ? sendError.message : 'Unknown error'}`,
+            metadata: {
+              alertId,
+              watchlistItemId,
+              ruleType,
+              error: sendError instanceof Error ? sendError.message : 'Unknown error',
+            },
+          },
+        })
+
+        // Re-throw to let BullMQ handle retry
+        throw sendError
+      }
     } catch (error) {
       const err = error as Error
       log.error('Failed to process delayed notification', { alertId, error: err.message })

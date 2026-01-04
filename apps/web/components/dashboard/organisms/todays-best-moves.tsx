@@ -1,7 +1,8 @@
 /**
- * @deprecated This component has been replaced by GoodDealHero in Dashboard v3.
- * @see apps/web/components/dashboard/organisms/good-deal-hero.tsx
- * @see ADR-012 Dashboard v3 Action-Oriented Deal Surface
+ * @deprecated This component has been replaced by BestPrices in Dashboard v4.
+ * Dashboard v4 uses a state-driven design with StateBanner, WatchlistPreviewV4, and BestPrices.
+ * @see apps/web/components/dashboard/organisms/best-prices.tsx
+ * @see apps/web/components/dashboard/organisms/state-banner.tsx
  *
  * This file is kept for backwards compatibility during migration.
  * Do not use in new code.

@@ -35,7 +35,7 @@ export function SavedItemsManager() {
   const { items, meta, loading, error, remove, updatePrefs, refetch } = useSavedItems()
 
   const handleRemove = async (productId: string, name: string) => {
-    if (!confirm(`Remove "${name}" from saved items?`)) return
+    if (!confirm(`Remove "${name}" from your watchlist?`)) return
 
     try {
       await remove(productId)
@@ -68,7 +68,7 @@ export function SavedItemsManager() {
     return (
       <Card>
         <CardContent className="py-12">
-          <p className="text-center text-muted-foreground">Loading saved items...</p>
+          <p className="text-center text-muted-foreground">Loading watchlist...</p>
         </CardContent>
       </Card>
     )
@@ -100,7 +100,7 @@ export function SavedItemsManager() {
             <div className="text-center py-12">
               <Bookmark className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                No saved items yet. Search for products and save them to track prices.
+                No items in your watchlist yet. Search for products and add them to track prices.
               </p>
               <Button className="mt-4" asChild>
                 <a href="/dashboard/search">Search Products</a>
@@ -127,9 +127,9 @@ export function SavedItemsManager() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium">Saved items limit reached</p>
+                <p className="font-medium">Watchlist limit reached</p>
                 <p className="text-sm text-muted-foreground">
-                  Upgrade to Premium for unlimited saved items
+                  Upgrade to Premium for unlimited watchlist items
                 </p>
               </div>
               <Button asChild>
@@ -203,7 +203,7 @@ function SavedItemRow({
           </div>
 
           <p className="text-xs text-muted-foreground mt-1">
-            Saved {new Date(item.savedAt).toLocaleDateString()}
+            Added {new Date(item.savedAt).toLocaleDateString()}
           </p>
         </div>
 

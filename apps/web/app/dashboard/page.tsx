@@ -1,70 +1,88 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
-import { GoodDealHero } from '@/components/dashboard/organisms/good-deal-hero'
-import { RecentChanges } from '@/components/dashboard/organisms/recent-changes'
-import { HeadsUpNudge } from '@/components/dashboard/organisms/heads-up-nudge'
-import { PremiumPrompt } from '@/components/dashboard/organisms/premium-prompt'
+'use client'
+
+import { useDashboardState } from '@/hooks/use-dashboard-state'
+import { StateBanner } from '@/components/dashboard/organisms/state-banner'
+import { WatchlistPreviewV4 } from '@/components/dashboard/organisms/watchlist-preview-v4'
+import { BestPrices } from '@/components/dashboard/organisms/best-prices'
+import { Card, CardContent } from '@/components/ui/card'
+import { Loader2 } from 'lucide-react'
 
 /**
- * Dashboard Page - Dashboard v3 (ADR-012)
+ * Dashboard Page - Dashboard v4
  *
- * Action-oriented deal surface that:
- * 1. Surfaces at most one high-confidence deal recommendation at a time
- * 2. Treats the absence of a recommendation as a valid and expected state
- * 3. Shows only recent changes (not full saved items list)
- * 4. Integrates Saved Searches silently as signal inputs
- * 5. Uses plain, descriptive language
- * 6. Avoids scores, rankings, verdicts, charts
+ * State-driven dashboard per dashboard-product-spec.md:
+ * 1. State Banner: Contextual message based on user state
+ * 2. Watchlist Preview: Subset of watchlist items (hidden for BRAND_NEW)
+ * 3. Best Prices: Non-personalized deals (always shown)
  *
- * Layout:
- * 1. Hero Section: "Good Deal Right Now" or No-Hero quiet state
- * 2. Recent Changes: Activity feed of price/availability changes (3-5 items max)
- * 3. Heads Up: Optional nudge for saved search signals
- * 4. Premium Prompt: Soft upgrade prompt (free users only)
+ * States:
+ * - BRAND_NEW: 0 items → Hero search module
+ * - NEW: 1-4 items → Expansion prompt + caliber chips
+ * - NEEDS_ALERTS: ≥5 items, missing alerts → Configure alerts prompt
+ * - HEALTHY: ≥5 items, all alerts active → Reassurance
+ * - RETURNING: Healthy + alerts delivered → Value reinforcement
+ * - POWER_USER: ≥7 items + alerts → Compact status + inline actions
  *
- * When no Hero AND no recent changes:
- * - Shows only system status ("Nothing urgent right now")
- * - No filler content
- *
- * Full Saved Items list lives on /dashboard/saved (the "Portfolio")
- *
- * @see ADR-012 Dashboard v3 Action-Oriented Deal Surface
- * @see context/06_ux_charter.md
+ * @see dashboard-product-spec.md
+ * @see ADR-012 Dashboard v3 (predecessor)
  */
-export default async function DashboardPage() {
-  const session = await auth()
+export default function DashboardPage() {
+  const { state, watchlistPreview, bestPrices, loading, error } = useDashboardState()
 
-  if (!session) {
-    redirect('/api/auth/signin')
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Loading dashboard...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
-  const userTier = (session.user as any)?.tier || 'FREE'
-  const isPremium = userTier === 'PREMIUM'
+  if (error || !state) {
+    return (
+      <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+        <Card>
+          <CardContent className="py-12">
+            <p className="text-center text-destructive">
+              {error || 'Failed to load dashboard'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Determine max preview items based on state
+  const maxPreviewItems = state.state === 'POWER_USER' ? 7 : 3
 
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
-      {/* Zone A: Primary Attention Slot (Hero Deal OR System Status - mutually exclusive) */}
+    <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
+      {/* State Banner (contextual per user state) */}
       <section>
-        <GoodDealHero isPremium={isPremium} />
+        <StateBanner state={state.state} context={state} />
       </section>
 
-      {/* Zone B: Recent Changes Activity Feed
-          - Only shows items with recent price/availability changes
-          - Disappears completely when nothing changed
-          - Delta-only display (no full prices, charts, rankings)
-          - Full saved items list lives on /dashboard/saved */}
-      <section>
-        <RecentChanges />
-      </section>
+      {/* Watchlist Preview (hidden for BRAND_NEW state) */}
+      {state.state !== 'BRAND_NEW' && watchlistPreview.length > 0 && (
+        <section>
+          <WatchlistPreviewV4
+            items={watchlistPreview}
+            totalCount={state.watchlistCount}
+            maxItems={maxPreviewItems}
+            state={state.state}
+          />
+        </section>
+      )}
 
-      {/* Heads Up: Saved search signals as subtle nudge */}
+      {/* Best Prices (always shown) */}
       <section>
-        <HeadsUpNudge />
-      </section>
-
-      {/* Premium Prompt: Soft upgrade prompt (bottom, free users only) */}
-      <section>
-        <PremiumPrompt isPremium={isPremium} />
+        <BestPrices items={bestPrices} />
       </section>
     </div>
   )
