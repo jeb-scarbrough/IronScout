@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useSession } from 'next-auth/react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import {
   getDashboardState,
   getWatchlistPreview,
   getBestPrices,
+  AuthError,
   type DashboardStateContext,
   type WatchlistPreviewItem,
   type BestPriceItem,
@@ -13,6 +14,9 @@ import {
 import { createLogger } from '@/lib/logger'
 
 const logger = createLogger('hooks:dashboard-state')
+
+// Max retry attempts for auth errors
+const MAX_AUTH_RETRIES = 1
 
 /**
  * Dashboard state for v4 state-driven rendering
@@ -63,12 +67,13 @@ export interface UseDashboardStateResult {
  * Per dashboard-product-spec.md: state resolution is server-side.
  */
 export function useDashboardState(): UseDashboardStateResult {
-  const { data: session, status } = useSession()
+  const { data: session, status, update } = useSession()
   const [state, setState] = useState<DashboardStateContext | null>(null)
   const [watchlistPreview, setWatchlistPreview] = useState<WatchlistPreviewItem[]>([])
   const [bestPrices, setBestPrices] = useState<BestPriceItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const authRetryCount = useRef(0)
 
   // Extract token from session
   const token = (session as any)?.accessToken as string | undefined
@@ -107,13 +112,40 @@ export function useDashboardState(): UseDashboardStateResult {
       setState(stateResponse)
       setWatchlistPreview(previewResponse.items)
       setError(null)
+      authRetryCount.current = 0 // Reset on success
     } catch (err) {
       logger.error('Failed to fetch dashboard state', {}, err)
+
+      // Handle expired/invalid session - attempt refresh first
+      if (err instanceof AuthError) {
+        if (authRetryCount.current < MAX_AUTH_RETRIES) {
+          authRetryCount.current++
+          logger.info('Token rejected, attempting session refresh', {
+            attempt: authRetryCount.current,
+          })
+
+          // Trigger NextAuth session refresh
+          const updatedSession = await update()
+
+          // Check if session was refreshed successfully
+          if (updatedSession && !(updatedSession as any).error) {
+            logger.info('Session refreshed, retrying fetch')
+            // Retry will happen via useEffect when token changes
+            return
+          }
+        }
+
+        // Refresh failed or max retries exceeded - sign out
+        logger.info('Session refresh failed, signing out')
+        signOut({ callbackUrl: '/auth/signin' })
+        return
+      }
+
       setError('Failed to load dashboard. Please try again.')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, update])
 
   // Fetch on mount and when token changes
   useEffect(() => {

@@ -1,17 +1,21 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useSession } from 'next-auth/react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import {
   getWatchlist,
   addToWatchlist,
   removeFromWatchlist,
   updateWatchlistItem,
+  AuthError,
 } from '@/lib/api'
 import type { WatchlistResponse, UseWatchlistResult } from '@/types/dashboard'
 import { createLogger } from '@/lib/logger'
 
 const logger = createLogger('hooks:watchlist')
+
+// Max retry attempts for auth errors
+const MAX_AUTH_RETRIES = 1
 
 /**
  * Hook for managing watchlist
@@ -19,10 +23,11 @@ const logger = createLogger('hooks:watchlist')
  * Premium: Unlimited items, collections
  */
 export function useWatchlist(): UseWatchlistResult {
-  const { data: session } = useSession()
+  const { data: session, update } = useSession()
   const [data, setData] = useState<WatchlistResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const authRetryCount = useRef(0)
 
   const fetchWatchlist = useCallback(async () => {
     const token = (session as any)?.accessToken
@@ -36,13 +41,33 @@ export function useWatchlist(): UseWatchlistResult {
       setError(null)
       const response = await getWatchlist(token)
       setData(response)
+      authRetryCount.current = 0 // Reset on success
     } catch (err) {
+      // Handle expired/invalid session - attempt refresh first
+      if (err instanceof AuthError) {
+        if (authRetryCount.current < MAX_AUTH_RETRIES) {
+          authRetryCount.current++
+          logger.info('Token rejected, attempting session refresh', {
+            attempt: authRetryCount.current,
+          })
+
+          const updatedSession = await update()
+          if (updatedSession && !(updatedSession as any).error) {
+            logger.info('Session refreshed, retrying fetch')
+            return // Retry will happen via useEffect when token changes
+          }
+        }
+
+        logger.info('Session refresh failed, signing out')
+        signOut({ callbackUrl: '/auth/signin' })
+        return
+      }
       logger.error('Failed to fetch watchlist', {}, err)
       setError(err instanceof Error ? err.message : 'Failed to load watchlist')
     } finally {
       setLoading(false)
     }
-  }, [(session as any)?.accessToken])
+  }, [(session as any)?.accessToken, update])
 
   useEffect(() => {
     if (session?.user?.id) {
