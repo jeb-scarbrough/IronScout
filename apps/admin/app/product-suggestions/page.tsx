@@ -1,5 +1,5 @@
 import { prisma } from '@ironscout/db';
-import { Package, Clock, CheckCircle, XCircle, GitMerge } from 'lucide-react';
+import { Package, Clock, CheckCircle, XCircle, GitMerge, Building2, Rss, Settings2 } from 'lucide-react';
 import { SuggestionActions } from './suggestion-actions';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,12 @@ const statusConfig = {
   MERGED: { label: 'Merged', color: 'bg-blue-100 text-blue-700', icon: GitMerge },
 };
 
+const sourceTypeConfig = {
+  MERCHANT: { label: 'Merchant', color: 'bg-purple-100 text-purple-700', icon: Building2 },
+  AFFILIATE: { label: 'Affiliate', color: 'bg-orange-100 text-orange-700', icon: Rss },
+  INTERNAL: { label: 'Internal', color: 'bg-gray-100 text-gray-700', icon: Settings2 },
+};
+
 export default async function ProductSuggestionsPage() {
   const suggestions = await prisma.product_suggestions.findMany({
     orderBy: [
@@ -20,6 +26,13 @@ export default async function ProductSuggestionsPage() {
     include: {
       merchants: {
         select: { businessName: true },
+      },
+      affiliate_feeds: {
+        select: {
+          id: true,
+          network: true,
+          sources: { select: { name: true } }
+        },
       },
       retailer_skus: {
         select: { id: true, rawTitle: true, rawUpc: true, rawPrice: true },
@@ -39,7 +52,7 @@ export default async function ProductSuggestionsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Product Suggestions</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Review and approve new product suggestions from merchants
+            Review and approve incoming product suggestions
           </p>
         </div>
       </div>
@@ -144,7 +157,7 @@ export default async function ProductSuggestionsPage() {
                 Attributes
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Dealer
+                Source
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
@@ -161,6 +174,23 @@ export default async function ProductSuggestionsPage() {
             {suggestions.map((suggestion) => {
               const status = statusConfig[suggestion.status];
               const StatusIcon = status.icon;
+              const sourceType = sourceTypeConfig[suggestion.sourceType];
+              const SourceTypeIcon = sourceType.icon;
+
+              // Determine source display name
+              const getSourceName = () => {
+                if (suggestion.sourceName) return suggestion.sourceName;
+                if (suggestion.sourceType === 'MERCHANT' && suggestion.merchants) {
+                  return suggestion.merchants.businessName;
+                }
+                if (suggestion.sourceType === 'AFFILIATE' && suggestion.affiliate_feeds) {
+                  return suggestion.affiliate_feeds.sources?.name || suggestion.affiliate_feeds.network;
+                }
+                if (suggestion.sourceType === 'INTERNAL') {
+                  return 'Internal';
+                }
+                return 'Unknown';
+              };
 
               return (
                 <tr key={suggestion.id} className={suggestion.status === 'PENDING' ? 'bg-yellow-50' : ''}>
@@ -175,7 +205,7 @@ export default async function ProductSuggestionsPage() {
                         </div>
                       )}
                       {suggestion.retailer_skus && (
-                        <div className="text-xs text-gray-400 mt-1 truncate" title={suggestion.retailer_skus.rawTitle}>
+                        <div className="text-xs text-gray-400 mt-1 truncate" title={suggestion.retailer_skus.rawTitle ?? undefined}>
                           From: {suggestion.retailer_skus.rawTitle}
                         </div>
                       )}
@@ -192,7 +222,13 @@ export default async function ProductSuggestionsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{suggestion.merchants.businessName}</div>
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${sourceType.color}`}>
+                        <SourceTypeIcon className="h-3 w-3" />
+                        {sourceType.label}
+                      </span>
+                      <div className="text-sm text-gray-900">{getSourceName()}</div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>

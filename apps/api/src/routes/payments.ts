@@ -3,6 +3,7 @@ import { z } from 'zod'
 import Stripe from 'stripe'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger'
+import { premiumEnabled, premiumApiEnabled, stripeEnabled, requirePremiumApi } from '../lib/features'
 
 const logger = loggers.payments
 const router: any = Router()
@@ -428,7 +429,7 @@ router.get('/debug/webhook-stats', async (req: Request, res: Response) => {
 // Consumer Checkout (existing)
 // =============================================================================
 
-router.post('/create-checkout', async (req: Request, res: Response) => {
+router.post('/create-checkout', requirePremiumApi(), async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {
@@ -506,7 +507,7 @@ router.post('/create-checkout', async (req: Request, res: Response) => {
 // Merchant Checkout
 // =============================================================================
 
-router.post('/merchant/create-checkout', async (req: Request, res: Response) => {
+router.post('/merchant/create-checkout', requirePremiumApi(), async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {
@@ -643,7 +644,7 @@ router.post('/merchant/create-checkout', async (req: Request, res: Response) => 
 // Merchant Customer Portal
 // =============================================================================
 
-router.post('/merchant/create-portal-session', async (req: Request, res: Response) => {
+router.post('/merchant/create-portal-session', requirePremiumApi(), async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {
@@ -740,6 +741,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
       eventType: event.type,
       eventId: event.id
     })
+
+    // FEATURE FLAG: When premium is disabled, verify signature but skip side effects
+    // This ensures security (signature verification) while preventing entitlement changes
+    if (!premiumEnabled()) {
+      log('INFO', 'Premium disabled - webhook received but side effects skipped', {
+        action: 'webhook_premium_disabled',
+        eventType: event.type,
+        eventId: event.id
+      })
+      webhookStats.processed++
+      return res.json({ received: true, premiumDisabled: true })
+    }
 
     switch (event.type) {
       // =======================================================================
@@ -1831,7 +1844,7 @@ async function handleConsumerSubscriptionDeleted(subscription: Stripe.Subscripti
 // Plans endpoint
 // =============================================================================
 
-router.get('/plans', async (req: Request, res: Response) => {
+router.get('/plans', requirePremiumApi(), async (req: Request, res: Response) => {
   try {
     const plans = [
       {
@@ -1888,7 +1901,7 @@ router.get('/plans', async (req: Request, res: Response) => {
 })
 
 // Merchant plans endpoint
-router.get('/merchant/plans', async (req: Request, res: Response) => {
+router.get('/merchant/plans', requirePremiumApi(), async (req: Request, res: Response) => {
   try {
     const merchantPlans = [
       {

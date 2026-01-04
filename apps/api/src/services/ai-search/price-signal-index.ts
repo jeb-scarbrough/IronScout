@@ -376,7 +376,7 @@ export async function calculateInternalPriceSignal(
     ...publicSignal,
     _internal: {
       retailerConfidenceHint: bestPrice
-        ? getRetailerConfidenceHint(bestPrice.retailer.tier)
+        ? getRetailerConfidenceHint(bestPrice.retailer?.tier)
         : 'unknown',
       brandDataCompletenessHint: getBrandDataCompletenessHint(product.brand),
       shippingCost

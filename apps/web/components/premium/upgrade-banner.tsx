@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Crown, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
+import { premiumEnabled, isEffectivelyPremium } from '@/lib/features'
 
 interface UpgradeBannerProps {
   title?: string
@@ -25,8 +26,14 @@ export function UpgradeBanner({
   const { data: session } = useSession()
   const [dismissed, setDismissed] = useState(false)
 
+  // FEATURE FLAG: Don't show upgrade banners when premium is disabled
+  if (!premiumEnabled()) {
+    return null
+  }
+
   // Don't show if user is already premium or banner is dismissed
-  if ((session?.user as any)?.tier === 'PREMIUM' || dismissed) {
+  const userTier = (session?.user as any)?.tier
+  if (isEffectivelyPremium(userTier) || dismissed) {
     return null
   }
 

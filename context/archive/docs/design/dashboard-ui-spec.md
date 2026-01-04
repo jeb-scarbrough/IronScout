@@ -5,6 +5,21 @@
 
 ---
 
+> ⚠️ AUTHORITATIVE SCOPE NOTICE
+>
+> This document defines **visual structure, interaction patterns, and component behavior only**.
+>
+> Canonical dashboard behavior, user states, and module eligibility are defined in:
+>
+> **dashboard-product-spec.md**
+>
+> In the event of any conflict between this document and the product spec,  
+> **dashboard-product-spec.md takes precedence**.
+>
+> Product intent and behavioral guardrails are further constrained by:
+> - ADR-012: Dashboard v3 – Action-Oriented Deal Surface
+
+
 ## Design Posture
 
 - **Dark-first** - Signals seriousness and differentiation

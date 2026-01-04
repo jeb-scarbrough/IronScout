@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { CheckCircle, Loader2, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import confetti from 'canvas-confetti'
+import { premiumEnabled } from '@/lib/features'
 
 function PaymentSuccessContent() {
   const searchParams = useSearchParams()
@@ -15,6 +16,12 @@ function PaymentSuccessContent() {
   const sessionId = searchParams.get('session_id')
 
   useEffect(() => {
+    // FEATURE FLAG: Redirect to home when premium is disabled
+    if (!premiumEnabled()) {
+      router.push('/')
+      return
+    }
+
     // Celebrate with confetti!
     if (sessionId) {
       setTimeout(() => {

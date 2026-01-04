@@ -328,3 +328,13 @@ Conflicting changes must be rejected or escalated via ADR amendment.
 
 **Decision Outcome:**  
 Proceed with Dashboard v3 implementation under this ADR. Iterate via amendments as thresholds and data confidence mature.
+
+
+### Canonical Product Specification
+
+The authoritative product-level definition of dashboard behavior lives in:
+
+- **dashboard-product-spec.md**
+
+All dashboard UI and implementation work must conform to this specification.
+Conflicting behavior must be resolved by updating the product spec and, if needed, this ADR.

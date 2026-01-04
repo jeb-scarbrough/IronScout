@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   Users,
+  Store,
   BarChart3,
   Settings,
   LogOut,
@@ -19,6 +20,7 @@ interface NavigationProps {
 
 const navItems = [
   { name: 'Merchants', href: '/merchants', icon: Users },
+  { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
   { name: 'Product Suggestions', href: '/product-suggestions', icon: Package },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

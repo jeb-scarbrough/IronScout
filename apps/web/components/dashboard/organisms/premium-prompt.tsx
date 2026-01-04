@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Bell } from 'lucide-react'
 import Link from 'next/link'
+import { premiumEnabled } from '@/lib/features'
 
 interface PremiumPromptProps {
   /** Whether user is already premium */
@@ -22,6 +23,11 @@ interface PremiumPromptProps {
  * - No urgency or upsell pressure
  */
 export function PremiumPrompt({ isPremium = false }: PremiumPromptProps) {
+  // FEATURE FLAG: Don't show premium prompts when premium is disabled
+  if (!premiumEnabled()) {
+    return null
+  }
+
   // Don't show to premium users
   if (isPremium) {
     return null

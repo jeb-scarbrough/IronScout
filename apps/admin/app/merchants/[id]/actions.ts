@@ -1440,3 +1440,196 @@ export async function unlistRetailer(merchantId: string, merchantRetailerId: str
     return { success: false, error: 'Failed to unlist retailer' };
   }
 }
+
+/**
+ * Get available retailers that can be linked to a merchant
+ * Returns retailers that are not yet linked to any merchant (V1: 1 retailer = 1 merchant)
+ */
+export async function getAvailableRetailers() {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized', retailers: [] };
+  }
+
+  try {
+    // Get all retailer IDs that are already linked
+    const linkedRetailerIds = await prisma.merchant_retailers.findMany({
+      select: { retailerId: true },
+    });
+    const linkedIds = linkedRetailerIds.map((r) => r.retailerId);
+
+    // Get retailers not linked to any merchant
+    const availableRetailers = await prisma.retailers.findMany({
+      where: {
+        id: { notIn: linkedIds.length > 0 ? linkedIds : ['__none__'] },
+      },
+      select: {
+        id: true,
+        name: true,
+        website: true,
+        visibilityStatus: true,
+        tier: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return { success: true, retailers: availableRetailers };
+  } catch (error) {
+    loggers.merchants.error('Failed to get available retailers', {}, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to get available retailers', retailers: [] };
+  }
+}
+
+/**
+ * Link a retailer to a merchant
+ * Creates a merchant_retailers record with ACTIVE status and UNLISTED listing
+ */
+export async function linkRetailerToMerchant(
+  merchantId: string,
+  retailerId: string,
+  options?: { listImmediately?: boolean }
+) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Verify merchant exists
+    const merchant = await prisma.merchants.findUnique({
+      where: { id: merchantId },
+      select: { id: true, businessName: true },
+    });
+
+    if (!merchant) {
+      return { success: false, error: 'Merchant not found' };
+    }
+
+    // Verify retailer exists
+    const retailer = await prisma.retailers.findUnique({
+      where: { id: retailerId },
+      select: { id: true, name: true, visibilityStatus: true },
+    });
+
+    if (!retailer) {
+      return { success: false, error: 'Retailer not found' };
+    }
+
+    // Check if already linked (V1: 1 retailer = 1 merchant)
+    const existingLink = await prisma.merchant_retailers.findFirst({
+      where: { retailerId },
+      include: { merchants: { select: { businessName: true } } },
+    });
+
+    if (existingLink) {
+      return {
+        success: false,
+        error: `This retailer is already linked to ${existingLink.merchants.businessName}`,
+      };
+    }
+
+    const now = new Date();
+    const shouldList = options?.listImmediately && retailer.visibilityStatus === 'ELIGIBLE';
+
+    // Create the link
+    const merchantRetailer = await prisma.merchant_retailers.create({
+      data: {
+        merchantId,
+        retailerId,
+        status: 'ACTIVE',
+        listingStatus: shouldList ? 'LISTED' : 'UNLISTED',
+        createdBy: session.userId,
+        ...(shouldList && {
+          listedAt: now,
+          listedBy: session.userId,
+        }),
+      },
+    });
+
+    // Audit log
+    await logAdminAction(session.userId, 'RETAILER_LINKED', {
+      merchantId,
+      resource: 'MerchantRetailer',
+      resourceId: merchantRetailer.id,
+      newValue: {
+        retailerId,
+        retailerName: retailer.name,
+        merchantName: merchant.businessName,
+        status: 'ACTIVE',
+        listingStatus: shouldList ? 'LISTED' : 'UNLISTED',
+      },
+    });
+
+    revalidatePath(`/merchants/${merchantId}`);
+
+    return {
+      success: true,
+      message: `${retailer.name} has been linked to ${merchant.businessName}${shouldList ? ' and listed' : ''}`,
+    };
+  } catch (error) {
+    loggers.merchants.error('Failed to link retailer', { merchantId, retailerId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to link retailer' };
+  }
+}
+
+/**
+ * Unlink a retailer from a merchant
+ * Deletes the merchant_retailers record
+ */
+export async function unlinkRetailerFromMerchant(merchantId: string, merchantRetailerId: string) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Get current state for audit
+    const merchantRetailer = await prisma.merchant_retailers.findUnique({
+      where: { id: merchantRetailerId },
+      include: {
+        retailers: { select: { name: true } },
+        merchants: { select: { businessName: true } },
+      },
+    });
+
+    if (!merchantRetailer) {
+      return { success: false, error: 'Link not found' };
+    }
+
+    if (merchantRetailer.merchantId !== merchantId) {
+      return { success: false, error: 'Link does not belong to this merchant' };
+    }
+
+    // Delete the link
+    await prisma.merchant_retailers.delete({
+      where: { id: merchantRetailerId },
+    });
+
+    // Audit log
+    await logAdminAction(session.userId, 'RETAILER_UNLINKED', {
+      merchantId,
+      resource: 'MerchantRetailer',
+      resourceId: merchantRetailerId,
+      oldValue: {
+        retailerId: merchantRetailer.retailerId,
+        retailerName: merchantRetailer.retailers.name,
+        merchantName: merchantRetailer.merchants.businessName,
+        status: merchantRetailer.status,
+        listingStatus: merchantRetailer.listingStatus,
+      },
+    });
+
+    revalidatePath(`/merchants/${merchantId}`);
+
+    return {
+      success: true,
+      message: `${merchantRetailer.retailers.name} has been unlinked from this merchant`,
+    };
+  } catch (error) {
+    loggers.merchants.error('Failed to unlink retailer', { merchantId, merchantRetailerId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to unlink retailer' };
+  }
+}

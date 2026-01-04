@@ -1,4 +1,5 @@
 import { Prisma } from '@ironscout/db'
+import { premiumEnabled, getEffectiveTier } from '../lib/features'
 
 /**
  * Tier-based feature configuration
@@ -153,10 +154,16 @@ export const PRICING = {
 } as const
 
 /**
- * Get tier configuration for a user tier
+ * Get tier configuration for a user tier.
+ *
+ * IMPORTANT: When FEATURE_PREMIUM_ENABLED=false, this always returns FREE tier config
+ * regardless of the user's actual tier. This ensures all premium features are disabled
+ * consistently across the application.
  */
 export function getTierConfig(tier: UserTier) {
-  return TIER_CONFIG[tier] || TIER_CONFIG.FREE
+  // Apply feature flag - force FREE tier when premium is disabled
+  const effectiveTier = getEffectiveTier(tier)
+  return TIER_CONFIG[effectiveTier] || TIER_CONFIG.FREE
 }
 
 /**
@@ -363,6 +370,21 @@ export function visibleDealerPriceWhere(): Prisma.pricesWhereInput {
  * ```
  */
 export function visibleRetailerPriceWhere(): Prisma.pricesWhereInput {
+  // In development, allow bypassing merchant_retailer checks for simpler test data
+  // NODE_ENV is 'development' or undefined in local dev
+  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development'
+  const skipMerchantCheck = isDev && process.env.SKIP_MERCHANT_RETAILER_CHECK === 'true'
+
+  if (skipMerchantCheck) {
+    return {
+      retailers: {
+        is: {
+          visibilityStatus: 'ELIGIBLE',
+        },
+      },
+    }
+  }
+
   return {
     retailers: {
       is: {

@@ -501,60 +501,65 @@ function filterToWinningRows(
 
 /**
  * Batch upsert SourceProducts
- * Uses a transaction with individual upserts (Prisma doesn't support bulk upsert with ON CONFLICT)
+ * Uses raw SQL with unnest() for efficient bulk upsert with ON CONFLICT
  */
 async function batchUpsertSourceProducts(
   sourceId: string,
   products: ProductWithIdentity[],
   runId: string
 ): Promise<UpsertedSourceProduct[]> {
-  const results: UpsertedSourceProduct[] = []
+  if (products.length === 0) return []
 
-  await prisma.$transaction(async (tx) => {
-    for (const { product, identity, identityKey } of products) {
-      const urlHash = computeUrlHash(product.url)
-      const normalizedUrlValue = normalizeUrl(product.url)
+  // Extract arrays for unnest - parallel arrays for each field
+  const identityTypes = products.map((p) => p.identity.type)
+  const identityValues = products.map((p) => p.identity.value)
+  const titles = products.map((p) => p.product.name)
+  const urls = products.map((p) => p.product.url)
+  const imageUrls = products.map((p) => p.product.imageUrl ?? null)
+  const skus = products.map((p) => p.product.sku ?? null)
+  const upcs = products.map((p) => p.product.upc ?? null)
+  const urlHashes = products.map((p) => computeUrlHash(p.product.url))
+  const normalizedUrls = products.map((p) => normalizeUrl(p.product.url))
+  const impactItemIds = products.map((p) => p.product.impactItemId ?? null)
 
-      const upserted = await tx.source_products.upsert({
-        where: {
-          sourceId_identityType_identityValue: {
-            sourceId,
-            identityType: identity.type,
-            identityValue: identity.value,
-          },
-        },
-        create: {
-          sourceId,
-          identityType: identity.type,
-          identityValue: identity.value,
-          title: product.name,
-          url: product.url,
-          imageUrl: product.imageUrl,
-          sku: product.sku,
-          upc: product.upc,
-          urlHash,
-          normalizedUrl: normalizedUrlValue,
-          impactItemId: product.impactItemId,
-          createdByRunId: runId,
-          lastUpdatedByRunId: runId,
-        },
-        update: {
-          title: product.name,
-          url: product.url,
-          imageUrl: product.imageUrl,
-          sku: product.sku,
-          upc: product.upc,
-          urlHash,
-          normalizedUrl: normalizedUrlValue,
-          impactItemId: product.impactItemId,
-          lastUpdatedByRunId: runId,
-        },
-        select: { id: true },
-      })
-
-      results.push({ id: upserted.id, identityKey })
-    }
-  })
+  // Bulk upsert with ON CONFLICT DO UPDATE
+  // Returns id and constructed identityKey for mapping back to products
+  const results = await prisma.$queryRaw<UpsertedSourceProduct[]>`
+    INSERT INTO source_products (
+      "id", "sourceId", "identityType", "identityValue", "title", "url",
+      "imageUrl", "sku", "upc", "urlHash", "normalizedUrl", "impactItemId",
+      "createdByRunId", "lastUpdatedByRunId", "createdAt", "updatedAt"
+    )
+    SELECT
+      gen_random_uuid(),
+      ${sourceId},
+      unnest(${identityTypes}::text[])::"SourceProductIdentityType",
+      unnest(${identityValues}::text[]),
+      unnest(${titles}::text[]),
+      unnest(${urls}::text[]),
+      unnest(${imageUrls}::text[]),
+      unnest(${skus}::text[]),
+      unnest(${upcs}::text[]),
+      unnest(${urlHashes}::text[]),
+      unnest(${normalizedUrls}::text[]),
+      unnest(${impactItemIds}::text[]),
+      ${runId},
+      ${runId},
+      NOW(),
+      NOW()
+    ON CONFLICT ("sourceId", "identityType", "identityValue") DO UPDATE SET
+      "title" = EXCLUDED."title",
+      "url" = EXCLUDED."url",
+      "imageUrl" = EXCLUDED."imageUrl",
+      "sku" = EXCLUDED."sku",
+      "upc" = EXCLUDED."upc",
+      "urlHash" = EXCLUDED."urlHash",
+      "normalizedUrl" = EXCLUDED."normalizedUrl",
+      "impactItemId" = EXCLUDED."impactItemId",
+      "lastUpdatedByRunId" = EXCLUDED."lastUpdatedByRunId",
+      "updatedAt" = NOW()
+    RETURNING "id", "identityType" || ':' || "identityValue" AS "identityKey"
+  `
 
   return results
 }

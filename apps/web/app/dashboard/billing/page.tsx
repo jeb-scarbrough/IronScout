@@ -1,8 +1,15 @@
+import { redirect } from 'next/navigation'
 import { BillingOverview } from '@/components/billing/billing-overview'
 import { SubscriptionDetails } from '@/components/billing/subscription-details'
 import { PaymentHistory } from '@/components/billing/payment-history'
+import { premiumEnabled } from '@/lib/features'
 
 export default function BillingPage() {
+  // FEATURE FLAG: Redirect to dashboard when premium is disabled
+  if (!premiumEnabled()) {
+    redirect('/dashboard')
+  }
+
   return (
     <div className="p-6 lg:p-8">
       {/* Page Header */}

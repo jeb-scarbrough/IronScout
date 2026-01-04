@@ -840,7 +840,7 @@ function reRankProducts(products: any[], intent: SearchIntent): any[] {
     }
     
     // Score by retailer tier
-    const hasPremiumRetailer = product.prices.some((p: any) => p.retailer.tier === 'PREMIUM')
+    const hasPremiumRetailer = product.prices.some((p: any) => p.retailers?.tier === 'PREMIUM')
     if (hasPremiumRetailer) {
       score += 5
     }
@@ -930,10 +930,10 @@ function formatProduct(product: any, isPremium: boolean): any {
       url: price.url,
       inStock: price.inStock,
       retailer: {
-        id: price.retailer.id,
-        name: price.retailer.name,
-        tier: price.retailer.tier,
-        logoUrl: price.retailer.logoUrl
+        id: price.retailers.id,
+        name: price.retailers.name,
+        tier: price.retailers.tier,
+        logoUrl: price.retailers.logoUrl
       }
     }))
   }

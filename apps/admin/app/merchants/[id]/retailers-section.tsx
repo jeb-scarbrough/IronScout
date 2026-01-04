@@ -12,7 +12,16 @@ import {
   Clock,
   Info,
 } from 'lucide-react';
-import { getMerchantRetailers, listRetailer, unlistRetailer, MerchantRetailerInfo } from './actions';
+import {
+  getMerchantRetailers,
+  listRetailer,
+  unlistRetailer,
+  getAvailableRetailers,
+  linkRetailerToMerchant,
+  unlinkRetailerFromMerchant,
+  MerchantRetailerInfo,
+} from './actions';
+import { Plus, Unlink, Link } from 'lucide-react';
 
 interface RetailersSectionProps {
   merchantId: string;
@@ -46,6 +55,14 @@ function formatDate(date: Date | null): string {
   });
 }
 
+interface AvailableRetailer {
+  id: string;
+  name: string;
+  website: string;
+  visibilityStatus: string;
+  tier: string;
+}
+
 export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSectionProps) {
   const [retailers, setRetailers] = useState<MerchantRetailerInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +71,14 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [unlistReason, setUnlistReason] = useState('');
   const [showUnlistDialog, setShowUnlistDialog] = useState<string | null>(null);
+
+  // Link retailer state
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [availableRetailers, setAvailableRetailers] = useState<AvailableRetailer[]>([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [selectedRetailerId, setSelectedRetailerId] = useState<string>('');
+  const [listImmediately, setListImmediately] = useState(true);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState<string | null>(null);
 
   // Load retailers on mount
   useEffect(() => {
@@ -125,6 +150,76 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
     }
   }
 
+  async function openLinkDialog() {
+    setShowLinkDialog(true);
+    setLoadingAvailable(true);
+    setSelectedRetailerId('');
+    setListImmediately(true);
+    setActionMessage(null);
+
+    try {
+      const result = await getAvailableRetailers();
+      if (result.success) {
+        setAvailableRetailers(result.retailers);
+      } else {
+        setActionMessage({ type: 'error', text: result.error || 'Failed to load available retailers' });
+      }
+    } catch {
+      setActionMessage({ type: 'error', text: 'Failed to load available retailers' });
+    } finally {
+      setLoadingAvailable(false);
+    }
+  }
+
+  async function handleLinkRetailer() {
+    if (!selectedRetailerId) {
+      setActionMessage({ type: 'error', text: 'Please select a retailer' });
+      return;
+    }
+
+    setActionInProgress('linking');
+    setActionMessage(null);
+
+    try {
+      const result = await linkRetailerToMerchant(merchantId, selectedRetailerId, {
+        listImmediately,
+      });
+
+      if (result.success) {
+        setActionMessage({ type: 'success', text: result.message || 'Retailer linked successfully' });
+        setShowLinkDialog(false);
+        setSelectedRetailerId('');
+        await loadRetailers();
+      } else {
+        setActionMessage({ type: 'error', text: result.error || 'Failed to link retailer' });
+      }
+    } catch {
+      setActionMessage({ type: 'error', text: 'An unexpected error occurred' });
+    } finally {
+      setActionInProgress(null);
+    }
+  }
+
+  async function handleUnlinkRetailer(retailer: MerchantRetailerInfo) {
+    setActionInProgress(retailer.id);
+    setActionMessage(null);
+
+    try {
+      const result = await unlinkRetailerFromMerchant(merchantId, retailer.id);
+      if (result.success) {
+        setActionMessage({ type: 'success', text: result.message || 'Retailer unlinked successfully' });
+        setShowUnlinkConfirm(null);
+        await loadRetailers();
+      } else {
+        setActionMessage({ type: 'error', text: result.error || 'Failed to unlink retailer' });
+      }
+    } catch {
+      setActionMessage({ type: 'error', text: 'An unexpected error occurred' });
+    } finally {
+      setActionInProgress(null);
+    }
+  }
+
   function getVisibilityStatus(retailer: MerchantRetailerInfo): { visible: boolean; reason: string } {
     if (retailer.visibilityStatus !== 'ELIGIBLE') {
       return { visible: false, reason: `Retailer is ${retailer.visibilityStatus}` };
@@ -150,6 +245,13 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
             {retailers.length}
           </span>
         </div>
+        <button
+          onClick={openLinkDialog}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md"
+        >
+          <Plus className="h-4 w-4" />
+          Link Retailer
+        </button>
       </div>
 
       {/* Delinquency Warning */}
@@ -214,7 +316,14 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
         <div className="py-8 text-center text-gray-500">
           <Store className="h-8 w-8 mx-auto mb-2 text-gray-300" />
           <p>No retailers linked to this merchant</p>
-          <p className="text-sm mt-1">Retailers are created and linked during onboarding</p>
+          <p className="text-sm mt-1 mb-4">Link an existing retailer or create a new one first</p>
+          <button
+            onClick={openLinkDialog}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+          >
+            <Plus className="h-4 w-4" />
+            Link Retailer
+          </button>
         </div>
       )}
 
@@ -326,40 +435,50 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
                       )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-right">
-                      {retailer.listingStatus === 'LISTED' ? (
+                      <div className="flex items-center justify-end gap-2">
+                        {retailer.listingStatus === 'LISTED' ? (
+                          <button
+                            onClick={() => {
+                              setShowUnlistDialog(retailer.id);
+                              setUnlistReason('');
+                              setActionMessage(null);
+                            }}
+                            disabled={actionInProgress === retailer.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <EyeOff className="h-3.5 w-3.5" />
+                            Unlist
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleList(retailer)}
+                            disabled={
+                              actionInProgress === retailer.id ||
+                              retailer.status !== 'ACTIVE' ||
+                              retailer.visibilityStatus !== 'ELIGIBLE'
+                            }
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={
+                              retailer.status !== 'ACTIVE'
+                                ? 'Status must be ACTIVE to list'
+                                : retailer.visibilityStatus !== 'ELIGIBLE'
+                                ? 'Retailer must be ELIGIBLE to list'
+                                : 'Make visible to consumers'
+                            }
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            {actionInProgress === retailer.id ? 'Listing...' : 'List'}
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            setShowUnlistDialog(retailer.id);
-                            setUnlistReason('');
-                            setActionMessage(null);
-                          }}
+                          onClick={() => setShowUnlinkConfirm(retailer.id)}
                           disabled={actionInProgress === retailer.id}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="inline-flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-50"
+                          title="Remove link between retailer and merchant"
                         >
-                          <EyeOff className="h-3.5 w-3.5" />
-                          Unlist
+                          <Unlink className="h-3.5 w-3.5" />
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => handleList(retailer)}
-                          disabled={
-                            actionInProgress === retailer.id ||
-                            retailer.status !== 'ACTIVE' ||
-                            retailer.visibilityStatus !== 'ELIGIBLE'
-                          }
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={
-                            retailer.status !== 'ACTIVE'
-                              ? 'Status must be ACTIVE to list'
-                              : retailer.visibilityStatus !== 'ELIGIBLE'
-                              ? 'Retailer must be ELIGIBLE to list'
-                              : 'Make visible to consumers'
-                          }
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          {actionInProgress === retailer.id ? 'Listing...' : 'List'}
-                        </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -412,6 +531,140 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionInProgress ? 'Unlisting...' : 'Unlist Retailer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link Retailer Dialog */}
+      {showLinkDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Link className="h-5 w-5 text-blue-600" />
+              <h3 className="text-lg font-medium text-gray-900">Link Retailer</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Select a retailer to link to this merchant. Only retailers not already linked to another merchant are shown.
+            </p>
+
+            {loadingAvailable ? (
+              <div className="py-8 text-center text-gray-500">
+                <Clock className="h-6 w-6 animate-spin mx-auto mb-2" />
+                Loading available retailers...
+              </div>
+            ) : availableRetailers.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                <Store className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p>No available retailers</p>
+                <p className="text-sm mt-1">All retailers are already linked to merchants, or no retailers exist.</p>
+                <a
+                  href="/retailers/create"
+                  className="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create New Retailer
+                </a>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label htmlFor="retailerSelect" className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Retailer
+                  </label>
+                  <select
+                    id="retailerSelect"
+                    value={selectedRetailerId}
+                    onChange={(e) => setSelectedRetailerId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Choose a retailer...</option>
+                    {availableRetailers.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.website.replace(/^https?:\/\//, '')}) - {r.visibilityStatus}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={listImmediately}
+                      onChange={(e) => setListImmediately(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      List immediately (make visible to consumers)
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Only applies if retailer is ELIGIBLE. Otherwise it will be linked but unlisted.
+                  </p>
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setShowLinkDialog(false);
+                  setSelectedRetailerId('');
+                  setActionMessage(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              {availableRetailers.length > 0 && (
+                <button
+                  onClick={handleLinkRetailer}
+                  disabled={!selectedRetailerId || actionInProgress === 'linking'}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {actionInProgress === 'linking' ? 'Linking...' : 'Link Retailer'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlink Confirmation Dialog */}
+      {showUnlinkConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Unlink className="h-5 w-5 text-red-600" />
+              <h3 className="text-lg font-medium text-gray-900">Unlink Retailer</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Are you sure you want to unlink <strong>{retailers.find(r => r.id === showUnlinkConfirm)?.retailerName}</strong> from this merchant?
+              This will remove the relationship entirely, not just hide it from consumers.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowUnlinkConfirm(null);
+                  setActionMessage(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const retailer = retailers.find((r) => r.id === showUnlinkConfirm);
+                  if (retailer) {
+                    handleUnlinkRetailer(retailer);
+                  }
+                }}
+                disabled={actionInProgress !== null}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionInProgress ? 'Unlinking...' : 'Unlink Retailer'}
               </button>
             </div>
           </div>

@@ -204,10 +204,14 @@ foreach ($service in $services) {
         $logFile = "$logsDir\$name.log"
         Write-Host "  Logs: $logFile" -ForegroundColor Gray
 
+        # Set window title so user can identify which app is which
+        $windowTitle = "IronScout - $name"
+        if ($port) { $windowTitle += " [:$port]" }
+
         Start-Process powershell -ArgumentList @(
             "-NoExit",
             "-Command",
-            "Set-Location '$projectRoot'; Write-Host 'Starting $name...' -ForegroundColor Cyan; $command 2>&1 | Tee-Object -FilePath '$logFile'"
+            "`$host.UI.RawUI.WindowTitle = '$windowTitle'; Set-Location '$projectRoot'; Write-Host 'Starting $name...' -ForegroundColor Cyan; $command 2>&1 | Tee-Object -FilePath '$logFile'"
         )
 
         $jobs += @{ Name = $name; Job = $null; Port = $port; HealthCheck = $service.HealthCheck; LogFile = $logFile }

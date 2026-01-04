@@ -27,6 +27,45 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean)
 
+// Access token expires in 1 hour, refresh 5 minutes before expiry
+const ACCESS_TOKEN_LIFETIME_MS = 60 * 60 * 1000 // 1 hour
+const REFRESH_BUFFER_MS = 5 * 60 * 1000 // 5 minutes before expiry
+
+/**
+ * Refresh the access token using the refresh token
+ * Returns new tokens or null if refresh failed
+ */
+async function refreshAccessToken(refreshToken: string): Promise<{
+  accessToken: string
+  refreshToken: string
+  accessTokenExpires: number
+} | null> {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    })
+
+    if (!response.ok) {
+      logger.auth.warn('Token refresh failed', { status: response.status })
+      return null
+    }
+
+    const data = await response.json()
+    logger.auth.debug('Token refreshed successfully')
+
+    return {
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      accessTokenExpires: Date.now() + ACCESS_TOKEN_LIFETIME_MS,
+    }
+  } catch (error) {
+    logger.auth.error('Token refresh error', {}, error)
+    return null
+  }
+}
+
 // Detect if running on localhost (even in production mode)
 const isLocalhost = process.env.NEXTAUTH_URL?.includes('localhost') || false
 
@@ -302,8 +341,45 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.isAdmin = (user as any).isAdmin || ADMIN_EMAILS.includes((user.email || '').toLowerCase())
         token.accessToken = (user as any).accessToken
         token.refreshToken = (user as any).refreshToken
+        // Track when the access token expires
+        token.accessTokenExpires = Date.now() + ACCESS_TOKEN_LIFETIME_MS
+
+        return token
       }
 
+      // Subsequent requests - check if access token needs refresh
+      const accessTokenExpires = token.accessTokenExpires as number | undefined
+      const refreshToken = token.refreshToken as string | undefined
+
+      // If no expiry tracked or no refresh token, return as-is
+      if (!accessTokenExpires || !refreshToken) {
+        return token
+      }
+
+      // Check if token is expired or about to expire
+      const shouldRefresh = Date.now() > accessTokenExpires - REFRESH_BUFFER_MS
+
+      if (!shouldRefresh) {
+        // Token still valid
+        return token
+      }
+
+      // Token expired or expiring soon - attempt refresh
+      logger.auth.debug('Access token expiring, attempting refresh')
+      const refreshed = await refreshAccessToken(refreshToken)
+
+      if (refreshed) {
+        // Update token with new values
+        token.accessToken = refreshed.accessToken
+        token.refreshToken = refreshed.refreshToken
+        token.accessTokenExpires = refreshed.accessTokenExpires
+        return token
+      }
+
+      // Refresh failed - mark token as errored
+      // The session callback will handle this
+      logger.auth.warn('Token refresh failed, session will be invalidated')
+      token.error = 'RefreshTokenError'
       return token
     },
 
@@ -317,6 +393,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         ;(session.user as any).isAdmin = token.isAdmin || false
         // Expose access token for API calls
         ;(session as any).accessToken = token.accessToken
+        // Expose error if token refresh failed (frontend can trigger sign-out)
+        if (token.error) {
+          ;(session as any).error = token.error
+        }
       }
 
       return session
