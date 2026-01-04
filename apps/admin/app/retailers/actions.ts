@@ -301,6 +301,110 @@ export async function createRetailer(
   }
 }
 
+/**
+ * Create a new retailer and optionally link to a merchant
+ */
+export async function createRetailerAndLink(
+  data: CreateRetailerData & { merchantId?: string; listImmediately?: boolean }
+): Promise<{ success: boolean; data?: { id: string }; error?: string }> {
+  const session = await getAdminSession();
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Validate required fields
+    if (!data.name?.trim()) {
+      return { success: false, error: 'Name is required' };
+    }
+
+    if (!data.website?.trim()) {
+      return { success: false, error: 'Website is required' };
+    }
+
+    // Normalize website URL
+    let website = data.website.trim().toLowerCase();
+    if (!website.startsWith('http://') && !website.startsWith('https://')) {
+      website = 'https://' + website;
+    }
+    website = website.replace(/\/+$/, '');
+
+    // Check for duplicate website
+    const existing = await prisma.retailers.findUnique({
+      where: { website },
+    });
+
+    if (existing) {
+      return { success: false, error: 'A retailer with this website already exists' };
+    }
+
+    // If linking to merchant, verify it exists
+    if (data.merchantId) {
+      const merchant = await prisma.merchants.findUnique({
+        where: { id: data.merchantId },
+        select: { id: true },
+      });
+      if (!merchant) {
+        return { success: false, error: 'Merchant not found' };
+      }
+    }
+
+    // Create retailer and link in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const retailer = await tx.retailers.create({
+        data: {
+          name: data.name!.trim(),
+          website,
+          logoUrl: data.logoUrl?.trim() || null,
+          tier: data.tier || 'STANDARD',
+          visibilityStatus: data.visibilityStatus || 'ELIGIBLE',
+          visibilityReason: data.visibilityReason?.trim() || null,
+          visibilityUpdatedAt: new Date(),
+          visibilityUpdatedBy: session.userId,
+        },
+      });
+
+      // Link to merchant if specified
+      if (data.merchantId) {
+        await tx.merchant_retailers.create({
+          data: {
+            merchantId: data.merchantId,
+            retailerId: retailer.id,
+            listingStatus: data.listImmediately ? 'LISTED' : 'UNLISTED',
+            status: data.listImmediately ? 'ACTIVE' : 'PENDING',
+            listedAt: data.listImmediately ? new Date() : null,
+            listedBy: data.listImmediately ? session.userId : null,
+          },
+        });
+      }
+
+      return retailer;
+    });
+
+    await logAdminAction(session.userId, 'CREATE_RETAILER', {
+      resource: 'Retailer',
+      resourceId: result.id,
+      newValue: {
+        name: result.name,
+        website: result.website,
+        tier: result.tier,
+        visibilityStatus: result.visibilityStatus,
+        linkedMerchantId: data.merchantId || null,
+      },
+    });
+
+    revalidatePath('/retailers');
+    if (data.merchantId) {
+      revalidatePath(`/merchants/${data.merchantId}`);
+    }
+
+    return { success: true, data: { id: result.id } };
+  } catch (error) {
+    console.error('Error creating retailer:', error);
+    return { success: false, error: 'Failed to create retailer' };
+  }
+}
+
 // ============================================================================
 // UPDATE Operations
 // ============================================================================
@@ -513,7 +617,7 @@ export async function linkMerchantToRetailer(
       return { success: false, error: 'Merchant not found' };
     }
 
-    // Check if retailer already has a merchant linked
+    // Check if retailer already has a merchant linked (1 retailer = 1 merchant)
     const existingLink = await prisma.merchant_retailers.findFirst({
       where: { retailerId },
     });
@@ -522,14 +626,7 @@ export async function linkMerchantToRetailer(
       return { success: false, error: 'This retailer is already linked to a merchant' };
     }
 
-    // Check if merchant already has a retailer linked
-    const merchantLink = await prisma.merchant_retailers.findFirst({
-      where: { merchantId },
-    });
-
-    if (merchantLink) {
-      return { success: false, error: 'This merchant is already linked to another retailer' };
-    }
+    // Note: A merchant CAN have multiple retailers, so we don't check merchantId
 
     // Create the link
     await prisma.merchant_retailers.create({

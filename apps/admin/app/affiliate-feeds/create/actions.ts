@@ -67,6 +67,14 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
       return { success: false, error: 'Website URL is required' };
     }
 
+    // Normalize website URL
+    let websiteUrl = data.websiteUrl.trim().toLowerCase();
+    if (!websiteUrl.startsWith('http://') && !websiteUrl.startsWith('https://')) {
+      websiteUrl = 'https://' + websiteUrl;
+    }
+    // Remove trailing slash
+    websiteUrl = websiteUrl.replace(/\/+$/, '');
+
     // Create retailer if it doesn't exist
     let retailer = await prisma.retailers.findFirst({
       where: { name: { equals: data.retailerName, mode: 'insensitive' } },
@@ -76,7 +84,7 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
       retailer = await prisma.retailers.create({
         data: {
           name: data.retailerName,
-          website: data.websiteUrl!,
+          website: websiteUrl,
         },
       });
     }
@@ -86,7 +94,7 @@ export async function createAffiliateFeedWithSource(data: CreateAffiliateFeedWit
       data: {
         name: data.sourceName,
         type: 'FEED_CSV',
-        url: data.websiteUrl!,
+        url: websiteUrl,
         retailerId: retailer.id,
         sourceKind: 'AFFILIATE_FEED',
         affiliateNetwork: data.affiliateNetwork,

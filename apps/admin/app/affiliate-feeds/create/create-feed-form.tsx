@@ -6,6 +6,16 @@ import Link from 'next/link';
 import { Save, Loader2 } from 'lucide-react';
 import { createAffiliateFeedWithSource, type AffiliateNetwork } from './actions';
 
+/** Normalize a URL: add https:// if missing, lowercase, remove trailing slash */
+function normalizeUrl(url: string): string {
+  let normalized = url.trim().toLowerCase();
+  if (!normalized) return normalized;
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = 'https://' + normalized;
+  }
+  return normalized.replace(/\/+$/, '');
+}
+
 type Transport = 'FTP' | 'SFTP';
 
 const AFFILIATE_NETWORKS: { value: AffiliateNetwork; label: string }[] = [
@@ -132,13 +142,17 @@ export function CreateFeedForm() {
               Website URL *
             </label>
             <input
-              type="url"
+              type="text"
               required
               value={formData.websiteUrl}
               onChange={(e) => updateField('websiteUrl', e.target.value)}
+              onBlur={(e) => updateField('websiteUrl', normalizeUrl(e.target.value))}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              placeholder="e.g., https://palmettostatearmory.com"
+              placeholder="e.g., palmettostatearmory.com"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              https:// will be added automatically if not provided
+            </p>
           </div>
         </div>
       </div>

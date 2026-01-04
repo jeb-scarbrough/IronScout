@@ -560,8 +560,8 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
                 <p>No available retailers</p>
                 <p className="text-sm mt-1">All retailers are already linked to merchants, or no retailers exist.</p>
                 <a
-                  href="/retailers/create"
-                  className="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md"
+                  href={`/retailers/create?merchantId=${merchantId}`}
+                  className="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
                 >
                   <Plus className="h-4 w-4" />
                   Create New Retailer
@@ -586,6 +586,13 @@ export function RetailersSection({ merchantId, subscriptionStatus }: RetailersSe
                       </option>
                     ))}
                   </select>
+                  <a
+                    href={`/retailers/create?merchantId=${merchantId}`}
+                    className="inline-flex items-center gap-1 mt-2 text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Or create a new retailer
+                  </a>
                 </div>
 
                 <div className="mb-4">
