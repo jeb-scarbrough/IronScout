@@ -145,7 +145,8 @@ model affiliate_feed_runs {
 
 model affiliate_feeds {
   id                     String                @id @default(cuid())
-  sourceId               String                @unique
+  sourceId               String
+  variant                FeedVariant           @default(FULL)
   network                AffiliateNetwork
   status                 AffiliateFeedStatus   @default(DRAFT)
   scheduleFrequencyHours Int?
@@ -177,8 +178,10 @@ model affiliate_feeds {
   product_suggestions    product_suggestions[]
   sources                sources               @relation(fields: [sourceId], references: [id])
 
+  @@unique([sourceId, variant])
   @@index([nextRunAt])
   @@index([status])
+  @@index([sourceId])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -1060,7 +1063,7 @@ model sources {
   affiliateTrackingTemplate String?
   isDisplayPrimary          Boolean           @default(false)
   sourceKind                SourceKind        @default(DIRECT)
-  affiliate_feeds           affiliate_feeds?
+  affiliate_feeds           affiliate_feeds[]
   executions                executions[]
   source_products           source_products[]
   prices                    prices[]
@@ -1414,6 +1417,18 @@ enum FeedCompression {
 
 enum FeedFormat {
   CSV
+}
+
+/// Feed variant for supporting multiple feeds per source
+/// Used with affiliate_feeds to distinguish full vs delta, regional splits, etc.
+enum FeedVariant {
+  FULL                // Complete catalog refresh
+  DELTA               // Incremental updates only
+  REGIONAL_US         // US-specific catalog
+  REGIONAL_CA         // Canada-specific catalog
+  REGIONAL_EU         // EU-specific catalog
+  CATEGORY_AMMO       // Ammo-only feed
+  CATEGORY_ACCESSORIES // Accessories-only feed
 }
 
 enum FeedFormatType {
