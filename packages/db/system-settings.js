@@ -16,11 +16,13 @@ export const SETTING_KEYS = {
   ALLOW_PLAIN_FTP: 'AFFILIATE_FEED_ALLOW_PLAIN_FTP',
   HARVESTER_SCHEDULER_ENABLED: 'HARVESTER_SCHEDULER_ENABLED',
   AFFILIATE_SCHEDULER_ENABLED: 'AFFILIATE_FEED_SCHEDULER_ENABLED',
+  CIRCUIT_BREAKER_BYPASS: 'AFFILIATE_CIRCUIT_BREAKER_BYPASS',
 
   // Operations
   AFFILIATE_BATCH_SIZE: 'AFFILIATE_BATCH_SIZE',
   PRICE_HEARTBEAT_HOURS: 'PRICE_HEARTBEAT_HOURS',
   AFFILIATE_RUN_RETENTION_DAYS: 'AFFILIATE_RUN_RETENTION_DAYS',
+  HARVESTER_LOG_LEVEL: 'HARVESTER_LOG_LEVEL',
 
   // Queue History Settings
   QUEUE_HISTORY_RETENTION_COUNT: 'QUEUE_HISTORY_RETENTION_COUNT',
@@ -55,11 +57,13 @@ const DEFAULTS = {
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: false,
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: true,
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: true,
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: false,
 
   // Operations
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 1000,
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 24,
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 30,
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'info',
 
   // Queue History (all enabled by default)
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 100,
@@ -127,6 +131,36 @@ export async function getNumberSetting(key) {
 }
 
 /**
+ * Get a string setting value (with env var override)
+ * @param {string} key
+ * @returns {Promise<string>}
+ */
+export async function getStringSetting(key) {
+  // Check env var first (for local override)
+  const envValue = process.env[key]
+  if (envValue) return envValue
+
+  return /** @type {string} */ (await getSettingValue(key))
+}
+
+/**
+ * Get a string setting value without falling back to defaults.
+ * Returns the env override if set, otherwise the DB value, otherwise null.
+ * @param {string} key
+ * @returns {Promise<string | null>}
+ */
+export async function getOptionalStringSetting(key) {
+  const envValue = process.env[key]
+  if (envValue) return envValue
+
+  const setting = await prisma.system_settings.findUnique({
+    where: { key },
+  })
+
+  return setting ? /** @type {string} */ (setting.value) : null
+}
+
+/**
  * Check if a feature is enabled
  * @param {string} key
  * @returns {Promise<boolean>}
@@ -141,6 +175,7 @@ export async function isFeatureEnabled(key) {
 export const isPlainFtpAllowed = () => getBooleanSetting(SETTING_KEYS.ALLOW_PLAIN_FTP)
 export const isHarvesterSchedulerEnabled = () => getBooleanSetting(SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED)
 export const isAffiliateSchedulerEnabled = () => getBooleanSetting(SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED)
+export const isCircuitBreakerBypassed = () => getBooleanSetting(SETTING_KEYS.CIRCUIT_BREAKER_BYPASS)
 export const isMaintenanceMode = () => getBooleanSetting(SETTING_KEYS.MAINTENANCE_MODE)
 export const isRegistrationEnabled = () => getBooleanSetting(SETTING_KEYS.REGISTRATION_ENABLED)
 export const isAiSearchEnabled = () => getBooleanSetting(SETTING_KEYS.AI_SEARCH_ENABLED)
@@ -151,6 +186,8 @@ export const isAlertProcessingEnabled = () => getBooleanSetting(SETTING_KEYS.ALE
 export const getAffiliateBatchSize = () => getNumberSetting(SETTING_KEYS.AFFILIATE_BATCH_SIZE)
 export const getPriceHeartbeatHours = () => getNumberSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS)
 export const getAffiliateRunRetentionDays = () => getNumberSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS)
+export const getHarvesterLogLevel = () => getStringSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL)
+export const getHarvesterLogLevelOptional = () => getOptionalStringSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL)
 
 /**
  * Queue history settings - maps queue name to setting key

@@ -429,12 +429,15 @@ export function assertCreated(result: ResolverResult): void {
 /**
  * Assert result is unmatched
  */
-export function assertUnmatched(result: ResolverResult, expectedReasonCode?: string): void {
-  if (result.status !== 'UNMATCHED') {
-    throw new Error(`Expected UNMATCHED, got ${result.status}: ${JSON.stringify(result)}`)
+/**
+ * Assert result is NEEDS_REVIEW (insufficient data or ambiguous)
+ */
+export function assertNeedsReview(result: ResolverResult, expectedReasonCode?: string): void {
+  if (result.status !== 'NEEDS_REVIEW') {
+    throw new Error(`Expected NEEDS_REVIEW, got ${result.status}: ${JSON.stringify(result)}`)
   }
   if (result.productId !== null) {
-    throw new Error('Expected productId to be null for UNMATCHED result')
+    throw new Error('Expected productId to be null for NEEDS_REVIEW result')
   }
   if (expectedReasonCode && result.reasonCode !== expectedReasonCode) {
     throw new Error(`Expected reasonCode ${expectedReasonCode}, got ${result.reasonCode}`)

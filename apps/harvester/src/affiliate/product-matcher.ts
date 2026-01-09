@@ -4,28 +4,42 @@
  * Links source_products to canonical products via UPC matching.
  * Per spec: Uses normalized UPC for lookup, maintains run-local cache.
  *
+ * v2: Writes to product_links (source of truth) with conflict guard.
+ * - Don't replace MATCHED with anything
+ * - Don't replace CREATED with different productId
+ *
  * v1 MVP: UPC-only matching. Future iterations may add fuzzy matching.
  */
 
 import { prisma } from '@ironscout/db'
+import { ProductLinkStatus } from '@ironscout/db/generated/prisma'
 import { logger } from '../config/logger'
+import { createId } from '@paralleldrive/cuid2'
 
 const log = logger.affiliate
+
+// Version tracked in product_links.resolverVersion
+const MATCHER_VERSION = 'ProductMatcher-v2.0'
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-/** Matched product entry for cache */
-interface MatchedProduct {
-  upc: string
-  productId: string
-}
-
 /** Product match result */
 export interface ProductMatchResult {
   sourceProductId: string
   productId: string | null
+  /** Whether product_links row was written/updated */
+  linkWritten: boolean
+  /** Whether this item should be enqueued to resolver (unmatched) */
+  needsResolver: boolean
+}
+
+/** Product link write result for batch operations */
+interface ProductLinkWriteResult {
+  sourceProductId: string
+  written: boolean
+  skippedReason?: 'ALREADY_MATCHED' | 'CREATED_DIFFERENT_PRODUCT' | 'ERROR'
 }
 
 // ============================================================================
@@ -77,11 +91,15 @@ export function normalizeUpc(upc: string | null | undefined): string | null {
  * Usage:
  * 1. Create instance at start of run
  * 2. Call batchMatchByUpc() for each chunk of source products
- * 3. Matcher maintains cache across chunks to avoid repeated lookups
+ * 3. Matcher writes to product_links for matches
+ * 4. Returns unmatched items for resolver enqueueing
  */
 export class ProductMatcher {
   // Run-local cache: normalizedUpc -> productId
   private cache = new Map<string, string | null>()
+
+  // Cache of existing product_links status to avoid redundant checks
+  private linkStatusCache = new Map<string, ProductLinkStatus>()
 
   // Stats for logging
   private stats = {
@@ -89,30 +107,70 @@ export class ProductMatcher {
     cacheHits: 0,
     dbLookups: 0,
     matchesFound: 0,
+    linksWritten: 0,
+    linksSkipped: 0,
   }
 
   /**
    * Batch match source products to canonical products by UPC
    *
+   * For each source product:
+   * - If UPC matches a canonical product, writes to product_links with status=MATCHED
+   * - If no match, marks needsResolver=true for resolver enqueueing
+   *
+   * Conflict guard policy:
+   * - Don't replace MATCHED with anything
+   * - Don't replace CREATED with different productId
+   *
    * @param sourceProducts - Array of {id, upc} from source_products
-   * @returns Array of {sourceProductId, productId} for matched products
+   * @returns Array of results indicating match status and resolver needs
    */
   async batchMatchByUpc(
     sourceProducts: Array<{ id: string; upc: string | null }>
   ): Promise<ProductMatchResult[]> {
     const results: ProductMatchResult[] = []
+    const batchStart = Date.now()
+    let noUpcCount = 0
+    let cacheMatchCount = 0
+    let cacheNoMatchCount = 0
+    let dbMatchCount = 0
+    let dbNoMatchCount = 0
+
+    log.debug('PRODUCT_MATCH_BATCH_START', {
+      inputCount: sourceProducts.length,
+      cacheSize: this.cache.size,
+    })
 
     // Collect UPCs that need DB lookup
     const upcsToLookup: string[] = []
-    const sourceProductByNormalizedUpc = new Map<string, string[]>()
+    const sourceProductByNormalizedUpc = new Map<string, Array<{ id: string; upc: string | null }>>()
+
+    // Track items for product_links writing
+    const matchedItems: Array<{ sourceProductId: string; productId: string; normalizedUpc: string }> = []
+    const unmatchedItems: Array<{ sourceProductId: string }> = []
 
     for (const sp of sourceProducts) {
       this.stats.totalLookups++
 
       const normalizedUpc = normalizeUpc(sp.upc)
       if (!normalizedUpc) {
-        // No valid UPC - no match possible
-        results.push({ sourceProductId: sp.id, productId: null })
+        // No valid UPC - needs resolver
+        noUpcCount++
+        unmatchedItems.push({ sourceProductId: sp.id })
+        results.push({
+          sourceProductId: sp.id,
+          productId: null,
+          linkWritten: false,
+          needsResolver: true,
+        })
+        log.debug('PRODUCT_MATCH_DECISION', {
+          sourceProductId: sp.id,
+          rawUpc: sp.upc?.substring(0, 20) || null,
+          normalizedUpc: null,
+          decision: 'NO_UPC',
+          productId: null,
+          needsResolver: true,
+        })
         continue
       }
 
@@ -120,13 +178,28 @@ export class ProductMatcher {
       if (this.cache.has(normalizedUpc)) {
         this.stats.cacheHits++
         const cachedProductId = this.cache.get(normalizedUpc)!
+        if (cachedProductId) {
+          this.stats.matchesFound++
+          cacheMatchCount++
+          matchedItems.push({ sourceProductId: sp.id, productId: cachedProductId, normalizedUpc })
+        } else {
+          cacheNoMatchCount++
+          unmatchedItems.push({ sourceProductId: sp.id })
+        }
+        // Note: linkWritten will be updated after batch write
         results.push({
           sourceProductId: sp.id,
           productId: cachedProductId,
+          linkWritten: false, // Will update after batch write
+          needsResolver: !cachedProductId,
         })
-        if (cachedProductId) {
-          this.stats.matchesFound++
-        }
+        log.debug('PRODUCT_MATCH_DECISION', {
+          sourceProductId: sp.id,
+          normalizedUpc,
+          decision: cachedProductId ? 'CACHE_HIT_MATCHED' : 'CACHE_HIT_NO_MATCH',
+          productId: cachedProductId,
+          needsResolver: !cachedProductId,
+        })
         continue
       }
 
@@ -135,28 +208,247 @@ export class ProductMatcher {
         sourceProductByNormalizedUpc.set(normalizedUpc, [])
         upcsToLookup.push(normalizedUpc)
       }
-      sourceProductByNormalizedUpc.get(normalizedUpc)!.push(sp.id)
+      sourceProductByNormalizedUpc.get(normalizedUpc)!.push(sp)
     }
 
     // Batch lookup from DB if needed
     if (upcsToLookup.length > 0) {
       this.stats.dbLookups += upcsToLookup.length
+      const dbStart = Date.now()
       const matchedProducts = await this.fetchProductsByUpc(upcsToLookup)
+      const dbDurationMs = Date.now() - dbStart
+
+      log.debug('PRODUCT_MATCH_DB_LOOKUP', {
+        upcsQueried: upcsToLookup.length,
+        productsFound: matchedProducts.size,
+        durationMs: dbDurationMs,
+        upcSample: upcsToLookup.slice(0, 5),
+      })
 
       // Update cache and build results
       for (const normalizedUpc of upcsToLookup) {
         const productId = matchedProducts.get(normalizedUpc) ?? null
         this.cache.set(normalizedUpc, productId)
 
-        const sourceProductIds = sourceProductByNormalizedUpc.get(normalizedUpc) ?? []
-        for (const sourceProductId of sourceProductIds) {
-          results.push({ sourceProductId, productId })
+        const sourceProducts = sourceProductByNormalizedUpc.get(normalizedUpc) ?? []
+        for (const sp of sourceProducts) {
           if (productId) {
             this.stats.matchesFound++
+            dbMatchCount++
+            matchedItems.push({ sourceProductId: sp.id, productId, normalizedUpc })
+          } else {
+            dbNoMatchCount++
+            unmatchedItems.push({ sourceProductId: sp.id })
           }
+          results.push({
+            sourceProductId: sp.id,
+            productId,
+            linkWritten: false, // Will update after batch write
+            needsResolver: !productId,
+          })
+          log.debug('PRODUCT_MATCH_DECISION', {
+            sourceProductId: sp.id,
+            normalizedUpc,
+            decision: productId ? 'DB_MATCHED' : 'DB_NO_MATCH',
+            productId,
+            needsResolver: !productId,
+          })
         }
       }
     }
+
+    // Write product_links for matched items with conflict guard
+    let linksWrittenCount = 0
+    let linksSkippedCount = 0
+    if (matchedItems.length > 0) {
+      const writeResults = await this.batchWriteProductLinks(matchedItems)
+
+      // Update results with linkWritten status
+      const writeResultMap = new Map(writeResults.map((r) => [r.sourceProductId, r]))
+      for (const result of results) {
+        const writeResult = writeResultMap.get(result.sourceProductId)
+        if (writeResult) {
+          result.linkWritten = writeResult.written
+          if (writeResult.written) {
+            linksWrittenCount++
+          } else {
+            linksSkippedCount++
+          }
+        }
+      }
+
+      this.stats.linksWritten += linksWrittenCount
+      this.stats.linksSkipped += linksSkippedCount
+    }
+
+    const batchDurationMs = Date.now() - batchStart
+    log.debug('PRODUCT_MATCH_BATCH_COMPLETE', {
+      inputCount: sourceProducts.length,
+      resultsCount: results.length,
+      noUpcCount,
+      cacheHits: this.stats.cacheHits,
+      cacheMatchCount,
+      cacheNoMatchCount,
+      dbLookups: upcsToLookup.length,
+      dbMatches: dbMatchCount,
+      dbNoMatchCount,
+      totalMatches: this.stats.matchesFound,
+      linksWritten: linksWrittenCount,
+      linksSkipped: linksSkippedCount,
+      needsResolver: unmatchedItems.length,
+      cacheSize: this.cache.size,
+      durationMs: batchDurationMs,
+    })
+
+    return results
+  }
+
+  /**
+   * Write product_links for matched items with atomic WHERE-guarded UPSERT
+   *
+   * Conflict guard policy (enforced atomically in SQL):
+   * - Never overwrite CREATED status
+   * - Never change MATCHED to a different productId
+   * - Can update NEEDS_REVIEW, ERROR, UNMATCHED, or same productId
+   *
+   * Uses raw SQL UPSERT with WHERE clause to eliminate race conditions
+   * between check and write operations.
+   */
+  private async batchWriteProductLinks(
+    items: Array<{ sourceProductId: string; productId: string; normalizedUpc: string }>
+  ): Promise<ProductLinkWriteResult[]> {
+    if (items.length === 0) return []
+
+    const results: ProductLinkWriteResult[] = []
+    const now = new Date()
+    const skippedCounts = {
+      ALREADY_MATCHED: 0,
+      CREATED_DIFFERENT_PRODUCT: 0,
+      CONFLICT_GUARD: 0,
+      ERROR: 0,
+    }
+
+    // Process each item with atomic WHERE-guarded UPSERT
+    // The WHERE clause ensures conflict guard is checked atomically with the write
+    for (const item of items) {
+      const evidence = JSON.stringify({
+        matchMethod: 'upc',
+        normalizedUpc: item.normalizedUpc,
+        timestamp: now.toISOString(),
+        matcher: MATCHER_VERSION,
+      })
+
+      try {
+        // Atomic UPSERT with WHERE guard
+        // INSERT if no row exists
+        // UPDATE only if:
+        //   - status NOT IN ('CREATED', 'MATCHED'), OR
+        //   - status = 'MATCHED' AND productId = new productId (idempotent)
+        const result = await prisma.$executeRaw`
+          INSERT INTO "product_links" (
+            "id", "sourceProductId", "productId", "matchType", "status",
+            "confidence", "resolverVersion", "evidence", "resolvedAt",
+            "createdAt", "updatedAt"
+          )
+          VALUES (
+            ${createId()},
+            ${item.sourceProductId},
+            ${item.productId},
+            'UPC'::"ProductLinkMatchType",
+            'MATCHED'::"ProductLinkStatus",
+            1.0,
+            ${MATCHER_VERSION},
+            ${evidence}::jsonb,
+            ${now},
+            ${now},
+            ${now}
+          )
+          ON CONFLICT ("sourceProductId") DO UPDATE
+          SET
+            "productId" = EXCLUDED."productId",
+            "matchType" = EXCLUDED."matchType",
+            "status" = EXCLUDED."status",
+            "confidence" = EXCLUDED."confidence",
+            "resolverVersion" = EXCLUDED."resolverVersion",
+            "evidence" = EXCLUDED."evidence",
+            "resolvedAt" = EXCLUDED."resolvedAt",
+            "updatedAt" = EXCLUDED."updatedAt"
+          WHERE
+            -- Conflict guard: allow update only if safe
+            (
+              -- Can update if status is not CREATED or MATCHED
+              "product_links"."status" NOT IN ('CREATED', 'MATCHED')
+              -- OR if MATCHED with same productId (idempotent)
+              OR ("product_links"."status" = 'MATCHED' AND "product_links"."productId" = EXCLUDED."productId")
+            )
+        `
+
+        // result = number of affected rows (0 = skipped by WHERE, 1 = written)
+        const written = result > 0
+
+        if (written) {
+          results.push({ sourceProductId: item.sourceProductId, written: true })
+          this.linkStatusCache.set(item.sourceProductId, ProductLinkStatus.MATCHED)
+          log.debug('PRODUCT_LINK_UPSERT_OK', {
+            sourceProductId: item.sourceProductId,
+            productId: item.productId,
+            matchType: 'UPC',
+          })
+        } else {
+          // WHERE clause blocked the update - check why
+          const existing = await prisma.product_links.findUnique({
+            where: { sourceProductId: item.sourceProductId },
+            select: { status: true, productId: true },
+          })
+
+          const skippedReason =
+            existing?.status === 'CREATED'
+              ? 'CREATED_DIFFERENT_PRODUCT'
+              : existing?.status === 'MATCHED'
+                ? 'ALREADY_MATCHED'
+                : 'CONFLICT_GUARD'
+
+          results.push({
+            sourceProductId: item.sourceProductId,
+            written: false,
+            skippedReason: skippedReason as ProductLinkWriteResult['skippedReason'],
+          })
+          if (skippedReason && skippedReason in skippedCounts) {
+            skippedCounts[skippedReason as keyof typeof skippedCounts]++
+          }
+
+          if (existing) {
+            this.linkStatusCache.set(item.sourceProductId, existing.status as ProductLinkStatus)
+          }
+
+          log.debug('PRODUCT_LINK_UPSERT_SKIP', {
+            sourceProductId: item.sourceProductId,
+            reason: skippedReason,
+            existingStatus: existing?.status,
+            existingProductId: existing?.productId,
+            newProductId: item.productId,
+          })
+        }
+      } catch (err) {
+        log.error('PRODUCT_LINK_UPSERT_ERROR', {
+          error: err,
+          sourceProductId: item.sourceProductId,
+        })
+        results.push({
+          sourceProductId: item.sourceProductId,
+          written: false,
+          skippedReason: 'ERROR',
+        })
+        skippedCounts.ERROR++
+      }
+    }
+
+    log.debug('PRODUCT_LINK_UPSERT_SUMMARY', {
+      attempted: items.length,
+      written: results.filter((r) => r.written).length,
+      skipped: results.filter((r) => !r.written).length,
+      skippedCounts,
+    })
 
     return results
   }
@@ -203,6 +495,7 @@ export class ProductMatcher {
     return {
       ...this.stats,
       cacheSize: this.cache.size,
+      linkStatusCacheSize: this.linkStatusCache.size,
       hitRate:
         this.stats.totalLookups > 0
           ? ((this.stats.cacheHits / this.stats.totalLookups) * 100).toFixed(1)
@@ -211,12 +504,20 @@ export class ProductMatcher {
         this.stats.totalLookups > 0
           ? ((this.stats.matchesFound / this.stats.totalLookups) * 100).toFixed(1)
           : '0',
+      linkWriteRate:
+        this.stats.matchesFound > 0
+          ? ((this.stats.linksWritten / this.stats.matchesFound) * 100).toFixed(1)
+          : '0',
     }
   }
 }
 
 /**
  * Batch update source_products.productId after matching
+ *
+ * @deprecated Use ProductMatcher.batchMatchByUpc() which writes to product_links directly.
+ * This function updates the legacy source_products.productId field.
+ * Kept for backward compatibility during migration.
  *
  * @param matches - Array of {sourceProductId, productId} where productId is non-null
  */

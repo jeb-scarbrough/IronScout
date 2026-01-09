@@ -8,6 +8,7 @@
 import { scheduleAllCrawls } from './scheduler'
 import { crawlQueue } from './config/queues'
 import { rootLogger } from './config/logger'
+import { flushLogs } from '@ironscout/logger'
 
 const log = rootLogger
 
@@ -20,6 +21,7 @@ async function main() {
       log.info('Triggering crawl for all enabled sources')
       await scheduleAllCrawls()
       log.info('Crawl jobs queued successfully')
+      await flushLogs()
       process.exit(0)
       break
 
@@ -33,6 +35,7 @@ async function main() {
     case 'status':
       // Show queue status
       await showQueueStatus()
+      await flushLogs()
       process.exit(0)
       break
 
@@ -45,6 +48,7 @@ async function main() {
       log.info('  pnpm dev status    - Show queue status')
       log.info('  pnpm worker        - Start worker processes')
       log.info('')
+      await flushLogs()
       process.exit(0)
   }
 }
@@ -76,5 +80,5 @@ async function showQueueStatus() {
 
 main().catch((error) => {
   log.error('Error', { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined)
-  process.exit(1)
+  flushLogs().finally(() => process.exit(1))
 })

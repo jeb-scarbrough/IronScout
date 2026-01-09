@@ -30,6 +30,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
 import { ExpressAdapter } from '@bull-board/express'
 
 import { rootLogger } from '../config/logger'
+import { flushLogs } from '@ironscout/logger'
 import {
   crawlQueue,
   fetchQueue,
@@ -61,7 +62,7 @@ if (!config.username || !config.password) {
     required: ['BULLBOARD_USERNAME', 'BULLBOARD_PASSWORD'],
     hint: 'Set these environment variables before starting',
   })
-  process.exit(1)
+  flushLogs().finally(() => process.exit(1))
 }
 
 // =============================================================================
@@ -174,13 +175,13 @@ const shutdown = async (signal: string) => {
 
   server.close(() => {
     log.info('Bull Board server closed')
-    process.exit(0)
+    flushLogs().finally(() => process.exit(0))
   })
 
   // Force exit after 10 seconds
   setTimeout(() => {
     log.warn('Forced shutdown after timeout')
-    process.exit(1)
+    flushLogs().finally(() => process.exit(1))
   }, 10000)
 }
 

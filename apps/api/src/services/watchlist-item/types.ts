@@ -2,7 +2,7 @@
  * ADR-011A: Intent-Ready Saved Items Types
  *
  * Domain types for WatchlistItem (internal) / SavedItem (user-facing).
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  *
  * Terminology (per ADR-011A Section 1):
  * - User-facing: "Saved Item"

@@ -9,7 +9,9 @@ import {
   CheckCircle,
   XCircle,
   ExternalLink,
-  Plus
+  Plus,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +72,13 @@ export default async function RetailersPage({
           },
         },
         take: 1,
+      },
+      sources: {
+        select: {
+          source_trust_config: {
+            select: { upcTrusted: true },
+          },
+        },
       },
       _count: {
         select: {
@@ -214,6 +223,9 @@ export default async function RetailersPage({
                 Visibility
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                UPC Trust
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Merchant
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -233,7 +245,7 @@ export default async function RetailersPage({
           <tbody className="bg-white divide-y divide-gray-200">
             {retailers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                   {search || visibility || tier
                     ? 'No retailers found matching your filters.'
                     : 'No retailers yet. Add your first retailer to get started.'}
@@ -290,6 +302,37 @@ export default async function RetailersPage({
                           {retailer.visibilityReason}
                         </p>
                       )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const trustedCount = retailer.sources.filter(s => s.source_trust_config?.upcTrusted).length;
+                        const totalSources = retailer.sources.length;
+                        if (totalSources === 0) {
+                          return <span className="text-sm text-gray-400">—</span>;
+                        }
+                        if (trustedCount === totalSources) {
+                          return (
+                            <span className="inline-flex items-center gap-1 text-sm text-green-600" title={`All ${totalSources} sources trusted`}>
+                              <ShieldCheck className="h-4 w-4" />
+                              All
+                            </span>
+                          );
+                        }
+                        if (trustedCount === 0) {
+                          return (
+                            <span className="inline-flex items-center gap-1 text-sm text-gray-400" title="No sources trusted">
+                              <ShieldAlert className="h-4 w-4" />
+                              None
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1 text-sm text-amber-600" title={`${trustedCount} of ${totalSources} sources trusted`}>
+                            <ShieldAlert className="h-4 w-4" />
+                            {trustedCount}/{totalSources}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {merchant ? (

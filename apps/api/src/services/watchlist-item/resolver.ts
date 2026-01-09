@@ -7,7 +7,7 @@
  * CRITICAL: All product resolution MUST go through this resolver.
  * Direct productId access outside resolver/repo is forbidden.
  *
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 import { prisma } from '@ironscout/db'

@@ -8,6 +8,7 @@ import type {
   ProductLinkMatchType,
   ProductLinkStatus,
   ProductLinkReasonCode,
+  SourceKind,
 } from '@ironscout/db/generated/prisma'
 
 /**
@@ -126,6 +127,13 @@ export interface ResolverResult {
   resolverVersion: string
   evidence: ResolverEvidence
 
+  // Source context (avoids duplicate DB fetch in worker)
+  sourceKind: SourceKind | null
+
+  // Skip persistence flag - when true, worker should not persist result
+  // Set when inputHash unchanged (SKIP_SAME_INPUT) or MANUAL_LOCKED
+  skipped: boolean
+
   // Canonical product (if created)
   createdProduct?: {
     id: string
@@ -160,6 +168,61 @@ export interface FingerprintWeights {
     grain: number
     title: number
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Scoring Strategy Interface
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Candidate product data for scoring
+ * Minimal interface to decouple scoring from Prisma types
+ */
+export interface CandidateProduct {
+  id: string
+  canonicalKey: string | null
+  brandNorm: string | null
+  caliberNorm: string | null
+  roundCount: number | null
+  grainWeight: number | null
+  name?: string | null
+}
+
+/**
+ * Result of scoring a single candidate
+ */
+export interface ScoringResult {
+  /** Overall score (0-1) */
+  total: number
+  /** Component scores for auditability */
+  componentScores: Record<string, number>
+  /** Match flags for evidence */
+  matchDetails: {
+    brandMatch: boolean
+    caliberMatch: boolean
+    packMatch: boolean
+    grainMatch: boolean
+    titleSimilarity: number
+  }
+}
+
+/**
+ * Scoring strategy interface
+ * Allows swapping out different scoring implementations
+ */
+export interface ScoringStrategy {
+  /** Strategy name for logging/evidence */
+  readonly name: string
+  /** Strategy version for auditing */
+  readonly version: string
+
+  /**
+   * Score a candidate product against normalized input
+   * @param input - Normalized source product data
+   * @param candidate - Candidate product to score
+   * @returns Scoring result with total score and component details
+   */
+  score(input: NormalizedInput, candidate: CandidateProduct): ScoringResult
 }
 
 /**

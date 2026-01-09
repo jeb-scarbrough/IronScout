@@ -802,9 +802,10 @@ model products {
   product_reports       product_reports[]
   source_products       source_products[]
   watchlist_items       watchlist_items[]
-  product_links         product_links[]
-  aliasesFrom           product_aliases[]      @relation("AliasFrom")
-  aliasesTo             product_aliases[]      @relation("AliasTo")
+  product_links                 product_links[]
+  aliasesFrom                   product_aliases[]      @relation("AliasFrom")
+  aliasesTo                     product_aliases[]      @relation("AliasTo")
+  product_resolve_requests      product_resolve_requests[]
 
   @@index([bulletType])
   @@index([caliber])
@@ -921,6 +922,11 @@ model source_products {
   /// Per Spec v1.2 §6: Resolver compares this against prior inputHash.
   normalizedHash          String?
 
+  /// Canonical identity key for this source product.
+  /// Namespaced string: "upc:12345678901", "sku:ABC123", "urlhash:deadbeef"
+  /// Precedence: UPC > SKU > URL hash. Used for idempotency and dedup.
+  identityKey             String?
+
   // Relations
   prices                        prices[]
   source_product_presence       source_product_presence?
@@ -929,10 +935,12 @@ model source_products {
   sources                       sources                   @relation(fields: [sourceId], references: [id])
   products                      products?                 @relation(fields: [productId], references: [id])
   product_links                 product_links?
+  product_resolve_requests      product_resolve_requests[]
 
   @@index([productId])
   @@index([sourceId])
   @@index([normalizedHash])
+  @@index([identityKey]) // For dedupe and idempotency lookups
 }
 
 /// All identifiers observed for a source product.
@@ -944,8 +952,8 @@ model source_product_identifiers {
   idType          IdentifierType
   idValue         String
   /// Namespace for scoping: network name (IMPACT, AVANTLINK), retailer ID, etc.
-  /// Required for NETWORK_ITEM_ID, MERCHANT_SKU. NULL for universal codes (UPC, EAN).
-  namespace       String?
+  /// Required for NETWORK_ITEM_ID, MERCHANT_SKU. Empty string for universal codes (UPC, EAN).
+  namespace       String         @default("")
   /// Exactly one identifier per source_product should be canonical (used for upsert matching)
   isCanonical     Boolean        @default(false)
   /// Normalized value for consistent matching (trimmed, uppercased where appropriate)
@@ -1002,6 +1010,7 @@ model product_links {
   @@index([productId])
   @@index([status])
   @@index([matchType])
+  @@index([status, matchType]) // For filtered queries by resolution state
   @@index([resolverVersion])
   @@index([resolvedAt])
 }
@@ -1026,6 +1035,45 @@ model product_aliases {
   toProduct     products @relation("AliasTo", fields: [toProductId], references: [id], onDelete: Restrict)
 
   @@index([toProductId])
+}
+
+/// Tracks product resolution requests for intent, dedup, and retries.
+/// Separate from product_links (which tracks outcomes).
+/// Per Spec: idempotencyKey = sourceId + ":" + identityKey
+model product_resolve_requests {
+  id              String                       @id @default(cuid())
+
+  /// sourceId + ":" + identityKey (e.g., "src123:upc:012345678901")
+  idempotencyKey  String                       @unique
+  sourceProductId String
+  sourceId        String
+
+  /// Current status of this request
+  status          ProductResolveRequestStatus  @default(PENDING)
+
+  /// Number of processing attempts
+  attempts        Int                          @default(0)
+  /// Last attempt timestamp
+  lastAttemptAt   DateTime?
+  /// Error message if FAILED
+  errorMessage    String?
+
+  /// Resulting productId if created/matched (denormalized for quick lookup)
+  resultProductId String?
+
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  // Relations
+  source_products source_products              @relation(fields: [sourceProductId], references: [id], onDelete: Cascade)
+  sources         sources                      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  products        products?                    @relation(fields: [resultProductId], references: [id], onDelete: SetNull)
+
+  @@index([sourceProductId])
+  @@index([sourceId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([status, updatedAt]) // For worker polling queries
 }
 
 /// Per-source trust configuration for identifier eligibility.
@@ -1069,8 +1117,9 @@ model sources {
   executions                executions[]
   source_products           source_products[]
   prices                    prices[]
-  retailers                 retailers           @relation(fields: [retailerId], references: [id])
+  retailers                 retailers             @relation(fields: [retailerId], references: [id])
   source_trust_config       source_trust_config?
+  product_resolve_requests  product_resolve_requests[]
 
   @@index([retailerId], map: "sources_retailer_id_idx")
 }
@@ -1136,7 +1185,7 @@ model watchlist_collections {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// ADR-011A: Intent-Ready Saved Items (WatchlistItem Resolver Seam)
 /// Supports SKU intent (v1) with schema-level preparation for future SEARCH intent.
-/// See context/decisions/ADR-011A-Intent-Ready-Saved-Items.md for full specification.
+/// See context/decisions/ADR-017-Intent-Ready-Saved-Items.md for full specification.
 model watchlist_items {
   id           String   @id @default(cuid())
   userId       String
@@ -1621,8 +1670,15 @@ enum ProductLinkStatus {
   MATCHED
   /// Created new canonical product and linked
   CREATED
-  /// Could not link (insufficient data, ambiguous, or conflict)
+  /// @deprecated Use NEEDS_REVIEW instead. Kept for backward compatibility with existing data.
+  /// Will be migrated to NEEDS_REVIEW in future cleanup.
   UNMATCHED
+  /// Awaiting human review (insufficient data, ambiguous match, or flagged)
+  /// This is the correct terminal state for "could not decide" cases.
+  NEEDS_REVIEW
+  /// Manually skipped by admin during review (deferred, not actionable, etc.)
+  /// Terminal state - removed from active review queue.
+  SKIPPED
   /// Resolution failed with system error
   ERROR
 }
@@ -1647,4 +1703,16 @@ enum ProductLinkReasonCode {
   SYSTEM_ERROR
   /// All normalization attempts failed
   NORMALIZATION_FAILED
+}
+
+/// Status of a product resolve request.
+enum ProductResolveRequestStatus {
+  /// Queued, waiting to be processed
+  PENDING
+  /// Currently being processed
+  PROCESSING
+  /// Successfully resolved (see product_links for outcome)
+  COMPLETED
+  /// Failed to process (see errorMessage)
+  FAILED
 }

@@ -18,6 +18,7 @@ import { redisConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   ProductResolveJobData,
+  productResolveQueue,
 } from '../config/queues'
 import { resolveSourceProduct, RESOLVER_VERSION } from './resolver'
 import { logger } from '../config/logger'
@@ -51,8 +52,15 @@ export function startProductResolverWorker(options?: {
   maxStalledCount?: number
 }): Worker<ProductResolveJobData> {
   const concurrency = options?.concurrency ?? 5
+  const maxStalledCount = options?.maxStalledCount ?? 3
 
-  log.info(`[ResolverWorker] Starting with concurrency=${concurrency}`)
+  log.info('RESOLVER_WORKER_START', {
+    event: 'RESOLVER_WORKER_START',
+    concurrency,
+    maxStalledCount,
+    queueName: QUEUE_NAMES.PRODUCT_RESOLVE,
+    resolverVersion: RESOLVER_VERSION,
+  })
 
   productResolverWorker = new Worker<ProductResolveJobData>(
     QUEUE_NAMES.PRODUCT_RESOLVE,
@@ -62,7 +70,7 @@ export function startProductResolverWorker(options?: {
     {
       connection: redisConnection,
       concurrency,
-      maxStalledCount: options?.maxStalledCount ?? 3,
+      maxStalledCount,
     }
   )
 
@@ -70,20 +78,43 @@ export function startProductResolverWorker(options?: {
   productResolverWorker.on('completed', (job: Job<ProductResolveJobData>) => {
     processedCount++
     lastProcessedAt = new Date()
-    log.debug(`[ResolverWorker] Completed job ${job.id}`)
+    log.debug('RESOLVER_JOB_COMPLETED', {
+      event: 'RESOLVER_JOB_COMPLETED',
+      jobId: job.id,
+      sourceProductId: job.data.sourceProductId,
+      trigger: job.data.trigger,
+      processedCount,
+    })
   })
 
   productResolverWorker.on('failed', (job: Job<ProductResolveJobData> | undefined, error: Error) => {
     errorCount++
-    log.error(`[ResolverWorker] Failed job ${job?.id}: ${error.message}`)
+    log.error('RESOLVER_JOB_FAILED', {
+      event: 'RESOLVER_JOB_FAILED',
+      jobId: job?.id,
+      sourceProductId: job?.data?.sourceProductId,
+      trigger: job?.data?.trigger,
+      errorMessage: error.message,
+      errorName: error.name,
+      errorCount,
+      attemptsMade: job?.attemptsMade,
+    }, error)
   })
 
   productResolverWorker.on('error', (error: Error) => {
-    log.error(`[ResolverWorker] Worker error: ${error.message}`)
+    log.error('RESOLVER_WORKER_ERROR', {
+      event: 'RESOLVER_WORKER_ERROR',
+      errorMessage: error.message,
+      errorName: error.name,
+    }, error)
   })
 
   productResolverWorker.on('stalled', (jobId: string) => {
-    log.warn(`[ResolverWorker] Stalled job: ${jobId}`)
+    log.warn('RESOLVER_JOB_STALLED', {
+      event: 'RESOLVER_JOB_STALLED',
+      jobId,
+      reason: 'Job processing took too long or worker crashed',
+    })
   })
 
   return productResolverWorker
@@ -94,16 +125,29 @@ export function startProductResolverWorker(options?: {
  */
 export async function stopProductResolverWorker(): Promise<void> {
   if (productResolverWorker) {
-    log.info('[ResolverWorker] Stopping worker...')
+    log.info('RESOLVER_WORKER_STOPPING', {
+      event: 'RESOLVER_WORKER_STOPPING',
+      processedCount,
+      errorCount,
+      lastProcessedAt: lastProcessedAt?.toISOString(),
+    })
     await productResolverWorker.close()
     productResolverWorker = null
-    log.info('[ResolverWorker] Worker stopped')
+    log.info('RESOLVER_WORKER_STOPPED', {
+      event: 'RESOLVER_WORKER_STOPPED',
+      finalProcessedCount: processedCount,
+      finalErrorCount: errorCount,
+    })
   }
 }
 
 /**
  * Process a single RESOLVE_SOURCE_PRODUCT job
  * Per Spec v1.2 §0.3: Execute resolver and persist result
+ *
+ * Performance optimizations:
+ * - sourceKind is returned by resolver (avoids duplicate DB fetch)
+ * - Persistence is skipped when result.skipped=true (SKIP_SAME_INPUT, MANUAL_LOCKED)
  */
 async function processResolveJob(
   job: Job<ProductResolveJobData>
@@ -111,42 +155,113 @@ async function processResolveJob(
   const { sourceProductId, trigger, resolverVersion } = job.data
   const startTime = Date.now()
 
-  log.info(`[ResolverWorker] Processing ${sourceProductId} (trigger: ${trigger}, version: ${resolverVersion})`)
-
-  // Load source to get sourceKind for metrics (bounded label)
-  const sourceProduct = await prisma.source_products.findUnique({
-    where: { id: sourceProductId },
-    select: {
-      sources: {
-        select: { sourceKind: true },
-      },
-    },
+  log.info('RESOLVER_JOB_START', {
+    event: 'RESOLVER_JOB_START',
+    jobId: job.id,
+    sourceProductId,
+    trigger,
+    jobResolverVersion: resolverVersion,
+    currentResolverVersion: RESOLVER_VERSION,
+    attemptsMade: job.attemptsMade,
+    timestamp: job.timestamp,
   })
-  const sourceKind: SourceKindLabel = sourceProduct?.sources?.sourceKind ?? 'UNKNOWN'
-
-  // Record request metric at job start
-  recordRequest(sourceKind)
 
   // Version check - warn if job was enqueued with different version
   if (resolverVersion !== RESOLVER_VERSION) {
-    log.warn(
-      `[ResolverWorker] Version mismatch: job=${resolverVersion}, current=${RESOLVER_VERSION}`
-    )
+    log.warn('RESOLVER_VERSION_MISMATCH', {
+      event: 'RESOLVER_VERSION_MISMATCH',
+      sourceProductId,
+      jobVersion: resolverVersion,
+      currentVersion: RESOLVER_VERSION,
+      reason: 'Job was enqueued with different resolver version - algorithm may have changed',
+    })
   }
+
+  // Transition request status to PROCESSING
+  const requestUpdate = await prisma.product_resolve_requests.updateMany({
+    where: {
+      sourceProductId,
+      status: 'PENDING',
+    },
+    data: {
+      status: 'PROCESSING',
+      lastAttemptAt: new Date(),
+    },
+  })
+
+  log.debug('RESOLVER_REQUEST_PROCESSING', {
+    event: 'RESOLVER_REQUEST_PROCESSING',
+    sourceProductId,
+    rowsUpdated: requestUpdate.count,
+  })
 
   try {
     // Execute resolver algorithm
+    log.debug('RESOLVER_ALGORITHM_START', {
+      event: 'RESOLVER_ALGORITHM_START',
+      sourceProductId,
+      trigger,
+    })
+
     const result = await resolveSourceProduct(sourceProductId, trigger)
 
-    // Persist result to product_links
-    await persistResolverResult(sourceProductId, result)
+    // Get sourceKind from result (resolver already fetched it, avoids duplicate DB query)
+    const sourceKind: SourceKindLabel = result.sourceKind ?? 'UNKNOWN'
 
-    // Update source_products.normalizedHash if applicable
-    if (result.evidence?.inputHash) {
-      await prisma.source_products.update({
-        where: { id: sourceProductId },
-        data: { normalizedHash: result.evidence.inputHash },
+    // Record request metric (now using sourceKind from result)
+    recordRequest(sourceKind)
+
+    log.debug('RESOLVER_ALGORITHM_COMPLETE', {
+      event: 'RESOLVER_ALGORITHM_COMPLETE',
+      sourceProductId,
+      matchType: result.matchType,
+      status: result.status,
+      reasonCode: result.reasonCode,
+      confidence: result.confidence,
+      productId: result.productId,
+      isRelink: result.isRelink,
+      relinkBlocked: result.relinkBlocked,
+      createdProduct: !!result.createdProduct,
+      skipped: result.skipped,
+      rulesFired: result.evidence?.rulesFired,
+    })
+
+    // Skip persistence when result is unchanged (SKIP_SAME_INPUT, MANUAL_LOCKED)
+    // This avoids 2 writes per job when inputHash hasn't changed
+    if (result.skipped) {
+      log.debug('RESOLVER_PERSISTENCE_SKIPPED', {
+        event: 'RESOLVER_PERSISTENCE_SKIPPED',
+        sourceProductId,
+        reason: 'Result unchanged - skipping persistence',
+        matchType: result.matchType,
+        reasonCode: result.reasonCode,
       })
+    } else {
+      // Persist result to product_links
+      const persistStart = Date.now()
+      await persistResolverResult(sourceProductId, result)
+      const persistDuration = Date.now() - persistStart
+
+      log.debug('RESOLVER_RESULT_PERSISTED', {
+        event: 'RESOLVER_RESULT_PERSISTED',
+        sourceProductId,
+        productId: result.productId,
+        matchType: result.matchType,
+        persistDurationMs: persistDuration,
+      })
+
+      // Update source_products.normalizedHash if applicable
+      if (result.evidence?.inputHash) {
+        await prisma.source_products.update({
+          where: { id: sourceProductId },
+          data: { normalizedHash: result.evidence.inputHash },
+        })
+        log.debug('RESOLVER_HASH_UPDATED', {
+          event: 'RESOLVER_HASH_UPDATED',
+          sourceProductId,
+          inputHash: result.evidence.inputHash.slice(0, 16) + '...',
+        })
+      }
     }
 
     // Record decision metrics
@@ -158,25 +273,81 @@ async function processResolveJob(
       durationMs,
     })
 
-    log.info(
-      `[ResolverWorker] Resolved ${sourceProductId}: ` +
-      `matchType=${result.matchType}, status=${result.status}, ` +
-      `productId=${result.productId || 'NULL'}, confidence=${result.confidence.toFixed(4)}, ` +
-      `durationMs=${durationMs}`
-    )
+    // Transition request status to COMPLETED
+    await prisma.product_resolve_requests.updateMany({
+      where: {
+        sourceProductId,
+        status: 'PROCESSING',
+      },
+      data: {
+        status: 'COMPLETED',
+        resultProductId: result.productId,
+        errorMessage: null,
+      },
+    })
+
+    log.info('RESOLVER_JOB_COMPLETE', {
+      event: 'RESOLVER_JOB_COMPLETE',
+      jobId: job.id,
+      sourceProductId,
+      trigger,
+      sourceKind,
+      matchType: result.matchType,
+      status: result.status,
+      reasonCode: result.reasonCode,
+      productId: result.productId,
+      confidence: Number(result.confidence.toFixed(4)),
+      isRelink: result.isRelink,
+      relinkBlocked: result.relinkBlocked,
+      createdProduct: !!result.createdProduct,
+      skipped: result.skipped,
+      durationMs,
+    })
 
     return result
   } catch (error: any) {
     // Record failure metrics for system errors
+    // Note: sourceKind is unknown at this point since resolver failed
     const durationMs = Date.now() - startTime
     recordResolverJob({
-      sourceKind,
+      sourceKind: 'UNKNOWN',
       status: 'ERROR',
       reasonCode: 'SYSTEM_ERROR',
       durationMs,
     })
 
-    log.error(`[ResolverWorker] Error processing ${sourceProductId}: ${error.message}`)
+    // Determine if this is the final attempt (BullMQ attempts: 3 means 3 total)
+    const isFinalAttempt = job.attemptsMade >= 2 // 0-indexed, so 2 = 3rd attempt
+
+    if (isFinalAttempt) {
+      // Final attempt failed - mark request as FAILED
+      await prisma.product_resolve_requests.updateMany({
+        where: {
+          sourceProductId,
+          status: 'PROCESSING',
+        },
+        data: {
+          status: 'FAILED',
+          errorMessage: error.message?.slice(0, 1000) ?? 'Unknown error',
+        },
+      })
+    }
+    // If not final attempt, leave as PROCESSING so sweeper can recover if needed
+
+    log.error('RESOLVER_JOB_ERROR', {
+      event: 'RESOLVER_JOB_ERROR',
+      jobId: job.id,
+      sourceProductId,
+      trigger,
+      sourceKind: 'UNKNOWN', // Not available when resolver fails
+      errorMessage: error.message,
+      errorName: error.name,
+      errorCode: error.code,
+      durationMs,
+      attemptsMade: job.attemptsMade,
+      isFinalAttempt,
+      willRetry: !isFinalAttempt,
+    }, error)
 
     // For system errors, rethrow to trigger BullMQ retry
     // For business logic errors (captured in result), we don't retry
@@ -195,7 +366,28 @@ async function persistResolverResult(
   const now = new Date()
 
   // Truncate evidence if needed (per spec: max 500KB)
-  const evidence = truncateEvidence(result.evidence, 500 * 1024)
+  const maxEvidenceSize = 500 * 1024
+  const { evidence, wasTruncated, originalSize, finalSize } = truncateEvidence(result.evidence, maxEvidenceSize)
+
+  if (wasTruncated) {
+    log.warn('RESOLVER_EVIDENCE_TRUNCATED', {
+      event: 'RESOLVER_EVIDENCE_TRUNCATED',
+      sourceProductId,
+      originalSize,
+      finalSize,
+      maxSize: maxEvidenceSize,
+      reductionPercent: ((originalSize - finalSize) / originalSize * 100).toFixed(1),
+    })
+  }
+
+  log.debug('RESOLVER_PERSIST_START', {
+    event: 'RESOLVER_PERSIST_START',
+    sourceProductId,
+    productId: result.productId,
+    matchType: result.matchType,
+    status: result.status,
+    evidenceSize: finalSize,
+  })
 
   await prisma.product_links.upsert({
     where: { sourceProductId },
@@ -227,40 +419,66 @@ async function persistResolverResult(
  * Truncate evidence to fit within size limit
  * Per Spec v1.2 §2: maxEvidenceSize = 500KB
  */
-function truncateEvidence(evidence: any, maxSize: number): any {
+function truncateEvidence(
+  evidence: any,
+  maxSize: number
+): { evidence: any; wasTruncated: boolean; originalSize: number; finalSize: number } {
   const json = JSON.stringify(evidence)
+  const originalSize = json.length
 
   if (json.length <= maxSize) {
-    return evidence
+    return {
+      evidence,
+      wasTruncated: false,
+      originalSize,
+      finalSize: originalSize,
+    }
   }
 
   // Progressively remove fields to reduce size
   const truncated = { ...evidence, truncated: true }
+  const truncationSteps: string[] = []
 
   // First, truncate candidates to top 5
   if (truncated.candidates?.length > 5) {
+    const originalCandidates = truncated.candidates.length
     truncated.candidates = truncated.candidates.slice(0, 5)
+    truncationSteps.push(`candidates: ${originalCandidates} -> 5`)
   }
 
   // If still too large, remove candidates entirely
   let truncatedJson = JSON.stringify(truncated)
   if (truncatedJson.length > maxSize && truncated.candidates) {
+    truncationSteps.push('candidates: removed entirely')
     delete truncated.candidates
     truncatedJson = JSON.stringify(truncated)
   }
 
   // If still too large, truncate normalization errors
   if (truncatedJson.length > maxSize && truncated.normalizationErrors) {
+    const originalErrors = truncated.normalizationErrors.length
     truncated.normalizationErrors = truncated.normalizationErrors.slice(0, 3)
+    truncationSteps.push(`normalizationErrors: ${originalErrors} -> 3`)
     truncatedJson = JSON.stringify(truncated)
   }
 
   // If still too large, remove inputNormalized title (longest field)
   if (truncatedJson.length > maxSize && truncated.inputNormalized?.title) {
+    const originalTitleLen = truncated.inputNormalized.title.length
     truncated.inputNormalized.title = truncated.inputNormalized.title.slice(0, 100) + '...'
+    truncationSteps.push(`inputNormalized.title: ${originalTitleLen} -> 100`)
+    truncatedJson = JSON.stringify(truncated)
   }
 
-  return truncated
+  // Add truncation metadata
+  truncated.truncationSteps = truncationSteps
+
+  return {
+    evidence: truncated,
+    wasTruncated: true,
+    originalSize,
+    finalSize: truncatedJson.length,
+  }
 }
 
 /**
@@ -287,4 +505,175 @@ export function resetResolverWorkerMetrics(): void {
   processedCount = 0
   errorCount = 0
   lastProcessedAt = null
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STUCK PROCESSING SWEEPER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Sweeper configuration
+const SWEEPER_INTERVAL_MS = 60_000 // Run every 60 seconds
+const PROCESSING_TIMEOUT_MS = 5 * 60_000 // 5 minutes stuck = timeout
+const MAX_ATTEMPTS = 3
+
+let sweeperInterval: ReturnType<typeof setInterval> | null = null
+let sweeperRunning = false
+
+/**
+ * Start the stuck PROCESSING sweeper
+ * Runs periodically to detect and recover stuck requests
+ */
+export function startProcessingSweeper(): void {
+  if (sweeperInterval) {
+    log.warn('SWEEPER_ALREADY_RUNNING', {
+      event: 'SWEEPER_ALREADY_RUNNING',
+    })
+    return
+  }
+
+  log.info('SWEEPER_START', {
+    event: 'SWEEPER_START',
+    intervalMs: SWEEPER_INTERVAL_MS,
+    timeoutMs: PROCESSING_TIMEOUT_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  })
+
+  sweeperInterval = setInterval(async () => {
+    if (sweeperRunning) {
+      log.debug('SWEEPER_SKIP_IN_PROGRESS', {
+        event: 'SWEEPER_SKIP_IN_PROGRESS',
+      })
+      return
+    }
+
+    sweeperRunning = true
+    try {
+      await sweepStuckProcessing()
+    } catch (err) {
+      log.error('SWEEPER_ERROR', {
+        event: 'SWEEPER_ERROR',
+        error: err instanceof Error ? err.message : String(err),
+      }, err)
+    } finally {
+      sweeperRunning = false
+    }
+  }, SWEEPER_INTERVAL_MS)
+}
+
+/**
+ * Stop the stuck PROCESSING sweeper
+ */
+export function stopProcessingSweeper(): void {
+  if (sweeperInterval) {
+    clearInterval(sweeperInterval)
+    sweeperInterval = null
+    log.info('SWEEPER_STOP', {
+      event: 'SWEEPER_STOP',
+    })
+  }
+}
+
+/**
+ * Sweep stuck PROCESSING requests
+ *
+ * Finds requests that have been PROCESSING for too long and:
+ * - Transitions to FAILED if max attempts reached
+ * - Transitions to PENDING and re-enqueues if retries remain
+ */
+async function sweepStuckProcessing(): Promise<void> {
+  const timeoutThreshold = new Date(Date.now() - PROCESSING_TIMEOUT_MS)
+
+  // Find stuck PROCESSING requests
+  const stuckRequests = await prisma.product_resolve_requests.findMany({
+    where: {
+      status: 'PROCESSING',
+      updatedAt: { lt: timeoutThreshold },
+    },
+    select: {
+      id: true,
+      idempotencyKey: true,
+      sourceProductId: true,
+      attempts: true,
+      lastAttemptAt: true,
+    },
+    take: 100, // Batch limit
+  })
+
+  if (stuckRequests.length === 0) {
+    return
+  }
+
+  log.info('SWEEPER_FOUND_STUCK', {
+    event: 'SWEEPER_FOUND_STUCK',
+    count: stuckRequests.length,
+    timeoutThreshold: timeoutThreshold.toISOString(),
+  })
+
+  let retriedCount = 0
+  let failedCount = 0
+
+  for (const request of stuckRequests) {
+    const newAttempts = request.attempts + 1
+
+    if (newAttempts >= MAX_ATTEMPTS) {
+      // Max attempts reached - mark as FAILED
+      await prisma.product_resolve_requests.update({
+        where: { id: request.id },
+        data: {
+          status: 'FAILED',
+          attempts: newAttempts,
+          errorMessage: `Exceeded max attempts (${MAX_ATTEMPTS}) - stuck in PROCESSING`,
+        },
+      })
+      failedCount++
+
+      log.warn('SWEEPER_REQUEST_FAILED', {
+        event: 'SWEEPER_REQUEST_FAILED',
+        requestId: request.id,
+        sourceProductId: request.sourceProductId,
+        attempts: newAttempts,
+        maxAttempts: MAX_ATTEMPTS,
+      })
+    } else {
+      // Retry - transition back to PENDING and re-enqueue
+      await prisma.product_resolve_requests.update({
+        where: { id: request.id },
+        data: {
+          status: 'PENDING',
+          attempts: newAttempts,
+        },
+      })
+
+      // Re-enqueue to BullMQ
+      const jobId = `RESOLVE_SOURCE_PRODUCT:${request.sourceProductId}`
+      await productResolveQueue.add(
+        'RESOLVE_SOURCE_PRODUCT',
+        {
+          sourceProductId: request.sourceProductId,
+          trigger: 'RECONCILE' as const, // Retry is a reconciliation
+          resolverVersion: RESOLVER_VERSION,
+        },
+        {
+          jobId,
+          delay: 5_000, // 5s delay for retry
+        }
+      )
+      retriedCount++
+
+      log.info('SWEEPER_REQUEST_RETRY', {
+        event: 'SWEEPER_REQUEST_RETRY',
+        requestId: request.id,
+        sourceProductId: request.sourceProductId,
+        attempts: newAttempts,
+        maxAttempts: MAX_ATTEMPTS,
+      })
+    }
+  }
+
+  log.info('SWEEPER_COMPLETE', {
+    event: 'SWEEPER_COMPLETE',
+    totalStuck: stuckRequests.length,
+    retried: retriedCount,
+    failed: failedCount,
+  })
 }

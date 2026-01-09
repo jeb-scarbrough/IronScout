@@ -7,6 +7,7 @@ export const SETTING_KEYS = {
   ALLOW_PLAIN_FTP: 'AFFILIATE_FEED_ALLOW_PLAIN_FTP',
   HARVESTER_SCHEDULER_ENABLED: 'HARVESTER_SCHEDULER_ENABLED',
   AFFILIATE_SCHEDULER_ENABLED: 'AFFILIATE_FEED_SCHEDULER_ENABLED',
+  CIRCUIT_BREAKER_BYPASS: 'AFFILIATE_CIRCUIT_BREAKER_BYPASS',
 
   // Operations Settings - tunable parameters
   AFFILIATE_BATCH_SIZE: 'AFFILIATE_BATCH_SIZE',
@@ -48,6 +49,7 @@ export const DANGER_ZONE_KEYS = [
   SETTING_KEYS.ALLOW_PLAIN_FTP,
   SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED,
   SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED,
+  SETTING_KEYS.CIRCUIT_BREAKER_BYPASS,
 ] as const;
 
 export const OPERATIONS_KEYS = [
@@ -91,6 +93,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, boolean | number | string> = {
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: false,
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: true,
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: true,
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: false,
 
   // Operations
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 1000,
@@ -131,6 +134,7 @@ export const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: 'Allow plain FTP connections for affiliate feeds (insecure - credentials sent in cleartext)',
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: 'Enable the main harvester scheduler (disabling stops all scheduled harvesting)',
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: 'Enable the affiliate feed scheduler (disabling stops scheduled feed processing)',
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: 'Bypass circuit breaker for all affiliate feeds (allows mass expiry of products)',
 
   // Operations
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 'Number of items to process per batch in affiliate feeds',
@@ -173,6 +177,7 @@ export const SETTING_TYPES: Record<SettingKey, SettingType> = {
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: 'boolean',
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: 'boolean',
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: 'boolean',
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: 'boolean',
 
   // Operations - numbers and strings
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 'number',
@@ -247,4 +252,170 @@ export const LOG_LEVEL_DESCRIPTIONS: Record<LogLevel, string> = {
   warn: 'Warnings and errors only',
   error: 'Errors and fatal only',
   fatal: 'Fatal errors only',
+};
+
+// =============================================================================
+// Setting Tooltips (Extended help text with consequences)
+// =============================================================================
+
+export interface SettingTooltip {
+  summary: string;
+  whenEnabled?: string;
+  whenDisabled?: string;
+  warning?: string;
+  note?: string;
+}
+
+export const SETTING_TOOLTIPS: Record<SettingKey, SettingTooltip> = {
+  // Danger Zone
+  [SETTING_KEYS.ALLOW_PLAIN_FTP]: {
+    summary: 'Controls whether affiliate feeds can connect using insecure plain FTP protocol.',
+    whenEnabled: 'Credentials are transmitted in cleartext over the network. Network attackers can intercept usernames and passwords.',
+    whenDisabled: 'Only SFTP (secure) connections are allowed. Feeds configured for plain FTP will fail until reconfigured.',
+    warning: 'Enabling this setting violates security best practices and should only be used temporarily for legacy feeds.',
+  },
+  [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: {
+    summary: 'Controls the main harvester scheduler that processes crawl, fetch, extract, normalize, and write queues.',
+    whenEnabled: 'All scheduled harvesting jobs will be processed automatically according to their schedules.',
+    whenDisabled: 'All automated harvesting stops. Manual job triggers will still work. Use during maintenance windows.',
+    note: 'This affects all source crawling, not just affiliate feeds.',
+  },
+  [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: {
+    summary: 'Controls the affiliate feed scheduler that triggers scheduled feed downloads and processing.',
+    whenEnabled: 'Affiliate feeds will be fetched and processed according to their configured schedules.',
+    whenDisabled: 'Scheduled affiliate feed processing stops. Manual triggers via the admin UI will still work.',
+    note: 'Disable this if you need to pause all affiliate feed activity without affecting other harvesting.',
+  },
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: {
+    summary: 'Bypasses the circuit breaker safety mechanism that prevents mass expiry of products.',
+    whenEnabled: 'Feeds can expire unlimited products in a single run. This can cause mass data loss if a feed has issues.',
+    whenDisabled: 'Circuit breaker protects against feeds that would expire more than 30% or 500 products (whichever is lower).',
+    warning: 'Only enable temporarily during initial feed setup or when intentionally refreshing all data. Re-disable immediately after.',
+  },
+
+  // Operations
+  [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: {
+    summary: 'Number of products processed in each database batch during affiliate feed processing.',
+    note: 'Lower values reduce memory usage but increase processing time. Higher values improve throughput but use more memory. Recommended range: 500-2000.',
+    warning: 'Very high values (>5000) may cause out-of-memory errors or database timeouts.',
+  },
+  [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: {
+    summary: 'Hours between "heartbeat" price writes even when the price hasn\'t changed.',
+    note: 'Heartbeats confirm that a price is still valid, creating a continuous record in price history. Lower values provide finer granularity but increase storage.',
+    warning: 'Setting too low (<6 hours) can significantly increase database size.',
+  },
+  [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: {
+    summary: 'Number of days to retain affiliate feed run history and associated error records.',
+    note: 'Older runs are automatically cleaned up. Longer retention helps with debugging historical issues but increases storage.',
+    warning: 'Very long retention (>90 days) may impact database performance on large deployments.',
+  },
+  [SETTING_KEYS.HARVESTER_LOG_LEVEL]: {
+    summary: 'Controls the verbosity of harvester log output.',
+    note: 'Changes take effect immediately without requiring a harvester restart. Use "debug" for troubleshooting, "info" for normal operation.',
+    warning: '"debug" level generates significant log volume and may impact performance.',
+  },
+
+  // Queue History
+  [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: {
+    summary: 'Number of completed and failed jobs to retain per queue in Bull Board.',
+    note: 'Higher values provide more history for debugging but consume more Redis memory.',
+    warning: 'Very high values (>500) may cause Redis memory issues on constrained deployments.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_CRAWL]: {
+    summary: 'Retain job history for the crawl queue (source discovery and URL enumeration).',
+    whenEnabled: 'Completed crawl jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Crawl jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_FETCH]: {
+    summary: 'Retain job history for the fetch queue (downloading page content).',
+    whenEnabled: 'Completed fetch jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Fetch jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_EXTRACT]: {
+    summary: 'Retain job history for the extract queue (parsing product data from pages).',
+    whenEnabled: 'Completed extract jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Extract jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_NORMALIZE]: {
+    summary: 'Retain job history for the normalize queue (standardizing product data).',
+    whenEnabled: 'Completed normalize jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Normalize jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_WRITE]: {
+    summary: 'Retain job history for the write queue (persisting data to database).',
+    whenEnabled: 'Completed write jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Write jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_ALERT]: {
+    summary: 'Retain job history for the alert queue (processing price alerts).',
+    whenEnabled: 'Completed alert jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Alert jobs are removed immediately after completion, saving Redis memory.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_MERCHANT_FEED_INGEST]: {
+    summary: 'Retain job history for merchant feed ingestion queue.',
+    whenEnabled: 'Completed merchant feed jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Merchant feed jobs are removed immediately after completion.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_MERCHANT_SKU_MATCH]: {
+    summary: 'Retain job history for merchant SKU matching queue.',
+    whenEnabled: 'Completed SKU match jobs appear in Bull Board for debugging.',
+    whenDisabled: 'SKU match jobs are removed immediately after completion.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_MERCHANT_BENCHMARK]: {
+    summary: 'Retain job history for merchant benchmark calculation queue.',
+    whenEnabled: 'Completed benchmark jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Benchmark jobs are removed immediately after completion.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_MERCHANT_INSIGHT]: {
+    summary: 'Retain job history for merchant insight generation queue.',
+    whenEnabled: 'Completed insight jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Insight jobs are removed immediately after completion.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_FEED]: {
+    summary: 'Retain job history for affiliate feed processing queue.',
+    whenEnabled: 'Completed affiliate feed jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Affiliate feed jobs are removed immediately after completion.',
+  },
+  [SETTING_KEYS.QUEUE_HISTORY_AFFILIATE_SCHEDULER]: {
+    summary: 'Retain job history for affiliate feed scheduler queue.',
+    whenEnabled: 'Completed scheduler jobs appear in Bull Board for debugging.',
+    whenDisabled: 'Scheduler jobs are removed immediately after completion.',
+  },
+
+  // Feature Flags
+  [SETTING_KEYS.MAINTENANCE_MODE]: {
+    summary: 'Displays a maintenance banner across all apps and disables write operations.',
+    whenEnabled: 'Users see a maintenance message. Database writes are blocked. Use during planned maintenance.',
+    whenDisabled: 'Normal operation resumes. Users can interact with the platform normally.',
+    warning: 'Enabling this affects all users immediately. Coordinate with your team before enabling.',
+  },
+  [SETTING_KEYS.REGISTRATION_ENABLED]: {
+    summary: 'Controls whether new users can register accounts.',
+    whenEnabled: 'New users can sign up through the registration flow.',
+    whenDisabled: 'Registration is closed. Existing users can still sign in. Use for invite-only periods.',
+  },
+  [SETTING_KEYS.AI_SEARCH_ENABLED]: {
+    summary: 'Enables AI-powered natural language search intent parsing.',
+    whenEnabled: 'User search queries are processed by AI to understand intent (e.g., "cheap 9mm ammo" → caliber filter).',
+    whenDisabled: 'Search uses traditional keyword matching only. Reduces API costs but may impact search quality.',
+    note: 'Disabling this gracefully degrades to keyword search with no user-visible errors.',
+  },
+  [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: {
+    summary: 'Enables vector-enhanced semantic search results.',
+    whenEnabled: 'Search results use vector embeddings for semantic matching beyond exact keywords.',
+    whenDisabled: 'Search uses traditional full-text search only. May reduce result quality for ambiguous queries.',
+    note: 'This requires vector embeddings to be populated for products.',
+  },
+  [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: {
+    summary: 'Global kill switch for all outbound email notifications.',
+    whenEnabled: 'Price alerts, welcome emails, and other notifications are sent to users.',
+    whenDisabled: 'All email sending is blocked. Use during email service issues or to stop all notifications.',
+    warning: 'Disabling this stops all user-facing email communication immediately.',
+  },
+  [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: {
+    summary: 'Controls whether price alerts are evaluated and notifications sent.',
+    whenEnabled: 'Price changes trigger alert evaluation and notifications are sent to users.',
+    whenDisabled: 'Alert processing is paused. Alerts accumulate but are not evaluated or sent.',
+    note: 'When re-enabled, accumulated alerts will be processed. Consider clearing old alerts first if disabled for a long time.',
+  },
 };

@@ -921,6 +921,84 @@ export async function unignoreRun(runId: string) {
 }
 
 // =============================================================================
+// Trust Config Operations
+// =============================================================================
+
+/**
+ * Update trust config for a source
+ * Per Spec v1.2: Controls whether UPCs from this source are trusted for canonical matching
+ */
+export async function updateSourceTrustConfig(sourceId: string, upcTrusted: boolean) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Verify source exists
+    const source = await prisma.sources.findUnique({
+      where: { id: sourceId },
+      select: { id: true, name: true },
+    });
+
+    if (!source) {
+      return { success: false, error: 'Source not found' };
+    }
+
+    // Get existing config to log old value
+    const existingConfig = await prisma.source_trust_config.findUnique({
+      where: { sourceId },
+    });
+
+    const oldValue = {
+      upcTrusted: existingConfig?.upcTrusted ?? false,
+      version: existingConfig?.version ?? 0,
+    };
+
+    // Upsert the trust config - increment version on every change
+    const config = await prisma.source_trust_config.upsert({
+      where: { sourceId },
+      create: {
+        sourceId,
+        upcTrusted,
+        version: 1,
+        updatedBy: session.email,
+      },
+      update: {
+        upcTrusted,
+        version: { increment: 1 },
+        updatedBy: session.email,
+      },
+    });
+
+    await logAdminAction(session.userId, 'UPDATE_SOURCE_TRUST_CONFIG', {
+      resource: 'SourceTrustConfig',
+      resourceId: sourceId,
+      oldValue,
+      newValue: {
+        upcTrusted: config.upcTrusted,
+        version: config.version,
+      },
+    });
+
+    revalidatePath('/affiliate-feeds');
+    revalidatePath('/retailers');
+
+    return {
+      success: true,
+      config: {
+        upcTrusted: config.upcTrusted,
+        version: config.version,
+      },
+    };
+  } catch (error) {
+    loggers.feeds.error('Failed to update source trust config', { sourceId }, error instanceof Error ? error : new Error(String(error)));
+    return { success: false, error: 'Failed to update trust config' };
+  }
+}
+
+// =============================================================================
 // Read Operations
 // =============================================================================
 

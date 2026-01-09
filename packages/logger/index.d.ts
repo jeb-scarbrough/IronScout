@@ -17,6 +17,7 @@
  * Environment variables (Node.js only):
  * - LOG_LEVEL: Minimum log level (debug, info, warn, error, fatal). Default: info
  * - LOG_FORMAT: Output format (json, pretty). Default: json in production, pretty in development
+ * - LOG_ASYNC: Enable async buffered logging (true/1). Default: false
  * - NODE_ENV: Used to determine defaults
  *
  * Browser behavior:
@@ -56,6 +57,10 @@ export declare function setLogLevel(level: LogLevel): void;
  * Get the current effective log level
  */
 export declare function getCurrentLogLevel(): LogLevel;
+/**
+ * Flush any pending async log writes (no-op if async logging disabled)
+ */
+export declare function flushLogs(): Promise<void>;
 export interface ILogger {
     debug(message: string, meta?: LogContext): void;
     info(message: string, meta?: LogContext): void;

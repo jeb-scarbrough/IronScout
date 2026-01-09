@@ -98,16 +98,30 @@ $procNames = @("node","pnpm","npm","bun","next","cmd","powershell")
 $procCandidates = Get-Process -Name $procNames -ErrorAction SilentlyContinue
 
 if ($procCandidates) {
+    $procInfo = @{}
+    $parentCache = @{}
+
+    function Get-ParentPid {
+        param([int]$pid)
+        if ($parentCache.ContainsKey($pid)) {
+            return $parentCache[$pid]
+        }
+        $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue
+        $parentPid = if ($cim) { [int]$cim.ParentProcessId } else { 0 }
+        $parentCache[$pid] = $parentPid
+        return $parentPid
+    }
+
     foreach ($proc in $procCandidates) {
         # Skip our own process
         if ($proc.Id -eq $myPID) {
             continue
         }
         try {
-            # Get command line of the process
-            $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+            $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $($proc.Id)" -ErrorAction SilentlyContinue
+            $cmdLine = if ($cim) { $cim.CommandLine } else { $null }
 
-            Write-Debug "  PID $($proc.Id): $cmdLine"
+            Write-Debug "  PID $($proc.Id) [$($proc.ProcessName)]: $cmdLine"
 
             # Check if it's one of our processes (IronScout or apps folder)
             if ($cmdLine -and (
@@ -118,31 +132,76 @@ if ($procCandidates) {
                 $cmdLine -match "dist[\\/]index\.js" -or   # API server
                 $cmdLine -match "dist[\\/]worker\.js"      # Harvester worker
             )) {
-                # Determine app name
-                $appName = if ($cmdLine -match "harvester" -or $cmdLine -match "dist[\\/]worker\.js") { "Harvester" }
-                           elseif ($cmdLine -match "apps[\\/]web" -or $cmdLine -match "next dev") { "Web" }
-                           elseif ($cmdLine -match "apps[\\/]api" -or $cmdLine -match "dist[\\/]index\.js") { "API" }
-                           elseif ($cmdLine -match "apps[\\/]admin") { "Admin" }
-                           elseif ($cmdLine -match "apps[\\/]merchant") { "Merchant" }
-                           else { "Node" }
-
-                Write-Info "Stopping $appName node process (PID: $($proc.Id))..."
-                try {
-                    Stop-Process -Id $proc.Id -Force
-                    Start-Sleep -Milliseconds 300
-                    $stillRunning = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
-                    if (-not $stillRunning) {
-                        Write-Success "  Stopped $appName"
-                        $stoppedCount++
-                    } else {
-                        Write-Failure "  Failed to stop PID $($proc.Id)"
-                    }
-                } catch {
-                    Write-Failure "  Error: $_"
+                $procInfo[$proc.Id] = [pscustomobject]@{
+                    Proc = $proc
+                    CmdLine = $cmdLine
+                }
+                if ($cim) {
+                    $parentCache[$proc.Id] = [int]$cim.ParentProcessId
                 }
             }
         } catch {
             Write-Debug "  Could not check PID $($proc.Id)"
+        }
+    }
+
+    $matchedPids = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($pid in $procInfo.Keys) {
+        [void]$matchedPids.Add([int]$pid)
+    }
+
+    function HasMatchedAncestor {
+        param([int]$pid)
+        $current = $pid
+        $guard = 0
+        while ($true) {
+            $parent = Get-ParentPid -pid $current
+            if (-not $parent -or $parent -le 0) {
+                return $false
+            }
+            if ($matchedPids.Contains($parent)) {
+                return $true
+            }
+            $current = $parent
+            $guard++
+            if ($guard -gt 20) {
+                return $false
+            }
+        }
+    }
+
+    foreach ($info in $procInfo.Values) {
+        $proc = $info.Proc
+        if (-not $proc) {
+            continue
+        }
+        if (HasMatchedAncestor -pid $proc.Id) {
+            Write-Debug "  Skipping PID $($proc.Id) [$($proc.ProcessName)] due to matched ancestor"
+            continue
+        }
+
+        $cmdLine = $info.CmdLine
+        # Determine app name
+        $appName = if ($cmdLine -match "harvester" -or $cmdLine -match "dist[\\/]worker\.js") { "Harvester" }
+                   elseif ($cmdLine -match "apps[\\/]web" -or $cmdLine -match "next dev") { "Web" }
+                   elseif ($cmdLine -match "apps[\\/]api" -or $cmdLine -match "dist[\\/]index\.js") { "API" }
+                   elseif ($cmdLine -match "apps[\\/]admin") { "Admin" }
+                   elseif ($cmdLine -match "apps[\\/]merchant") { "Merchant" }
+                   else { "Node" }
+
+        Write-Info "Stopping $appName process (PID: $($proc.Id), Name: $($proc.ProcessName))..."
+        try {
+            Stop-Process -Id $proc.Id -Force
+            Start-Sleep -Milliseconds 300
+            $stillRunning = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+            if (-not $stillRunning) {
+                Write-Success "  Stopped $appName"
+                $stoppedCount++
+            } else {
+                Write-Failure "  Failed to stop PID $($proc.Id)"
+            }
+        } catch {
+            Write-Failure "  Error: $_"
         }
     }
 } else {

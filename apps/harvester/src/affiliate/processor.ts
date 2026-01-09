@@ -24,7 +24,9 @@ import { createHash } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
 import { logger } from '../config/logger'
 import { computeUrlHash, normalizeUrl } from './parser'
-import { ProductMatcher, batchUpdateSourceProductIds } from './product-matcher'
+import { ProductMatcher } from './product-matcher'
+import { enqueueProductResolve } from '../config/queues'
+import { RESOLVER_VERSION } from '../resolver'
 import type {
   FeedRunContext,
   ParsedFeedProduct,
@@ -253,38 +255,67 @@ export async function processProducts(
 
       // Build lookup: sourceProductId -> productId for price writes
       const sourceProductIdToProductId = new Map<string, string | null>()
-      const matchesToUpdate: Array<{ sourceProductId: string; productId: string }> = []
+      const itemsNeedingResolver: string[] = []
+      let matchedCount = 0
+      let linksWrittenCount = 0
 
       for (const result of matchResults) {
         sourceProductIdToProductId.set(result.sourceProductId, result.productId)
         if (result.productId) {
-          matchesToUpdate.push({
-            sourceProductId: result.sourceProductId,
-            productId: result.productId,
-          })
+          matchedCount++
+        }
+        if (result.linkWritten) {
+          linksWrittenCount++
+        }
+        if (result.needsResolver) {
+          itemsNeedingResolver.push(result.sourceProductId)
         }
       }
 
-      // Batch update source_products.productId for matches
-      if (matchesToUpdate.length > 0) {
-        await batchUpdateSourceProductIds(matchesToUpdate)
-        productsMatched += matchesToUpdate.length
+      productsMatched += matchedCount
+
+      // Enqueue resolver for unmatched items
+      // Per hybrid architecture: ProductMatcher handles UPC hits, Resolver handles rest
+      if (itemsNeedingResolver.length > 0) {
+        const enqueueStart = Date.now()
+        await Promise.all(
+          itemsNeedingResolver.map((sourceProductId) =>
+            enqueueProductResolve(sourceProductId, 'INGEST', RESOLVER_VERSION)
+          )
+        )
+        log.debug('RESOLVER_ENQUEUE_OK', {
+          runId: run.id,
+          chunkNum,
+          enqueuedCount: itemsNeedingResolver.length,
+          durationMs: Date.now() - enqueueStart,
+        })
       }
 
       log.info('MATCH_OK', {
         runId: run.id,
         chunkNum,
-        matchedCount: matchesToUpdate.length,
-        unmatchedCount: sourceProductsForMatching.length - matchesToUpdate.length,
+        matchedCount,
+        linksWrittenCount,
+        unmatchedCount: sourceProductsForMatching.length - matchedCount,
+        enqueuedForResolver: itemsNeedingResolver.length,
         durationMs: Date.now() - matchStart,
       })
 
       // Step 3: Batch update presence and seen records
-      log.debug('Updating presence and seen records', { runId: run.id, chunkNum, count: sourceProductIds.length })
+      // Deduplicate sourceProductIds - multiple products may have resolved to the same ID
+      // (e.g., due to identifier collision). Without dedup, ON CONFLICT fails with:
+      // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+      const uniqueSourceProductIds = [...new Set(sourceProductIds)]
+      log.debug('Updating presence and seen records', {
+        runId: run.id,
+        chunkNum,
+        count: uniqueSourceProductIds.length,
+        duplicatesRemoved: sourceProductIds.length - uniqueSourceProductIds.length,
+      })
       const presenceStart = Date.now()
       await Promise.all([
-        batchUpdatePresence(sourceProductIds, t0),
-        batchRecordSeen(run.id, sourceProductIds),
+        batchUpdatePresence(uniqueSourceProductIds, t0),
+        batchRecordSeen(run.id, uniqueSourceProductIds),
       ])
       log.debug('Presence and seen records updated', {
         runId: run.id,
@@ -707,11 +738,11 @@ async function batchUpsertSourceProducts(
     idValue: string
     namespace: string
   }>>`
-    SELECT spi."sourceProductId", spi."idType"::text, spi."idValue", COALESCE(spi."namespace", '') as namespace
+    SELECT spi."sourceProductId", spi."idType"::text, spi."idValue", spi."namespace"
     FROM source_product_identifiers spi
     JOIN source_products sp ON sp.id = spi."sourceProductId"
     WHERE sp."sourceId" = ${sourceId}
-      AND (spi."idType"::text, spi."idValue", COALESCE(spi."namespace", '')) IN (
+      AND (spi."idType"::text, spi."idValue", spi."namespace") IN (
         SELECT
           unnest(${idTypes}::text[]),
           unnest(${idValues}::text[]),

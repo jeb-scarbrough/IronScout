@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Loader2, Check, X } from 'lucide-react';
 import { updateQueueHistorySetting } from './actions';
-import { SETTING_KEYS, QUEUE_DISPLAY_NAMES, NUMBER_SETTING_RANGES } from './constants';
+import { SETTING_KEYS, QUEUE_DISPLAY_NAMES, NUMBER_SETTING_RANGES, SETTING_TOOLTIPS } from './constants';
+import { SettingHelp } from './setting-tooltip';
 import type { SettingValue } from './actions';
 
 interface QueueHistorySettingsProps {
@@ -102,7 +103,10 @@ export function QueueHistorySettings({ initialSettings }: QueueHistorySettingsPr
       {/* Retention Count */}
       <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
         <div>
-          <h3 className="font-medium text-gray-900">Retention Count</h3>
+          <h3 className="font-medium text-gray-900 flex items-center">
+            Retention Count
+            <SettingHelp tooltip={SETTING_TOOLTIPS[SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]} position="right" />
+          </h3>
           <p className="text-sm text-gray-600">
             Number of completed jobs to keep per queue (10-1000)
           </p>
@@ -138,25 +142,36 @@ export function QueueHistorySettings({ initialSettings }: QueueHistorySettingsPr
           const displayName = QUEUE_DISPLAY_NAMES[key];
 
           return (
-            <button
+            <div
               key={key}
-              onClick={() => handleToggle(key, prop, isEnabled)}
-              disabled={isLoading}
               className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
                 isEnabled
-                  ? 'bg-green-50 border-green-200 hover:bg-green-100'
-                  : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-gray-50 border-gray-200'
               }`}
             >
-              <span className="text-sm font-medium text-gray-900">{displayName}</span>
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-              ) : isEnabled ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : (
-                <X className="h-4 w-4 text-gray-400" />
-              )}
-            </button>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium text-gray-900">{displayName}</span>
+                <SettingHelp tooltip={SETTING_TOOLTIPS[key]} position="top" />
+              </div>
+              <button
+                onClick={() => handleToggle(key, prop, isEnabled)}
+                disabled={isLoading}
+                className={`p-1 rounded transition-colors ${
+                  isEnabled
+                    ? 'hover:bg-green-200'
+                    : 'hover:bg-gray-200'
+                }`}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                ) : isEnabled ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <X className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+            </div>
           );
         })}
       </div>

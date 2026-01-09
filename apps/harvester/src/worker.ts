@@ -21,7 +21,7 @@ import {
   getHarvesterLogLevel,
   getHarvesterLogLevelOptional,
 } from '@ironscout/db'
-import { setLogLevel, type LogLevel } from '@ironscout/logger'
+import { setLogLevel, type LogLevel, flushLogs } from '@ironscout/logger'
 import { warmupRedis } from './config/redis'
 import { initQueueSettings } from './config/queues'
 import { logger } from './config/logger'
@@ -41,7 +41,12 @@ import { startMerchantScheduler, stopMerchantScheduler } from './merchant/schedu
 import { createAffiliateFeedWorker, createAffiliateFeedScheduler } from './affiliate'
 
 // Product Resolver Worker (Spec v1.2)
-import { startProductResolverWorker, stopProductResolverWorker } from './resolver'
+import {
+  startProductResolverWorker,
+  stopProductResolverWorker,
+  startProcessingSweeper,
+  stopProcessingSweeper,
+} from './resolver'
 import type { Worker } from 'bullmq'
 
 // Create affiliate workers (lazy initialization)
@@ -184,6 +189,7 @@ async function startup() {
   const redisConnected = await warmupRedis()
   if (!redisConnected) {
     log.error('Redis not available - cannot start workers')
+    await flushLogs()
     process.exit(1)
   }
 
@@ -218,6 +224,10 @@ async function startup() {
   // Start product resolver worker (always on - processes RESOLVE jobs from writer)
   log.info('Starting product resolver worker')
   resolverWorker = startProductResolverWorker({ concurrency: 5 })
+
+  // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
+  log.info('Starting product resolver sweeper')
+  startProcessingSweeper()
 
   // Start harvester/merchant scheduler if enabled
   if (harvesterSchedulerEnabled) {
@@ -276,8 +286,11 @@ const shutdown = async (signal: string) => {
       // Affiliate workers (if started)
       affiliateFeedWorker?.close(),
       affiliateFeedScheduler?.close(),
-      // Product resolver worker
-      stopProductResolverWorker(),
+      // Product resolver: stop sweeper first, then worker
+      (async () => {
+        stopProcessingSweeper()
+        await stopProductResolverWorker()
+      })(),
     ])
     log.info('All workers closed')
 
@@ -287,10 +300,12 @@ const shutdown = async (signal: string) => {
 
     const durationMs = Date.now() - shutdownStart
     log.info('Graceful shutdown complete', { durationMs })
+    await flushLogs()
     process.exit(0)
   } catch (error) {
     const err = error as Error
     log.error('Error during shutdown', { error: err.message })
+    await flushLogs()
     process.exit(1)
   }
 }

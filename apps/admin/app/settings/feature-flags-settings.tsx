@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
 import { updateFeatureFlagSetting } from './actions';
-import { SETTING_KEYS, SETTING_DESCRIPTIONS } from './constants';
+import { SETTING_KEYS, SETTING_DESCRIPTIONS, SETTING_TOOLTIPS } from './constants';
+import { SettingHelp } from './setting-tooltip';
 import type { SettingValue } from './actions';
 
 interface FeatureFlagsSettingsProps {
@@ -121,7 +122,10 @@ export function FeatureFlagsSettings({ initialSettings }: FeatureFlagsSettingsPr
                 <ToggleLeft className="h-5 w-5 mt-0.5 text-gray-400" />
               )}
               <div>
-                <h3 className="font-medium text-gray-900">{flag.label}</h3>
+                <h3 className="font-medium text-gray-900 flex items-center">
+                  {flag.label}
+                  <SettingHelp tooltip={SETTING_TOOLTIPS[flag.key]} position="right" />
+                </h3>
                 <p className="text-sm text-gray-600 mt-0.5">{flag.description}</p>
               </div>
             </div>

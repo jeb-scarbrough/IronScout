@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq'
 import { redisConnection } from './redis'
-import { getQueueHistorySettings } from '@ironscout/db'
+import { getQueueHistorySettings, prisma } from '@ironscout/db'
+import { createId } from '@paralleldrive/cuid2'
 
 // Queue names
 export const QUEUE_NAMES = {
@@ -281,10 +282,103 @@ export const productResolveQueue = new Queue<ProductResolveJobData>(
 )
 
 /**
- * Enqueue a product resolution job with deduplication
+ * Enqueue a product resolution job with database-level deduplication
+ *
  * Per Spec v1.2 §0.3: JobId = RESOLVE_SOURCE_PRODUCT:<sourceProductId>
+ *
+ * Uses product_resolve_requests table as source of truth for dedup:
+ * - Inserts new request if none exists
+ * - Resets FAILED → PENDING for retry
+ * - Ignores if already PENDING/PROCESSING/COMPLETED
+ * - Only enqueues to BullMQ if row transitions to PENDING
+ *
+ * @param sourceProductId - The source product to resolve
+ * @param sourceId - The source ID (for idempotencyKey)
+ * @param identityKey - The identity key (for idempotencyKey)
+ * @param trigger - What triggered the resolution
+ * @param resolverVersion - Current resolver version
+ * @param options - Optional delay
+ * @returns Request ID if enqueued, null if deduplicated
  */
 export async function enqueueProductResolve(
+  sourceProductId: string,
+  trigger: ProductResolveJobData['trigger'],
+  resolverVersion: string,
+  options?: { delay?: number; sourceId?: string; identityKey?: string }
+): Promise<string | null> {
+  // Build idempotency key: sourceId:identityKey or fallback to sourceProductId
+  const idempotencyKey = options?.sourceId && options?.identityKey
+    ? `${options.sourceId}:${options.identityKey}`
+    : `sp:${sourceProductId}` // Fallback for backward compatibility
+
+  const sourceId = options?.sourceId ?? 'unknown'
+
+  try {
+    // Atomic upsert with state machine logic
+    // Only transitions FAILED → PENDING; ignores PENDING/PROCESSING/COMPLETED
+    const result = await prisma.$queryRaw<Array<{ id: string; status: string; was_updated: boolean }>>`
+      INSERT INTO "product_resolve_requests" (
+        "id", "idempotencyKey", "sourceProductId", "sourceId",
+        "status", "attempts", "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${createId()},
+        ${idempotencyKey},
+        ${sourceProductId},
+        ${sourceId},
+        'PENDING'::"ProductResolveRequestStatus",
+        0,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT ("idempotencyKey") DO UPDATE
+      SET
+        "status" = CASE
+          WHEN "product_resolve_requests"."status" = 'FAILED' THEN 'PENDING'::"ProductResolveRequestStatus"
+          ELSE "product_resolve_requests"."status"
+        END,
+        "updatedAt" = NOW()
+      RETURNING
+        "id",
+        "status"::text,
+        (xmax = 0) AS was_inserted
+    `
+
+    if (result.length === 0) {
+      return null // Should not happen
+    }
+
+    const { id: requestId, status } = result[0]
+
+    // Only enqueue if status is now PENDING
+    // (either new insert or FAILED → PENDING transition)
+    if (status === 'PENDING') {
+      const jobId = `RESOLVE_SOURCE_PRODUCT:${sourceProductId}`
+      await productResolveQueue.add(
+        'RESOLVE_SOURCE_PRODUCT',
+        { sourceProductId, trigger, resolverVersion },
+        {
+          jobId,
+          delay: options?.delay ?? 10_000, // 10s debounce default
+        }
+      )
+      return requestId
+    }
+
+    // Request exists in non-FAILED state, don't re-enqueue
+    return null
+  } catch (err) {
+    // Log but don't throw - dedup failures shouldn't block price writes
+    console.error('[enqueueProductResolve] Failed to enqueue resolve request:', err)
+    return null
+  }
+}
+
+/**
+ * Legacy enqueue function without database dedupe (for backward compatibility)
+ * @deprecated Use enqueueProductResolve with sourceId and identityKey instead
+ */
+export async function enqueueProductResolveLegacy(
   sourceProductId: string,
   trigger: ProductResolveJobData['trigger'],
   resolverVersion: string,
@@ -296,7 +390,7 @@ export async function enqueueProductResolve(
     { sourceProductId, trigger, resolverVersion },
     {
       jobId,
-      delay: options?.delay ?? 10_000, // 10s debounce default
+      delay: options?.delay ?? 10_000,
     }
   )
 }

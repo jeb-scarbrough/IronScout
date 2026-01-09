@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Settings, Loader2, Save } from 'lucide-react';
 import { updateOperationsSetting, updateLogLevelSetting } from './actions';
-import { SETTING_KEYS, SETTING_DESCRIPTIONS, NUMBER_SETTING_RANGES, LOG_LEVELS, LOG_LEVEL_DESCRIPTIONS, type LogLevel } from './constants';
+import { SETTING_KEYS, SETTING_DESCRIPTIONS, SETTING_TOOLTIPS, NUMBER_SETTING_RANGES, LOG_LEVELS, LOG_LEVEL_DESCRIPTIONS, type LogLevel } from './constants';
+import { SettingHelp } from './setting-tooltip';
 import type { SettingValue } from './actions';
 
 interface OperationsSettingsProps {
@@ -127,7 +128,10 @@ export function OperationsSettings({ initialSettings }: OperationsSettingsProps)
           <div className="flex items-start gap-3 flex-1">
             <Settings className="h-5 w-5 mt-0.5 text-gray-400" />
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900">Harvester Log Level</h3>
+              <h3 className="font-medium text-gray-900 flex items-center">
+                  Harvester Log Level
+                  <SettingHelp tooltip={SETTING_TOOLTIPS[SETTING_KEYS.HARVESTER_LOG_LEVEL]} position="right" />
+                </h3>
               <p className="text-sm text-gray-600 mt-0.5">
                 {SETTING_DESCRIPTIONS[SETTING_KEYS.HARVESTER_LOG_LEVEL]}
               </p>
@@ -184,7 +188,10 @@ export function OperationsSettings({ initialSettings }: OperationsSettingsProps)
               <div className="flex items-start gap-3 flex-1">
                 <Settings className="h-5 w-5 mt-0.5 text-gray-400" />
                 <div className="flex-1">
-                  <h3 className="font-medium text-gray-900">{setting.label}</h3>
+                  <h3 className="font-medium text-gray-900 flex items-center">
+                    {setting.label}
+                    <SettingHelp tooltip={SETTING_TOOLTIPS[setting.key]} position="right" />
+                  </h3>
                   <p className="text-sm text-gray-600 mt-0.5">{setting.description}</p>
                   {range && (
                     <p className="text-xs text-gray-500 mt-1">

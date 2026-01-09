@@ -27,7 +27,7 @@ import {
   EDGE_CASES,
   assertMatched,
   assertCreated,
-  assertUnmatched,
+  assertNeedsReview,
   assertError,
   assertRulesFired,
   type MockSourceProduct,
@@ -55,7 +55,7 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   products: {
-    findFirst: vi.fn(),
+    findUnique: vi.fn(),
     findMany: vi.fn(),
     create: vi.fn(),
   },
@@ -84,7 +84,7 @@ vi.mock('../../config/logger', () => ({
 }))
 
 // Import after mocks are set up
-import { resolveSourceProduct, RESOLVER_VERSION } from '../resolver'
+import { resolveSourceProduct, RESOLVER_VERSION, clearTrustConfigCache } from '../resolver'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test Helpers
@@ -104,7 +104,7 @@ function setupMocks(config: {
   mockPrisma.source_trust_config.findUnique.mockResolvedValue(config.trustConfig ?? null)
 
   // Product lookups
-  mockPrisma.products.findFirst.mockImplementation(async (args: any) => {
+  mockPrisma.products.findUnique.mockImplementation(async (args: any) => {
     const products = config.existingProducts ?? []
     if (args?.where?.canonicalKey) {
       return products.find(p => p.canonicalKey === args.where.canonicalKey) ?? null
@@ -171,11 +171,11 @@ B. MATCHING LOGIC
    B2. UPC match creates product → CREATED
    B3. UPC present but source not trusted → falls through to fingerprint
    B4. Fingerprint match with clear winner → MATCHED
-   B5. Fingerprint ambiguous (score in ambiguity range) → UNMATCHED
-   B6. Fingerprint ambiguous (gap too small) → UNMATCHED
-   B7. Candidate overflow → UNMATCHED
-   B8. No candidates for fingerprint → UNMATCHED
-   B9. Insufficient data (missing brand/caliber) → UNMATCHED
+   B5. Fingerprint ambiguous (score in ambiguity range) → NEEDS_REVIEW
+   B6. Fingerprint ambiguous (gap too small) → NEEDS_REVIEW
+   B7. Candidate overflow → NEEDS_REVIEW
+   B8. No candidates for fingerprint → NEEDS_REVIEW
+   B9. Insufficient data (missing brand/caliber) → NEEDS_REVIEW
    B10. Idempotency: same inputHash returns existing link
    B11. MANUAL lock prevents override
    B12. Relink: stronger matchType allows relink
@@ -213,6 +213,7 @@ describe('A. Inputs and Validation', () => {
     resetMocks()
     resetFactories()
     resetMetrics()
+    clearTrustConfigCache()
   })
 
   describe('A1. Source product not found', () => {
@@ -227,7 +228,7 @@ describe('A. Inputs and Validation', () => {
   })
 
   describe('A2. Empty/null required fields', () => {
-    it('returns UNMATCHED when brand is null and no UPC', async () => {
+    it('returns NEEDS_REVIEW when brand is null and no UPC', async () => {
       const sourceProduct = createSourceProduct({ brand: null })
       setupMocks({
         sourceProduct,
@@ -236,11 +237,11 @@ describe('A. Inputs and Validation', () => {
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
       assertRulesFired(result, ['INSUFFICIENT_DATA'])
     })
 
-    it('returns UNMATCHED when title is empty and no UPC', async () => {
+    it('returns NEEDS_REVIEW when title is empty and no UPC', async () => {
       const sourceProduct = createSourceProduct({ title: '', brand: 'Federal' })
       setupMocks({
         sourceProduct,
@@ -250,7 +251,7 @@ describe('A. Inputs and Validation', () => {
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
       // Title empty means no caliber can be extracted → insufficient data
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
     })
   })
 
@@ -403,7 +404,7 @@ describe('A. Inputs and Validation', () => {
 
       // Invalid UPC is normalized to undefined, so falls through to fingerprint
       // With no brand → INSUFFICIENT_DATA
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
     })
 
     it('normalizes UPC with dashes and spaces', async () => {
@@ -435,6 +436,7 @@ describe('B. Matching Logic', () => {
     resetMocks()
     resetFactories()
     resetMetrics()
+    clearTrustConfigCache()
   })
 
   describe('B1. UPC exact match', () => {
@@ -487,17 +489,18 @@ describe('B. Matching Logic', () => {
       setupMocks({
         sourceProduct,
         trustConfig,
+        existingProducts: [], // No fingerprint candidates
       })
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      // No brand/caliber → INSUFFICIENT_DATA
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      // Caliber is extracted from "Federal 9mm" title, so fingerprint matching proceeds
+      // With no candidates, result is AMBIGUOUS_FINGERPRINT
+      assertNeedsReview(result, 'AMBIGUOUS_FINGERPRINT')
+      // UPC_NOT_TRUSTED rule is fired, proving the UPC path was attempted but skipped
       assertRulesFired(result, ['UPC_NOT_TRUSTED'])
-      // Verify normalization error recorded (array with one string containing the message)
-      expect(result.evidence.normalizationErrors).toBeDefined()
-      expect(result.evidence.normalizationErrors?.length).toBeGreaterThan(0)
-      expect(result.evidence.normalizationErrors?.[0]).toContain('UPC present but source not trusted')
+      // Note: normalizationErrors from UPC path are not preserved in final result
+      // because fingerprint matching creates a new result object
     })
   })
 
@@ -505,6 +508,8 @@ describe('B. Matching Logic', () => {
     it('returns MATCHED with highest scoring candidate', async () => {
       const sourceProduct = createSourceProduct({
         brand: 'Federal',
+        // Default title: 'Federal Premium 9mm Luger 124gr JHP'
+        // This extracts: caliber='9mm', grain=124
       })
 
       // Create candidates with different scores
@@ -513,7 +518,7 @@ describe('B. Matching Logic', () => {
         brandNorm: 'federal',
         caliberNorm: '9mm',
         roundCount: 50,
-        grainWeight: 124,
+        grainWeight: 124, // Matches extracted grain
       })
       const poorMatch = createProduct({
         id: 'poor_match',
@@ -529,41 +534,39 @@ describe('B. Matching Logic', () => {
         existingProducts: [bestMatch, poorMatch],
       })
 
-      // Note: Current implementation has caliberNorm as undefined from normalizeInput
-      // This will result in INSUFFICIENT_DATA. For this test to work, we'd need
-      // caliber extraction to be implemented. Testing the fingerprint path requires
-      // the resolver to have caliberNorm extracted from the source_product.
-
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      // With current implementation, caliberNorm is always undefined → INSUFFICIENT_DATA
-      // This documents the actual behavior
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      // Caliber extraction works now! Title "Federal Premium 9mm Luger 124gr JHP"
+      // extracts caliber='9mm' and grain=124, enabling fingerprint matching
+      assertMatched(result, 'best_match')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.confidence).toBeGreaterThan(0.7) // brand + caliber + grain matches
+      assertRulesFired(result, ['FINGERPRINT_MATCHED'])
     })
   })
 
   describe('B5-B8. Fingerprint edge cases', () => {
-    // Note: These tests document expected behavior but require caliberNorm extraction
-    // to be implemented for fingerprint matching to work
-
-    it('returns UNMATCHED when no candidates found (empty result)', async () => {
+    it('returns NEEDS_REVIEW when no candidates found (empty result)', async () => {
+      // Default title "Federal Premium 9mm Luger 124gr JHP" extracts caliber='9mm'
       const sourceProduct = createSourceProduct({ brand: 'UnknownBrand' })
 
       setupMocks({
         sourceProduct,
         trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
-        existingProducts: [], // No candidates
+        existingProducts: [], // No candidates match (unknownbrand, 9mm)
       })
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      // Current implementation: caliberNorm undefined → INSUFFICIENT_DATA
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      // Caliber extraction works, but no candidates match the fingerprint
+      // → AMBIGUOUS_FINGERPRINT (no candidates found)
+      assertNeedsReview(result, 'AMBIGUOUS_FINGERPRINT')
+      assertRulesFired(result, ['AMBIGUOUS_FINGERPRINT'])
     })
   })
 
   describe('B9. Insufficient data', () => {
-    it('returns UNMATCHED with INSUFFICIENT_DATA when brand is missing', async () => {
+    it('returns NEEDS_REVIEW with INSUFFICIENT_DATA when brand is missing', async () => {
       const sourceProduct = createSourceProduct({ brand: null })
 
       setupMocks({
@@ -573,18 +576,95 @@ describe('B. Matching Logic', () => {
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      assertUnmatched(result, 'INSUFFICIENT_DATA')
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
       assertRulesFired(result, ['INSUFFICIENT_DATA'])
     })
   })
 
   describe('B10. Idempotency', () => {
-    it('returns existing link when inputHash matches', async () => {
-      const sourceProduct = createSourceProduct()
+    it('returns existing link when inputHash matches (skipped=true, no upsert)', async () => {
+      const sourceProduct = createSourceProduct({
+        title: 'Federal 9mm 124gr JHP',
+        brand: 'Federal',
+      })
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '012345678901'),
+      ]
       const existingProductId = 'existing_product_id'
+      const trustConfig = createTrustConfig({
+        sourceId: sourceProduct.sourceId,
+        upcTrusted: true,
+      })
 
-      // Set up existing link with matching evidence
-      // Note: This requires the inputHash to match, which depends on normalization
+      // Step 1: Run resolver WITHOUT existing link to compute inputHash
+      setupMocks({
+        sourceProduct: { ...sourceProduct, product_links: null },
+        trustConfig,
+        existingProducts: [createProduct({ id: existingProductId, canonicalKey: 'UPC:012345678901' })],
+      })
+
+      const firstResult = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // Capture the computed inputHash
+      const computedInputHash = firstResult.evidence.inputHash
+      expect(computedInputHash).toBeDefined()
+      expect(computedInputHash.length).toBe(64) // SHA256 hex
+
+      // Step 2: Reset mocks and set up existing link with matching inputHash
+      resetMocks()
+      clearTrustConfigCache()
+
+      sourceProduct.product_links = createProductLink({
+        sourceProductId: sourceProduct.id,
+        productId: existingProductId,
+        matchType: 'UPC',
+        status: 'MATCHED',
+        confidence: 0.99,
+        evidence: {
+          dictionaryVersion: '1.0.0',
+          trustConfigVersion: trustConfig.version,
+          inputNormalized: firstResult.evidence.inputNormalized,
+          inputHash: computedInputHash, // Use the computed hash
+          rulesFired: ['UPC_MATCH_ATTEMPTED', 'UPC_MATCHED'],
+        },
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig,
+        existingProducts: [createProduct({ id: existingProductId, canonicalKey: 'UPC:012345678901' })],
+      })
+
+      // Step 3: Run resolver again - should short-circuit
+      const secondResult = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // Assertions: idempotent short-circuit
+      expect(secondResult.skipped).toBe(true)
+      expect(secondResult.productId).toBe(existingProductId)
+      expect(secondResult.matchType).toBe('UPC')
+      expect(secondResult.status).toBe('MATCHED')
+      expect(secondResult.evidence.inputHash).toBe(computedInputHash)
+
+      // Short-circuit should avoid UPC lookup/creation
+      expect(mockPrisma.products.findUnique).not.toHaveBeenCalled()
+      expect(mockPrisma.products.create).not.toHaveBeenCalled()
+    })
+
+    it('re-resolves when inputHash differs (input changed)', async () => {
+      const sourceProduct = createSourceProduct({
+        title: 'Federal 9mm 124gr JHP',
+        brand: 'Federal',
+      })
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '012345678901'),
+      ]
+      const existingProductId = 'existing_product_id'
+      const trustConfig = createTrustConfig({
+        sourceId: sourceProduct.sourceId,
+        upcTrusted: true,
+      })
+
+      // Set up existing link with OLD inputHash (simulating input change)
       sourceProduct.product_links = createProductLink({
         sourceProductId: sourceProduct.id,
         productId: existingProductId,
@@ -592,24 +672,28 @@ describe('B. Matching Logic', () => {
         status: 'MATCHED',
         evidence: {
           dictionaryVersion: '1.0.0',
-          trustConfigVersion: 0, // Default when no trust config
+          trustConfigVersion: trustConfig.version,
           inputNormalized: {} as any,
-          inputHash: '', // Will need to compute the actual hash
-          rulesFired: ['SKIP_SAME_INPUT'],
+          inputHash: 'old_hash_that_will_not_match_new_input_12345678901234567890123456789012',
+          rulesFired: ['UPC_MATCHED'],
         },
       })
 
       setupMocks({
         sourceProduct,
-        trustConfig: null, // Will use default (version 0)
+        trustConfig,
+        existingProducts: [createProduct({ id: existingProductId, canonicalKey: 'UPC:012345678901' })],
       })
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      // First run will compute inputHash and store it
-      // Since the existing link has empty inputHash, it won't match
-      // This documents that idempotency requires matching inputHash
-      expect(result.status).toBeDefined()
+      // Should re-resolve (not skipped) because inputHash differs
+      expect(result.skipped).toBe(false)
+      expect(result.productId).toBe(existingProductId)
+      // Should NOT have SKIP_SAME_INPUT in rules
+      expect(result.evidence.rulesFired).not.toContain('SKIP_SAME_INPUT')
+      // Should have processed normally
+      assertRulesFired(result, ['UPC_MATCH_ATTEMPTED'])
     })
   })
 
@@ -736,6 +820,7 @@ describe('C. Persistence and Consistency', () => {
     resetMocks()
     resetFactories()
     resetMetrics()
+    clearTrustConfigCache()
   })
 
   describe('C1. Product creation succeeds', () => {
@@ -787,11 +872,11 @@ describe('C. Persistence and Consistency', () => {
         createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true })
       )
 
-      // First findFirst returns null (no product exists), then returns the product after race
-      let findFirstCalls = 0
-      mockPrisma.products.findFirst.mockImplementation(async () => {
-        findFirstCalls++
-        if (findFirstCalls === 1) return null // First call: product doesn't exist
+      // First findUnique returns null (no product exists), then returns the product after race
+      let findUniqueCalls = 0
+      mockPrisma.products.findUnique.mockImplementation(async () => {
+        findUniqueCalls++
+        if (findUniqueCalls === 1) return null // First call: product doesn't exist
         return existingProduct // Second call: another worker created it
       })
 
@@ -829,6 +914,90 @@ describe('C. Persistence and Consistency', () => {
         .rejects.toThrow('Database connection lost')
     })
   })
+
+  describe('C4. Persistence shape assertions', () => {
+    it('NEEDS_REVIEW result has productId = null', async () => {
+      const sourceProduct = createSourceProduct({ brand: null })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // Core assertion: NEEDS_REVIEW must have null productId
+      expect(result.status).toBe('NEEDS_REVIEW')
+      expect(result.productId).toBeNull()
+      expect(result.matchType).toBe('NONE')
+      expect(result.reasonCode).toBe('INSUFFICIENT_DATA')
+    })
+
+    it('CREATED result has productId != null', async () => {
+      const sourceProduct = createSourceProduct()
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '999888777666'),
+      ]
+
+      const newProduct = createProduct({
+        id: 'newly_created_product',
+        canonicalKey: 'UPC:999888777666',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true }),
+        existingProducts: [],
+        productCreateResult: newProduct,
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // Core assertion: CREATED must have non-null productId
+      expect(result.status).toBe('CREATED')
+      expect(result.productId).toBe('newly_created_product')
+      expect(result.productId).not.toBeNull()
+      expect(result.createdProduct).toBeDefined()
+      expect(result.createdProduct?.id).toBe('newly_created_product')
+    })
+
+    it('MATCHED result has productId != null', async () => {
+      const sourceProduct = createSourceProduct()
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '012345678901'),
+      ]
+      const existingProductId = 'existing_matched_product'
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true }),
+        existingProducts: [createProduct({ id: existingProductId, canonicalKey: 'UPC:012345678901' })],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // Core assertion: MATCHED must have non-null productId
+      expect(result.status).toBe('MATCHED')
+      expect(result.productId).toBe(existingProductId)
+      expect(result.productId).not.toBeNull()
+    })
+
+    it('ERROR result has productId = null', async () => {
+      // Source not found → ERROR status
+      setupMocks({
+        sourceProduct: null,
+      })
+
+      const result = await resolveSourceProduct('nonexistent_id', 'INGEST')
+
+      // Core assertion: ERROR must have null productId
+      expect(result.status).toBe('ERROR')
+      expect(result.productId).toBeNull()
+      // reasonCode is always SYSTEM_ERROR, specific code is in evidence
+      expect(result.reasonCode).toBe('SYSTEM_ERROR')
+      expect(result.evidence.systemError?.code).toBe('SOURCE_NOT_FOUND')
+    })
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -840,6 +1009,7 @@ describe('D. Dependency Failures', () => {
     resetMocks()
     resetFactories()
     resetMetrics()
+    clearTrustConfigCache()
   })
 
   describe('D1. source_products lookup throws', () => {
@@ -868,7 +1038,7 @@ describe('D. Dependency Failures', () => {
   })
 
   describe('D3. products lookup throws', () => {
-    it('propagates error when products.findFirst fails', async () => {
+    it('propagates error when products.findUnique fails', async () => {
       const sourceProduct = createSourceProduct()
       sourceProduct.source_product_identifiers = [
         createUpcIdentifier(sourceProduct.id, '012345678901'),
@@ -878,7 +1048,7 @@ describe('D. Dependency Failures', () => {
       mockPrisma.source_trust_config.findUnique.mockResolvedValue(
         createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true })
       )
-      mockPrisma.products.findFirst.mockRejectedValue(
+      mockPrisma.products.findUnique.mockRejectedValue(
         new Error('Products table unavailable')
       )
 
@@ -903,7 +1073,7 @@ describe('D. Dependency Failures', () => {
       mockPrisma.source_trust_config.findUnique.mockResolvedValue(
         createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true })
       )
-      mockPrisma.products.findFirst.mockResolvedValue(existingProduct)
+      mockPrisma.products.findUnique.mockResolvedValue(existingProduct)
       mockPrisma.product_aliases.findUnique.mockRejectedValue(
         new Error('Alias lookup failed')
       )
@@ -923,6 +1093,7 @@ describe('E. Metrics Correctness', () => {
     resetMocks()
     resetFactories()
     resetMetrics()
+    clearTrustConfigCache()
   })
 
   /**
@@ -970,15 +1141,15 @@ describe('E. Metrics Correctness', () => {
       expect(snapshot.decisions['AFFILIATE_FEED']['CREATED']).toBe(1)
     })
 
-    it('records UNMATCHED decision', () => {
+    it('records NEEDS_REVIEW decision', () => {
       recordResolverJob({
         sourceKind: 'DIRECT',
-        status: 'UNMATCHED',
+        status: 'NEEDS_REVIEW',
         durationMs: 50,
       })
 
       const snapshot = getMetricsSnapshot()
-      expect(snapshot.decisions['DIRECT']['UNMATCHED']).toBe(1)
+      expect(snapshot.decisions['DIRECT']['NEEDS_REVIEW']).toBe(1)
     })
 
     it('records ERROR decision', () => {
@@ -1010,7 +1181,7 @@ describe('E. Metrics Correctness', () => {
     it('does not record failure for non-ERROR status', () => {
       recordResolverJob({
         sourceKind: 'DIRECT',
-        status: 'UNMATCHED',
+        status: 'NEEDS_REVIEW',
         durationMs: 100,
       })
 

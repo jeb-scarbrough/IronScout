@@ -32,6 +32,7 @@ export interface AllSettings {
     allowPlainFtp: SettingValue;
     harvesterSchedulerEnabled: SettingValue;
     affiliateSchedulerEnabled: SettingValue;
+    circuitBreakerBypass: SettingValue;
   };
   operations: {
     affiliateBatchSize: SettingValue;
@@ -101,6 +102,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       allowPlainFtp,
       harvesterSchedulerEnabled,
       affiliateSchedulerEnabled,
+      circuitBreakerBypass,
       affiliateBatchSize,
       priceHeartbeatHours,
       affiliateRunRetentionDays,
@@ -130,6 +132,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       getSystemSetting(SETTING_KEYS.ALLOW_PLAIN_FTP),
       getSystemSetting(SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED),
       getSystemSetting(SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED),
+      getSystemSetting(SETTING_KEYS.CIRCUIT_BREAKER_BYPASS),
       getSystemSetting(SETTING_KEYS.AFFILIATE_BATCH_SIZE),
       getSystemSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS),
       getSystemSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS),
@@ -164,6 +167,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
           allowPlainFtp,
           harvesterSchedulerEnabled,
           affiliateSchedulerEnabled,
+          circuitBreakerBypass,
         },
         operations: {
           affiliateBatchSize,

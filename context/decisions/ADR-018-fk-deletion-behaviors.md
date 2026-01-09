@@ -1,4 +1,4 @@
-# ADR-016: Foreign Key Deletion Behaviors
+# ADR-018: Foreign Key Deletion Behaviors
 
 ## Status
 Accepted

@@ -18,6 +18,7 @@ import { FeedStatusActions } from './feed-status-actions';
 import { RunsTable } from './runs-table';
 import { EditFeedSettings } from './edit-feed-settings';
 import { TestConnectionButton } from './test-connection-button';
+import { TrustConfigToggle } from './trust-config-toggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,10 @@ export default async function AffiliateFeedDetailPage({
     where: { id },
     include: {
       sources: {
-        include: { retailers: true },
+        include: {
+          retailers: true,
+          source_trust_config: true,
+        },
       },
       affiliate_feed_runs: {
         orderBy: { startedAt: 'desc' },
@@ -324,6 +328,14 @@ export default async function AffiliateFeedDetailPage({
           <TestConnectionButton feedId={feed.id} />
         </div>
       </div>
+
+      {/* Trust Configuration */}
+      <TrustConfigToggle
+        sourceId={feed.sources.id}
+        sourceName={feed.sources.name}
+        upcTrusted={feed.sources.source_trust_config?.upcTrusted ?? false}
+        version={feed.sources.source_trust_config?.version ?? 0}
+      />
 
       {/* Change Detection */}
       {(feed.lastRemoteMtime || feed.lastRemoteSize || feed.lastContentHash) && (

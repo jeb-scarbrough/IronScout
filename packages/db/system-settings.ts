@@ -16,6 +16,7 @@ export const SETTING_KEYS = {
   ALLOW_PLAIN_FTP: 'AFFILIATE_FEED_ALLOW_PLAIN_FTP',
   HARVESTER_SCHEDULER_ENABLED: 'HARVESTER_SCHEDULER_ENABLED',
   AFFILIATE_SCHEDULER_ENABLED: 'AFFILIATE_FEED_SCHEDULER_ENABLED',
+  CIRCUIT_BREAKER_BYPASS: 'AFFILIATE_CIRCUIT_BREAKER_BYPASS',
 
   // Operations
   AFFILIATE_BATCH_SIZE: 'AFFILIATE_BATCH_SIZE',
@@ -58,6 +59,7 @@ const DEFAULTS: Record<SettingKey, boolean | number | string> = {
   [SETTING_KEYS.ALLOW_PLAIN_FTP]: false,
   [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: true,
   [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: true,
+  [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: false,
 
   // Operations
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: 1000,
@@ -171,6 +173,7 @@ export async function isFeatureEnabled(key: SettingKey): Promise<boolean> {
 export const isPlainFtpAllowed = () => getBooleanSetting(SETTING_KEYS.ALLOW_PLAIN_FTP)
 export const isHarvesterSchedulerEnabled = () => getBooleanSetting(SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED)
 export const isAffiliateSchedulerEnabled = () => getBooleanSetting(SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED)
+export const isCircuitBreakerBypassed = () => getBooleanSetting(SETTING_KEYS.CIRCUIT_BREAKER_BYPASS)
 export const isMaintenanceMode = () => getBooleanSetting(SETTING_KEYS.MAINTENANCE_MODE)
 export const isRegistrationEnabled = () => getBooleanSetting(SETTING_KEYS.REGISTRATION_ENABLED)
 export const isAiSearchEnabled = () => getBooleanSetting(SETTING_KEYS.AI_SEARCH_ENABLED)

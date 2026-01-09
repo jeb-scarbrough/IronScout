@@ -15,10 +15,12 @@ import {
   Rss,
   DollarSign,
   Plus,
+  Shield,
 } from 'lucide-react';
 import { EditRetailerForm } from './edit-form';
 import { VisibilityActions } from './visibility-actions';
 import { MerchantLinkSection } from './merchant-link-section';
+import { SourceTrustConfigSection } from './source-trust-config-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +51,15 @@ export default async function RetailerDetailPage({
             select: { id: true, businessName: true, status: true },
           },
         },
+      },
+      sources: {
+        select: {
+          id: true,
+          name: true,
+          sourceKind: true,
+          source_trust_config: true,
+        },
+        orderBy: { name: 'asc' },
       },
       _count: {
         select: {
@@ -329,6 +340,11 @@ export default async function RetailerDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Trust Configuration Section */}
+      {retailer.sources.length > 0 && (
+        <SourceTrustConfigSection sources={retailer.sources} />
+      )}
 
       {/* Feeds Section */}
       <div className="bg-white shadow rounded-lg p-6">

@@ -13,8 +13,28 @@
  */
 
 export { RESOLVER_VERSION, resolveSourceProduct } from './resolver'
-export { productResolverWorker, startProductResolverWorker, stopProductResolverWorker } from './worker'
-export type { ResolverResult, ResolverEvidence } from './types'
+export {
+  productResolverWorker,
+  startProductResolverWorker,
+  stopProductResolverWorker,
+  startProcessingSweeper,
+  stopProcessingSweeper,
+} from './worker'
+export type {
+  ResolverResult,
+  ResolverEvidence,
+  ScoringStrategy,
+  ScoringResult,
+  CandidateProduct,
+  NormalizedInput,
+} from './types'
+
+// Scoring strategies
+export {
+  DEFAULT_SCORING_STRATEGY,
+  WeightedExactMatchStrategy,
+  createWeightedExactMatchStrategy,
+} from './scoring'
 
 // Metrics exports (Appendix B)
 export {

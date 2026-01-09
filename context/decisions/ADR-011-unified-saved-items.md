@@ -18,7 +18,7 @@ Accepted
 
 ### ADR-011A — Intent-Ready Saved Items (WatchlistItem Resolver Seam)
 
-This ADR is amended by **ADR-011A-Intent-Ready-Saved-Items.md**, which defines
+This ADR is amended by **ADR-017-Intent-Ready-Saved-Items.md**, which defines
 internal architecture and schema requirements while preserving all user-facing
 behavior specified here.
 

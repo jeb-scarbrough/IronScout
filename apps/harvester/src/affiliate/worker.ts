@@ -9,7 +9,7 @@
 
 import { Worker, Job } from 'bullmq'
 import { randomUUID } from 'crypto'
-import { prisma, Prisma } from '@ironscout/db'
+import { prisma, Prisma, isCircuitBreakerBypassed } from '@ironscout/db'
 import { redisConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
@@ -693,16 +693,30 @@ async function executePhase2(
   const sourceName = feed.sources.name
   const retailerName = feed.sources.retailers?.name
 
-  // Evaluate circuit breaker
+  // Check if circuit breaker is globally bypassed
+  const bypassCircuitBreaker = await isCircuitBreakerBypassed()
+  if (bypassCircuitBreaker) {
+    log.warn('Circuit breaker BYPASSED globally', {
+      feedId: feed.id,
+      runId: run.id,
+      sourceName,
+      retailerName,
+      note: 'AFFILIATE_CIRCUIT_BREAKER_BYPASS=true - skipping circuit breaker evaluation',
+    })
+  }
+
+  // Evaluate circuit breaker (or skip if bypassed)
   log.info('Phase 2: Evaluating circuit breaker', { feedId: feed.id, runId: run.id, sourceName, retailerName })
-  const cbResult = await evaluateCircuitBreaker(
-    run.id,
-    feed.id,
-    feed.expiryHours,
-    t0,
-    phase1Result.metrics.urlHashFallbackCount,
-    phase1Result.metrics.productsUpserted // Total products processed for URL_HASH percentage
-  )
+  const cbResult = bypassCircuitBreaker
+    ? { passed: true, metrics: { activeCountBefore: 0, seenSuccessCount: 0, wouldExpireCount: 0, urlHashFallbackCount: phase1Result.metrics.urlHashFallbackCount, expiryPercentage: 0 } }
+    : await evaluateCircuitBreaker(
+        run.id,
+        feed.id,
+        feed.expiryHours,
+        t0,
+        phase1Result.metrics.urlHashFallbackCount,
+        phase1Result.metrics.productsUpserted // Total products processed for URL_HASH percentage
+      )
 
   // Update run with circuit breaker metrics
   await prisma.affiliate_feed_runs.update({

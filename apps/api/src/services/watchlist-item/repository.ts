@@ -7,7 +7,7 @@
  *
  * All methods exclude soft-deleted items unless explicitly requested.
  *
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 import { prisma, Prisma } from '@ironscout/db'

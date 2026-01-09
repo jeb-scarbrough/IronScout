@@ -10,6 +10,7 @@ import {
   LogOut,
   Rss,
   Activity,
+  ClipboardList,
 } from 'lucide-react';
 import type { AdminSession } from '@/lib/auth';
 
@@ -22,7 +23,8 @@ const navItems = [
   { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
   { name: 'Resolver Metrics', href: '/resolver-metrics', icon: Activity },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Review Queue', href: '/review-queue', icon: ClipboardList },
+  { name: 'Platform Configuration', href: '/settings', icon: Settings },
 ];
 
 export function Navigation({ admin }: NavigationProps) {

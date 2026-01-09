@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Shield, ShieldAlert, ShieldOff, Loader2, Power, PowerOff } from 'lucide-react';
 import { updateDangerZoneSetting } from './actions';
-import { SETTING_KEYS, SETTING_DESCRIPTIONS } from './constants';
+import { SETTING_KEYS, SETTING_DESCRIPTIONS, SETTING_TOOLTIPS } from './constants';
+import { SettingHelp } from './setting-tooltip';
 import type { SettingValue } from './actions';
 
 interface DangerZoneSettingsProps {
@@ -11,6 +12,7 @@ interface DangerZoneSettingsProps {
     allowPlainFtp: SettingValue;
     harvesterSchedulerEnabled: SettingValue;
     affiliateSchedulerEnabled: SettingValue;
+    circuitBreakerBypass: SettingValue;
   };
 }
 
@@ -65,6 +67,20 @@ const DANGER_SETTINGS: DangerSetting[] = [
     disableWarning: 'Scheduled affiliate feed processing will stop. Manual runs will still work.',
     invertLogic: true,
   },
+  {
+    key: SETTING_KEYS.CIRCUIT_BREAKER_BYPASS,
+    label: 'Bypass Circuit Breaker',
+    description: SETTING_DESCRIPTIONS[SETTING_KEYS.CIRCUIT_BREAKER_BYPASS],
+    enableLabel: 'Bypass (Dangerous)',
+    disableLabel: 'Enable Protection',
+    enableWarning: [
+      'Circuit breaker protection will be disabled for ALL feeds',
+      'Feeds can expire unlimited products in a single run',
+      'This can cause mass data loss if a feed has issues',
+      'Only enable temporarily for initial feed setup or testing',
+    ],
+    disableWarning: 'Circuit breaker will resume protecting against mass product expiry.',
+  },
 ];
 
 export function DangerZoneSettings({ initialSettings }: DangerZoneSettingsProps) {
@@ -72,6 +88,7 @@ export function DangerZoneSettings({ initialSettings }: DangerZoneSettingsProps)
     [SETTING_KEYS.ALLOW_PLAIN_FTP]: initialSettings.allowPlainFtp.value as boolean,
     [SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED]: initialSettings.harvesterSchedulerEnabled.value as boolean,
     [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: initialSettings.affiliateSchedulerEnabled.value as boolean,
+    [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: initialSettings.circuitBreakerBypass.value as boolean,
   });
 
   const [metadata, setMetadata] = useState<Record<string, { updatedBy: string | null; updatedAt: Date | null }>>({
@@ -86,6 +103,10 @@ export function DangerZoneSettings({ initialSettings }: DangerZoneSettingsProps)
     [SETTING_KEYS.AFFILIATE_SCHEDULER_ENABLED]: {
       updatedBy: initialSettings.affiliateSchedulerEnabled.updatedBy,
       updatedAt: initialSettings.affiliateSchedulerEnabled.updatedAt,
+    },
+    [SETTING_KEYS.CIRCUIT_BREAKER_BYPASS]: {
+      updatedBy: initialSettings.circuitBreakerBypass.updatedBy,
+      updatedAt: initialSettings.circuitBreakerBypass.updatedAt,
     },
   });
 
@@ -168,7 +189,10 @@ export function DangerZoneSettings({ initialSettings }: DangerZoneSettingsProps)
                 <ShieldOff className="h-5 w-5 text-red-500 mt-0.5" />
               )}
               <div>
-                <h3 className="font-medium text-gray-900">{setting.label}</h3>
+                <h3 className="font-medium text-gray-900 flex items-center">
+                  {setting.label}
+                  <SettingHelp tooltip={SETTING_TOOLTIPS[setting.key]} position="right" />
+                </h3>
                 <p className="text-sm text-gray-600 mt-1">{setting.description}</p>
                 {meta.updatedBy && (
                   <p className="text-xs text-gray-500 mt-2">

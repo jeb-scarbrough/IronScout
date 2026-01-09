@@ -2,7 +2,7 @@
  * ADR-011A: WatchlistItem Resolver Tests
  *
  * Tests for the resolver that maps WatchlistItems to product IDs.
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'

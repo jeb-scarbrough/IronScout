@@ -2,7 +2,7 @@
  * ADR-011A: WatchlistItem Repository Tests
  *
  * Tests for the repository that handles WatchlistItem persistence.
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'

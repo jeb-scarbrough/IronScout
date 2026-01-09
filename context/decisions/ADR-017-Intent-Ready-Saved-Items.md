@@ -397,7 +397,7 @@ Operational guidance:
 
 ADR-011 should reference this file as:
 
-- `ADR-011A-Intent-Ready-Saved-Items.md`
+- `ADR-017-Intent-Ready-Saved-Items.md`
 
 ---
 

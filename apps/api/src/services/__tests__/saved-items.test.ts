@@ -2,7 +2,7 @@
  * ADR-011A: Saved Items Service Tests
  *
  * Tests for soft delete, resurrection, and deletedAt filter enforcement.
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'

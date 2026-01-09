@@ -11,7 +11,7 @@
  * - Internal/domain + DB: WatchlistItem
  * - API DTO: SavedItemDTO (in saved-items.ts)
  *
- * See: context/decisions/ADR-011A-Intent-Ready-Saved-Items.md
+ * See: context/decisions/ADR-017-Intent-Ready-Saved-Items.md
  */
 
 // Types

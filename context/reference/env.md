@@ -144,6 +144,10 @@ Scheduling:
   - Use this to enforce singleton scheduler deployments (ADR-001).
   - Only one instance should set this true in production.
 
+Logging:
+- `LOG_ASYNC=true|1` - Enable async buffered logging with flush on shutdown (default: false)
+  - Use only when graceful shutdown is enforced (no `kill -9`).
+
 Safety:
 - `MAX_WRITE_BATCH_SIZE` (optional)
 - `MAX_SOURCE_CONCURRENCY` (optional)

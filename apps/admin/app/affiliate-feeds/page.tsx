@@ -9,6 +9,8 @@ import {
   FileText,
   AlertTriangle,
   Plus,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { FeedActions } from './feed-actions';
 
@@ -36,7 +38,10 @@ export default async function AffiliateFeedsPage() {
     ],
     include: {
       sources: {
-        include: { retailers: true },
+        include: {
+          retailers: true,
+          source_trust_config: true,
+        },
       },
       affiliate_feed_runs: {
         orderBy: { startedAt: 'desc' },
@@ -181,6 +186,9 @@ export default async function AffiliateFeedsPage() {
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                UPC Trust
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Transport
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -230,6 +238,19 @@ export default async function AffiliateFeedsPage() {
                     {feed.consecutiveFailures > 0 && feed.status !== 'DISABLED' && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                         {feed.consecutiveFailures} failures
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {feed.sources.source_trust_config?.upcTrusted ? (
+                      <span className="inline-flex items-center gap-1 text-sm text-green-600" title="UPCs from this source are trusted">
+                        <ShieldCheck className="h-4 w-4" />
+                        Trusted
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-sm text-gray-400" title="UPCs require fingerprint verification">
+                        <ShieldAlert className="h-4 w-4" />
+                        Untrusted
                       </span>
                     )}
                   </td>
@@ -303,7 +324,7 @@ export default async function AffiliateFeedsPage() {
 
             {feeds.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                   No affiliate feeds configured yet.{' '}
                   <Link href="/affiliate-feeds/create" className="text-blue-600 hover:underline">
                     Add your first feed
