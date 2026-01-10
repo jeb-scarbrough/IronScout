@@ -223,7 +223,7 @@ async function startup() {
 
   // Start product resolver worker (always on - processes RESOLVE jobs from writer)
   log.info('Starting product resolver worker')
-  resolverWorker = startProductResolverWorker({ concurrency: 5 })
+  resolverWorker = await startProductResolverWorker({ concurrency: 5 })
 
   // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
   log.info('Starting product resolver sweeper')

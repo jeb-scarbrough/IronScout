@@ -25,8 +25,19 @@ import {
   type CandidateProduct,
 } from './types'
 import { logger } from '../config/logger'
-import { extractCaliber, extractGrainWeight, extractRoundCount } from '../normalizer/ammo-utils'
+import { logResolverDetail } from '../config/run-file-logger'
+import {
+  deriveShotgunLoadType,
+  extractCaliber,
+  extractGrainWeight,
+  extractRoundCount,
+  extractShellLength,
+  extractShotSize,
+  extractSlugWeight,
+} from '../normalizer/ammo-utils'
 import { DEFAULT_SCORING_STRATEGY } from './scoring'
+import { normalizeBrandString } from './brand-normalization'
+import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
 
 const log = logger.resolver
 
@@ -75,17 +86,26 @@ export function getTrustConfigCacheStats(): { size: number; maxSize: number; ttl
 /**
  * Create a resolver-scoped logger with sourceProductId context
  * All log entries from this resolver run will include the sourceProductId
+ * Logs to both console and per-run file (when affiliateFeedRunId is provided)
  */
-function createResolverLog(sourceProductId: string, trigger: string) {
+function createResolverLog(sourceProductId: string, trigger: string, affiliateFeedRunId?: string) {
   return {
-    debug: (event: string, meta?: Record<string, unknown>) =>
-      log.debug(event, { sourceProductId, trigger, ...meta }),
-    info: (event: string, meta?: Record<string, unknown>) =>
-      log.info(event, { sourceProductId, trigger, ...meta }),
-    warn: (event: string, meta?: Record<string, unknown>) =>
-      log.warn(event, { sourceProductId, trigger, ...meta }),
-    error: (event: string, meta?: Record<string, unknown>, error?: unknown) =>
-      log.error(event, { sourceProductId, trigger, ...meta }, error),
+    debug: (event: string, meta?: Record<string, unknown>) => {
+      log.debug(event, { sourceProductId, trigger, ...meta })
+      logResolverDetail('debug', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+    },
+    info: (event: string, meta?: Record<string, unknown>) => {
+      log.info(event, { sourceProductId, trigger, ...meta })
+      logResolverDetail('info', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+    },
+    warn: (event: string, meta?: Record<string, unknown>) => {
+      log.warn(event, { sourceProductId, trigger, ...meta })
+      logResolverDetail('warn', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+    },
+    error: (event: string, meta?: Record<string, unknown>, error?: unknown) => {
+      log.error(event, { sourceProductId, trigger, ...meta }, error)
+      logResolverDetail('error', sourceProductId, event, { trigger, ...meta, error: error instanceof Error ? error.message : String(error) }, affiliateFeedRunId)
+    },
   }
 }
 
@@ -95,13 +115,14 @@ function createResolverLog(sourceProductId: string, trigger: string) {
  */
 export async function resolveSourceProduct(
   sourceProductId: string,
-  trigger: 'INGEST' | 'RECONCILE' | 'MANUAL'
+  trigger: 'INGEST' | 'RECONCILE' | 'MANUAL',
+  affiliateFeedRunId?: string
 ): Promise<ResolverResult> {
   const startTime = Date.now()
   const config = DEFAULT_RESOLVER_CONFIG
   const rulesFired: string[] = []
   const normalizationErrors: string[] = []
-  const rlog = createResolverLog(sourceProductId, trigger)
+  const rlog = createResolverLog(sourceProductId, trigger, affiliateFeedRunId)
 
   rlog.info('RESOLVER_START', {
     resolverVersion: RESOLVER_VERSION,
@@ -236,7 +257,22 @@ export async function resolveSourceProduct(
 
   rlog.debug('NORMALIZE_START', { phase: 'normalize' })
 
-  const normalized = normalizeInput(sourceProduct, sourceProduct.source_product_identifiers, rlog)
+  const { normalized, brandAliasApplied, brandAliasId } = normalizeInput(
+    sourceProduct,
+    sourceProduct.source_product_identifiers,
+    rlog
+  )
+
+  // Track brand alias application
+  if (brandAliasApplied) {
+    rulesFired.push('BRAND_ALIAS_APPLIED')
+    // Record for daily tracking (fire-and-forget, non-blocking)
+    if (brandAliasId) {
+      recordAliasApplication(prisma, brandAliasId).catch(() => {
+        // Ignore errors - non-critical
+      })
+    }
+  }
 
   // Compute input hash for idempotency and reconciliation
   const inputHash = computeInputHash(normalized, DICTIONARY_VERSION, trustConfig.version)
@@ -553,12 +589,13 @@ async function loadTrustConfig(
 /**
  * Normalize input fields for matching
  * Per Spec v1.2 §3: Deterministic, non-throwing
+ * Per brand-aliases-v1: Also applies brand aliases and returns tracking info
  */
 function normalizeInput(
   sourceProduct: any,
   identifiers: any[],
   rlog: ReturnType<typeof createResolverLog>
-): NormalizedInput {
+): { normalized: NormalizedInput; brandAliasApplied: boolean; brandAliasId?: string } {
   // Extract UPC from identifiers
   const upcIdentifier = identifiers.find(i => i.idType === 'UPC')
   const rawUpc = upcIdentifier?.idValue
@@ -582,14 +619,27 @@ function normalizeInput(
     })
   }
 
-  // Normalize brand
+  // Normalize brand with alias lookup
   const rawBrand = sourceProduct.brand
-  const normalizedBrand = normalizeBrand(rawBrand)
+  const brandResult = normalizeBrand(rawBrand)
+  const normalizedBrand = brandResult.brandNorm
+
   if (rawBrand && !normalizedBrand) {
     rlog.warn('BRAND_NORMALIZATION_FAILED', {
       phase: 'normalize',
       rawBrand,
       reason: 'Brand normalization resulted in empty string',
+    })
+  }
+
+  // Log if brand alias was applied
+  if (brandResult.aliasApplied) {
+    rlog.info('BRAND_ALIAS_APPLIED', {
+      phase: 'normalize',
+      rawBrand,
+      originalNorm: normalizeBrandString(rawBrand),
+      resolvedNorm: normalizedBrand,
+      aliasId: brandResult.aliasId,
     })
   }
 
@@ -602,10 +652,22 @@ function normalizeInput(
   const extractedCaliber = extractCaliber(rawTitle || '')
   const extractedGrain = extractGrainWeight(rawTitle || '')
   const extractedRoundCount = extractRoundCount(rawTitle || '')
+  const extractedShotSize = extractShotSize(rawTitle || '')
+  const extractedSlugWeight = extractSlugWeight(rawTitle || '')
+  const extractedShellLength = extractShellLength(rawTitle || '')
+  const extractedLoadType = deriveShotgunLoadType(
+    rawTitle || '',
+    extractedShotSize,
+    extractedSlugWeight
+  )
 
   const resolvedCaliber = sourceProduct.caliber || extractedCaliber
   const resolvedGrain = sourceProduct.grainWeight ?? extractedGrain
   const resolvedRoundCount = sourceProduct.roundCount ?? extractedRoundCount
+  const resolvedShotSize = extractedShotSize ?? undefined
+  const resolvedSlugWeight = extractedSlugWeight ?? undefined
+  const resolvedShellLength = extractedShellLength ?? undefined
+  const resolvedLoadType = extractedLoadType ?? undefined
 
   if (rawTitle && !extractedCaliber && !sourceProduct.caliber) {
     rlog.debug('CALIBER_EXTRACTION_FAILED', {
@@ -632,25 +694,37 @@ function normalizeInput(
       caliber: resolvedCaliber,
       grain: resolvedGrain,
       roundCount: resolvedRoundCount,
+      shotSize: resolvedShotSize,
+      slugWeight: resolvedSlugWeight,
+      shellLength: resolvedShellLength,
+      loadType: resolvedLoadType,
     },
     identifierCount: identifiers.length,
     identifierTypes: identifiers.map(i => i.idType),
   })
 
   return {
-    title: sourceProduct.title,
-    titleNorm: normalizedTitle,
-    titleSignature,
-    brand: sourceProduct.brand,
-    brandNorm: normalizedBrand,
-    caliber: resolvedCaliber ?? undefined,
-    caliberNorm: resolvedCaliber ?? undefined, // extractCaliber/normalizer returns normalized form
-    upc: rawUpc,
-    upcNorm: normalizedUpc,
-    packCount: resolvedRoundCount ?? undefined,
-    grain: resolvedGrain ?? undefined,
-    url: sourceProduct.url,
-    normalizedUrl: sourceProduct.normalizedUrl,
+    normalized: {
+      title: sourceProduct.title,
+      titleNorm: normalizedTitle,
+      titleSignature,
+      brand: sourceProduct.brand,
+      brandNorm: normalizedBrand,
+      caliber: resolvedCaliber ?? undefined,
+      caliberNorm: resolvedCaliber ?? undefined, // extractCaliber/normalizer returns normalized form
+      upc: rawUpc,
+      upcNorm: normalizedUpc,
+      packCount: resolvedRoundCount ?? undefined,
+      grain: resolvedGrain ?? undefined,
+      shotSize: resolvedShotSize,
+      slugWeight: resolvedSlugWeight,
+      shellLength: resolvedShellLength,
+      loadType: resolvedLoadType,
+      url: sourceProduct.url,
+      normalizedUrl: sourceProduct.normalizedUrl,
+    },
+    brandAliasApplied: brandResult.aliasApplied,
+    brandAliasId: brandResult.aliasId,
   }
 }
 
@@ -676,25 +750,29 @@ function computeTitleSignature(title: string): string {
 }
 
 /**
- * Normalize brand name
+ * Normalize brand name with alias lookup
+ * Per brand-aliases-v1 spec: Normalize raw brand, then look up alias in cache.
+ *
+ * @returns Object with normalized brand and whether alias was applied
  */
-function normalizeBrand(brand?: string | null): string | undefined {
-  if (!brand) return undefined
-  const normalized = brand
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+function normalizeBrand(brand?: string | null): {
+  brandNorm: string | undefined
+  aliasApplied: boolean
+  aliasId?: string
+} {
+  const normalized = normalizeBrandString(brand)
+  if (!normalized) {
+    return { brandNorm: undefined, aliasApplied: false }
+  }
 
-  const alias = BRAND_ALIASES[normalized]
-  return alias ?? normalized
-}
+  // Look up alias in cache
+  const { resolvedBrand, aliasApplied, aliasId } = brandAliasCache.lookup(normalized)
 
-const BRAND_ALIASES: Record<string, string> = {
-  'pmc ammunition': 'pmc',
-  'cci ammunition': 'cci',
-  'federal': 'federal premium',
-  'federal ammunition': 'federal premium',
+  return {
+    brandNorm: resolvedBrand,
+    aliasApplied,
+    aliasId,
+  }
 }
 
 /**
@@ -899,6 +977,10 @@ async function attemptUpcMatch(
 /**
  * Attempt fingerprint-based match
  * Per Spec v1.2 §3: Score candidates, apply ambiguity rule
+ *
+ * Uses "identity-key first" model:
+ * 1. If all identity fields present → direct lookup by canonicalKey
+ * 2. If identity fields missing → fall back to fuzzy scoring
  */
 async function attemptFingerprintMatch(
   normalized: NormalizedInput,
@@ -911,11 +993,381 @@ async function attemptFingerprintMatch(
   rlog: ReturnType<typeof createResolverLog>,
   scoringStrategy: ScoringStrategy = DEFAULT_SCORING_STRATEGY
 ): Promise<ResolverResult> {
+  // ============================================================================
+  // IDENTITY-KEY FIRST: Direct lookup when all identity fields are present
+  // ============================================================================
+  const isShotgun = normalized.caliberNorm?.includes('Gauge') || normalized.caliberNorm === '.410 Bore'
+  const hasGrain = normalized.grain != null && normalized.grain > 0
+  const hasPackCount = normalized.packCount != null && normalized.packCount > 0
+  const hasShellOrSignature = Boolean(normalized.shellLength || normalized.titleSignature)
+  const hasShotgunIdentity = Boolean(
+    isShotgun &&
+    normalized.brandNorm &&
+    normalized.caliberNorm &&
+    normalized.loadType &&
+    hasPackCount &&
+    hasShellOrSignature
+  )
+  const hasCompleteIdentity = Boolean(
+    !isShotgun &&
+    normalized.brandNorm &&
+    normalized.caliberNorm &&
+    normalized.titleSignature &&
+    hasGrain &&
+    hasPackCount
+  )
+
+  if (hasShotgunIdentity) {
+    const shellOrSignature = normalized.shellLength || normalized.titleSignature || ''
+    const fingerprintData = [
+      normalized.brandNorm,
+      normalized.caliberNorm,
+      String(normalized.packCount),
+      normalized.loadType,
+      shellOrSignature,
+    ].join('|')
+    const identityKey = `FP_SG:${createHash('sha256').update(fingerprintData).digest('hex')}`
+
+    rlog.debug('IDENTITY_KEY_LOOKUP', {
+      phase: 'identity_key',
+      identityKey,
+      identityKeyType: 'shotgun',
+      fingerprintFields: {
+        brandNorm: normalized.brandNorm,
+        caliberNorm: normalized.caliberNorm,
+        packCount: normalized.packCount,
+        loadType: normalized.loadType,
+        shellLength: normalized.shellLength,
+        titleSignature: normalized.titleSignature?.slice(0, 30),
+      },
+    })
+
+    const existingProduct = await prisma.products.findUnique({
+      where: { canonicalKey: identityKey },
+    })
+
+    if (existingProduct) {
+      rulesFired.push('IDENTITY_KEY_MATCHED')
+
+      rlog.info('IDENTITY_KEY_MATCHED', {
+        phase: 'identity_key',
+        decision: 'MATCHED',
+        productId: existingProduct.id,
+        identityKey,
+        identityKeyType: 'shotgun',
+      })
+
+      const isRelink = existingLink && existingLink.productId !== existingProduct.id
+      const relinkBlocked = isRelink && !shouldRelink(existingLink, 'FINGERPRINT', 1.0, rulesFired, rlog)
+      const finalProductId = relinkBlocked ? existingLink.productId : existingProduct.id
+
+      return {
+        productId: finalProductId,
+        matchType: 'FINGERPRINT' as const,
+        status: 'MATCHED' as const,
+        reasonCode: relinkBlocked ? 'RELINK_BLOCKED_HYSTERESIS' : null,
+        confidence: 1.0,
+        resolverVersion: RESOLVER_VERSION,
+        evidence: {
+          dictionaryVersion: DICTIONARY_VERSION,
+          trustConfigVersion: trustConfig.version,
+          inputNormalized: normalized,
+          inputHash,
+          rulesFired,
+          candidates: [],
+        },
+        sourceKind,
+        skipped: false,
+        isRelink,
+        relinkBlocked,
+      }
+    }
+
+    rlog.info('IDENTITY_KEY_CREATE_ATTEMPT', {
+      phase: 'identity_key',
+      identityKey,
+      identityKeyType: 'shotgun',
+      productData: {
+        name: normalized.title?.slice(0, 80),
+        brandNorm: normalized.brandNorm,
+        caliberNorm: normalized.caliberNorm,
+        packCount: normalized.packCount,
+        loadType: normalized.loadType,
+        shellLength: normalized.shellLength,
+      },
+    })
+
+    let product: any
+    let isCreated = false
+
+    try {
+      product = await prisma.products.create({
+        data: {
+          canonicalKey: identityKey,
+          name: normalized.title,
+          category: 'ammunition',
+          brandNorm: normalized.brandNorm,
+          caliberNorm: normalized.caliberNorm,
+          roundCount: normalized.packCount ?? null,
+        },
+      })
+      isCreated = true
+      rulesFired.push('IDENTITY_KEY_CREATED')
+
+      rlog.info('IDENTITY_KEY_CREATED', {
+        phase: 'identity_key',
+        productId: product.id,
+        identityKey,
+        identityKeyType: 'shotgun',
+      })
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        rulesFired.push('IDENTITY_KEY_RACE_RETRY')
+        rlog.warn('IDENTITY_KEY_RACE_CONDITION', {
+          phase: 'identity_key',
+          identityKey,
+          identityKeyType: 'shotgun',
+          reason: 'Another worker created product concurrently, retrying lookup',
+        })
+        product = await prisma.products.findUnique({
+          where: { canonicalKey: identityKey },
+        })
+      } else {
+        rlog.error('IDENTITY_KEY_CREATE_ERROR', {
+          phase: 'identity_key',
+          identityKey,
+          identityKeyType: 'shotgun',
+          errorCode: error.code,
+          errorMessage: error.message,
+        }, error)
+        throw error
+      }
+    }
+
+    if (product) {
+      rlog.info('IDENTITY_KEY_RESULT', {
+        phase: 'identity_key',
+        decision: isCreated ? 'CREATED' : 'MATCHED',
+        productId: product.id,
+        identityKey,
+        identityKeyType: 'shotgun',
+        isCreated,
+      })
+
+      return {
+        productId: product.id,
+        matchType: 'FINGERPRINT' as const,
+        status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+        reasonCode: null,
+        confidence: 1.0,
+        resolverVersion: RESOLVER_VERSION,
+        evidence: {
+          dictionaryVersion: DICTIONARY_VERSION,
+          trustConfigVersion: trustConfig.version,
+          inputNormalized: normalized,
+          inputHash,
+          rulesFired,
+          candidates: [],
+        },
+        sourceKind,
+        skipped: false,
+        isRelink: false,
+        relinkBlocked: false,
+        createdProduct: isCreated ? { id: product.id, canonicalKey: identityKey } : undefined,
+      }
+    }
+
+    rlog.warn('IDENTITY_KEY_FALLTHROUGH', {
+      phase: 'identity_key',
+      identityKey,
+      identityKeyType: 'shotgun',
+      reason: 'Product null after race retry, falling through to fuzzy scoring',
+    })
+  }
+
+  if (hasCompleteIdentity) {
+    // Compute deterministic identity key
+    const fingerprintData = [
+      normalized.brandNorm,
+      normalized.caliberNorm,
+      String(normalized.grain),
+      String(normalized.packCount),
+      normalized.titleSignature,
+    ].join('|')
+    const identityKey = `FP:${createHash('sha256').update(fingerprintData).digest('hex')}`
+
+    rlog.debug('IDENTITY_KEY_LOOKUP', {
+      phase: 'identity_key',
+      identityKey,
+      fingerprintFields: {
+        brandNorm: normalized.brandNorm,
+        caliberNorm: normalized.caliberNorm,
+        grain: normalized.grain,
+        packCount: normalized.packCount,
+        titleSignature: normalized.titleSignature?.slice(0, 30),
+      },
+    })
+
+    // Direct lookup by identity key
+    const existingProduct = await prisma.products.findUnique({
+      where: { canonicalKey: identityKey },
+    })
+
+    if (existingProduct) {
+      // Found exact match by identity key
+      rulesFired.push('IDENTITY_KEY_MATCHED')
+
+      rlog.info('IDENTITY_KEY_MATCHED', {
+        phase: 'identity_key',
+        decision: 'MATCHED',
+        productId: existingProduct.id,
+        identityKey,
+      })
+
+      // Check hysteresis for relink
+      const isRelink = existingLink && existingLink.productId !== existingProduct.id
+      const relinkBlocked = isRelink && !shouldRelink(existingLink, 'FINGERPRINT', 1.0, rulesFired, rlog)
+      const finalProductId = relinkBlocked ? existingLink.productId : existingProduct.id
+
+      return {
+        productId: finalProductId,
+        matchType: 'FINGERPRINT' as const,
+        status: 'MATCHED' as const,
+        reasonCode: relinkBlocked ? 'RELINK_BLOCKED_HYSTERESIS' : null,
+        confidence: 1.0,
+        resolverVersion: RESOLVER_VERSION,
+        evidence: {
+          dictionaryVersion: DICTIONARY_VERSION,
+          trustConfigVersion: trustConfig.version,
+          inputNormalized: normalized,
+          inputHash,
+          rulesFired,
+          candidates: [],
+        },
+        sourceKind,
+        skipped: false,
+        isRelink,
+        relinkBlocked,
+      }
+    }
+
+    // No existing product - create new one
+    rlog.info('IDENTITY_KEY_CREATE_ATTEMPT', {
+      phase: 'identity_key',
+      identityKey,
+      productData: {
+        name: normalized.title?.slice(0, 80),
+        brandNorm: normalized.brandNorm,
+        caliberNorm: normalized.caliberNorm,
+        grain: normalized.grain,
+        packCount: normalized.packCount,
+      },
+    })
+
+    let product: any
+    let isCreated = false
+
+    try {
+      product = await prisma.products.create({
+        data: {
+          canonicalKey: identityKey,
+          name: normalized.title,
+          category: 'ammunition',
+          brandNorm: normalized.brandNorm,
+          caliberNorm: normalized.caliberNorm,
+          grainWeight: normalized.grain ?? null,
+          roundCount: normalized.packCount ?? null,
+        },
+      })
+      isCreated = true
+      rulesFired.push('IDENTITY_KEY_CREATED')
+
+      rlog.info('IDENTITY_KEY_CREATED', {
+        phase: 'identity_key',
+        productId: product.id,
+        identityKey,
+      })
+    } catch (error: any) {
+      // Handle race condition - another worker created it
+      if (error.code === 'P2002') {
+        rulesFired.push('IDENTITY_KEY_RACE_RETRY')
+        rlog.warn('IDENTITY_KEY_RACE_CONDITION', {
+          phase: 'identity_key',
+          identityKey,
+          reason: 'Another worker created product concurrently, retrying lookup',
+        })
+        product = await prisma.products.findUnique({
+          where: { canonicalKey: identityKey },
+        })
+      } else {
+        rlog.error('IDENTITY_KEY_CREATE_ERROR', {
+          phase: 'identity_key',
+          identityKey,
+          errorCode: error.code,
+          errorMessage: error.message,
+        }, error)
+        throw error
+      }
+    }
+
+    if (product) {
+      rlog.info('IDENTITY_KEY_RESULT', {
+        phase: 'identity_key',
+        decision: isCreated ? 'CREATED' : 'MATCHED',
+        productId: product.id,
+        identityKey,
+        isCreated,
+      })
+
+      return {
+        productId: product.id,
+        matchType: 'FINGERPRINT' as const,
+        status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+        reasonCode: null,
+        confidence: 1.0,
+        resolverVersion: RESOLVER_VERSION,
+        evidence: {
+          dictionaryVersion: DICTIONARY_VERSION,
+          trustConfigVersion: trustConfig.version,
+          inputNormalized: normalized,
+          inputHash,
+          rulesFired,
+          candidates: [],
+        },
+        sourceKind,
+        skipped: false,
+        isRelink: false,
+        relinkBlocked: false,
+        createdProduct: isCreated ? { id: product.id, canonicalKey: identityKey } : undefined,
+      }
+    }
+
+    // Extremely rare: race retry returned null, fall through to fuzzy scoring
+    rlog.warn('IDENTITY_KEY_FALLTHROUGH', {
+      phase: 'identity_key',
+      identityKey,
+      reason: 'Product null after race retry, falling through to fuzzy scoring',
+    })
+  }
+
+  // ============================================================================
+  // FUZZY SCORING: Fall back when identity fields are incomplete
+  // ============================================================================
   rlog.debug('FINGERPRINT_CANDIDATE_QUERY', {
     phase: 'fingerprint_match',
+    reason: hasCompleteIdentity ? 'identity_key_fallthrough' : 'incomplete_identity_fields',
     queryParams: {
       brandNorm: normalized.brandNorm,
       caliberNorm: normalized.caliberNorm,
+    },
+    missingFields: {
+      brandNorm: !normalized.brandNorm,
+      caliberNorm: !normalized.caliberNorm,
+      titleSignature: !normalized.titleSignature,
+      grain: !hasGrain,
+      packCount: !hasPackCount,
+      loadType: isShotgun ? !normalized.loadType : undefined,
+      shellLength: isShotgun ? !normalized.shellLength : undefined,
     },
     maxCandidates: config.maxCandidates,
     scoringStrategy: {
@@ -1035,14 +1487,215 @@ async function attemptFingerprintMatch(
   const insufficientGap = scoreGap < config.ambiguityGap
   const isAmbiguous = inAmbiguousZone || insufficientGap
 
-  if (isAmbiguous || scoredCandidates.length === 0) {
+  // No candidates found - create new product if we have sufficient data
+  if (scoredCandidates.length === 0) {
+    if (isShotgun) {
+      const hasLoadType = Boolean(normalized.loadType)
+      const hasShellOrSignature = Boolean(normalized.shellLength || normalized.titleSignature)
+      if (!normalized.brandNorm || !normalized.caliberNorm || !hasPackCount || !hasLoadType || !hasShellOrSignature) {
+        rulesFired.push('FINGERPRINT_INSUFFICIENT_DATA')
+        rlog.info('FINGERPRINT_NO_CANDIDATES_INSUFFICIENT_DATA', {
+          phase: 'fingerprint_match',
+          decision: 'NEEDS_REVIEW',
+          reason: 'No candidates and insufficient shotgun identity data to create product',
+          hasBrandNorm: !!normalized.brandNorm,
+          hasCaliberNorm: !!normalized.caliberNorm,
+          hasPackCount,
+          hasLoadType,
+          hasShellOrSignature,
+        })
+        return createNeedsReviewResult(
+          'INSUFFICIENT_DATA',
+          normalized,
+          inputHash,
+          trustConfig,
+          rulesFired,
+          [],
+          sourceKind,
+          topK
+        )
+      }
+
+      rlog.warn('SHOTGUN_IDENTITY_FALLTHROUGH', {
+        phase: 'fingerprint_match',
+        decision: 'NEEDS_REVIEW',
+        reason: 'Shotgun identity was complete but identity-key path did not return',
+        identityFields: {
+          brandNorm: normalized.brandNorm,
+          caliberNorm: normalized.caliberNorm,
+          packCount: normalized.packCount,
+          loadType: normalized.loadType,
+          shellLength: normalized.shellLength,
+        },
+      })
+      return createNeedsReviewResult(
+        'INSUFFICIENT_DATA',
+        normalized,
+        inputHash,
+        trustConfig,
+        rulesFired,
+        [],
+        sourceKind,
+        topK
+      )
+    }
+
+    // Check for minimum required fields to create a product
+    // Per design: require grain and packCount to avoid bad merges (e.g., 50-round vs 20-round boxes)
+    if (!normalized.brandNorm || !normalized.caliberNorm || !normalized.titleSignature || !hasGrain || !hasPackCount) {
+      rulesFired.push('FINGERPRINT_INSUFFICIENT_DATA')
+      rlog.info('FINGERPRINT_NO_CANDIDATES_INSUFFICIENT_DATA', {
+        phase: 'fingerprint_match',
+        decision: 'NEEDS_REVIEW',
+        reason: 'No candidates and insufficient data to create product',
+        hasBrandNorm: !!normalized.brandNorm,
+        hasCaliberNorm: !!normalized.caliberNorm,
+        hasTitleSignature: !!normalized.titleSignature,
+        hasGrain,
+        hasPackCount,
+      })
+      return createNeedsReviewResult(
+        'INSUFFICIENT_DATA',
+        normalized,
+        inputHash,
+        trustConfig,
+        rulesFired,
+        [],
+        sourceKind,
+        topK
+      )
+    }
+
+    // Generate deterministic canonicalKey for fingerprint-based product
+    // Format: FP:<sha256 hash> per schema comment
+    const fingerprintData = [
+      normalized.brandNorm,
+      normalized.caliberNorm,
+      String(normalized.grain),
+      String(normalized.packCount),
+      normalized.titleSignature,
+    ].join('|')
+    const canonicalKey = `FP:${createHash('sha256').update(fingerprintData).digest('hex')}`
+
+    rlog.info('FINGERPRINT_PRODUCT_CREATE_ATTEMPT', {
+      phase: 'fingerprint_match',
+      canonicalKey,
+      fingerprintData,
+      reason: 'No candidates found, creating new product',
+      productData: {
+        name: normalized.title?.slice(0, 80),
+        brandNorm: normalized.brandNorm,
+        caliberNorm: normalized.caliberNorm,
+        grain: normalized.grain,
+        packCount: normalized.packCount,
+      },
+    })
+
+    let product: any
+    let isCreated = false
+
+    try {
+      product = await prisma.products.create({
+        data: {
+          canonicalKey,
+          name: normalized.title,
+          category: 'ammunition',
+          brandNorm: normalized.brandNorm,
+          caliberNorm: normalized.caliberNorm,
+          grainWeight: normalized.grain ?? null,
+          roundCount: normalized.packCount ?? null,
+        },
+      })
+      isCreated = true
+      rulesFired.push('FINGERPRINT_PRODUCT_CREATED')
+
+      rlog.info('FINGERPRINT_PRODUCT_CREATED', {
+        phase: 'fingerprint_match',
+        productId: product.id,
+        canonicalKey,
+      })
+    } catch (error: any) {
+      // Handle race condition - another worker created it
+      if (error.code === 'P2002') {
+        rulesFired.push('FINGERPRINT_PRODUCT_RACE_RETRY')
+        rlog.warn('FINGERPRINT_PRODUCT_RACE_CONDITION', {
+          phase: 'fingerprint_match',
+          canonicalKey,
+          errorCode: error.code,
+          reason: 'Another worker created product concurrently, retrying lookup',
+        })
+        product = await prisma.products.findUnique({
+          where: { canonicalKey },
+        })
+      } else {
+        rlog.error('FINGERPRINT_PRODUCT_CREATE_ERROR', {
+          phase: 'fingerprint_match',
+          canonicalKey,
+          errorCode: error.code,
+          errorMessage: error.message,
+        }, error)
+        throw error
+      }
+    }
+
+    if (!product) {
+      rlog.error('FINGERPRINT_PRODUCT_MISSING_AFTER_CREATE', {
+        phase: 'fingerprint_match',
+        canonicalKey,
+        reason: 'Product not found after create/race retry',
+      })
+      return createNeedsReviewResult(
+        'AMBIGUOUS_FINGERPRINT',
+        normalized,
+        inputHash,
+        trustConfig,
+        rulesFired,
+        [],
+        sourceKind,
+        topK
+      )
+    }
+
+    rlog.info('FINGERPRINT_CREATE_RESULT', {
+      phase: 'fingerprint_match',
+      decision: isCreated ? 'CREATED' : 'MATCHED',
+      productId: product.id,
+      canonicalKey,
+      isCreated,
+    })
+
+    return {
+      productId: product.id,
+      matchType: 'FINGERPRINT' as const,
+      status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+      reasonCode: null,
+      confidence: 1.0,
+      resolverVersion: RESOLVER_VERSION,
+      evidence: {
+        dictionaryVersion: DICTIONARY_VERSION,
+        trustConfigVersion: trustConfig.version,
+        inputNormalized: normalized,
+        inputHash,
+        rulesFired,
+        candidates: [],
+      },
+      sourceKind,
+      skipped: false,
+      isRelink: false,
+      relinkBlocked: false,
+      createdProduct: isCreated ? { id: product.id, canonicalKey } : undefined,
+    }
+  }
+
+  // Truly ambiguous - multiple candidates with unclear winner
+  // Note: Products with complete identity data are handled by identity-key-first (above),
+  // so this path is only for products with incomplete identity fields.
+  if (isAmbiguous) {
     rulesFired.push('AMBIGUOUS_FINGERPRINT')
 
-    const ambiguityReason = scoredCandidates.length === 0
-      ? 'No candidates found'
-      : inAmbiguousZone
-        ? `Best score ${bestScore.toFixed(3)} in ambiguous zone [${config.ambiguityLow}, ${config.ambiguityHigh})`
-        : `Score gap ${scoreGap.toFixed(3)} < threshold ${config.ambiguityGap}`
+    const ambiguityReason = inAmbiguousZone
+      ? `Best score ${bestScore.toFixed(3)} in ambiguous zone [${config.ambiguityLow}, ${config.ambiguityHigh})`
+      : `Score gap ${scoreGap.toFixed(3)} < threshold ${config.ambiguityGap}`
 
     rlog.info('FINGERPRINT_AMBIGUOUS', {
       phase: 'fingerprint_match',

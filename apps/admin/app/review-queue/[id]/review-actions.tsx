@@ -28,6 +28,7 @@ interface SearchProduct {
   canonicalKey: string | null;
   brandNorm: string | null;
   caliberNorm: string | null;
+  upcNorm: string | null;
 }
 
 interface InputNormalized {
@@ -77,7 +78,8 @@ export function ReviewActions({
   const filteredProducts = searchProducts.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.canonicalKey?.toLowerCase().includes(searchQuery.toLowerCase())
+      p.canonicalKey?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.upcNorm?.includes(searchQuery)
   );
 
   const handleLinkToExisting = async (productId: string) => {
@@ -217,6 +219,9 @@ export function ReviewActions({
                   </div>
                   <div className="text-xs text-gray-500">
                     {product.brandNorm} · {product.caliberNorm}
+                    <span className="ml-2 font-mono text-gray-400">
+                      {product.upcNorm ? `UPC: ${product.upcNorm}` : '(No UPC)'}
+                    </span>
                   </div>
                 </button>
               ))

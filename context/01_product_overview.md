@@ -33,6 +33,8 @@ IronScout watches the market continuously.
 
 When something changes in a meaningful way, IronScout surfaces it.
 
+Canonical grouping aims to show one product with prices across multiple retailers whenever possible.
+
 ---
 
 ## How It Works

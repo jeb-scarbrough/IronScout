@@ -425,6 +425,50 @@ describe('A. Inputs and Validation', () => {
       expect(result.evidence.inputNormalized.upcNorm).toBe('012345678901')
     })
   })
+
+  describe('A8. Caliber extraction', () => {
+    it('extracts caliber from 5.56mm NATO title', async () => {
+      const sourceProduct = createSourceProduct({
+        title: 'Winchester USA 5.56mm NATO 55gr M193 FMJ',
+        brand: 'Winchester',
+      })
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '012345678901'),
+      ]
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true }),
+        existingProducts: [createProduct({ canonicalKey: 'UPC:012345678901' })],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      assertMatched(result)
+      expect(result.evidence.inputNormalized.caliberNorm).toBe('5.56 NATO')
+    })
+
+    it('extracts caliber from 5.56 title without NATO suffix', async () => {
+      const sourceProduct = createSourceProduct({
+        title: 'Lake City M855 Green Tip 5.56 - 62 Grain Penetrator - 420 Round Can',
+        brand: 'Lake City',
+      })
+      sourceProduct.source_product_identifiers = [
+        createUpcIdentifier(sourceProduct.id, '012345678901'),
+      ]
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: true }),
+        existingProducts: [createProduct({ canonicalKey: 'UPC:012345678901' })],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      assertMatched(result)
+      expect(result.evidence.inputNormalized.caliberNorm).toBe('5.56 NATO')
+    })
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -495,8 +539,8 @@ describe('B. Matching Logic', () => {
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
       // Caliber is extracted from "Federal 9mm" title, so fingerprint matching proceeds
-      // With no candidates, result is AMBIGUOUS_FINGERPRINT
-      assertNeedsReview(result, 'AMBIGUOUS_FINGERPRINT')
+      // With missing fingerprint fields (packCount), result is INSUFFICIENT_DATA
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
       // UPC_NOT_TRUSTED rule is fired, proving the UPC path was attempted but skipped
       assertRulesFired(result, ['UPC_NOT_TRUSTED'])
       // Note: normalizationErrors from UPC path are not preserved in final result
@@ -507,9 +551,10 @@ describe('B. Matching Logic', () => {
   describe('B4. Fingerprint match with clear winner', () => {
     it('returns MATCHED with highest scoring candidate', async () => {
       const sourceProduct = createSourceProduct({
-        brand: 'Federal',
+        brand: 'Federal Premium',
         // Default title: 'Federal Premium 9mm Luger 124gr JHP'
         // This extracts: caliber='9mm', grain=124
+        // Brand 'Federal Premium' normalizes to 'federal premium' to match products
       })
 
       // Create candidates with different scores
@@ -546,8 +591,9 @@ describe('B. Matching Logic', () => {
   })
 
   describe('B5-B8. Fingerprint edge cases', () => {
-    it('returns NEEDS_REVIEW when no candidates found (empty result)', async () => {
-      // Default title "Federal Premium 9mm Luger 124gr JHP" extracts caliber='9mm'
+    it('returns NEEDS_REVIEW when no candidates and insufficient data (missing packCount)', async () => {
+      // Default title "Federal Premium 9mm Luger 124gr JHP" extracts caliber='9mm', grain=124
+      // but no packCount - insufficient data to auto-create product
       const sourceProduct = createSourceProduct({ brand: 'UnknownBrand' })
 
       setupMocks({
@@ -558,10 +604,91 @@ describe('B. Matching Logic', () => {
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      // Caliber extraction works, but no candidates match the fingerprint
-      // → AMBIGUOUS_FINGERPRINT (no candidates found)
-      assertNeedsReview(result, 'AMBIGUOUS_FINGERPRINT')
-      assertRulesFired(result, ['AMBIGUOUS_FINGERPRINT'])
+      // No candidates found + missing packCount → NEEDS_REVIEW (insufficient data)
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
+      assertRulesFired(result, ['FINGERPRINT_INSUFFICIENT_DATA'])
+    })
+
+    it('creates product when no candidates found but sufficient data', async () => {
+      // Title includes packCount - sufficient to auto-create
+      const sourceProduct = createSourceProduct({
+        brand: 'UnknownBrand',
+        title: 'UnknownBrand 9mm Luger 124gr FMJ 50rd Box',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [], // No candidates match
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      // No candidates found but sufficient data → CREATE product
+      expect(result.status).toBe('CREATED')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.createdProduct).toBeDefined()
+      assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
+    })
+
+    it('creates product via shotgun identity key when loadType + packCount present', async () => {
+      const sourceProduct = createSourceProduct({
+        brand: 'TestBrand',
+        title: 'TestBrand 12 Gauge 00 Buck Buckshot 25rd',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(result.status).toBe('CREATED')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.createdProduct).toBeDefined()
+      assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
+    })
+
+    it('creates product via shotgun identity key when shellLength is missing but titleSignature is present', async () => {
+      const sourceProduct = createSourceProduct({
+        brand: 'TestBrand',
+        title: 'TestBrand 12 Gauge 1oz Slug 5rd',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(result.status).toBe('CREATED')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.createdProduct?.canonicalKey?.startsWith('FP_SG:')).toBe(true)
+      expect(result.evidence.inputNormalized.shellLength).toBeUndefined()
+      expect(result.evidence.inputNormalized.loadType).toBe('1oz Slug')
+      assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
+    })
+
+    it('returns NEEDS_REVIEW for shotgun when loadType is missing', async () => {
+      const sourceProduct = createSourceProduct({
+        brand: 'TestBrand',
+        title: 'TestBrand 12 Gauge Buckshot 25rd',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [],
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      assertNeedsReview(result, 'INSUFFICIENT_DATA')
+      assertRulesFired(result, ['FINGERPRINT_INSUFFICIENT_DATA'])
     })
   })
 

@@ -13,6 +13,10 @@ The Product Resolver is responsible for:
 3. Handling ambiguous cases that require human review
 4. Maintaining an audit trail of all matching decisions
 
+Goal:
+- Maximize cross-vendor grouping so users see one product with multiple prices.
+- Review is the exception, not the default, when required attributes are present.
+
 Key challenges:
 - **Identity fragmentation**: Same product appears with different titles, UPCs, and attributes across sources
 - **Trust variance**: Some sources provide reliable UPCs; others have incorrect or missing identifiers
@@ -46,8 +50,11 @@ Stage 3: NEEDS_REVIEW (human intervention)
 - UPC trust is source-specific (some retailers have reliable UPC data; others don't)
 - Match confidence: 1.0 for trusted UPC matches
 
-**Stage 2: Fingerprint Scoring**
-- Compute weighted similarity across normalized attributes:
+**Stage 2: Fingerprint (Identity-First, then Scoring)**
+- If identity fields are complete (`brandNorm`, `caliberNorm`, `grain`, `packCount`, `titleSignature`):
+  - Compute deterministic canonical key and attempt direct lookup.
+  - If no match exists, create a new canonical product (race-safe).
+- If identity fields are incomplete, fall back to weighted similarity scoring across:
   - Title similarity (TF-IDF cosine similarity)
   - Brand match (exact normalized comparison)
   - Caliber match (exact normalized comparison)
@@ -258,9 +265,60 @@ Roadmap:
 
 ### UNMATCHED Deprecation
 `UNMATCHED` is a legacy status from before `NEEDS_REVIEW` was introduced. Both are treated identically:
-- Appear in Review Queue
-- Subject to same status guards
-- May be consolidated in future migration
+
+---
+
+## Amendment: Identity-Key-First Fingerprint Resolution
+
+### Status
+Accepted
+
+### Context
+Ambiguity spikes occur when candidates are queried by `brandNorm + caliberNorm` only. Once a product exists, later variants with different `grain` or `packCount` see candidates and fall into the ambiguity zone. Review should remain the exception when identity fields are complete.
+
+### Decision
+When identity fields are complete, the resolver uses an identity-key-first path before fuzzy scoring.
+
+Identity fields:
+- `brandNorm`
+- `caliberNorm`
+- `grain`
+- `packCount`
+- `titleSignature`
+
+Shotgun identity fields (caliber contains "Gauge" or ".410 Bore"):
+- `brandNorm`
+- `caliberNorm`
+- `packCount`
+- `loadType` (shot size or slug weight)
+- `shellLength` if present, otherwise `titleSignature`
+
+Canonical identity:
+- `canonicalKey` = `FP:${sha256(brandNorm|caliberNorm|grain|packCount|titleSignature)}`
+- `canonicalKey` = `FP_SG:${sha256(brandNorm|caliberNorm|packCount|loadType|shellLengthOrTitleSignature)}` for shotgun inputs
+
+Flow:
+- If identity fields are present:
+  - Compute `canonicalKey` and attempt direct lookup.
+  - If found, return `MATCHED` (identity-key match).
+  - If not found, create a new product (identity-key create).
+- If identity fields are incomplete:
+  - Fall back to fuzzy fingerprint scoring over `brandNorm + caliberNorm` candidates.
+  - Ambiguity and insufficient data still return `NEEDS_REVIEW`.
+
+Concurrency:
+- Create uses the same P2002 retry pattern as the UPC path.
+- Unique constraint on `products.canonicalKey` enforces idempotency.
+
+### Consequences
+Pros:
+- Review volume drops for variant-rich feeds.
+- Canonical creation becomes deterministic and race-safe when identity fields are present.
+
+Cons (accepted):
+- Over-merging risk remains if identity fields are incomplete or low quality.
+- Shotgun entries lacking `loadType` or `packCount` still fall back to fuzzy scoring and may require review.
+- Best-effort canonicalization prioritizes throughput over perfect separation.
 
 ---
 

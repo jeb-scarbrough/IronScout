@@ -267,6 +267,12 @@ Structured input enrichment (v1.2+):
 - These fields are derived at ingestion time from affiliate Attributes JSON or URL slug parsing.
 - They are used only to improve fingerprint readiness when title parsing is insufficient.
 
+Shotgun identity inputs (v1.2+):
+- For shotgun calibers (Gauge or .410 Bore), resolver derives:
+  - loadType (shot size or slug weight)
+  - shellLength (inches, if present)
+- If shellLength is missing, titleSignature is used as a fallback in the identity key.
+
 Output
 
 Upserted product_links row

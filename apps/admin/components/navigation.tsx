@@ -11,6 +11,7 @@ import {
   Rss,
   Activity,
   ClipboardList,
+  Tags,
 } from 'lucide-react';
 import type { AdminSession } from '@/lib/auth';
 
@@ -22,6 +23,7 @@ const navItems = [
   { name: 'Merchants', href: '/merchants', icon: Users },
   { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
+  { name: 'Brand Aliases', href: '/brand-aliases', icon: Tags },
   { name: 'Resolver Metrics', href: '/resolver-metrics', icon: Activity },
   { name: 'Review Queue', href: '/review-queue', icon: ClipboardList },
   { name: 'Platform Configuration', href: '/settings', icon: Settings },

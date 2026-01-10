@@ -41,13 +41,34 @@ export default async function AnalyticsPage() {
     merchant
   ] = await Promise.all([
     prisma.click_events.count({
-      where: { merchantId, createdAt: { gte: today } },
+      where: {
+        createdAt: { gte: today },
+        retailers: {
+          merchant_retailers: {
+            some: { merchantId, status: 'ACTIVE' },
+          },
+        },
+      },
     }),
     prisma.click_events.count({
-      where: { merchantId, createdAt: { gte: weekAgo } },
+      where: {
+        createdAt: { gte: weekAgo },
+        retailers: {
+          merchant_retailers: {
+            some: { merchantId, status: 'ACTIVE' },
+          },
+        },
+      },
     }),
     prisma.click_events.count({
-      where: { merchantId, createdAt: { gte: monthAgo } },
+      where: {
+        createdAt: { gte: monthAgo },
+        retailers: {
+          merchant_retailers: {
+            some: { merchantId, status: 'ACTIVE' },
+          },
+        },
+      },
     }),
     prisma.pixel_events.aggregate({
       where: { merchantId, createdAt: { gte: today } },

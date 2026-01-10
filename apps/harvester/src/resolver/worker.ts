@@ -21,6 +21,7 @@ import {
   productResolveQueue,
 } from '../config/queues'
 import { resolveSourceProduct, RESOLVER_VERSION } from './resolver'
+import { brandAliasCache } from './brand-alias-cache'
 import { logger } from '../config/logger'
 import { logResolverResult, logResolverError, closeResolverLogger } from '../config/run-file-logger'
 import type { ResolverResult } from './types'
@@ -48,12 +49,19 @@ export let productResolverWorker: Worker<ProductResolveJobData> | null = null
  * Start the Product Resolver worker
  * Per Spec v1.2: Should be called once during harvester startup
  */
-export function startProductResolverWorker(options?: {
+export async function startProductResolverWorker(options?: {
   concurrency?: number
   maxStalledCount?: number
-}): Worker<ProductResolveJobData> {
+}): Promise<Worker<ProductResolveJobData>> {
   const concurrency = options?.concurrency ?? 5
   const maxStalledCount = options?.maxStalledCount ?? 3
+
+  // Initialize brand alias cache before starting worker
+  await brandAliasCache.initialize(prisma)
+  log.info('BRAND_ALIAS_CACHE_INITIALIZED', {
+    event: 'BRAND_ALIAS_CACHE_INITIALIZED',
+    metrics: brandAliasCache.getMetrics(),
+  })
 
   log.info('RESOLVER_WORKER_START', {
     event: 'RESOLVER_WORKER_START',
@@ -135,6 +143,9 @@ export async function stopProductResolverWorker(): Promise<void> {
     await productResolverWorker.close()
     productResolverWorker = null
 
+    // Stop brand alias cache refresh timer and Redis subscriber
+    await brandAliasCache.stop()
+
     // Close the daily rolling file logger
     await closeResolverLogger()
 
@@ -208,7 +219,7 @@ async function processResolveJob(
       trigger,
     })
 
-    const result = await resolveSourceProduct(sourceProductId, trigger)
+    const result = await resolveSourceProduct(sourceProductId, trigger, job.data.affiliateFeedRunId)
 
     // Get sourceKind from result (resolver already fetched it, avoids duplicate DB query)
     const sourceKind: SourceKindLabel = result.sourceKind ?? 'UNKNOWN'

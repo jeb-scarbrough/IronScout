@@ -6,6 +6,7 @@ import { redisConnection } from '../config/redis'
 import { logger } from '../config/logger'
 import { alertQueue, WriteJobData, NormalizedProduct, enqueueProductResolve } from '../config/queues'
 import { RESOLVER_VERSION } from '../resolver'
+import { normalizeBrandString } from '../resolver/brand-normalization'
 import {
   recordPriceWriteWithVariance,
   type SourceKindLabel,
@@ -130,6 +131,7 @@ async function batchUpsertSourceProducts(
             title: item.name,
             imageUrl: item.imageUrl,
             brand: item.brand,
+            brandNorm: normalizeBrandString(item.brand),
             description: item.description,
             category: item.category,
             lastUpdatedByRunId: executionId,
@@ -146,6 +148,7 @@ async function batchUpsertSourceProducts(
             url: item.url,
             imageUrl: item.imageUrl,
             brand: item.brand,
+            brandNorm: normalizeBrandString(item.brand),
             description: item.description,
             category: item.category,
             createdByRunId: executionId,
@@ -367,6 +370,7 @@ async function processBatch(
               title: item.name,
               imageUrl: item.imageUrl,
               brand: item.brand,
+              brandNorm: normalizeBrandString(item.brand),
               description: item.description,
               category: item.category,
               lastUpdatedByRunId: executionId,
@@ -384,6 +388,7 @@ async function processBatch(
               url: item.url,
               imageUrl: item.imageUrl,
               brand: item.brand,
+              brandNorm: normalizeBrandString(item.brand),
               description: item.description,
               category: item.category,
               createdByRunId: executionId,

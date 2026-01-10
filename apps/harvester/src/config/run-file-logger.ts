@@ -23,6 +23,41 @@ const DATAFEED_LOG_DIR = join(process.cwd(), 'logs', 'datafeeds')
 // Log retention in days
 const LOG_RETENTION_DAYS = 7
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LOG LEVEL CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+
+const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  fatal: 4,
+}
+
+/**
+ * Get the configured file log level from environment
+ * DATAFEED_FILE_LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+ * Defaults to 'info'
+ */
+function getFileLogLevel(): LogLevel {
+  const envLevel = process.env.DATAFEED_FILE_LOG_LEVEL?.toLowerCase()
+  if (envLevel && envLevel in LOG_LEVEL_PRIORITY) {
+    return envLevel as LogLevel
+  }
+  return 'info'
+}
+
+/**
+ * Check if a log level should be written based on configured threshold
+ */
+function shouldLog(level: LogLevel): boolean {
+  const threshold = getFileLogLevel()
+  return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[threshold]
+}
+
 /**
  * Slugify a name for filesystem safety
  * "Bob's Ammo & Guns" -> "bobs-ammo-guns"
@@ -195,12 +230,13 @@ export function createRunFileLogger(options: RunFileLoggerOptions): RunFileLogge
   cleanupOldLogs(DATAFEED_LOG_DIR)
 
   function writeEntry(
-    level: string,
+    level: LogLevel,
     message: string,
     meta?: LogContext,
     error?: unknown
   ): void {
     if (!isOpen) return
+    if (!shouldLog(level)) return
     const line = formatEntry(level, message, runId, feedId, meta, error)
     stream.write(line + '\n')
   }
@@ -269,6 +305,7 @@ export function createRunFileLogger(options: RunFileLoggerOptions): RunFileLogge
     retailerName ? `Retailer: ${retailerName}` : '',
     `Feed ID: ${feedId}`,
     `Run ID: ${runId}`,
+    `Log Level: ${getFileLogLevel()}`,
     `Started: ${new Date().toISOString()}`,
     '='.repeat(80),
     '',
@@ -472,6 +509,28 @@ export function logResolverError(
 ): void {
   const stream = getResolverStream(affiliateFeedRunId)
   const line = formatResolverEntry('error', sourceProductId, message, meta, error)
+  stream.write(line + '\n')
+}
+
+/**
+ * Log detailed resolver activity to per-run log file.
+ * Respects DATAFEED_FILE_LOG_LEVEL environment variable.
+ *
+ * Use this for detailed debug/info logs during resolution.
+ */
+export function logResolverDetail(
+  level: LogLevel,
+  sourceProductId: string,
+  event: string,
+  meta?: LogContext,
+  affiliateFeedRunId?: string
+): void {
+  if (!shouldLog(level)) {
+    return
+  }
+
+  const stream = getResolverStream(affiliateFeedRunId)
+  const line = formatResolverEntry(level, sourceProductId, event, meta)
   stream.write(line + '\n')
 }
 

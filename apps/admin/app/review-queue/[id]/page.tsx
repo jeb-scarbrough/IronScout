@@ -128,6 +128,14 @@ export default async function ReviewDetailPage({
         inputNormalized?.caliberNorm ? { caliberNorm: inputNormalized.caliberNorm } : {},
       ].filter(c => Object.keys(c).length > 0),
     },
+    select: {
+      id: true,
+      name: true,
+      canonicalKey: true,
+      brandNorm: true,
+      caliberNorm: true,
+      upcNorm: true,
+    },
     take: 20,
     orderBy: { name: 'asc' },
   });
@@ -422,6 +430,7 @@ export default async function ReviewDetailPage({
               canonicalKey: p.canonicalKey,
               brandNorm: p.brandNorm,
               caliberNorm: p.caliberNorm,
+              upcNorm: p.upcNorm,
             }))}
             inputNormalized={inputNormalized}
             knownBrands={brands}

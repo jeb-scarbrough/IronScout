@@ -30,7 +30,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?25\s?acp\b|25\s?auto\b/i, normalized: '.25 ACP' },
 
   // Rifle calibers - 5.56/.223
-  { pattern: /\b5\.56\s?nato|5\.56x45(?:mm)?\b/i, normalized: '5.56 NATO' },
+  { pattern: /\b5\.56(?:\s?mm)?(?:\s?nato)?\b|5\.56x45(?:mm)?\b/i, normalized: '5.56 NATO' },
   { pattern: /(?:^|\s|\W)\.?\s?223\s?rem(?:ington)?\b/i, normalized: '.223 Remington' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?lr\b|22\s?long\s?rifle\b/i, normalized: '.22 LR' },
 
@@ -292,6 +292,121 @@ export function extractRoundCount(productName: string): number | null {
 
   // Common defaults by caliber if not explicitly stated
   // This could be enhanced based on caliber
+  return null
+}
+
+// ============================================================================
+// SHOTGUN SIGNAL EXTRACTION
+// ============================================================================
+
+function parseMixedNumber(input: string): number | null {
+  const normalized = input
+    .replace(/\u00BC/g, '1/4')
+    .replace(/\u00BD/g, '1/2')
+    .replace(/\u00BE/g, '3/4')
+    .trim()
+
+  const mixed = normalized.match(/^(\d+)\s*[- ]\s*(\d+)\/(\d+)$/)
+  if (mixed) {
+    const whole = Number.parseInt(mixed[1], 10)
+    const numerator = Number.parseInt(mixed[2], 10)
+    const denominator = Number.parseInt(mixed[3], 10)
+    if (Number.isFinite(whole) && Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+      return whole + (numerator / denominator)
+    }
+  }
+
+  const fraction = normalized.match(/^(\d+)\/(\d+)$/)
+  if (fraction) {
+    const numerator = Number.parseInt(fraction[1], 10)
+    const denominator = Number.parseInt(fraction[2], 10)
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+      return numerator / denominator
+    }
+  }
+
+  const decimal = Number.parseFloat(normalized)
+  if (Number.isFinite(decimal)) {
+    return decimal
+  }
+
+  return null
+}
+
+function formatDecimal(value: number, maxDecimals: number): string {
+  const fixed = value.toFixed(maxDecimals)
+  return fixed.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+}
+
+function formatOunces(value: number): string {
+  return `${formatDecimal(value, 3)}oz`
+}
+
+function formatInches(value: number): string {
+  return `${formatDecimal(value, 3)}in`
+}
+
+export function extractShotSize(productName: string): string | null {
+  const name = productName.toLowerCase()
+
+  const buckMatch = name.match(/(?:^|\s)(?:#|no\.?\s*)?(0{1,3}|[1-9](?:\.5)?)\s*(?:buck(?:shot)?)\b/i)
+  if (buckMatch) {
+    return `${buckMatch[1]} Buck`
+  }
+
+  const shotMatch = name.match(/(?:^|\s)(?:#|no\.?\s*)?([1-9](?:\.5)?)\s*(?:shot|birdshot)\b/i)
+  if (shotMatch) {
+    return `${shotMatch[1]} Shot`
+  }
+
+  return null
+}
+
+export function extractSlugWeight(productName: string): string | null {
+  if (!/slug/i.test(productName)) return null
+  const match = productName.match(/(\d+(?:\.\d+)?|\d+\s*[- ]\s*\d+\/\d+)\s?oz\b/i)
+  if (!match) return null
+
+  const parsed = parseMixedNumber(match[1])
+  if (parsed == null) return null
+  return formatOunces(parsed)
+}
+
+function extractShotWeight(productName: string): string | null {
+  if (/slug/i.test(productName) || !/buck|shot/i.test(productName)) return null
+  const match = productName.match(/(\d+(?:\.\d+)?|\d+\s*[- ]\s*\d+\/\d+)\s?oz\b/i)
+  if (!match) return null
+
+  const parsed = parseMixedNumber(match[1])
+  if (parsed == null) return null
+  return formatOunces(parsed)
+}
+
+export function extractShellLength(productName: string): string | null {
+  const match = productName.match(/(\d+(?:\.\d+)?|\d+\s*[- ]\s*\d+\/\d+)\s*(?:in(?:ch)?|")/i)
+  if (!match) return null
+
+  const parsed = parseMixedNumber(match[1])
+  if (parsed == null) return null
+  return formatInches(parsed)
+}
+
+export function deriveShotgunLoadType(
+  productName: string,
+  shotSize?: string | null,
+  slugWeight?: string | null
+): string | null {
+  const resolvedShotSize = shotSize ?? extractShotSize(productName)
+  if (resolvedShotSize) return resolvedShotSize
+
+  const resolvedSlugWeight = slugWeight ?? extractSlugWeight(productName)
+  if (resolvedSlugWeight) return `${resolvedSlugWeight} Slug`
+
+  const shotWeight = extractShotWeight(productName)
+  if (shotWeight) {
+    return /buck/i.test(productName) ? `${shotWeight} Buck` : `${shotWeight} Shot`
+  }
+
   return null
 }
 

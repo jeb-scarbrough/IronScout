@@ -51,7 +51,6 @@ export default async function MerchantDetailPage({
       },
       _count: {
         select: {
-          click_events: true,
           pixel_events: true,
         },
       },
@@ -70,8 +69,8 @@ export default async function MerchantDetailPage({
 
   const retailerId = merchantRetailer?.retailerId;
 
-  // Get SKU and feed counts from the retailer (both legacy and affiliate systems)
-  const [legacySkuCount, legacyFeedCount, affiliateFeedCount, sourceProductCount] = await Promise.all([
+  // Get SKU, feed counts, and click events from the retailer (both legacy and affiliate systems)
+  const [legacySkuCount, legacyFeedCount, affiliateFeedCount, sourceProductCount, clickEventCount] = await Promise.all([
     retailerId
       ? prisma.retailer_skus.count({ where: { retailerId } })
       : Promise.resolve(0),
@@ -85,6 +84,10 @@ export default async function MerchantDetailPage({
     // Count source products via sources
     retailerId
       ? prisma.source_products.count({ where: { sources: { retailerId } } })
+      : Promise.resolve(0),
+    // Count click events for the retailer
+    retailerId
+      ? prisma.click_events.count({ where: { retailerId } })
       : Promise.resolve(0),
   ]);
 
@@ -240,7 +243,7 @@ export default async function MerchantDetailPage({
                 <span className="text-sm font-medium text-gray-500">Clicks</span>
               </div>
               <p className="mt-2 text-2xl font-semibold text-gray-900">
-                {merchant._count.click_events.toLocaleString()}
+                {clickEventCount.toLocaleString()}
               </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">

@@ -6,6 +6,7 @@
  */
 
 import { Queue } from 'bullmq';
+import Redis from 'ioredis';
 
 const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -20,6 +21,47 @@ const redisConnection = {
   password: redisPassword,
   maxRetriesPerRequest: null,
 };
+
+// ============================================================================
+// BRAND ALIAS CACHE INVALIDATION (Pub/Sub)
+// ============================================================================
+
+const BRAND_ALIAS_INVALIDATE_CHANNEL = 'brand-alias:invalidate';
+
+let pubClient: Redis | null = null;
+
+function getPubClient(): Redis {
+  if (!pubClient) {
+    pubClient = new Redis({
+      host: redisHost,
+      port: redisPort,
+      password: redisPassword,
+      lazyConnect: true,
+    });
+    pubClient.on('error', (err) => {
+      console.error('[Redis Pub/Sub] Client error:', err.message);
+    });
+  }
+  return pubClient;
+}
+
+/**
+ * Publish a brand alias cache invalidation event.
+ * Harvester instances subscribe to this channel and refresh their cache.
+ */
+export async function publishBrandAliasInvalidation(aliasId: string, action: 'activate' | 'disable'): Promise<void> {
+  try {
+    const client = getPubClient();
+    await client.publish(BRAND_ALIAS_INVALIDATE_CHANNEL, JSON.stringify({ aliasId, action, timestamp: Date.now() }));
+    console.log(`[Redis Pub/Sub] Published brand alias invalidation: ${action} ${aliasId}`);
+  } catch (error) {
+    // Non-critical: log and continue, fallback is periodic refresh
+    const err = error as Error;
+    console.error('[Redis Pub/Sub] Failed to publish invalidation', { message: err.message });
+  }
+}
+
+export { BRAND_ALIAS_INVALIDATE_CHANNEL };
 
 // Affiliate Feed Queue
 export interface AffiliateFeedJobData {
