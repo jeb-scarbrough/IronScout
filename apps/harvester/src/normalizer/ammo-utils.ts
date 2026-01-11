@@ -24,18 +24,26 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?40\s?s&w\b|40\s?s&w\b/i, normalized: '.40 S&W' },
   { pattern: /(?:^|\s|\W)\.?\s?38\s?special\b|38\s?spl\b/i, normalized: '.38 Special' },
   { pattern: /(?:^|\s|\W)\.?\s?357\s?mag\b|357\s?magnum\b/i, normalized: '.357 Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?357\s?sig\b|357\s?sig\b/i, normalized: '.357 SIG' },
   { pattern: /\b10\s?mm|10mm\s?auto\b/i, normalized: '10mm Auto' },
   { pattern: /(?:^|\s|\W)\.?\s?380\s?acp\b|380\s?auto\b/i, normalized: '.380 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?32\s?acp\b|32\s?auto\b/i, normalized: '.32 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?25\s?acp\b|25\s?auto\b/i, normalized: '.25 ACP' },
 
+  // Rimfire calibers
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?lr\b|22\s?long\s?rifle\b/i, normalized: '.22 LR' },
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?wmr\b|22\s?win(?:chester)?\s?mag(?:num)?\b|22\s?magnum\b/i, normalized: '.22 WMR' },
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?short\b/i, normalized: '.22 Short' },
+  { pattern: /(?:^|\s|\W)\.?\s?17\s?hmr\b|17\s?hornady\s?mag(?:num)?\b/i, normalized: '.17 HMR' },
+  { pattern: /(?:^|\s|\W)\.?\s?17\s?wsm\b|17\s?win(?:chester)?\s?super\s?mag\b/i, normalized: '.17 WSM' },
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?hornet\b/i, normalized: '.22 Hornet' },
+
   // Rifle calibers - 5.56/.223
   { pattern: /\b5\.56(?:\s?mm)?(?:\s?nato)?\b|5\.56x45(?:mm)?\b/i, normalized: '5.56 NATO' },
   { pattern: /(?:^|\s|\W)\.?\s?223\s?rem(?:ington)?\b/i, normalized: '.223 Remington' },
-  { pattern: /(?:^|\s|\W)\.?\s?22\s?lr\b|22\s?long\s?rifle\b/i, normalized: '.22 LR' },
 
   // Rifle calibers - 7.62
-  { pattern: /\b7\.62x39\b/i, normalized: '7.62x39mm' },
+  { pattern: /\b7\.62x39(?:mm)?\b/i, normalized: '7.62x39mm' },
   { pattern: /\b7\.62\s?nato|7\.62x51|(?:^|\s|\W)\.?\s?308\s?win(?:chester)?\b/i, normalized: '.308 Winchester' },
   { pattern: /\b7\.62x54r\b/i, normalized: '7.62x54R' },
 
@@ -85,18 +93,21 @@ export function normalizeCaliberString(value: string): string | null {
 // ============================================================================
 
 export function extractGrainWeight(productName: string): number | null {
-  // Match patterns like "115gr", "124 gr", "55 grain"
+  // Match patterns like "115gr", "124 gr", "55 grain", "62gn", "15.5gr"
   const patterns = [
-    /(\d{2,3})\s?gr(?:ain)?(?:s)?\b/i,
-    /(\d{2,3})-?grain/i,
+    /(\d{2,3}(?:\.\d+)?)\s?gr(?:ain)?(?:s)?\b/i,
+    /(\d{2,3}(?:\.\d+)?)\s?gn\b/i,  // "gn" variant (common in some feeds)
+    /(\d{2,3}(?:\.\d+)?)-?grain/i,
+    /(\d{2,3}(?:\.\d+)?)\s?grn\b/i, // "grn" variant
   ]
 
   for (const pattern of patterns) {
     const match = productName.match(pattern)
     if (match) {
-      const grain = parseInt(match[1], 10)
-      // Sanity check: typical ammo grains range from 20 to 800
-      if (grain >= 20 && grain <= 800) {
+      const grain = parseFloat(match[1])
+      // Sanity check: typical ammo grains range from 15 to 800
+      // (lowered min for .17 HMR which uses 15.5-20gr bullets)
+      if (grain >= 15 && grain <= 800) {
         return grain
       }
     }
@@ -273,18 +284,31 @@ function normalizeProductName(name: string): string {
 
 export function extractRoundCount(productName: string): number | null {
   // Match patterns like "50 rounds", "100rd", "500 count", "20-count"
+  // Also handles bulk/case patterns like "case of 500", "bulk 1000"
   const patterns = [
+    // Standard patterns
     /(\d+)\s?(?:rounds?|rds?|count|ct)\b/i,
     /(\d+)-(?:round|rd|count|ct)\b/i,
     /box\s?of\s?(\d+)/i,
+    // Bulk/case patterns
+    /case\s?of\s?(\d+)/i,
+    /(\d+)\s?(?:per\s?case|\/case)\b/i,
+    /bulk\s?(\d+)/i,
+    /(\d+)\s?(?:rd|round)s?\s?(?:bulk|case)\b/i,
+    // Value pack patterns
+    /value\s?pack\s?(?:of\s?)?(\d+)/i,
+    /(\d+)\s?(?:rd|round)s?\s?value\s?pack/i,
+    // Range pack patterns
+    /range\s?pack\s?(?:of\s?)?(\d+)/i,
+    /(\d+)\s?(?:rd|round)s?\s?range\s?pack/i,
   ]
 
   for (const pattern of patterns) {
     const match = productName.match(pattern)
     if (match) {
       const count = parseInt(match[1], 10)
-      // Sanity check: typical box sizes range from 5 to 1000
-      if (count >= 5 && count <= 5000) {
+      // Sanity check: typical sizes range from 5 to 10000 (bulk cases)
+      if (count >= 5 && count <= 10000) {
         return count
       }
     }

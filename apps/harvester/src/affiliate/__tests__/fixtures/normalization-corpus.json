@@ -248,6 +248,58 @@
       "expected": {
         "caliber": "9mm"
       }
+    },
+    {
+      "id": "hornady-17hmr-decimal",
+      "description": "Decimal grain weight extraction (.17 HMR uses 15.5-20gr)",
+      "input": {
+        "name": "Hornady V-MAX .17 HMR 15.5gr Polymer Tip - 50 Rounds",
+        "url": "https://example.com/hornady-17hmr-15half",
+        "price": 18.99,
+        "inStock": true,
+        "brand": "Hornady",
+        "sku": "83170"
+      },
+      "expected": {
+        "caliber": ".17 HMR",
+        "grainWeight": 15.5,
+        "roundCount": 50,
+        "brand": "Hornady"
+      }
+    },
+    {
+      "id": "federal-12ga-slug",
+      "description": "12 Gauge slug - no grainWeight (payload is oz, not grain)",
+      "input": {
+        "name": "Federal Power-Shok 12 Gauge 2-3/4\" 1oz Rifled Slug - 5 Rounds",
+        "url": "https://example.com/federal-12ga-slug",
+        "price": 8.99,
+        "inStock": true,
+        "brand": "Federal",
+        "sku": "F127RS"
+      },
+      "expected": {
+        "caliber": "12 Gauge",
+        "roundCount": 5,
+        "brand": "Federal"
+      }
+    },
+    {
+      "id": "winchester-20ga-birdshot",
+      "description": "20 Gauge birdshot - no grainWeight (payload is shot size)",
+      "input": {
+        "name": "Winchester Super-X 20 Gauge 2-3/4\" #7.5 Shot 1oz - 25 Rounds",
+        "url": "https://example.com/winchester-20ga-7half",
+        "price": 12.99,
+        "inStock": true,
+        "brand": "Winchester",
+        "sku": "XU207"
+      },
+      "expected": {
+        "caliber": "20 Gauge",
+        "roundCount": 25,
+        "brand": "Winchester"
+      }
     }
   ],
   "knownGaps": []
