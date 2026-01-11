@@ -25,6 +25,7 @@ export const logger = {
   merchant: rootLogger.child('merchant'),
   affiliate: rootLogger.child('affiliate'),
   resolver: rootLogger.child('resolver'),
+  embedding: rootLogger.child('embedding'),
 }
 
 // Export root logger for custom child creation

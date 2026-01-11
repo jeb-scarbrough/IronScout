@@ -15,6 +15,7 @@ interface FeatureFlagsSettingsProps {
     vectorSearchEnabled: SettingValue;
     emailNotificationsEnabled: SettingValue;
     alertProcessingEnabled: SettingValue;
+    autoEmbeddingEnabled: SettingValue;
   };
 }
 
@@ -64,6 +65,12 @@ const FLAGS: FlagConfig[] = [
     description: SETTING_DESCRIPTIONS[SETTING_KEYS.ALERT_PROCESSING_ENABLED],
     defaultEnabled: true,
   },
+  {
+    key: SETTING_KEYS.AUTO_EMBEDDING_ENABLED,
+    label: 'Auto Embedding',
+    description: SETTING_DESCRIPTIONS[SETTING_KEYS.AUTO_EMBEDDING_ENABLED],
+    defaultEnabled: false,
+  },
 ];
 
 export function FeatureFlagsSettings({ initialSettings }: FeatureFlagsSettingsProps) {
@@ -74,6 +81,7 @@ export function FeatureFlagsSettings({ initialSettings }: FeatureFlagsSettingsPr
     [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: initialSettings.vectorSearchEnabled.value as boolean,
     [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: initialSettings.emailNotificationsEnabled.value as boolean,
     [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: initialSettings.alertProcessingEnabled.value as boolean,
+    [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: initialSettings.autoEmbeddingEnabled.value as boolean,
   });
 
   const [loading, setLoading] = useState<string | null>(null);

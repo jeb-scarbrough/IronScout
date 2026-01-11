@@ -1,0 +1,212 @@
+30 pragmatic improvement ideas
+
+Make the ingestion pipeline idempotent by construction. Content-hash everything that matters, stop hashing volatile fields (price), and treat “same listing” as a stable entity with versioned observations.
+
+Add a real distributed scheduler + locks. One logical run per dealer/feed per interval. No “every replica runs the cron” chaos.
+
+Batch the DB. Replace O(n) per-SKU upserts with “fetch once, diff, then bulk create/update.” Use staging tables where it helps.
+
+Introduce a first-class “Freshness Engine.” Compute freshness per retailer, per caliber, per SKU, per region. Expose it everywhere.
+
+Backpressure + circuit breakers for harvesting. Rate-limit per domain, adaptive concurrency, automatic cool-down on bans/latency spikes.
+
+Unified normalization spec + test corpus. Golden fixtures for the ugliest ammo listings. If normalization regresses, CI fails.
+
+“Observation ledger” model. Separate “Listing identity” from “Price/stock observations” so history is cheap and immutable.
+
+Automated anomaly detection for bad data. Detect unit-price explosions, quantity mis-parses, duplicate pack-size mistakes. Quarantine instead of polluting search.
+
+Event-driven pipeline triggers. Ingest completes then immediately triggers matching, benchmark, insight. No stale gaps.
+
+Queue visibility and replays. Dead-letter queues, replay tooling, per-stage metrics, and operator-friendly controls.
+
+Tier enforcement audit trails. Every gated action logs user, tier, decision, reason. Makes support and trust painless.
+
+Permission model hardening. Explicit role boundaries per app (consumer/dealer/admin/harvester), plus policy tests.
+
+SLOs that matter. “Time-to-detect a change,” “time-to-notify,” “freshness percentile,” “coverage,” “false alert rate.”
+
+Self-serve status page. Show current ingestion health and freshness by retailer. Deflects support tickets.
+
+User-facing “Why am I seeing this?” Explain normalization, pack-size math, last-seen time, and source reliability.
+
+A “compare view” that doesn’t feel like Excel hell. Compare retailers for the same normalized item. Include shipping flags if allowed.
+
+Saved searches as first-class objects. With filters, thresholds, and notification routing. Treat them like dashboards users can manage.
+
+Notification ergonomics. Digest mode, quiet hours, snooze per saved search, de-duplication, and “only notify on meaningful change.”
+
+Alert semantics upgrade. Price drop vs back-in-stock vs threshold crossed vs volatility spike. Users care about the type of change.
+
+“Trust score” internally, “confidence” externally. Don’t do “deal scores,” but do show “high/medium/low confidence” for parsed fields.
+
+Search performance: hybrid index strategy. Exact-match for SKU-like fields + fast faceting + optional embeddings for messy text.
+
+Cache the expensive stuff. Materialize common queries, precompute aggregates, and cache normalized item pages.
+
+Progressive disclosure UX. Simple first. Deep details one click away. No cognitive load tax.
+
+Onboarding that forces one success. “Track 2 calibers, set 1 alert, choose digest.” Ship value in 60 seconds.
+
+Guided remediation flows. When data is stale or parsing confidence is low, suggest alternate retailers or broaden filters.
+
+Retailer compliance toolkit. Robots.txt respect, opt-out pipeline, contact metadata, and proof of rate limits.
+
+Data retention policy + privacy posture. Define and enforce retention windows for logs, observations, and user events.
+
+Admin “data surgery” tools. Merge/split normalized items, override pack-size mapping, quarantine bad sources.
+
+Load testing + chaos testing for harvesters. Simulate bans, slow pages, partial HTML, and schema drift.
+
+Operational runbooks. “What to do when retailer X blocks us,” “embedding queue backlog,” “freshness regression,” etc.
+
+Winnowed to the best 5 (ranked)
+1) Rebuild ingestion as an idempotent, batched, event-driven pipeline
+
+What it is
+
+Treat ingestion as: fetch once → normalize → diff → bulk write → emit events.
+
+Listing identity uses a stable dealerSkuHash that excludes volatile fields like price.
+
+Observations become append-only rows (or versioned updates) keyed to listing identity.
+
+Why users will notice
+
+Data updates get faster and more consistent. Fewer “why is this stale” moments.
+
+Price history stops getting randomly fragmented. Charts look trustworthy.
+
+Alerts trigger promptly after real changes, not hours later.
+
+How to implement
+
+Data model: split “listing identity” from “observations” (price/stock/lastSeen).
+
+Hashing: compute identity hash from stable fields (retailer, URL or canonical key, caliber, brand line, grain, casing, pack size when confident).
+
+Batching: prefetch existing rows for a dealer/feed, map in memory, then bulk create/update.
+
+Eventing: ingestion emits “ListingChanged” events that trigger match, benchmark, insight immediately.
+
+Idempotency: every stage dedupes by (listingId, contentHash) or (listingId, observedAtBucket).
+
+Why I’m confident
+
+Your docs already surface concrete ingestion pain (row churn, sequential DB hits, stale pipeline gaps, scheduler duplication). Fixing the spine pays off everywhere: performance, reliability, and trust. This is maximum leverage.
+
+2) Add a real distributed scheduler plus domain backpressure and circuit breakers
+
+What it is
+
+One logical schedule runner, not one per replica.
+
+Per-retailer concurrency limits, adaptive throttling, ban detection, and cool-down windows.
+
+Why users will notice
+
+Fewer outages and fewer “retailer suddenly disappeared” gaps.
+
+More predictable freshness across sources. Less spiky behavior.
+
+How to implement
+
+Distributed lock: use Postgres advisory locks, Redis, or a queue-native scheduler so only one worker schedules a given feed run.
+
+Per-domain limiter: token bucket keyed by domain.
+
+Circuit breaker: if error rate or latency crosses threshold, reduce concurrency and extend intervals automatically.
+
+Policy hooks: robots and opt-out enforcement live here, not sprinkled across harvesters.
+
+Why I’m confident
+
+Scheduler duplication and unbounded harvesting are classic self-inflicted wounds. This is cheap insurance that also reduces infra cost. Reliability is a feature.
+
+3) Ship a first-class Freshness Engine and surface it as a product primitive
+
+What it is
+
+A single internal service or module that computes freshness and coverage.
+
+Freshness becomes a first-class field on search results, item pages, and dashboards.
+
+Why users will notice
+
+Trust increases because the product admits uncertainty clearly.
+
+Users stop guessing whether the platform is “down” or “quiet.”
+
+It also prevents bad decisions without violating your “no recommendations” rule.
+
+How to implement
+
+Metrics: last successful harvest per retailer, last observed per listing, percentile freshness per query slice.
+
+UI: show “Last checked X minutes ago” plus “Retailer freshness: good/degraded.”
+
+Alert gating: if freshness is degraded, notifications can be delayed, annotated, or digested to reduce false urgency.
+
+Ops: power a status page and internal dashboards from the same engine.
+
+Why I’m confident
+
+You already emphasize availability and data freshness as promises. Operationalizing that promise is non-negotiable if you want long-term retention.
+
+4) Normalization spec + golden test corpus + anomaly quarantine
+
+What it is
+
+A strict normalization contract for listings plus a regression suite of real-world nasty samples.
+
+Anomaly detection that quarantines suspect parses instead of letting them poison search and alerts.
+
+Why users will notice
+
+Less “$0.08/round” nonsense caused by pack-size parsing errors.
+
+More consistent matching across retailers. Saved searches behave predictably.
+
+Reduced alert spam from data glitches.
+
+How to implement
+
+Fixtures: store representative HTML snippets or extracted fields with expected normalized output.
+
+CI gates: any normalization change must pass fixtures.
+
+Confidence scoring: pack size, CPR, and caliber parsing produce a confidence level.
+
+Quarantine lane: low-confidence records don’t trigger alerts and are excluded from certain views until reviewed or re-parsed.
+
+Why I’m confident
+
+Normalization quality is the bedrock. Without it, everything else is just a faster way to be wrong.
+
+5) Notification ergonomics: meaning-aware alerts, dedupe, digest, snooze, quiet hours
+
+What it is
+
+Make alerts feel like a helpful assistant, not a smoke alarm taped to the user’s forehead.
+
+Why users will notice
+
+Immediate perceived quality jump.
+
+Lower churn. Higher willingness to set up more tracking.
+
+It stays compliant with your “no deal scores, no purchase decisions” stance.
+
+How to implement
+
+Event types: back-in-stock, threshold crossed, price drop %, volatility spike, retailer resumed.
+
+Dedupe: collapse multiple changes into one message per item per window.
+
+User controls: quiet hours, digest schedule, snooze per saved search, “notify only on meaningful change.”
+
+Routing: email vs push vs SMS by severity and user preference (tier-gated if needed).
+
+Why I’m confident
+
+Monitoring products win or lose on notification quality. Great search gets you a trial. Great alerts get you renewal.

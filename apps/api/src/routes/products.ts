@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '@ironscout/db'
-import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory, visiblePriceWhere } from '../config/tiers'
+import { getMaxSearchResults, hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory } from '../config/tiers'
 import { getUserTier } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { batchGetPricesViaProductLinks, getPricesViaProductLinks } from '../services/ai-search/price-resolver'
 
 const log = loggers.products
 
@@ -89,21 +90,6 @@ router.get('/search', async (req: Request, res: Response) => {
       if (maxRounds) where.roundCount.lte = parseInt(maxRounds)
     }
 
-    // Build price filter conditions
-    const priceConditions: any = {}
-    if (minPrice) priceConditions.price = { gte: parseFloat(minPrice) }
-    if (maxPrice) {
-      priceConditions.price = priceConditions.price
-        ? { ...priceConditions.price, lte: parseFloat(maxPrice) }
-        : { lte: parseFloat(maxPrice) }
-    }
-    if (inStock === 'true') priceConditions.inStock = true
-
-    // Add price/stock filter if any conditions exist
-    if (Object.keys(priceConditions).length > 0) {
-      where.prices = { some: priceConditions }
-    }
-
     // Get total count
     const total = await prisma.products.count({ where })
 
@@ -127,27 +113,51 @@ router.get('/search', async (req: Request, res: Response) => {
         break
     }
 
-    // Fetch products with prices and retailers
-    let products = await prisma.products.findMany({
+    // Fetch products
+    // Per Spec v1.2 §0.0: Get prices through product_links
+    let rawProducts = await prisma.products.findMany({
       where,
       skip,
       take: limitNum,
-      include: {
-        prices: {
-          where: visiblePriceWhere(),
-          include: {
-            retailers: true
-          },
-          orderBy: [
-            // Sort by retailer tier (PREMIUM first, then STANDARD)
-            { retailers: { tier: 'desc' } },
-            // Then by price ascending
-            { price: 'asc' }
-          ]
-        }
-      },
       orderBy
     })
+
+    // Batch fetch prices via product_links
+    const productIds = rawProducts.map(p => p.id)
+    const pricesMap = await batchGetPricesViaProductLinks(productIds)
+
+    // Merge prices into products and apply price/stock filters
+    let products = rawProducts.map(p => {
+      const prices = pricesMap.get(p.id) || []
+
+      // Apply price/stock filters
+      let filteredPrices = prices
+      if (inStock === 'true') {
+        filteredPrices = filteredPrices.filter((pr: any) => pr.inStock)
+      }
+      if (minPrice) {
+        filteredPrices = filteredPrices.filter((pr: any) => parseFloat(pr.price.toString()) >= parseFloat(minPrice))
+      }
+      if (maxPrice) {
+        filteredPrices = filteredPrices.filter((pr: any) => parseFloat(pr.price.toString()) <= parseFloat(maxPrice))
+      }
+
+      // Sort prices by retailer tier, then price
+      filteredPrices.sort((a: any, b: any) => {
+        const tierOrder: Record<string, number> = { 'PREMIUM': 2, 'STANDARD': 1 }
+        const aTier = tierOrder[a.retailers?.tier || 'STANDARD'] || 0
+        const bTier = tierOrder[b.retailers?.tier || 'STANDARD'] || 0
+        if (aTier !== bTier) return bTier - aTier
+        return parseFloat(a.price.toString()) - parseFloat(b.price.toString())
+      })
+
+      return { ...p, prices: filteredPrices }
+    })
+
+    // Filter out products with no matching prices if price/stock filters were applied
+    if (inStock === 'true' || minPrice || maxPrice) {
+      products = products.filter(p => p.prices.length > 0)
+    }
 
     // Apply price sorting if needed (sort by lowest price)
     if (sortBy === 'price_asc' || sortBy === 'price_desc') {
@@ -259,27 +269,26 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
+    // Per Spec v1.2 §0.0: Get prices through product_links
     const product = await prisma.products.findUnique({
-      where: { id },
-      include: {
-        prices: {
-          where: visiblePriceWhere(),
-          include: {
-            retailers: true
-          },
-          orderBy: [
-            // Sort by retailer tier (PREMIUM first, then STANDARD)
-            { retailers: { tier: 'desc' } },
-            // Then by price ascending
-            { price: 'asc' }
-          ]
-        }
-      }
+      where: { id }
     })
 
     if (!product) {
       return res.status(404).json({ error: 'Product not found' })
     }
+
+    // Get prices via product_links
+    const prices = await getPricesViaProductLinks(id)
+
+    // Sort by retailer tier desc, then price asc
+    const sortedPrices = [...prices].sort((a: any, b: any) => {
+      const tierOrder: Record<string, number> = { 'PREMIUM': 2, 'STANDARD': 1 }
+      const aTier = tierOrder[a.retailers?.tier || 'STANDARD'] || 0
+      const bTier = tierOrder[b.retailers?.tier || 'STANDARD'] || 0
+      if (aTier !== bTier) return bTier - aTier
+      return parseFloat(a.price.toString()) - parseFloat(b.price.toString())
+    })
 
     // Transform to match API response format
     const formattedProduct = {
@@ -289,17 +298,17 @@ router.get('/:id', async (req: Request, res: Response) => {
       category: product.category,
       brand: product.brand,
       imageUrl: product.imageUrl,
-      prices: product.prices.map((price: any) => ({
+      prices: sortedPrices.map((price: any) => ({
         id: price.id,
         price: parseFloat(price.price.toString()),
         currency: price.currency,
         url: price.url,
         inStock: price.inStock,
         retailers: {
-          id: price.retailers.id,
-          name: price.retailers.name,
-          tier: price.retailers.tier,
-          logoUrl: price.retailers.logoUrl
+          id: price.retailers?.id,
+          name: price.retailers?.name,
+          tier: price.retailers?.tier,
+          logoUrl: price.retailers?.logoUrl
         }
       }))
     }
@@ -316,36 +325,34 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
   try {
     const { id } = req.params
 
+    // Per Spec v1.2 §0.0: Get prices through product_links
     const product = await prisma.products.findUnique({
-      where: { id },
-      include: {
-        prices: {
-          where: {
-            createdAt: {
-              // Get latest price from each retailer (within last 7 days)
-              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-            },
-            ...visiblePriceWhere(),
-          },
-          include: {
-            retailers: true
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
-        }
-      }
+      where: { id }
     })
 
     if (!product) {
       return res.status(404).json({ error: 'Product not found' })
     }
 
+    // Get prices via product_links
+    const prices = await getPricesViaProductLinks(id)
+
+    // Filter to prices from last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const recentPrices = prices.filter((p: any) =>
+      p.createdAt && new Date(p.createdAt) >= sevenDaysAgo
+    )
+
     // Get unique latest price for each retailer
+    // Sort by createdAt desc first to get latest
+    const sortedByDate = [...recentPrices].sort((a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+
     const pricesByRetailer = new Map()
-    for (const price of product.prices) {
-      if (!pricesByRetailer.has(price.retailerId)) {
-        pricesByRetailer.set(price.retailerId, price)
+    for (const price of sortedByDate) {
+      if (price.retailers?.id && !pricesByRetailer.has(price.retailers.id)) {
+        pricesByRetailer.set(price.retailers.id, price)
       }
     }
 
@@ -377,23 +384,23 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
         purpose: product.purpose,
         roundCount: product.roundCount
       },
-      prices: sortedPrices.map(price => ({
-        retailers: price.retailers.name,
-        retailerId: price.retailerId,
+      prices: sortedPrices.map((price: any) => ({
+        retailers: price.retailers?.name,
+        retailerId: price.retailers?.id,
         price: parseFloat(price.price.toString()),
         inStock: price.inStock,
         url: price.url,
-        tier: price.retailers.tier,
+        tier: price.retailers?.tier,
         lastUpdated: price.createdAt
       })),
       cheapest: cheapest ? {
-        retailers: cheapest.retailers.name,
+        retailers: cheapest.retailers?.name,
         price: parseFloat(cheapest.price.toString()),
         inStock: cheapest.inStock,
         url: cheapest.url
       } : null,
       cheapestInStock: cheapestInStock ? {
-        retailers: cheapestInStock.retailers.name,
+        retailers: cheapestInStock.retailers?.name,
         price: parseFloat(cheapestInStock.price.toString()),
         url: cheapestInStock.url
       } : null
@@ -429,32 +436,43 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     const daysNum = Math.min(requestedDays, maxDays)
     const startDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
 
-    // Build where clause with retailer visibility filter
-    const where: any = {
-      productId: id,
-      createdAt: { gte: startDate },
-      ...visiblePriceWhere(),
-    }
+    // Per Spec v1.2 §0.0: Query through product_links for price history
+    let prices: Array<{
+      price: any
+      createdAt: Date
+      retailerId: string
+      retailerName: string
+      retailerTier: string
+    }>
 
     if (retailerId) {
-      where.retailerId = retailerId as string
+      prices = await prisma.$queryRaw`
+        SELECT pr.price, pr."createdAt", pr."retailerId",
+               r.name as "retailerName", r.tier as "retailerTier"
+        FROM prices pr
+        JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
+        JOIN retailers r ON r.id = pr."retailerId"
+        WHERE pl."productId" = ${id}
+          AND pl.status IN ('MATCHED', 'CREATED')
+          AND pr."createdAt" >= ${startDate}
+          AND r."visibilityStatus" = 'ELIGIBLE'
+          AND pr."retailerId" = ${retailerId as string}
+        ORDER BY pr."createdAt" ASC
+      `
+    } else {
+      prices = await prisma.$queryRaw`
+        SELECT pr.price, pr."createdAt", pr."retailerId",
+               r.name as "retailerName", r.tier as "retailerTier"
+        FROM prices pr
+        JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
+        JOIN retailers r ON r.id = pr."retailerId"
+        WHERE pl."productId" = ${id}
+          AND pl.status IN ('MATCHED', 'CREATED')
+          AND pr."createdAt" >= ${startDate}
+          AND r."visibilityStatus" = 'ELIGIBLE'
+        ORDER BY pr."createdAt" ASC
+      `
     }
-
-    const prices = await prisma.prices.findMany({
-      where,
-      include: {
-        retailers: {
-          select: {
-            id: true,
-            name: true,
-            tier: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'asc'
-      }
-    })
 
     // Group by date and calculate daily stats
     const pricesByDate = new Map<string, number[]>()

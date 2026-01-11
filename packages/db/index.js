@@ -68,22 +68,13 @@ function createPrismaClient() {
     // Don't crash - pool will attempt to reconnect on next query
   })
 
-  // Debug: log connection events with pool status
-  pool.on('connect', (client) => {
-    logPoolStatus('after connect')
-  })
-
-  pool.on('acquire', (client) => {
-    logPoolStatus('after acquire')
-  })
-
-  pool.on('release', (client) => {
-    logPoolStatus('after release')
-  })
-
-  pool.on('remove', (client) => {
-    logPoolStatus('after remove')
-  })
+  // Pool event logging (enable with PRISMA_POOL_DEBUG=true for debugging connection issues)
+  if (process.env.PRISMA_POOL_DEBUG === 'true') {
+    pool.on('connect', () => logPoolStatus('after connect'))
+    pool.on('acquire', () => logPoolStatus('after acquire'))
+    pool.on('release', () => logPoolStatus('after release'))
+    pool.on('remove', () => logPoolStatus('after remove'))
+  }
 
   const adapter = new PrismaPg(pool)
 
@@ -118,3 +109,6 @@ export * from './validation.js'
 
 // Re-export visibility predicates (A1 semantics)
 export * from './visibility.js'
+
+// Re-export embedding text builder (shared between API and harvester)
+export * from './embedding-text.js'

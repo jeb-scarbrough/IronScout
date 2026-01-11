@@ -1,87 +1,42 @@
 import OpenAI from 'openai'
-import { prisma } from '@ironscout/db'
+import { prisma, buildProductText } from '@ironscout/db'
 import { loggers } from '../../config/logger'
+
+// Re-export buildProductText for backward compatibility
+export { buildProductText } from '@ironscout/db'
 
 const log = loggers.ai
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Initialize OpenAI client only if API key is configured
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+const openai = OPENAI_API_KEY
+  ? new OpenAI({ apiKey: OPENAI_API_KEY })
+  : null
 
 // Embedding model configuration
 const EMBEDDING_MODEL = 'text-embedding-3-small' // 1536 dimensions, $0.02/1M tokens
 // const EMBEDDING_MODEL = 'text-embedding-3-large' // 3072 dimensions, $0.13/1M tokens
 
 /**
- * Generate a rich text representation of a product for embedding
+ * Check if embedding service is available
  */
-export function buildProductText(product: {
-  name: string
-  description?: string | null
-  brand?: string | null
-  caliber?: string | null
-  grainWeight?: number | null
-  caseMaterial?: string | null
-  purpose?: string | null
-  category?: string | null
-}): string {
-  const parts: string[] = []
-  
-  // Product name is most important
-  parts.push(product.name)
-  
-  // Add structured attributes
-  if (product.brand) {
-    parts.push(`Brand: ${product.brand}`)
-  }
-  
-  if (product.caliber) {
-    parts.push(`Caliber: ${product.caliber}`)
-  }
-  
-  if (product.grainWeight) {
-    parts.push(`Grain weight: ${product.grainWeight}gr`)
-  }
-  
-  if (product.caseMaterial) {
-    parts.push(`Case: ${product.caseMaterial}`)
-  }
-  
-  if (product.purpose) {
-    parts.push(`Use: ${product.purpose}`)
-    
-    // Add semantic enrichment based on purpose
-    if (product.purpose === 'Defense') {
-      parts.push('self-defense home protection carry concealed')
-    } else if (product.purpose === 'Hunting') {
-      parts.push('game hunting deer elk hog varmint')
-    } else if (product.purpose === 'Target') {
-      parts.push('target practice range training plinking competition')
-    }
-  }
-  
-  if (product.category) {
-    parts.push(`Category: ${product.category}`)
-  }
-  
-  // Description last (can be verbose)
-  if (product.description) {
-    parts.push(product.description)
-  }
-  
-  return parts.join('\n')
+export function isEmbeddingServiceAvailable(): boolean {
+  return openai !== null
 }
 
 /**
  * Generate embedding for a single text
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
+  if (!openai) {
+    throw new Error('OpenAI client not initialized (OPENAI_API_KEY not set)')
+  }
+
   const response = await openai.embeddings.create({
     model: EMBEDDING_MODEL,
     input: text,
   })
-  
+
   return response.data[0].embedding
 }
 
@@ -89,13 +44,17 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * Generate embeddings for multiple texts (batched for efficiency)
  */
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!openai) {
+    throw new Error('OpenAI client not initialized (OPENAI_API_KEY not set)')
+  }
+
   // OpenAI allows up to 2048 inputs per request
   const batchSize = 100
   const embeddings: number[][] = []
-  
+
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize)
-    
+
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: batch,
@@ -129,8 +88,10 @@ export async function updateProductEmbedding(productId: string): Promise<void> {
   
   // Use raw SQL since Prisma doesn't support vector type natively
   await prisma.$executeRaw`
-    UPDATE products 
-    SET embedding = ${JSON.stringify(embedding)}::vector
+    UPDATE products
+    SET embedding = ${JSON.stringify(embedding)}::vector,
+        "lastEmbeddedAt" = NOW(),
+        "updatedAt" = NOW()
     WHERE id = ${productId}
   `
 }
@@ -182,8 +143,10 @@ export async function backfillProductEmbeddings(options: {
       for (let j = 0; j < batch.length; j++) {
         try {
           await prisma.$executeRaw`
-            UPDATE products 
-            SET embedding = ${JSON.stringify(embeddings[j])}::vector
+            UPDATE products
+            SET embedding = ${JSON.stringify(embeddings[j])}::vector,
+                "lastEmbeddedAt" = NOW(),
+                "updatedAt" = NOW()
             WHERE id = ${batch[j].id}
           `
         } catch (err) {
@@ -265,8 +228,9 @@ export async function hybridSearch(
   const conditions: string[] = ['embedding IS NOT NULL']
   
   if (filters.calibers?.length) {
-    const caliberList = filters.calibers.map(c => `'${c}'`).join(',')
-    conditions.push(`caliber IN (${caliberList})`)
+    // Use caliberNorm for filtering (normalized form, always populated by resolver)
+    const caliberPatterns = filters.calibers.map(c => `'%${c}%'`).join(',')
+    conditions.push(`"caliberNorm" ILIKE ANY(ARRAY[${caliberPatterns}])`)
   }
   
   if (filters.purpose) {
@@ -281,28 +245,32 @@ export async function hybridSearch(
   const whereClause = conditions.join(' AND ')
   
   // Query with both vector similarity and filter matching
+  // Per Spec v1.2 §0.0: Join through product_links for in-stock filtering
   const results = await prisma.$queryRaw<Array<{
     id: string
     similarity: number
     filter_match: number
   }>>`
-    SELECT 
+    SELECT
       p.id,
       1 - (p.embedding <=> ${JSON.stringify(queryEmbedding)}::vector) as similarity,
-      CASE 
-        WHEN ${filters.calibers?.length ? 1 : 0} = 1 AND p.caliber = ANY(${filters.calibers || []}) THEN 1
+      CASE
+        WHEN ${filters.calibers?.length ? 1 : 0} = 1 AND
+          p."caliberNorm" ILIKE ANY(${filters.calibers?.map(c => `%${c}%`) || []})
+        THEN 1
         ELSE 0
       END +
-      CASE 
+      CASE
         WHEN ${filters.purpose ? 1 : 0} = 1 AND p.purpose = ${filters.purpose || ''} THEN 1
         ELSE 0
       END as filter_match
     FROM products p
     ${filters.inStockOnly ? prisma.$queryRaw`
-      INNER JOIN prices pr ON pr."productId" = p.id AND pr."inStock" = true
+      INNER JOIN product_links pl ON pl."productId" = p.id AND pl.status IN ('MATCHED', 'CREATED')
+      INNER JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId" AND pr."inStock" = true
     ` : prisma.$queryRaw``}
     WHERE ${prisma.$queryRaw`${whereClause}`}
-    ORDER BY 
+    ORDER BY
       (${vectorWeight} * (1 - (p.embedding <=> ${JSON.stringify(queryEmbedding)}::vector))) +
       (${1 - vectorWeight} * filter_match / 2.0) DESC
     LIMIT ${limit}

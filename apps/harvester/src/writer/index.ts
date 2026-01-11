@@ -11,6 +11,7 @@ import {
   recordPriceWriteWithVariance,
   type SourceKindLabel,
 } from './metrics'
+import { emitIngestRunSummary } from '../config/ingest-summary'
 
 /**
  * Compute URL hash for identity key (consistent with affiliate processor)
@@ -720,6 +721,32 @@ export const writerWorker = new Worker<WriteJobData>(
           },
         })
       }
+
+      // Emit standardized INGEST_RUN_SUMMARY event
+      // This provides a consistent format for monitoring across all pipelines
+      emitIngestRunSummary({
+        pipeline: 'CRAWL',
+        runId: executionId,
+        sourceId,
+        retailerId,
+        status: allErrors.length > 0 ? 'WARNING' : 'SUCCESS',
+        durationMs: writeDurationMs,
+        input: {
+          totalRows: totalItems,
+        },
+        output: {
+          listingsCreated: allSourceProductIds.length, // Source products created
+          listingsUpdated: 0, // TODO: Track updates separately
+          pricesWritten: totalUpserted,
+          quarantined: 0, // Crawl pipeline doesn't quarantine
+          rejected: allErrors.length,
+          matched: 0, // Matching happens in resolver
+          enqueuedForResolver: allSourceProductIds.length,
+        },
+        errors: {
+          count: allErrors.length,
+        },
+      })
 
       return { success: true, upsertedCount: totalUpserted, priceChanges: allPriceChanges.length }
     } catch (error) {

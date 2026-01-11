@@ -11,6 +11,7 @@ import { parse as parseCSV } from 'csv-parse/sync'
 import { createHash } from 'crypto'
 import { logger } from '../config/logger'
 import { parseAttributes, parseUrlSignals } from './signal-extraction'
+import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../normalizer/ammo-utils'
 import type { ParsedFeedProduct, ParseResult, ParseError, ErrorCode } from './types'
 import { ERROR_CODES } from './types'
 
@@ -418,12 +419,20 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
   // Get and normalize URL
   const url = normalizeProductUrl(getValue('Url', 'URL', 'ProductURL', 'Product URL', 'Link', 'url', 'link'))
 
-  // Parse attribute payload (if present) for structured hints
+  // Extract product name first (needed for title-based signal extraction)
+  const name = normalizeString(getValue('Name', 'ProductName', 'Product Name', 'title', 'Title')) || ''
+
+  // Parse signals from multiple sources with priority: Attributes > URL > Title
   const attributeSignals = parseAttributes(getValue('Attributes', 'attributes'))
   const urlSignals = parseUrlSignals(url)
-  const caliber = attributeSignals.caliber ?? urlSignals.caliber
-  const grainWeight = attributeSignals.grainWeight ?? urlSignals.grainWeight
-  const roundCount = attributeSignals.roundCount ?? urlSignals.roundCount
+  const titleSignals = {
+    caliber: name ? normalizeCaliberString(name) : null,
+    grainWeight: name ? extractGrainWeight(name) : null,
+    roundCount: name ? extractRoundCount(name) : null,
+  }
+  const caliber = attributeSignals.caliber ?? urlSignals.caliber ?? titleSignals.caliber
+  const grainWeight = attributeSignals.grainWeight ?? urlSignals.grainWeight ?? titleSignals.grainWeight
+  const roundCount = attributeSignals.roundCount ?? urlSignals.roundCount ?? titleSignals.roundCount
 
   // Extract and normalize original price
   // If we used SalePrice, the list price (Price column) becomes the original/MSRP
@@ -434,7 +443,7 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
   const originalPrice = normalizePrice(originalPriceStr)
 
   return {
-    name: normalizeString(getValue('Name', 'ProductName', 'Product Name', 'title', 'Title')) || '',
+    name,
     url,
     price,
     inStock,

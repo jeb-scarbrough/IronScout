@@ -47,6 +47,12 @@ import {
   startProcessingSweeper,
   stopProcessingSweeper,
 } from './resolver'
+
+// Embedding Generation Worker
+import {
+  startEmbeddingWorker,
+  stopEmbeddingWorker,
+} from './embedding/worker'
 import type { Worker } from 'bullmq'
 
 // Create affiliate workers (lazy initialization)
@@ -55,6 +61,9 @@ let affiliateFeedScheduler: ReturnType<typeof createAffiliateFeedScheduler> | nu
 
 // Product resolver worker (lazy initialization)
 let resolverWorker: Worker | null = null
+
+// Embedding generation worker (lazy initialization)
+let embeddingWorker: Worker | null = null
 
 /**
  * Scheduler enabled flags (set during startup from database/env)
@@ -225,6 +234,11 @@ async function startup() {
   log.info('Starting product resolver worker')
   resolverWorker = await startProductResolverWorker({ concurrency: 5 })
 
+  // Start embedding generation worker (always on - processes embedding jobs from resolver)
+  // Lower concurrency due to OpenAI API rate limits
+  log.info('Starting embedding generation worker')
+  embeddingWorker = await startEmbeddingWorker({ concurrency: 3 })
+
   // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
   log.info('Starting product resolver sweeper')
   startProcessingSweeper()
@@ -291,6 +305,8 @@ const shutdown = async (signal: string) => {
         stopProcessingSweeper()
         await stopProductResolverWorker()
       })(),
+      // Embedding generation worker
+      stopEmbeddingWorker(),
     ])
     log.info('All workers closed')
 

@@ -1,10 +1,11 @@
-import { AlertTriangle, Flag, Sliders, Database, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Flag, Sliders, Database, ShieldCheck, Sparkles } from 'lucide-react';
 import { getAllSettings } from './actions';
 import { DangerZoneSettings } from './danger-zone-settings';
 import { OperationsSettings } from './operations-settings';
 import { FeatureFlagsSettings } from './feature-flags-settings';
 import { QueueHistorySettings } from './queue-history-settings';
 import { DataIntegritySettings } from './data-integrity-settings';
+import { EmbeddingsSettings } from './embeddings-settings';
 
 export default async function SettingsPage() {
   const { settings, error } = await getAllSettings();
@@ -97,6 +98,22 @@ export default async function SettingsPage() {
         </div>
         <div className="p-6">
           <DataIntegritySettings />
+        </div>
+      </div>
+
+      {/* Embeddings */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Embeddings</h2>
+          </div>
+          <p className="mt-1 text-sm text-gray-600">
+            Manage vector embeddings for semantic search. Embeddings enable AI-powered product discovery.
+          </p>
+        </div>
+        <div className="p-6">
+          <EmbeddingsSettings />
         </div>
       </div>
 

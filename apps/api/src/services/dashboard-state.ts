@@ -14,6 +14,7 @@
  */
 
 import { prisma } from '@ironscout/db'
+import { batchGetPricesViaProductLinks } from './ai-search/price-resolver'
 
 export type DashboardState =
   | 'BRAND_NEW'
@@ -156,34 +157,38 @@ export async function getWatchlistPreview(
   })
 
   // Get current best prices for these products
+  // Per Spec v1.2 §0.0: Query through product_links for prices
   const productIds = items
     .map((item) => item.products?.id)
     .filter((id): id is string => id !== null && id !== undefined)
 
-  const prices =
-    productIds.length > 0
-      ? await prisma.prices.findMany({
-          where: {
-            productId: { in: productIds },
-            inStock: true,
-          },
-          select: {
-            productId: true,
-            price: true,
-            inStock: true,
-          },
-          orderBy: { price: 'asc' },
-        })
-      : []
-
   // Build price lookup (best price per product)
   const priceByProduct = new Map<string, { price: number; inStock: boolean }>()
-  for (const price of prices) {
-    if (price.productId && !priceByProduct.has(price.productId)) {
-      priceByProduct.set(price.productId, {
-        price: parseFloat(price.price.toString()),
-        inStock: price.inStock,
-      })
+
+  if (productIds.length > 0) {
+    const pricesMap = await batchGetPricesViaProductLinks(productIds)
+
+    for (const [productId, prices] of pricesMap.entries()) {
+      // Filter for in-stock and sort by price
+      const inStockPrices = prices
+        .filter((p: any) => p.inStock)
+        .sort((a: any, b: any) => parseFloat(a.price.toString()) - parseFloat(b.price.toString()))
+
+      if (inStockPrices.length > 0) {
+        priceByProduct.set(productId, {
+          price: parseFloat(inStockPrices[0].price.toString()),
+          inStock: true,
+        })
+      } else if (prices.length > 0) {
+        // No in-stock prices, use cheapest anyway
+        const sortedPrices = [...prices].sort(
+          (a: any, b: any) => parseFloat(a.price.toString()) - parseFloat(b.price.toString())
+        )
+        priceByProduct.set(productId, {
+          price: parseFloat(sortedPrices[0].price.toString()),
+          inStock: false,
+        })
+      }
     }
   }
 

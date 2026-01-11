@@ -1,0 +1,8 @@
+"CatalogItemId","Name","Description","Manufacturer","Url","ImageUrl","CurrentPrice","OriginalPrice","Currency","StockAvailability","Gtin","Category"
+"Q-0001","Generic Range Pack 9mm 100rd","Brand missing, caliber present.","","https://example.com/generic-range-pack-9mm-100rd","https://example.com/img/generic-9mm-100.jpg","24.99","29.99","USD","In Stock","000222000201","Ammunition>Handgun"
+"Q-0002","ACME Bulk Pack 100rd","Caliber missing.","ACME","https://example.com/acme-bulk-pack-100rd","https://example.com/img/acme-bulk-100.jpg","19.99","24.99","USD","In Stock","000222000202","Ammunition"
+"Q-0003","ACME 5.56mm 55gr FMJ 20rd","Full identity fields.","ACME","https://example.com/acme-556mm-55gr-20rd","https://example.com/img/acme-556-20.jpg","11.49","13.99","USD","In Stock","000222000203","Ammunition>Rifle"
+"Q-0004","ACME 55gr FMJ 20rd","Caliber missing.","ACME","https://example.com/acme-55gr-20rd","https://example.com/img/acme-55gr-20.jpg","10.49","12.99","USD","In Stock","000222000204","Ammunition"
+"Q-0005","Federal 12 Gauge 00 Buck 5rd","Shotgun load.","Federal","https://example.com/federal-12ga-00-buck-5rd","https://example.com/img/federal-12ga-5.jpg","13.99","16.99","USD","In Stock","000222000205","Ammunition>Shotgun"
+"Q-0006","Unknown Product 20rd","Caliber and brand missing.","","https://example.com/unknown-product-20rd","https://example.com/img/unknown-20.jpg","7.99","9.99","USD","In Stock","000222000206","Ammunition"
+"Q-0007","Brandless 7.62x39 123gr 20rd","Brand missing, caliber present.","","https://example.com/brandless-762x39-123gr-20rd","https://example.com/img/brandless-762-20.jpg","8.99","10.99","USD","In Stock","000222000207","Ammunition>Rifle"

@@ -10,6 +10,7 @@ import { loggers } from './config/logger'
 const log = loggers.server
 
 import { requestContextMiddleware } from './middleware/request-context'
+import { requestLoggerMiddleware, errorLoggerMiddleware } from './middleware/request-logger'
 import { productsRouter } from './routes/products'
 import { adsRouter } from './routes/ads'
 import { alertsRouter } from './routes/alerts'
@@ -36,6 +37,10 @@ app.use(helmet())
 // Request context middleware - provides requestId correlation for logging
 // Must be early in the chain to capture all request processing
 app.use(requestContextMiddleware)
+
+// Request logger middleware - logs one entry per request at response finish
+// Must come after requestContextMiddleware to have access to requestId
+app.use(requestLoggerMiddleware)
 
 // CORS configuration to support multiple domains
 const allowedOrigins = [
@@ -120,9 +125,17 @@ app.use('/api/saved-items', savedItemsRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/users', usersRouter)
 
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  log.error('Unhandled error', { path: req.path, method: req.method }, err)
-  res.status(500).json({ error: 'Something went wrong!' })
+// Error logger middleware - logs errors with classification
+app.use(errorLoggerMiddleware)
+
+// Final error handler - sends response to client
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Error is already logged by errorLoggerMiddleware
+  const statusCode = err.statusCode || err.status || 500
+  res.status(statusCode).json({
+    error: statusCode >= 500 ? 'Something went wrong!' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+  })
 })
 
 const server = app.listen(PORT, () => {

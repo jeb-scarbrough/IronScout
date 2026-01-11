@@ -60,6 +60,7 @@ export interface AllSettings {
     vectorSearchEnabled: SettingValue;
     emailNotificationsEnabled: SettingValue;
     alertProcessingEnabled: SettingValue;
+    autoEmbeddingEnabled: SettingValue;
   };
 }
 
@@ -123,6 +124,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       vectorSearchEnabled,
       emailNotificationsEnabled,
       alertProcessingEnabled,
+      autoEmbeddingEnabled,
     ] = await Promise.all([
       getSystemSetting(SETTING_KEYS.ALLOW_PLAIN_FTP),
       getSystemSetting(SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED),
@@ -150,6 +152,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       getSystemSetting(SETTING_KEYS.VECTOR_SEARCH_ENABLED),
       getSystemSetting(SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED),
       getSystemSetting(SETTING_KEYS.ALERT_PROCESSING_ENABLED),
+      getSystemSetting(SETTING_KEYS.AUTO_EMBEDDING_ENABLED),
     ]);
 
     return {
@@ -186,6 +189,7 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
           vectorSearchEnabled,
           emailNotificationsEnabled,
           alertProcessingEnabled,
+          autoEmbeddingEnabled,
         },
       },
     };

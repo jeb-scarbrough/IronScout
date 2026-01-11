@@ -11,17 +11,9 @@ import {
 import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
 import { batchGetPricesViaProductLinks } from './price-resolver'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
-import { visiblePriceWhere } from '../../config/tiers'
 import { loggers } from '../../config/logger'
 
 const log = loggers.ai
-
-/**
- * Feature flag for Product Resolver v1.2 price path
- * When enabled, prices are fetched through product_links instead of direct relation
- * Set to true once resolver has populated product_links table
- */
-const USE_RESOLVER_PRICE_PATH = process.env.USE_RESOLVER_PRICE_PATH === 'true'
 
 /**
  * Explicit filters that can override AI intent
@@ -148,13 +140,12 @@ export async function aiSearch(
   
   // 3. Build Prisma where clause from merged intent (including Premium filters)
   const where = buildWhereClause(mergedIntent, explicitFilters, isPremium)
-  
+
   // 4. Build price/stock conditions
+  // Note: These are applied AFTER fetching products since prices come via product_links
+  // (Spec v1.2 §0.0: prices.productId is denormalized, query through product_links)
   const priceConditions = buildPriceConditions(mergedIntent, explicitFilters)
-  if (Object.keys(priceConditions).length > 0) {
-    where.prices = { some: priceConditions }
-  }
-  
+
   // 5. Fetch products - use vector search if enabled and sorting by relevance
   const skip = (page - 1) * limit
   let products: any[]
@@ -171,6 +162,14 @@ export async function aiSearch(
       // Note: Can't filter on embedding field since it's Unsupported("vector") in Prisma
       total = await prisma.products.count({ where })
       log.debug('Vector search returned', { productsCount: products.length, total })
+
+      // Fall back to standard search if vector search returns no results
+      // This handles cases where products don't have embeddings yet
+      if (products.length === 0 && total > 0) {
+        log.info('Vector search empty but products exist, falling back to standard search', { total })
+        products = await standardSearch(where, skip, limit * 2, isPremium)
+        vectorSearchUsed = false
+      }
     } catch (error) {
       log.warn('Vector search failed, falling back to standard search', { error })
       products = await standardSearch(where, skip, limit * 2, isPremium)
@@ -184,8 +183,31 @@ export async function aiSearch(
     log.debug('Standard search returned', { productsCount: products.length, total })
   }
 
+  // Apply price/stock filters to fetched prices
+  // (Prices are fetched via product_links, so filter here instead of in Prisma where)
+  if (Object.keys(priceConditions).length > 0) {
+    products = products.map((p: any) => {
+      if (!p.prices) return p
+      let filteredPrices = p.prices
+      if (priceConditions.inStock) {
+        filteredPrices = filteredPrices.filter((pr: any) => pr.inStock)
+      }
+      if (priceConditions.price?.gte !== undefined) {
+        filteredPrices = filteredPrices.filter((pr: any) =>
+          parseFloat(pr.price.toString()) >= priceConditions.price.gte
+        )
+      }
+      if (priceConditions.price?.lte !== undefined) {
+        filteredPrices = filteredPrices.filter((pr: any) =>
+          parseFloat(pr.price.toString()) <= priceConditions.price.lte
+        )
+      }
+      return { ...p, prices: filteredPrices }
+    })
+  }
+
   // Filter out products with no visible prices
-  // Products may exist but have all prices filtered out by visiblePriceWhere()
+  // Products may exist but have all prices filtered out by price conditions
   const originalCount = products.length
   products = products.filter((p: any) => p.prices && p.prices.length > 0)
 
@@ -353,20 +375,20 @@ function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters):
   }
   
   // Explicit grain range overrides AI-detected
-  if (filters.minGrain !== undefined || filters.maxGrain !== undefined) {
+  if (filters.minGrain != null || filters.maxGrain != null) {
     merged.grainWeights = undefined
   }
-  
-  // Explicit price range
-  if (filters.minPrice !== undefined) {
+
+  // Explicit price range (use != null to properly handle null values)
+  if (filters.minPrice != null) {
     merged.minPrice = filters.minPrice
   }
-  if (filters.maxPrice !== undefined) {
+  if (filters.maxPrice != null) {
     merged.maxPrice = filters.maxPrice
   }
-  
+
   // Explicit in-stock filter
-  if (filters.inStock !== undefined) {
+  if (filters.inStock != null) {
     merged.inStockOnly = filters.inStock
   }
   
@@ -401,12 +423,13 @@ function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters):
 function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters, isPremium: boolean): any {
   const where: any = {}
   const orConditions: any[] = []
-  
+
   // Caliber filter (explicit takes priority)
+  // Use caliberNorm for filtering (normalized form, always populated by resolver)
   const calibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
   if (calibers && calibers.length > 0) {
     where.OR = calibers.map(cal => ({
-      caliber: { contains: cal, mode: 'insensitive' }
+      caliberNorm: { contains: cal, mode: 'insensitive' }
     }))
   }
   
@@ -425,12 +448,13 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
   }
   
   // Grain weight filter
-  if (explicitFilters.minGrain !== undefined || explicitFilters.maxGrain !== undefined) {
+  // Use != null to handle both null and undefined (Prisma operators cannot accept null)
+  if (explicitFilters.minGrain != null || explicitFilters.maxGrain != null) {
     const grainCondition: any = {}
-    if (explicitFilters.minGrain !== undefined) {
+    if (explicitFilters.minGrain != null) {
       grainCondition.gte = explicitFilters.minGrain
     }
-    if (explicitFilters.maxGrain !== undefined) {
+    if (explicitFilters.maxGrain != null) {
       grainCondition.lte = explicitFilters.maxGrain
     }
     addCondition(where, { grainWeight: grainCondition })
@@ -499,12 +523,13 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
     }
     
     // Velocity range filter
-    if (explicitFilters.minVelocity !== undefined || explicitFilters.maxVelocity !== undefined) {
+    // Use != null to handle both null and undefined (Prisma operators cannot accept null)
+    if (explicitFilters.minVelocity != null || explicitFilters.maxVelocity != null) {
       const velocityCondition: any = {}
-      if (explicitFilters.minVelocity !== undefined) {
+      if (explicitFilters.minVelocity != null) {
         velocityCondition.gte = explicitFilters.minVelocity
       }
-      if (explicitFilters.maxVelocity !== undefined) {
+      if (explicitFilters.maxVelocity != null) {
         velocityCondition.lte = explicitFilters.maxVelocity
       }
       addCondition(where, { muzzleVelocityFps: velocityCondition })
@@ -550,8 +575,8 @@ function addCondition(where: any, condition: any): void {
 /**
  * Standard Prisma-based search
  *
- * When USE_RESOLVER_PRICE_PATH is enabled, prices are fetched through
- * product_links per Spec v1.2 §0.0 instead of direct relation.
+ * Prices are fetched through product_links per Spec v1.2 §0.0.
+ * This is the canonical query path for price grouping.
  */
 async function standardSearch(where: any, skip: number, take: number, includePremiumFields: boolean): Promise<any[]> {
   const baseSelect = {
@@ -587,50 +612,27 @@ async function standardSearch(where: any, skip: number, take: number, includePre
     } : {}),
   }
 
-  if (USE_RESOLVER_PRICE_PATH) {
-    // Product Resolver v1.2 path: fetch prices through product_links
-    const products = await prisma.products.findMany({
-      where,
-      skip,
-      take,
-      select: baseSelect,
-      orderBy: { createdAt: 'desc' },
-    })
-
-    if (products.length === 0) {
-      return []
-    }
-
-    // Batch fetch prices via product_links
-    const productIds = products.map((p: { id: string }) => p.id)
-    const pricesMap = await batchGetPricesViaProductLinks(productIds)
-
-    return products.map((p: { id: string }) => ({
-      ...p,
-      prices: pricesMap.get(p.id) || [],
-    }))
-  }
-
-  // Legacy path: direct prices relation
-  return prisma.products.findMany({
+  // Fetch products through product_links (Spec v1.2 §0.0)
+  const products = await prisma.products.findMany({
     where,
     skip,
     take,
-    select: {
-      ...baseSelect,
-      prices: {
-        where: visiblePriceWhere(),
-        include: {
-          retailers: true
-        },
-        orderBy: [
-          { retailers: { tier: 'desc' } },
-          { price: 'asc' }
-        ]
-      }
-    },
-    orderBy: { createdAt: 'desc' }
+    select: baseSelect,
+    orderBy: { createdAt: 'desc' },
   })
+
+  if (products.length === 0) {
+    return []
+  }
+
+  // Batch fetch prices via product_links
+  const productIds = products.map((p: { id: string }) => p.id)
+  const pricesMap = await batchGetPricesViaProductLinks(productIds)
+
+  return products.map((p: { id: string }) => ({
+    ...p,
+    prices: pricesMap.get(p.id) || [],
+  }))
 }
 
 /**
@@ -665,12 +667,13 @@ async function vectorEnhancedSearch(
   // Build filter conditions for SQL
   const conditions: string[] = ['embedding IS NOT NULL']
   const params: any[] = []
-  
-  // Caliber filter
+
+  // Caliber filter - use caliberNorm (normalized form, always populated by resolver)
   const calibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
   if (calibers?.length) {
-    conditions.push(`caliber ILIKE ANY($${params.length + 1})`)
-    params.push(calibers.map(c => `%${c}%`))
+    const caliberPatterns = calibers.map(c => `%${c}%`)
+    conditions.push(`"caliberNorm" ILIKE ANY($${params.length + 1})`)
+    params.push(caliberPatterns)
   }
   
   // Purpose filter
@@ -756,40 +759,20 @@ async function vectorEnhancedSearch(
     } : {}),
   }
 
-  let products: any[]
+  // Fetch products through product_links (Spec v1.2 §0.0)
+  const rawProducts = await prisma.products.findMany({
+    where: { id: { in: productIds.map(p => p.id) } },
+    select: baseSelect,
+  })
 
-  if (USE_RESOLVER_PRICE_PATH) {
-    // Product Resolver v1.2 path: fetch prices through product_links
-    const rawProducts = await prisma.products.findMany({
-      where: { id: { in: productIds.map(p => p.id) } },
-      select: baseSelect,
-    })
+  // Batch fetch prices via product_links
+  const ids = rawProducts.map((p: { id: string }) => p.id)
+  const pricesMap = await batchGetPricesViaProductLinks(ids)
 
-    // Batch fetch prices via product_links
-    const ids = rawProducts.map((p: { id: string }) => p.id)
-    const pricesMap = await batchGetPricesViaProductLinks(ids)
-
-    products = rawProducts.map((p: { id: string }) => ({
-      ...p,
-      prices: pricesMap.get(p.id) || [],
-    }))
-  } else {
-    // Legacy path: direct prices relation
-    products = await prisma.products.findMany({
-      where: { id: { in: productIds.map(p => p.id) } },
-      select: {
-        ...baseSelect,
-        prices: {
-          where: visiblePriceWhere(),
-          include: { retailers: true },
-          orderBy: [
-            { retailers: { tier: 'desc' } },
-            { price: 'asc' }
-          ]
-        }
-      }
-    })
-  }
+  const products = rawProducts.map((p: { id: string }) => ({
+    ...p,
+    prices: pricesMap.get(p.id) || [],
+  }))
 
   // Create similarity map and sort by similarity
   const similarityMap = new Map(productIds.map(p => [p.id, p.similarity]))
@@ -808,25 +791,27 @@ async function vectorEnhancedSearch(
  */
 function buildPriceConditions(intent: SearchIntent, explicitFilters: ExplicitFilters): any {
   const conditions: any = {}
-  
+
   const minPrice = explicitFilters.minPrice ?? intent.minPrice
   const maxPrice = explicitFilters.maxPrice ?? intent.maxPrice
-  
-  if (minPrice !== undefined) {
+
+  // Use != null to handle both null and undefined
+  // Prisma operators like gte/lte cannot accept null values
+  if (minPrice != null) {
     conditions.price = { gte: minPrice }
   }
-  
-  if (maxPrice !== undefined) {
-    conditions.price = conditions.price 
+
+  if (maxPrice != null) {
+    conditions.price = conditions.price
       ? { ...conditions.price, lte: maxPrice }
       : { lte: maxPrice }
   }
-  
+
   const inStock = explicitFilters.inStock ?? intent.inStockOnly
   if (inStock) {
     conditions.inStock = true
   }
-  
+
   return conditions
 }
 
@@ -838,7 +823,7 @@ function reRankProducts(products: any[], intent: SearchIntent): any[] {
     let score = 0
     
     // Score by grain weight match
-    if (intent.grainWeights && product.grainWeight) {
+    if (intent.grainWeights && intent.grainWeights.length > 0 && product.grainWeight) {
       if (intent.grainWeights.includes(product.grainWeight)) {
         score += 30
       } else {

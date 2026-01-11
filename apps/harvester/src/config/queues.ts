@@ -20,6 +20,8 @@ export const QUEUE_NAMES = {
   AFFILIATE_FEED_SCHEDULER: 'affiliate-feed-scheduler',
   // Product Resolver queue (Spec v1.2)
   PRODUCT_RESOLVE: 'product-resolve',
+  // Embedding Generation queue
+  EMBEDDING_GENERATE: 'embedding-generate',
 } as const
 
 // Job data interfaces
@@ -144,6 +146,7 @@ export async function initQueueSettings(): Promise<void> {
         'retailer-feed-ingest': true,
         'affiliate-feed': true,
         'affiliate-feed-scheduler': true,
+        'embedding-generate': true,
       },
     }
   }
@@ -418,6 +421,90 @@ export async function enqueueProductResolveLegacy(
   )
 }
 
+// ============================================================================
+// EMBEDDING GENERATION QUEUE
+// ============================================================================
+
+/**
+ * Embedding Generation job data
+ * Triggered after successful product resolution to generate vector embeddings
+ */
+export interface EmbeddingGenerateJobData {
+  productId: string
+  trigger: 'RESOLVE' | 'MANUAL' | 'BACKFILL'
+  /** Resolver version that created/updated the product (for traceability) */
+  resolverVersion?: string
+  /** Originating feed run ID for log correlation */
+  affiliateFeedRunId?: string
+}
+
+/**
+ * Embedding Generation queue
+ * - JobId format: EMBED_<productId> (dedup by productId)
+ * - Retry: max 3 attempts with exponential backoff
+ * - Lower concurrency than resolver (OpenAI API rate limits)
+ */
+export const embeddingGenerateQueue = new Queue<EmbeddingGenerateJobData>(
+  QUEUE_NAMES.EMBEDDING_GENERATE,
+  {
+    connection: redisConnection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000, // 2s, 8s, 32s (longer delays for API rate limits)
+      },
+      ...getJobOptions('embedding-generate'),
+    },
+  }
+)
+
+/**
+ * Enqueue an embedding generation job with deduplication by productId
+ *
+ * Uses jobId = EMBED_<productId> for BullMQ-level deduplication.
+ * If a job for this product is already queued, it will be ignored.
+ *
+ * @param productId - The canonical product ID to generate embedding for
+ * @param trigger - What triggered the embedding generation
+ * @param options - Optional resolverVersion and affiliateFeedRunId for traceability
+ * @returns true if enqueued, false if deduplicated
+ */
+export async function enqueueEmbeddingGenerate(
+  productId: string,
+  trigger: EmbeddingGenerateJobData['trigger'],
+  options?: { resolverVersion?: string; affiliateFeedRunId?: string; delay?: number }
+): Promise<boolean> {
+  try {
+    const jobId = `EMBED_${productId}`
+    await embeddingGenerateQueue.add(
+      'GENERATE_EMBEDDING',
+      {
+        productId,
+        trigger,
+        resolverVersion: options?.resolverVersion,
+        affiliateFeedRunId: options?.affiliateFeedRunId,
+      },
+      {
+        jobId,
+        delay: options?.delay ?? 5_000, // 5s delay to let resolver batch settle
+      }
+    )
+    return true
+  } catch (err: any) {
+    // Job with same ID already exists - this is expected deduplication
+    if (err?.message?.includes('Job already exists')) {
+      return false
+    }
+    rootLogger.error(
+      '[enqueueEmbeddingGenerate] Failed to enqueue embedding job',
+      { productId, trigger },
+      err
+    )
+    return false
+  }
+}
+
 // Export all queues
 export const queues = {
   crawl: crawlQueue,
@@ -434,4 +521,6 @@ export const queues = {
   affiliateFeedScheduler: affiliateFeedSchedulerQueue,
   // Product Resolver queue
   productResolve: productResolveQueue,
+  // Embedding Generation queue
+  embeddingGenerate: embeddingGenerateQueue,
 }

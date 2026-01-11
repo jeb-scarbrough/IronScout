@@ -12,13 +12,14 @@
  */
 
 import { Worker, Job } from 'bullmq'
-import { prisma } from '@ironscout/db'
+import { prisma, isAutoEmbeddingEnabled } from '@ironscout/db'
 import type { SourceKind } from '@ironscout/db/generated/prisma'
 import { redisConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   ProductResolveJobData,
   productResolveQueue,
+  enqueueEmbeddingGenerate,
 } from '../config/queues'
 import { resolveSourceProduct, RESOLVER_VERSION } from './resolver'
 import { brandAliasCache } from './brand-alias-cache'
@@ -244,11 +245,17 @@ async function processResolveJob(
 
     // Skip persistence when result is unchanged (SKIP_SAME_INPUT, MANUAL_LOCKED)
     // This avoids 2 writes per job when inputHash hasn't changed
-    if (result.skipped) {
+    // Also skip when source product doesn't exist (SOURCE_NOT_FOUND) to avoid FK violation
+    const isSourceNotFound = result.evidence?.systemError?.code === 'SOURCE_NOT_FOUND'
+    const skipPersistence = result.skipped || isSourceNotFound
+
+    if (skipPersistence) {
       log.debug('RESOLVER_PERSISTENCE_SKIPPED', {
         event: 'RESOLVER_PERSISTENCE_SKIPPED',
         sourceProductId,
-        reason: 'Result unchanged - skipping persistence',
+        reason: isSourceNotFound
+          ? 'Source product not found - cannot persist'
+          : 'Result unchanged - skipping persistence',
         matchType: result.matchType,
         reasonCode: result.reasonCode,
       })
@@ -334,6 +341,40 @@ async function processResolveJob(
       createdProduct: !!result.createdProduct,
       affiliateFeedRunId: job.data.affiliateFeedRunId,
     })
+
+    // Enqueue embedding generation if enabled and resolution was successful
+    // Only generate embeddings for MATCHED or CREATED (not skipped or ERROR)
+    if (
+      result.productId &&
+      (result.status === 'MATCHED' || result.status === 'CREATED') &&
+      !result.skipped
+    ) {
+      try {
+        const autoEmbeddingEnabled = await isAutoEmbeddingEnabled()
+        if (autoEmbeddingEnabled) {
+          const enqueued = await enqueueEmbeddingGenerate(result.productId, 'RESOLVE', {
+            resolverVersion: RESOLVER_VERSION,
+            affiliateFeedRunId: job.data.affiliateFeedRunId,
+          })
+          if (enqueued) {
+            log.debug('EMBEDDING_JOB_ENQUEUED', {
+              event: 'EMBEDDING_JOB_ENQUEUED',
+              productId: result.productId,
+              sourceProductId,
+              trigger: 'RESOLVE',
+            })
+          }
+        }
+      } catch (embeddingErr) {
+        // Log but don't fail the resolver job for embedding errors
+        log.warn('EMBEDDING_ENQUEUE_FAILED', {
+          event: 'EMBEDDING_ENQUEUE_FAILED',
+          productId: result.productId,
+          sourceProductId,
+          error: embeddingErr instanceof Error ? embeddingErr.message : String(embeddingErr),
+        })
+      }
+    }
 
     return result
   } catch (error: any) {

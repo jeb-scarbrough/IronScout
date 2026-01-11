@@ -1,0 +1,60 @@
+Idempotent + batched + event‑driven ingestion — 2/5
+Evidence:
+processor.ts processProducts, bulkInsertPrices (batched upserts, ON CONFLICT DO NOTHING).
+queues.ts enqueueProductResolve (DB‑deduped resolve requests).
+index.ts FEED_UNCHANGED / source.feedHash short‑circuit.
+feed-ingest.ts contentHash skip + retailer_skus.upsert.
+Missing (not found):
+Stable listing identity for retailer feeds (current generateSkuHash includes price in feed-ingest.ts).
+Append‑only observation model for retailer feeds (no observation table separate from retailer_skus in schema.prisma).
+Explicit “ListingChanged” event model (not found).
+What would move +1:
+Remove price from generateSkuHash and update retailer_skus.lastSeenAt on each ingest in feed-ingest.ts.
+Distributed scheduler + backpressure + circuit breakers — 3/5
+Evidence:
+scheduler.ts FOR UPDATE SKIP LOCKED claim loop.
+lock.ts pg_try_advisory_lock.
+scheduler.ts repeatable jobs + jitter.
+circuit-breaker.ts evaluateCircuitBreaker.
+Missing (not found):
+Per‑domain throttling/backpressure in index.ts or fetcher.ts.
+Adaptive per‑domain circuit breaker on error/latency (not found).
+What would move +1:
+Add per‑hostname token bucket limiter in index.ts and fetcher.ts.
+Freshness Engine productized — 1/5
+Evidence:
+schema.prisma prices.observedAt, source_product_presence.lastSeenSuccessAt, retailer_skus.lastSeenAt.
+dashboard.ts global freshness filter on observedAt.
+actions.ts updates lastSeenSuccessAt.
+Missing (not found):
+Central freshness module/service with consistent outputs.
+UI surfacing of freshness across search/product pages.
+Alert gating by freshness in index.ts.
+What would move +1:
+Expose observedAt/lastSeenAt in product/search API responses and render a basic “last seen” label in web UI.
+Normalization spec + golden tests + quarantine lane — 2/5
+Evidence:
+ammo-utils.ts normalization utilities.
+ammo-utils.test.ts calibration tests.
+bad-data-scenarios.test.ts parser corpus.
+schema.prisma quarantined_records + feed-ingest.ts processQuarantineRecord.
+Missing (not found):
+Golden normalization corpus with expected outputs.
+Anomaly quarantine lane for affiliate/crawl pipelines.
+What would move +1:
+Add normalization fixtures + expectations under apps/harvester/src/normalizer/__tests__/fixtures/*.
+Notifications ergonomics and semantics — 2/5
+Evidence:
+index.ts rate limits, tier delay, claim/commit dedupe.
+visibility.js used in index.ts for eligibility guardrails.
+user-settings.tsx UI toggles (weekly digest UI only).
+Missing (not found):
+Persisted user prefs for digest/quiet hours/snooze in schema.prisma.
+Backend enforcement of digest/quiet hours/snooze in index.ts.
+What would move +1:
+Add notification prefs table + API and enforce at send time in index.ts.
+Readiness Index
+
+Weights: (1)=30%, (2)=20%, (3)=20%, (4)=20%, (5)=10%
+Math: 0.30*2 + 0.20*3 + 0.20*1 + 0.20*2 + 0.10*2 = 0.6 + 0.6 + 0.2 + 0.4 + 0.2 = 2.0
+Readiness Index = 2.0 / 5

@@ -44,6 +44,7 @@ export const SETTING_KEYS = {
   VECTOR_SEARCH_ENABLED: 'VECTOR_SEARCH_ENABLED',
   EMAIL_NOTIFICATIONS_ENABLED: 'EMAIL_NOTIFICATIONS_ENABLED',
   ALERT_PROCESSING_ENABLED: 'ALERT_PROCESSING_ENABLED',
+  AUTO_EMBEDDING_ENABLED: 'AUTO_EMBEDDING_ENABLED',
 } as const
 
 export type SettingKey = typeof SETTING_KEYS[keyof typeof SETTING_KEYS]
@@ -84,6 +85,7 @@ const DEFAULTS: Record<SettingKey, boolean | number | string> = {
   [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: true,
   [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: true,
   [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: true,
+  [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: false,
 }
 
 // =============================================================================
@@ -175,6 +177,7 @@ export const isAiSearchEnabled = () => getBooleanSetting(SETTING_KEYS.AI_SEARCH_
 export const isVectorSearchEnabled = () => getBooleanSetting(SETTING_KEYS.VECTOR_SEARCH_ENABLED)
 export const isEmailNotificationsEnabled = () => getBooleanSetting(SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED)
 export const isAlertProcessingEnabled = () => getBooleanSetting(SETTING_KEYS.ALERT_PROCESSING_ENABLED)
+export const isAutoEmbeddingEnabled = () => getBooleanSetting(SETTING_KEYS.AUTO_EMBEDDING_ENABLED)
 
 export const getAffiliateBatchSize = () => getNumberSetting(SETTING_KEYS.AFFILIATE_BATCH_SIZE)
 export const getPriceHeartbeatHours = () => getNumberSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS)

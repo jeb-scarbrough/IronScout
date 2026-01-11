@@ -1,0 +1,414 @@
+  Generating 30 Ideas
+
+  Based on the documentation review, here are 30 potential improvements across different dimensions:
+
+  Resolver & Data Quality (1-6)
+  1. Auto-suggest brand aliases via clustering analysis on brandNorm similarity
+  2. Confidence calibration feedback loop - track manual decisions vs resolver predictions
+  3. Evidence archiving - summarize old evidence, retain recent detail
+  4. Dynamic ambiguity thresholds by ammo category (shotgun vs rifle)
+  5. UPC trust auto-detection based on false positive rates per source
+  6. Multi-source corroboration - boost confidence when 3+ sources agree
+
+  Admin & Operations (7-12)
+  7. Batch review actions - approve/skip multiple similar queue items
+  8. Auto-pause feeds with high error rates
+  9. Resolver dry-run mode for version testing
+  10. Admin Slack notifications for queue lag thresholds
+  11. Correction impact preview before activation
+  12. Review queue prioritization by feed volume/importance
+
+  User Experience (13-19)
+  13. Monitoring heartbeat indicator - "Last checked 3 hours ago"
+  14. Alert simulation/preview - "Here's what would have triggered"
+  15. Bulk save from search results
+  16. Price history sparklines in search results
+  17. "Why this price?" contextual explainer
+  18. Caliber quick-switch in navigation
+  19. Mobile-optimized search refinements
+
+  Performance & Scalability (20-24)
+  20. Candidate lookup index optimization (compound indexes)
+  21. Evidence pruning background job
+  22. Async correction recompute with priority queue
+  23. Brand alias cache warming improvements
+  24. Lazy loading of historical price data
+
+  Intelligence & Insights (25-30)
+  25. Price volatility indicator per product/caliber
+  26. "Typical price range" context in alerts
+  27. Seasonal pattern hints (historical, non-predictive)
+  28. Retailer reliability scores (internal ranking factor)
+  29. Weekly market summary digest email
+  30. Cross-caliber awareness hints in search
+
+  ---
+  Deep Analysis of Each Idea
+
+  Let me evaluate each against: ADR compliance, user perception, implementation complexity, and obvious value.
+  ┌─────┬─────────────────────────┬────────────────┬────────────┬───────────┬────────┬───────────┐
+  │  #  │          Idea           │    ADR Risk    │ User Value │ Ops Value │ Effort │  Verdict  │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 1   │ Auto-suggest aliases    │ None           │ Low        │ HIGH      │ Med    │ ✅ Top    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 2   │ Confidence calibration  │ None           │ Low        │ Med       │ Med    │ Maybe     │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 3   │ Evidence archiving      │ None           │ Low        │ HIGH      │ Med    │ ✅ Top    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 7   │ Batch review            │ None           │ Low        │ HIGH      │ Low    │ ✅ Top    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 8   │ Auto-pause feeds        │ None           │ Low        │ HIGH      │ Low    │ Strong    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 11  │ Correction preview      │ None           │ Low        │ HIGH      │ Low    │ Strong    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 13  │ Monitoring heartbeat    │ None           │ HIGH       │ Low       │ Low    │ ✅ Top    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 14  │ Alert simulation        │ None           │ HIGH       │ Low       │ Med    │ ✅ Top    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 16  │ Price sparklines        │ None           │ HIGH       │ Low       │ Med    │ Strong    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 25  │ Volatility indicator    │ None           │ HIGH       │ Low       │ Med    │ Strong    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 26  │ Typical range in alerts │ None           │ HIGH       │ Low       │ Low    │ Strong    │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 27  │ Seasonal hints          │ ⚠️ ADR-003/006 │ Med        │ Low       │ Med    │ ❌ Reject │
+  ├─────┼─────────────────────────┼────────────────┼────────────┼───────────┼────────┼───────────┤
+  │ 30  │ Cross-caliber hints     │ ⚠️ ADR-006     │ Med        │ Low       │ Low    │ ❌ Reject │
+  └─────┴─────────────────────────┴────────────────┴────────────┴───────────┴────────┴───────────┘
+  Rejected ideas:
+  - #27 (Seasonal patterns) - Too close to prediction, violates ADR-003 spirit
+  - #30 (Cross-caliber hints) - Could be perceived as recommendations
+  - #5 (Auto UPC trust) - Risky automation, better as admin alert
+  - #28 (Retailer scores) - Complex, could leak into consumer experience
+
+  ---
+  Final 5 Best Ideas (Ranked Best to Worst)
+
+  After careful analysis weighing impact, confidence, feasibility, and constraint compliance:
+
+  ---
+  1. 🏆 Monitoring Heartbeat Indicator
+
+  What it is: A dashboard component showing users that IronScout is actively monitoring their saved items, even during quiet periods. Displays "Your 12 items were last checked 3 hours ago. All prices stable." or "Monitoring active • Next check in ~2 hours."
+
+  Why this is #1:
+
+  Problem it solves: The documentation explicitly identifies "quiet day reassurance" as a gap. Users who enable alerts and then hear nothing may wonder: "Is IronScout actually working? Did it break? Should I manually check prices?" This anxiety undermines the core value proposition of passive monitoring.
+
+  User perception: Extremely positive. This transforms silence from ambiguous (broken or just quiet?) into reassuring (actively watching, nothing to report). It's the difference between a silent security camera (is it recording?) and one with a green "RECORDING" light.
+
+  Implementation approach:
+  // Add to saved_items or watchlist table
+  lastCheckedAt: DateTime?
+  lastPriceObservedAt: DateTime?
+
+  // Dashboard query
+  const monitoringStatus = await prisma.saved_items.aggregate({
+    where: { userId },
+    _max: { lastCheckedAt: true },
+    _count: { id: true }
+  })
+
+  // Display component
+  <MonitoringHeartbeat
+    itemCount={12}
+    lastChecked={monitoringStatus._max.lastCheckedAt}
+    status="all_stable" // or "price_changes_detected"
+  />
+
+  Why I'm confident:
+  - Zero ADR violation risk (purely informational)
+  - Lowest implementation effort of the top 5
+  - Directly addresses documented pain point
+  - Proven UX pattern (status indicators build trust)
+  - Aligns with Dashboard v4's emphasis on "quiet days are intentional"
+
+  Accretive value: Users who trust the system churn less. This single indicator could measurably improve retention for users in the "healthy" state who otherwise might doubt whether monitoring is working.
+
+  ---
+  2. 🥈 Alert Simulation / Preview
+
+  What it is: Before users enable an alert, they can preview: "If this alert had been active for the last 30 days, here's what would have triggered." Shows historical instances where the alert criteria would have matched.
+
+  Why this is #2:
+
+  Problem it solves: The documentation notes there's "no way for users to test alert criteria before activation." Users enabling alerts face uncertainty: "Will I get 50 alerts a day or 1 per month?" This leads to either over-cautious non-adoption or alert fatigue from misconfiguration.
+
+  User perception: This is a "wow" feature. It demonstrates IronScout's sophistication while being entirely historical (not predictive). Users see concrete evidence of what an alert would do, building confidence. It's like test-driving a car before buying.
+
+  Implementation approach:
+  // Alert preview endpoint
+  async function previewAlert(userId: string, alertConfig: AlertConfig) {
+    const thirtyDaysAgo = subDays(new Date(), 30)
+
+    // Query historical price facts that would have matched
+    const hypotheticalTriggers = await prisma.prices.findMany({
+      where: {
+        productId: alertConfig.productId,
+        observedAt: { gte: thirtyDaysAgo },
+        // Apply alert criteria
+        ...(alertConfig.type === 'PRICE_DROP' && {
+          pricePerRound: { lt: alertConfig.threshold }
+        })
+      },
+      orderBy: { observedAt: 'desc' },
+      take: 20
+    })
+
+    return {
+      triggerCount: hypotheticalTriggers.length,
+      triggers: hypotheticalTriggers,
+      averageFrequency: calculateFrequency(hypotheticalTriggers),
+      summary: `This alert would have triggered ${hypotheticalTriggers.length} times in the last 30 days`
+    }
+  }
+
+  UI display:
+  ┌─────────────────────────────────────────────┐
+  │ Alert Preview: Price Drop Below $0.30/rd   │
+  ├─────────────────────────────────────────────┤
+  │ Last 30 days: Would have triggered 4 times │
+  │                                             │
+  │ • Jan 5: $0.28/rd at Retailer A            │
+  │ • Dec 28: $0.29/rd at Retailer B           │
+  │ • Dec 15: $0.27/rd at Retailer A           │
+  │ • Dec 3: $0.29/rd at Retailer C            │
+  │                                             │
+  │ Average: ~1 alert per week                  │
+  │                                             │
+  │ [Enable Alert] [Adjust Threshold]          │
+  └─────────────────────────────────────────────┘
+
+  Why I'm confident:
+  - Purely historical, not predictive (ADR-003/006 compliant)
+  - High differentiation - competitors don't offer this
+  - Reduces alert misconfiguration (operational benefit)
+  - Natural extension of existing price history data
+  - Builds user confidence before commitment
+
+  Accretive value: Users who preview alerts configure them better, leading to higher-quality alerts (fewer false positives), which means better engagement and less alert fatigue. This could be a key conversion driver for Free→Premium.
+
+  ---
+  3. 🥉 Auto-Suggest Brand Aliases via Clustering
+
+  What it is: An admin tool that analyzes brandNorm values and suggests potential aliases based on clustering. "We found 847 products with 'Fed Premium' and 4,231 with 'Federal Premium' - suggest alias?" 
+
+  Why this is #3:
+
+  Problem it solves: The documentation explicitly states "alias discovery requires manual pattern spotting." Admins must manually notice that "Hornady" and "Hornady Ammunition" and "HORNADY MFG" are the same brand. This doesn't scale.
+
+  Operational perception: Transforms a tedious pattern-matching task into review-and-approve workflow. Admins still control activation (satisfying ADR constraints), but the system does the discovery work.
+
+  Implementation approach:
+  // Nightly job to identify potential alias pairs
+  async function suggestAliases() {
+    // Get all distinct brandNorm values with counts
+    const brands = await prisma.source_products.groupBy({
+      by: ['brandNorm'],
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } }
+    })
+
+    const suggestions: AliasSuggestion[] = []
+
+    for (const brand of brands) {
+      // Find similar brands using n-gram similarity
+      const similar = brands.filter(b =>
+        b.brandNorm !== brand.brandNorm &&
+        ngramSimilarity(b.brandNorm, brand.brandNorm) > 0.7
+      )
+
+      if (similar.length > 0) {
+        // Suggest mapping smaller to larger
+        const canonical = [brand, ...similar]
+          .sort((a, b) => b._count.id - a._count.id)[0]
+
+        suggestions.push({
+          aliasNorm: brand.brandNorm,
+          canonicalNorm: canonical.brandNorm,
+          aliasCount: brand._count.id,
+          canonicalCount: canonical._count.id,
+          similarity: ngramSimilarity(brand.brandNorm, canonical.brandNorm)
+        })
+      }
+    }
+
+    return suggestions
+  }
+
+  Admin UI:
+  ┌─────────────────────────────────────────────────────┐
+  │ Suggested Brand Aliases                              │
+  ├─────────────────────────────────────────────────────┤
+  │ "fed premium" (847 products)                        │
+  │  → "federal premium" (4,231 products)               │
+  │  Similarity: 91% | [Create Alias] [Dismiss]        │
+  ├─────────────────────────────────────────────────────┤
+  │ "hornady mfg" (234 products)                        │
+  │  → "hornady" (12,847 products)                      │
+  │  Similarity: 78% | [Create Alias] [Dismiss]        │
+  └─────────────────────────────────────────────────────┘
+
+  Why I'm confident:
+  - Addresses documented operational pain point
+  - Admin stays in control (no autonomous action)
+  - Clustering is deterministic and auditable
+  - Could dramatically reduce review queue over time
+  - Compounds in value (each alias improves future resolution)
+
+  Accretive value: Every brand alias created improves fingerprint matching, which reduces NEEDS_REVIEW items, which reduces admin burden, which allows IronScout to scale feed volume without linear ops cost growth.
+
+  ---
+  4. Price History Sparklines in Search Results
+
+  What it is: Inline mini-charts showing 30-day price trend for each search result. A small visual indicator showing whether prices are stable, trending down, or trending up.
+
+  Why this is #4:
+
+  Problem it solves: Users searching for ammo want to know "is now a good time?" but making that assessment requires clicking into each result and analyzing history. Sparklines provide at-a-glance context without explicit recommendations.
+
+  User perception: Visually differentiating and immediately useful. Users can scan search results and quickly identify which products have been dropping vs stable vs rising. This respects user agency (they interpret the visual) while providing helpful context.
+
+  Implementation approach:
+  // Compute sparkline data during search
+  async function enrichSearchResultsWithSparklines(results: SearchResult[]) {
+    const productIds = results.map(r => r.productId)
+
+    // Get 30-day price history for all products in batch
+    const priceHistory = await prisma.prices.findMany({
+      where: {
+        productId: { in: productIds },
+        observedAt: { gte: subDays(new Date(), 30) }
+      },
+      select: {
+        productId: true,
+        pricePerRound: true,
+        observedAt: true
+      },
+      orderBy: { observedAt: 'asc' }
+    })
+
+    // Group and compute sparkline points (7 points = weekly buckets)
+    const sparklines = computeSparklineData(priceHistory, 7)
+
+    return results.map(r => ({
+      ...r,
+      sparkline: sparklines[r.productId] || null,
+      trend: computeTrend(sparklines[r.productId]) // 'up' | 'down' | 'stable'
+    }))
+  }
+
+  UI component:
+  <SearchResult>
+    <ProductName>Federal 9mm 115gr FMJ 50rd</ProductName>
+    <CurrentPrice>$0.32/rd</CurrentPrice>
+    <Sparkline
+      data={[0.35, 0.34, 0.33, 0.32, 0.32, 0.31, 0.32]}
+      trend="down"
+      width={60}
+      height={20}
+    />
+    <TrendBadge trend="down">↓ 8% this month</TrendBadge>
+  </SearchResult>
+
+  Why I'm confident:
+  - Visual, not verbal - shows data without recommendations
+  - Proven UX pattern (Robinhood, finance apps use sparklines)
+  - Differentiates IronScout from price comparison sites
+  - Computationally efficient (batch query + simple math)
+  - Respects ADR-006 - no "buy now" messaging, just data
+
+  Accretive value: This is the kind of feature that makes users say "this is better than just checking retailer sites." Visual context at scale is hard to replicate manually. It's a compelling reason to use IronScout for search even if you don't enable alerts.
+
+  ---
+  5. Evidence Archiving with Summary Retention
+
+  What it is: A background job that archives resolver evidence older than 30 days, retaining a summary (inputHash, decision, confidence) while moving full JSON to cold storage.
+
+  Why this is #5:
+
+  Problem it solves: The documentation explicitly notes "evidence JSON grows unbounded; can cause constraint violations on very long edit chains." This is a ticking time bomb - as the system ages, evidence fields on frequently-resolved products will grow until they hit database limits.
+
+  Technical perception: This is invisible to users but critical for long-term reliability. It's the kind of infrastructure investment that prevents future incidents.
+
+  Implementation approach:
+  // Nightly archival job
+  async function archiveOldEvidence() {
+    const thirtyDaysAgo = subDays(new Date(), 30)
+
+    // Find links with large evidence that hasn't been archived recently
+    const linksToArchive = await prisma.product_links.findMany({
+      where: {
+        updatedAt: { lt: thirtyDaysAgo },
+        evidenceArchivedAt: null,
+        evidence: { not: null }
+      },
+      take: 1000
+    })
+
+    for (const link of linksToArchive) {
+      const evidence = link.evidence as ResolverEvidence
+
+      // Create summary (retain key fields for audit)
+      const summary: EvidenceSummary = {
+        inputHash: evidence.inputHash,
+        resolverVersion: evidence.dictionaryVersion,
+        decision: {
+          matchType: link.matchType,
+          confidence: link.confidence,
+          reasonCode: link.reasonCode
+        },
+        topCandidateScore: evidence.candidates?.[0]?.score,
+        archivedAt: new Date().toISOString(),
+        fullEvidenceRef: `s3://evidence-archive/${link.id}.json`
+      }
+
+      // Archive full evidence to S3
+      await s3.putObject({
+        Bucket: 'evidence-archive',
+        Key: `${link.id}.json`,
+        Body: JSON.stringify(evidence)
+      })
+
+      // Update link with summary
+      await prisma.product_links.update({
+        where: { id: link.id },
+        data: {
+          evidence: summary,
+          evidenceArchivedAt: new Date()
+        }
+      })
+    }
+  }
+
+  // Schema addition
+  model product_links {
+    // ... existing fields
+    evidenceArchivedAt DateTime?
+  }
+
+  Why I'm confident:
+  - Addresses explicitly documented pain point
+  - Prevents future constraint violations
+  - Maintains auditability (full evidence retrievable from S3)
+  - Predictable implementation pattern
+  - No user-facing changes required
+
+  Accretive value: This is insurance against future incidents. The cost of implementing it now is low; the cost of hitting evidence size limits in production (data loss, failed resolutions, manual cleanup) could be severe. It's the boring, responsible choice that makes the system more robust.
+
+  ---
+  Summary
+  ┌──────┬──────────────────────┬──────────────────────────────────┬────────┬────────────┐
+  │ Rank │         Idea         │         Primary Benefit          │ Effort │ Confidence │
+  ├──────┼──────────────────────┼──────────────────────────────────┼────────┼────────────┤
+  │ 1    │ Monitoring Heartbeat │ User trust, retention            │ Low    │ Very High  │
+  ├──────┼──────────────────────┼──────────────────────────────────┼────────┼────────────┤
+  │ 2    │ Alert Simulation     │ User confidence, differentiation │ Medium │ High       │
+  ├──────┼──────────────────────┼──────────────────────────────────┼────────┼────────────┤
+  │ 3    │ Auto-Suggest Aliases │ Operational scale                │ Medium │ High       │
+  ├──────┼──────────────────────┼──────────────────────────────────┼────────┼────────────┤
+  │ 4    │ Price Sparklines     │ Visual differentiation           │ Medium │ High       │
+  ├──────┼──────────────────────┼──────────────────────────────────┼────────┼────────────┤
+  │ 5    │ Evidence Archiving   │ Long-term reliability            │ Medium │ Very High  │
+  └──────┴──────────────────────┴──────────────────────────────────┴────────┴────────────┘
+  These five ideas span user-facing improvements (#1, #2, #4), operational leverage (#3), and infrastructure reliability (#5). None violate ADR constraints. All are obviously accretive - their value is clear and their implementation is straightforward within the existing architecture.

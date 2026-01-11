@@ -37,6 +37,7 @@
     "express": "^5.2.1",
     "fast-xml-parser": "^5.3.3",
     "ioredis": "^5.8.2",
+    "openai": "^6.15.0",
     "resend": "^6.6.0",
     "ssh2": "^1.17.0"
   },

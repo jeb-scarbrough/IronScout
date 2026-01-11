@@ -9,8 +9,8 @@ import {
   hasPriceHistoryAccess,
   getPriceHistoryDays,
   shapePriceHistory,
-  visiblePriceWhere
 } from '../config/tiers'
+import { batchGetPricesViaProductLinks } from '../services/ai-search/price-resolver'
 import { getUserTier, getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import {
@@ -143,21 +143,50 @@ router.get('/pulse', async (req: Request, res: Response) => {
     const showPriceTimingSignal = hasFeature(userTier, 'priceTimingSignal')
 
     // Calculate market pulse for each caliber
+    // Per Spec v1.2 §0.0: Query through product_links for prices
     const pulseData = await Promise.all(
       calibers.map(async caliber => {
-        // Get current average price for this caliber
-        const currentPrices = await prisma.prices.findMany({
-          where: {
-            products: { caliber },
-            inStock: true,
-            ...visiblePriceWhere(),
-          },
-          select: { price: true },
-          orderBy: { createdAt: 'desc' },
-          take: 50
+        // Get products for this caliber
+        const products = await prisma.products.findMany({
+          where: { caliber },
+          select: { id: true },
+          take: 100
         })
 
-        if (currentPrices.length === 0) {
+        if (products.length === 0) {
+          return {
+            caliber,
+            currentAvg: null,
+            trend: 'STABLE' as const,
+            trendPercent: 0,
+            priceTimingSignal: showPriceTimingSignal ? null : undefined,
+            priceContext: 'INSUFFICIENT_DATA' as const,
+            contextMeta: {
+              windowDays,
+              sampleCount: 0,
+              asOf: asOf.toISOString()
+            }
+          }
+        }
+
+        // Get prices through product_links
+        const productIds = products.map(p => p.id)
+        const pricesMap = await batchGetPricesViaProductLinks(productIds)
+
+        // Collect current in-stock prices
+        const currentPrices: number[] = []
+        for (const prices of pricesMap.values()) {
+          for (const price of prices) {
+            if (price.inStock) {
+              currentPrices.push(parseFloat(price.price.toString()))
+            }
+          }
+        }
+
+        // Take top 50 for calculation
+        const sampledPrices = currentPrices.slice(0, 50)
+
+        if (sampledPrices.length === 0) {
           return {
             caliber,
             currentAvg: null,
@@ -174,30 +203,32 @@ router.get('/pulse', async (req: Request, res: Response) => {
         }
 
         const currentAvg =
-          currentPrices.reduce((sum, p) => sum + parseFloat(p.price.toString()), 0) /
-          currentPrices.length
+          sampledPrices.reduce((sum, p) => sum + p, 0) / sampledPrices.length
 
         // Get historical average for trend based on windowDays
+        // Query historical prices through product_links
         const windowStart = new Date(asOf)
         windowStart.setDate(windowStart.getDate() - windowDays)
 
-        const historicalPrices = await prisma.prices.findMany({
-          where: {
-            products: { caliber },
-            createdAt: { lt: windowStart },
-            ...visiblePriceWhere(),
-          },
-          select: { price: true },
-          take: 50
-        })
+        const historicalPricesRaw = await prisma.$queryRaw<Array<{ price: any }>>`
+          SELECT pr.price
+          FROM prices pr
+          JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
+          JOIN products p ON p.id = pl."productId"
+          WHERE p.caliber = ${caliber}
+            AND pl.status IN ('MATCHED', 'CREATED')
+            AND pr."createdAt" < ${windowStart}
+          ORDER BY pr."createdAt" DESC
+          LIMIT 50
+        `
 
         let trend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE'
         let trendPercent = 0
 
-        if (historicalPrices.length > 0) {
+        if (historicalPricesRaw.length > 0) {
           const historicalAvg =
-            historicalPrices.reduce((sum, p) => sum + parseFloat(p.price.toString()), 0) /
-            historicalPrices.length
+            historicalPricesRaw.reduce((sum, p) => sum + parseFloat(p.price.toString()), 0) /
+            historicalPricesRaw.length
 
           trendPercent = ((currentAvg - historicalAvg) / historicalAvg) * 100
 
@@ -206,7 +237,6 @@ router.get('/pulse', async (req: Request, res: Response) => {
           } else if (trendPercent > 3) {
             trend = 'UP'
           }
-
         }
 
         // Determine price context (ADR-006: descriptive, not prescriptive)
@@ -224,7 +254,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
           // Context metadata for transparency
           contextMeta: {
             windowDays,
-            sampleCount: currentPrices.length,
+            sampleCount: sampledPrices.length,
             asOf: asOf.toISOString()
           }
         }
@@ -322,112 +352,148 @@ router.get('/deals', async (req: Request, res: Response) => {
       calibers = Array.from(calibersSet)
     }
 
-    // Build where clause
-    // Global: all in-stock items, sorted by price per round (best deals)
-    // Watchlist: prioritize user's calibers if they have any
-    const whereClause: any = {
-      inStock: true,
-      ...visiblePriceWhere(),
-    }
-
-    // For global scope, add freshness filter (< 24h based on observedAt)
-    if (isGlobalScope) {
-      const twentyFourHoursAgo = new Date()
-      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
-      whereClause.observedAt = { gte: twentyFourHoursAgo }
-    } else if (calibers.length > 0) {
-      whereClause.products = { caliber: { in: calibers } }
-    }
-
     // Get deals with best prices
-    const prices = await prisma.prices.findMany({
-      where: whereClause,
-      include: {
-        products: {
-          select: {
-            id: true,
-            name: true,
-            caliber: true,
-            brand: true,
-            imageUrl: true,
-            roundCount: true,
-            grainWeight: true
-          }
-        },
-        retailers: {
-          select: {
-            id: true,
-            name: true,
-            tier: true,
-            logoUrl: true
-          }
-        }
+    // Per Spec v1.2 §0.0: Query through product_links for prices
+    let productWhere: any = {}
+    if (!isGlobalScope && calibers.length > 0) {
+      productWhere.caliber = { in: calibers }
+    }
+
+    // Get products (optionally filtered by caliber)
+    const products = await prisma.products.findMany({
+      where: productWhere,
+      select: {
+        id: true,
+        name: true,
+        caliber: true,
+        brand: true,
+        imageUrl: true,
+        roundCount: true,
+        grainWeight: true
       },
-      orderBy: isGlobalScope
-        ? [{ price: 'asc' }]  // Global: purely by price
-        : [{ retailers: { tier: 'desc' } }, { price: 'asc' }],  // Watchlist: prefer premium retailers
-      take: maxDeals * 2 // Fetch extra for deduplication
+      take: maxDeals * 10 // Fetch more to have options after price filtering
     })
 
-    // Deduplicate by product (keep best price per product)
-    const seenProducts = new Set<string>()
-    const deals = prices
-      .filter(p => {
-        // Skip prices without a productId or products
-        if (!p.productId || !p.products) return false
-        if (seenProducts.has(p.productId)) return false
-        seenProducts.add(p.productId)
+    if (products.length === 0) {
+      return res.json({
+        items: [],
+        _meta: {
+          scope,
+          tier: isGlobalScope ? null : userTier,
+          itemsShown: 0,
+          itemsLimit: maxDeals,
+          personalized: !isGlobalScope && calibers.length > 0,
+          ...(isGlobalScope ? {} : { calibersUsed: calibers })
+        }
+      })
+    }
+
+    // Get prices through product_links
+    const productIds = products.map(p => p.id)
+    const pricesMap = await batchGetPricesViaProductLinks(productIds)
+
+    // Build deals list with best price per product
+    interface DealCandidate {
+      productId: string
+      product: typeof products[0]
+      price: any
+    }
+    const dealCandidates: DealCandidate[] = []
+
+    for (const product of products) {
+      const prices = pricesMap.get(product.id) || []
+
+      // Filter for in-stock and apply freshness filter for global scope
+      const twentyFourHoursAgo = new Date()
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
+
+      const eligiblePrices = prices.filter(p => {
+        if (!p.inStock) return false
+        if (isGlobalScope && p.observedAt && new Date(p.observedAt) < twentyFourHoursAgo) {
+          return false
+        }
         return true
       })
-      .slice(0, maxDeals)
-      .map(price => {
-        // price.products is guaranteed non-null by the filter above
-        const product = price.products!
-        const pricePerRound =
-          product.roundCount && product.roundCount > 0
-            ? parseFloat(price.price.toString()) / product.roundCount
-            : null
 
-        const deal: any = {
-          id: price.id,
-          product: product,
-          retailer: price.retailers,
-          price: parseFloat(price.price.toString()),
-          pricePerRound: pricePerRound ? Math.round(pricePerRound * 1000) / 1000 : null,
-          url: price.url,
-          inStock: price.inStock,
-          updatedAt: price.observedAt?.toISOString() ?? null
+      if (eligiblePrices.length > 0) {
+        // Sort by retailer tier desc, then price asc
+        eligiblePrices.sort((a, b) => {
+          if (!isGlobalScope) {
+            // Prefer premium retailers for watchlist scope
+            const tierOrder: Record<string, number> = { 'PREMIUM': 2, 'STANDARD': 1 }
+            const aTier = tierOrder[a.retailers?.tier || 'STANDARD'] || 0
+            const bTier = tierOrder[b.retailers?.tier || 'STANDARD'] || 0
+            if (aTier !== bTier) return bTier - aTier
+          }
+          return parseFloat(a.price.toString()) - parseFloat(b.price.toString())
+        })
+
+        dealCandidates.push({
+          productId: product.id,
+          product,
+          price: eligiblePrices[0]
+        })
+      }
+    }
+
+    // Sort by price for global scope, by tier+price for watchlist
+    dealCandidates.sort((a, b) => {
+      if (!isGlobalScope) {
+        const tierOrder: Record<string, number> = { 'PREMIUM': 2, 'STANDARD': 1 }
+        const aTier = tierOrder[a.price.retailers?.tier || 'STANDARD'] || 0
+        const bTier = tierOrder[b.price.retailers?.tier || 'STANDARD'] || 0
+        if (aTier !== bTier) return bTier - aTier
+      }
+      return parseFloat(a.price.price.toString()) - parseFloat(b.price.price.toString())
+    })
+
+    // Take top deals
+    const deals = dealCandidates.slice(0, maxDeals).map(({ productId, product, price }) => {
+      const pricePerRound =
+        product.roundCount && product.roundCount > 0
+          ? parseFloat(price.price.toString()) / product.roundCount
+          : null
+
+      const deal: any = {
+        id: price.id,
+        product: product,
+        retailer: price.retailers,
+        price: parseFloat(price.price.toString()),
+        pricePerRound: pricePerRound ? Math.round(pricePerRound * 1000) / 1000 : null,
+        url: price.url,
+        inStock: price.inStock,
+        updatedAt: price.observedAt?.toISOString() ?? null
+      }
+
+      // For watchlist scope, include user-specific fields
+      // For global scope, omit them entirely
+      if (!isGlobalScope) {
+        deal.isWatched = watchedProductIds.has(productId)
+
+        // Premium features: Price Position Index
+        // Normalized price position vs. reference set (0-100 scale)
+        // 0 = at or above 90th percentile of reference prices
+        // 100 = at or below 10th percentile of reference prices
+        // This is a descriptive position, not a value judgment
+        if (showPricePosition) {
+          // TODO: Implement actual calculation using reference set
+          // Formula: 100 - ((currentPrice - minRef) / (maxRef - minRef) * 100)
+          // For now, return null to indicate not yet calculated
+          deal.pricePosition = {
+            index: null, // number 0-100 when calculated
+            basis: 'SKU_MARKET_7D' as const, // Reference: same SKU across retailers, last 7 days
+            referenceSampleSize: 0, // Number of price observations in reference set
+            calculatedAt: null // ISO timestamp when last calculated
+          }
         }
 
-        // For watchlist scope, include user-specific fields
-        // For global scope, omit them entirely
-        if (!isGlobalScope) {
-          deal.isWatched = price.productId ? watchedProductIds.has(price.productId) : false
-
-          // Premium features: Price Position Index
-          // Normalized price position vs. reference set (0-100 scale)
-          // 0 = at or above 90th percentile of reference prices
-          // 100 = at or below 10th percentile of reference prices
-          // This is a descriptive position, not a value judgment
-          if (showPricePosition) {
-            // TODO: Implement actual calculation using reference set
-            // Formula: 100 - ((currentPrice - minRef) / (maxRef - minRef) * 100)
-            // For now, return null to indicate not yet calculated
-            deal.pricePosition = {
-              index: null, // number 0-100 when calculated
-              basis: 'SKU_MARKET_7D' as const, // Reference: same SKU across retailers, last 7 days
-              referenceSampleSize: 0, // Number of price observations in reference set
-              calculatedAt: null // ISO timestamp when last calculated
-            }
-          }
-
-          if (showExplanations && deal.isWatched) {
-            deal.explanation = 'Matches your watchlist preferences'
-          }
+        if (showExplanations && deal.isWatched) {
+          deal.explanation = 'Matches your watchlist preferences'
         }
+      }
 
-        return deal
-      })
+      return deal
+    })
 
     res.json({
       items: deals,
@@ -544,18 +610,20 @@ router.get('/price-history/:caliber', async (req: Request, res: Response) => {
     startDate.setDate(startDate.getDate() - effectiveDays)
 
     // Get price history aggregated by day
-    const prices = await prisma.prices.findMany({
-      where: {
-        products: { caliber: decodeURIComponent(caliber) },
-        createdAt: { gte: startDate },
-        ...visiblePriceWhere(),
-      },
-      select: {
-        price: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: 'asc' }
-    })
+    // Per Spec v1.2 §0.0: Query through product_links for prices
+    const decodedCaliber = decodeURIComponent(caliber)
+    const prices = await prisma.$queryRaw<Array<{ price: any; createdAt: Date }>>`
+      SELECT pr.price, pr."createdAt"
+      FROM prices pr
+      JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
+      JOIN products p ON p.id = pl."productId"
+      JOIN retailers r ON r.id = pr."retailerId"
+      WHERE p.caliber = ${decodedCaliber}
+        AND pl.status IN ('MATCHED', 'CREATED')
+        AND pr."createdAt" >= ${startDate}
+        AND r."visibilityStatus" = 'ELIGIBLE'
+      ORDER BY pr."createdAt" ASC
+    `
 
     // Aggregate by day
     const dailyData: Record<string, { prices: number[]; date: string }> = {}

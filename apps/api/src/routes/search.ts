@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { aiSearch, getSearchSuggestions, parseSearchIntent, backfillProductEmbeddings, updateProductEmbedding, ParseOptions } from '../services/ai-search'
+import { enqueueEmbeddingBatch, getEmbeddingQueueStats } from '../services/ai-search/embedding-queue'
 import { prisma, isAiSearchEnabled, isVectorSearchEnabled } from '@ironscout/db'
 import { requireAdmin, rateLimit, getUserTier } from '../middleware/auth'
 import { getMaxSearchResults, hasPriceHistoryAccess } from '../config/tiers'
@@ -598,43 +599,62 @@ router.get('/admin/ballistic-stats', requireAdmin, async (req: Request, res: Res
 })
 
 /**
- * Trigger embedding backfill (async - returns immediately)
+ * Trigger embedding backfill via queue (enqueues jobs to harvester)
  * POST /api/search/admin/backfill-embeddings
+ *
+ * Routes through the embedding-generate queue so all embeddings use
+ * the same code path (harvester worker) regardless of trigger source.
  */
 let backfillInProgress = false
 let backfillProgress = { processed: 0, total: 0, errors: [] as string[] }
 
 router.post('/admin/backfill-embeddings', requireAdmin, rateLimit({ max: 1, windowMs: 60000 }), async (req: Request, res: Response) => {
   if (backfillInProgress) {
-    return res.status(409).json({ 
+    return res.status(409).json({
       error: 'Backfill already in progress',
       progress: backfillProgress
     })
   }
-  
-  backfillInProgress = true
-  backfillProgress = { processed: 0, total: 0, errors: [] }
-  
-  backfillProductEmbeddings({
-    batchSize: 50,
-    onProgress: (processed, total) => {
-      backfillProgress.processed = processed
-      backfillProgress.total = total
+
+  try {
+    // Query products without embeddings
+    const productsWithoutEmbedding = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM products WHERE embedding IS NULL
+    `
+
+    if (productsWithoutEmbedding.length === 0) {
+      return res.json({
+        message: 'No products need embeddings',
+        total: 0,
+        enqueued: 0
+      })
     }
-  }).then(result => {
-    backfillProgress.errors = result.errors
+
+    backfillInProgress = true
+    backfillProgress = { processed: 0, total: productsWithoutEmbedding.length, errors: [] }
+
+    // Enqueue all products to the embedding queue
+    const productIds = productsWithoutEmbedding.map(p => p.id)
+    const { enqueued, skipped } = await enqueueEmbeddingBatch(productIds)
+
+    backfillProgress.processed = enqueued
     backfillInProgress = false
-    log.info('Backfill complete', { processed: result.processed, errors: result.errors.length })
-  }).catch(error => {
+
+    log.info('Backfill jobs enqueued', { total: productIds.length, enqueued, skipped })
+
+    res.json({
+      message: 'Backfill jobs enqueued to embedding queue',
+      total: productIds.length,
+      enqueued,
+      skipped,
+      note: 'Jobs will be processed by harvester embedding worker'
+    })
+  } catch (error: any) {
+    backfillInProgress = false
     backfillProgress.errors.push(error.message)
-    backfillInProgress = false
-    log.error('Backfill failed', {}, error)
-  })
-  
-  res.json({ 
-    message: 'Backfill started',
-    status: 'running'
-  })
+    log.error('Backfill enqueue failed', {}, error)
+    res.status(500).json({ error: error.message || 'Failed to enqueue backfill jobs' })
+  }
 })
 
 /**
@@ -645,10 +665,42 @@ router.get('/admin/backfill-progress', requireAdmin, (req: Request, res: Respons
   res.json({
     inProgress: backfillInProgress,
     ...backfillProgress,
-    percentComplete: backfillProgress.total > 0 
+    percentComplete: backfillProgress.total > 0
       ? Math.round((backfillProgress.processed / backfillProgress.total) * 100)
       : 0
   })
+})
+
+/**
+ * Get embedding statistics
+ * GET /api/search/admin/embedding-stats
+ */
+router.get('/admin/embedding-stats', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const [totalProducts, productsWithEmbedding] = await Promise.all([
+      prisma.products.count(),
+      prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM products WHERE embedding IS NOT NULL
+      `.then(r => Number(r[0].count)),
+    ])
+
+    const productsWithoutEmbedding = totalProducts - productsWithEmbedding
+    const coveragePercent = totalProducts > 0
+      ? Math.round((productsWithEmbedding / totalProducts) * 100)
+      : 0
+
+    res.json({
+      totalProducts,
+      productsWithEmbedding,
+      productsWithoutEmbedding,
+      coveragePercent,
+      backfillInProgress,
+      backfillProgress: backfillInProgress ? backfillProgress : null,
+    })
+  } catch (error) {
+    log.error('Embedding stats error', {}, error)
+    res.status(500).json({ error: 'Failed to get embedding stats' })
+  }
 })
 
 /**

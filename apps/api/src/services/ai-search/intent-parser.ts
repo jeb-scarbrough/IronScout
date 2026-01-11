@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import {
   PLATFORM_CALIBER_MAP,
   PURPOSE_SYNONYMS,
@@ -13,10 +13,11 @@ import { loggers } from '../../config/logger'
 
 const log = loggers.ai
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+// Initialize OpenAI client only if API key is configured
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY
+const openai = OPENAI_API_KEY
+  ? new OpenAI({ apiKey: OPENAI_API_KEY })
+  : null
 
 /**
  * Structured search intent extracted from natural language query
@@ -142,13 +143,23 @@ export async function parseSearchIntent(
   if (quickParse && quickParse.confidence > 0.8 && userTier === 'FREE') {
     return quickParse
   }
-  
-  // For complex queries or Premium users, use Claude
+
+  // Skip AI parsing if API key not configured
+  if (!openai) {
+    log.debug('AI parsing skipped (OPENAI_API_KEY not configured)')
+    return quickParse || {
+      originalQuery: query,
+      keywords: query.split(/\s+/).filter(w => w.length > 2),
+      confidence: 0.3,
+    }
+  }
+
+  // For complex queries or Premium users, use OpenAI
   try {
-    const intent = await parseWithClaude(query, userTier)
+    const intent = await parseWithAI(query, userTier)
     return intent
   } catch (error) {
-    log.error('Claude parsing failed, falling back to local parse', { error }, error as Error)
+    log.error('AI parsing failed, falling back to local parse', { error }, error as Error)
     return quickParse || {
       originalQuery: query,
       keywords: query.split(/\s+/).filter(w => w.length > 2),
@@ -260,36 +271,45 @@ function tryQuickParse(query: string): SearchIntent | null {
 }
 
 /**
- * Use Claude to parse complex natural language queries
+ * Use OpenAI to parse complex natural language queries
  * Premium users get deeper analysis
  */
-async function parseWithClaude(query: string, userTier: 'FREE' | 'PREMIUM'): Promise<SearchIntent> {
+async function parseWithAI(query: string, userTier: 'FREE' | 'PREMIUM'): Promise<SearchIntent> {
+  if (!openai) {
+    throw new Error('OpenAI client not initialized (OPENAI_API_KEY not set)')
+  }
+
   const isPremium = userTier === 'PREMIUM'
-  
-  const systemPrompt = isPremium 
-    ? getPremiumSystemPrompt() 
+
+  const systemPrompt = isPremium
+    ? getPremiumSystemPrompt()
     : getFreeSystemPrompt()
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: isPremium ? 1000 : 500,
-    system: systemPrompt,
+    temperature: 0.1,
+    response_format: { type: 'json_object' },
     messages: [
       {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
         role: 'user',
-        content: `Parse this search query: "${query}"`
-      }
-    ]
+        content: `Parse this search query: "${query}"`,
+      },
+    ],
   })
 
   // Extract text from response
-  const textContent = response.content.find(block => block.type === 'text')
-  if (!textContent || textContent.type !== 'text') {
-    throw new Error('No text response from Claude')
+  const content = response.choices[0]?.message?.content
+  if (!content) {
+    throw new Error('No response from OpenAI')
   }
-  
+
   // Parse JSON response
-  const parsed = JSON.parse(textContent.text)
+  const parsed = JSON.parse(content)
   
   // Build the intent object
   const intent: SearchIntent = {

@@ -1,0 +1,497 @@
+{
+  "description": "Synthetic test fixtures for extraction pattern validation",
+  "version": "1.0.0",
+  "fixtures": [
+    {
+      "id": "pistol-9mm-basic",
+      "title": "Federal American Eagle 9mm Luger 115gr FMJ 50 Rounds",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 115,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pistol-9mm-bulk",
+      "title": "Winchester USA 9mm 115 Grain FMJ Case of 1000",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 115,
+        "packCount": 1000,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pistol-45acp",
+      "title": "Hornady Critical Defense .45 ACP 185gr FTX 20rd Box",
+      "expected": {
+        "caliber": ".45 ACP",
+        "grain": 185,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pistol-40sw",
+      "title": "Speer Gold Dot 40 S&W 180 Grain JHP 50 Count",
+      "expected": {
+        "caliber": ".40 S&W",
+        "grain": 180,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pistol-380",
+      "title": "Blazer Brass .380 Auto 95gr FMJ 50 Rounds",
+      "expected": {
+        "caliber": ".380 ACP",
+        "grain": 95,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-556-nato",
+      "title": "PMC X-TAC 5.56 NATO 62gr Green Tip LAP 20rd",
+      "expected": {
+        "caliber": "5.56 NATO",
+        "grain": 62,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-556-bulk",
+      "title": "Federal XM193 5.56x45mm 55 Grain FMJ Bulk 500 Rounds",
+      "expected": {
+        "caliber": "5.56 NATO",
+        "grain": 55,
+        "packCount": 500,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-223-rem",
+      "title": "Hornady Frontier .223 Remington 55gr FMJ 20 Rounds",
+      "expected": {
+        "caliber": ".223 Remington",
+        "grain": 55,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-308-win",
+      "title": "Federal Gold Medal .308 Win 168gr Sierra MatchKing 20ct",
+      "expected": {
+        "caliber": ".308 Winchester",
+        "grain": 168,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-762x39",
+      "title": "Wolf Military Classic 7.62x39 124gr FMJ 20 Rounds",
+      "expected": {
+        "caliber": "7.62x39mm",
+        "grain": 124,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-300blk",
+      "title": "Hornady BLACK 300 Blackout 110gr V-MAX 20rd Box",
+      "expected": {
+        "caliber": ".300 Blackout",
+        "grain": 110,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-300aac",
+      "title": "Barnes VOR-TX .300 AAC BLK 110gr TAC-TX 20 Rounds",
+      "expected": {
+        "caliber": ".300 Blackout",
+        "grain": 110,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-65creed",
+      "title": "Hornady ELD Match 6.5 Creedmoor 140gr ELD-M 20 Rounds",
+      "expected": {
+        "caliber": "6.5 Creedmoor",
+        "grain": 140,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-65cm",
+      "title": "Federal Gold Medal 6.5 CM 140 Grain SMK 20ct",
+      "expected": {
+        "caliber": "6.5 Creedmoor",
+        "grain": 140,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-3006",
+      "title": "Remington Core-Lokt .30-06 Springfield 150gr PSP 20 Rounds",
+      "expected": {
+        "caliber": ".30-06 Springfield",
+        "grain": 150,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-22lr-basic",
+      "title": "CCI Standard Velocity .22 LR 40gr LRN 50 Rounds",
+      "expected": {
+        "caliber": ".22 LR",
+        "grain": 40,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-22lr-bulk",
+      "title": "Federal AutoMatch 22 Long Rifle 40gr RN Bulk 325 Rounds",
+      "expected": {
+        "caliber": ".22 LR",
+        "grain": 40,
+        "packCount": 325,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-22wmr",
+      "title": "CCI Maxi-Mag .22 WMR 40gr TMJ 50 Rounds",
+      "expected": {
+        "caliber": ".22 WMR",
+        "grain": 40,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-22magnum",
+      "title": "Hornady Critical Defense 22 Magnum 45gr FTX 50ct",
+      "expected": {
+        "caliber": ".22 WMR",
+        "grain": 45,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-17hmr",
+      "title": "CCI A17 .17 HMR 17gr Varmint Tip 200 Rounds",
+      "expected": {
+        "caliber": ".17 HMR",
+        "grain": 17,
+        "packCount": 200,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rimfire-17hmr-alt",
+      "title": "Hornady V-MAX 17 Hornady Magnum Rimfire 17gn V-MAX 50rd",
+      "expected": {
+        "caliber": ".17 HMR",
+        "grain": 17,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-12ga-buck",
+      "title": "Federal Power-Shok 12 Gauge 2-3/4\" 00 Buck 9 Pellet 5 Rounds",
+      "expected": {
+        "caliber": "12 Gauge",
+        "packCount": 5,
+        "shellLength": "2.75in",
+        "loadType": "00 Buck",
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-12ga-slug",
+      "title": "Remington Slugger 12ga 2.75\" 1oz Rifled Slug 5rd Box",
+      "expected": {
+        "caliber": "12 Gauge",
+        "packCount": 5,
+        "shellLength": "2.75in",
+        "loadType": "1oz Slug",
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-12ga-birdshot",
+      "title": "Winchester Super-X 12 Gauge 2-3/4\" #7.5 Shot 1-1/8oz 25 Rounds",
+      "expected": {
+        "caliber": "12 Gauge",
+        "packCount": 25,
+        "shellLength": "2.75in",
+        "loadType": "7.5 Shot",
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-20ga",
+      "title": "Federal Game Load 20 Gauge 2-3/4\" #6 Shot 1oz 25ct",
+      "expected": {
+        "caliber": "20 Gauge",
+        "packCount": 25,
+        "shellLength": "2.75in",
+        "loadType": "6 Shot",
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-410",
+      "title": "Hornady Critical Defense .410 Bore 2.5\" FTX/Round Ball 20 Rounds",
+      "expected": {
+        "caliber": ".410 Bore",
+        "packCount": 20,
+        "shellLength": "2.5in",
+        "identityEligible": true,
+        "note": "Eligible via shellLength even without loadType"
+      }
+    },
+    {
+      "id": "grain-variant-gn",
+      "title": "PMC Bronze 9mm 115gn FMJ 50 Rounds",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 115,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "grain-variant-grn",
+      "title": "Sellier & Bellot 9mm Luger 124grn FMJ 50rd",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 124,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pack-case-of",
+      "title": "Federal American Eagle 5.56 55gr FMJ Case of 500",
+      "expected": {
+        "caliber": "5.56 NATO",
+        "grain": 55,
+        "packCount": 500,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pack-bulk",
+      "title": "Tula 7.62x39 122gr FMJ Bulk 1000",
+      "expected": {
+        "caliber": "7.62x39mm",
+        "grain": 122,
+        "packCount": 1000,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pack-per-case",
+      "title": "Winchester 9mm 115gr FMJ 500 per case",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 115,
+        "packCount": 500,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pack-value-pack",
+      "title": "Blazer Brass .45 ACP 230gr FMJ Value Pack of 250",
+      "expected": {
+        "caliber": ".45 ACP",
+        "grain": 230,
+        "packCount": 250,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pack-range-pack",
+      "title": "Federal Champion 9mm 115gr FMJ 100rd Range Pack",
+      "expected": {
+        "caliber": "9mm",
+        "grain": 115,
+        "packCount": 100,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "missing-grain",
+      "title": "Federal Premium 9mm JHP 20 Rounds",
+      "expected": {
+        "caliber": "9mm",
+        "grain": null,
+        "packCount": 20,
+        "identityEligible": false,
+        "reason": "Missing grain weight"
+      }
+    },
+    {
+      "id": "missing-packcount",
+      "title": "Hornady Superformance .308 Win 165gr SST",
+      "expected": {
+        "caliber": ".308 Winchester",
+        "grain": 165,
+        "packCount": null,
+        "identityEligible": false,
+        "reason": "Missing pack count"
+      }
+    },
+    {
+      "id": "missing-caliber",
+      "title": "Premium Self Defense 124gr JHP 25 Rounds",
+      "expected": {
+        "caliber": null,
+        "grain": 124,
+        "packCount": 25,
+        "identityEligible": false,
+        "reason": "Missing caliber"
+      }
+    },
+    {
+      "id": "ambiguous-title",
+      "title": "Federal Premium Ammunition 20-Count Box",
+      "expected": {
+        "caliber": null,
+        "grain": null,
+        "packCount": 20,
+        "identityEligible": false,
+        "reason": "Missing caliber and grain"
+      }
+    },
+    {
+      "id": "revolver-357mag",
+      "title": "Hornady Critical Duty .357 Magnum 135gr FlexLock 25 Rounds",
+      "expected": {
+        "caliber": ".357 Magnum",
+        "grain": 135,
+        "packCount": 25,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "revolver-38spl",
+      "title": "Federal Hydra-Shok .38 Special +P 129gr JHP 20ct",
+      "expected": {
+        "caliber": ".38 Special",
+        "grain": 129,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "pistol-10mm",
+      "title": "Underwood Xtreme Penetrator 10mm Auto 140gr Solid Copper 20rd",
+      "expected": {
+        "caliber": "10mm Auto",
+        "grain": 140,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-50bmg",
+      "title": "PMC Bronze .50 BMG 660gr FMJ-BT 10 Rounds",
+      "expected": {
+        "caliber": ".50 BMG",
+        "grain": 660,
+        "packCount": 10,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-270win",
+      "title": "Nosler Partition .270 Winchester 150gr Partition 20ct",
+      "expected": {
+        "caliber": ".270 Winchester",
+        "grain": 150,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-243win",
+      "title": "Winchester Super-X .243 Win 100gr Power-Point 20 Rounds",
+      "expected": {
+        "caliber": ".243 Winchester",
+        "grain": 100,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-65grendel",
+      "title": "Hornady BLACK 6.5 Grendel 123gr ELD Match 20rd",
+      "expected": {
+        "caliber": "6.5 Grendel",
+        "grain": 123,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-762x54r",
+      "title": "Wolf 7.62x54R 148gr FMJ 20 Rounds",
+      "expected": {
+        "caliber": "7.62x54R",
+        "grain": 148,
+        "packCount": 20,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "rifle-30carbine",
+      "title": "Aguila 30 Carbine 110gr FMJ 50 Rounds",
+      "expected": {
+        "caliber": ".30 Carbine",
+        "grain": 110,
+        "packCount": 50,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "shotgun-12ga-3in",
+      "title": "Federal Black Cloud 12 Gauge 3\" BB Steel 25 Rounds",
+      "expected": {
+        "caliber": "12 Gauge",
+        "packCount": 25,
+        "shellLength": "3in",
+        "identityEligible": true,
+        "note": "Eligible via shellLength even without loadType (BB Steel not captured)"
+      }
+    },
+    {
+      "id": "shotgun-12ga-3.5in",
+      "title": "Winchester Super-X 12ga 3.5\" 00 Buckshot 5rd",
+      "expected": {
+        "caliber": "12 Gauge",
+        "packCount": 5,
+        "shellLength": "3.5in",
+        "loadType": "00 Buck",
+        "identityEligible": true
+      }
+    }
+  ]
+}

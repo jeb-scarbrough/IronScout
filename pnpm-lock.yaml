@@ -235,6 +235,9 @@ importers:
       ioredis:
         specifier: ^5.8.2
         version: 5.8.2
+      openai:
+        specifier: ^6.15.0
+        version: 6.15.0(ws@8.18.3)(zod@4.2.1)
       resend:
         specifier: ^6.6.0
         version: 6.6.0(@react-email/render@1.1.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))

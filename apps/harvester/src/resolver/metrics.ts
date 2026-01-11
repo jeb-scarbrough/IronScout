@@ -28,6 +28,13 @@ export type SourceKindLabel = SourceKind | 'UNKNOWN'
 export type StatusLabel = ProductLinkStatus
 export type ReasonCodeLabel = ProductLinkReasonCode | 'NONE'
 
+// Match path types for identity-key metrics
+export type MatchPathLabel = 'IDENTITY_KEY' | 'IDENTITY_KEY_SHOTGUN' | 'FUZZY' | 'UPC' | 'NONE'
+export type MatchPathOutcome = 'MATCHED' | 'CREATED' | 'FALLTHROUGH'
+
+// Missing field types for tracking extraction failures
+export type MissingFieldLabel = 'brandNorm' | 'caliberNorm' | 'grain' | 'packCount' | 'titleSignature' | 'loadType' | 'shellLength'
+
 export interface ResolverMetricsSnapshot {
   requests: Record<SourceKindLabel, number>
   decisions: Record<SourceKindLabel, Record<StatusLabel, number>>
@@ -37,6 +44,9 @@ export interface ResolverMetricsSnapshot {
     sum: number
     buckets: Record<number, number> // bucket threshold -> count
   }
+  // Identity-key metrics
+  matchPath: Record<MatchPathLabel, Record<MatchPathOutcome, number>>
+  missingFields: Record<MissingFieldLabel, number>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -57,6 +67,10 @@ const latency = {
   sum: 0,
   buckets: new Map<number, number>(),
 }
+
+// Identity-key path metrics
+const matchPath: Map<string, number> = new Map() // key: `${path}:${outcome}`
+const missingFields: Map<MissingFieldLabel, number> = new Map()
 
 // Initialize buckets
 for (const bucket of LATENCY_BUCKETS) {
@@ -113,6 +127,34 @@ export function recordLatency(durationMs: number): void {
   }
 }
 
+/**
+ * Record resolver match path
+ * Tracks identity-key vs fuzzy vs UPC resolution paths
+ */
+export function recordMatchPath(path: MatchPathLabel, outcome: MatchPathOutcome): void {
+  const key = `${path}:${outcome}`
+  const current = matchPath.get(key) ?? 0
+  matchPath.set(key, current + 1)
+}
+
+/**
+ * Record a missing field
+ * Tracks which fields are most commonly missing during normalization
+ */
+export function recordMissingField(field: MissingFieldLabel): void {
+  const current = missingFields.get(field) ?? 0
+  missingFields.set(field, current + 1)
+}
+
+/**
+ * Record multiple missing fields at once
+ */
+export function recordMissingFields(fields: MissingFieldLabel[]): void {
+  for (const field of fields) {
+    recordMissingField(field)
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Convenience function for full job recording
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -158,6 +200,8 @@ export function getMetricsSnapshot(): ResolverMetricsSnapshot {
       sum: latency.sum,
       buckets: {} as Record<number, number>,
     },
+    matchPath: {} as Record<MatchPathLabel, Record<MatchPathOutcome, number>>,
+    missingFields: {} as Record<MissingFieldLabel, number>,
   }
 
   // Requests
@@ -186,6 +230,20 @@ export function getMetricsSnapshot(): ResolverMetricsSnapshot {
   // Latency buckets
   for (const [bucket, count] of latency.buckets) {
     snapshot.latency.buckets[bucket] = count
+  }
+
+  // Match path
+  for (const [key, count] of matchPath) {
+    const [path, outcome] = key.split(':') as [MatchPathLabel, MatchPathOutcome]
+    if (!snapshot.matchPath[path]) {
+      snapshot.matchPath[path] = {} as Record<MatchPathOutcome, number>
+    }
+    snapshot.matchPath[path][outcome] = count
+  }
+
+  // Missing fields
+  for (const [field, count] of missingFields) {
+    snapshot.missingFields[field] = count
   }
 
   return snapshot
@@ -230,6 +288,21 @@ export function getPrometheusMetrics(): string {
   lines.push(`resolver_latency_ms_sum ${latency.sum}`)
   lines.push(`resolver_latency_ms_count ${latency.count}`)
 
+  // resolver_match_path_total
+  lines.push('# HELP resolver_match_path_total Total resolver resolutions by match path')
+  lines.push('# TYPE resolver_match_path_total counter')
+  for (const [key, count] of matchPath) {
+    const [path, outcome] = key.split(':')
+    lines.push(`resolver_match_path_total{path="${path}",outcome="${outcome}"} ${count}`)
+  }
+
+  // resolver_missing_field_total
+  lines.push('# HELP resolver_missing_field_total Total missing fields during normalization')
+  lines.push('# TYPE resolver_missing_field_total counter')
+  for (const [field, count] of missingFields) {
+    lines.push(`resolver_missing_field_total{field="${field}"} ${count}`)
+  }
+
   return lines.join('\n')
 }
 
@@ -249,6 +322,8 @@ export function resetMetrics(): void {
   for (const bucket of LATENCY_BUCKETS) {
     latency.buckets.set(bucket, 0)
   }
+  matchPath.clear()
+  missingFields.clear()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -309,4 +384,85 @@ export function getMatchRate(): number {
   }
 
   return totalDecisions > 0 ? matchedDecisions / totalDecisions : 0
+}
+
+/**
+ * Get identity-key resolution rate
+ * (identity-key matched + created) / total fingerprint resolutions
+ */
+export function getIdentityKeyRate(): number {
+  let identityKeyTotal = 0
+  let fuzzyTotal = 0
+
+  for (const [key, count] of matchPath) {
+    if (key.startsWith('IDENTITY_KEY:') || key.startsWith('IDENTITY_KEY_SHOTGUN:')) {
+      if (!key.endsWith(':FALLTHROUGH')) {
+        identityKeyTotal += count
+      }
+    } else if (key.startsWith('FUZZY:')) {
+      fuzzyTotal += count
+    }
+  }
+
+  const total = identityKeyTotal + fuzzyTotal
+  return total > 0 ? identityKeyTotal / total : 0
+}
+
+/**
+ * Get match path summary for display
+ */
+export function getMatchPathSummary(): {
+  identityKey: { matched: number; created: number; fallthrough: number }
+  identityKeyShotgun: { matched: number; created: number; fallthrough: number }
+  fuzzy: { matched: number; created: number }
+  upc: { matched: number; created: number }
+  none: { matched: number }
+} {
+  const summary = {
+    identityKey: { matched: 0, created: 0, fallthrough: 0 },
+    identityKeyShotgun: { matched: 0, created: 0, fallthrough: 0 },
+    fuzzy: { matched: 0, created: 0 },
+    upc: { matched: 0, created: 0 },
+    none: { matched: 0 },
+  }
+
+  for (const [key, count] of matchPath) {
+    const [path, outcome] = key.split(':') as [MatchPathLabel, MatchPathOutcome]
+    switch (path) {
+      case 'IDENTITY_KEY':
+        if (outcome === 'MATCHED') summary.identityKey.matched += count
+        else if (outcome === 'CREATED') summary.identityKey.created += count
+        else if (outcome === 'FALLTHROUGH') summary.identityKey.fallthrough += count
+        break
+      case 'IDENTITY_KEY_SHOTGUN':
+        if (outcome === 'MATCHED') summary.identityKeyShotgun.matched += count
+        else if (outcome === 'CREATED') summary.identityKeyShotgun.created += count
+        else if (outcome === 'FALLTHROUGH') summary.identityKeyShotgun.fallthrough += count
+        break
+      case 'FUZZY':
+        if (outcome === 'MATCHED') summary.fuzzy.matched += count
+        else if (outcome === 'CREATED') summary.fuzzy.created += count
+        break
+      case 'UPC':
+        if (outcome === 'MATCHED') summary.upc.matched += count
+        else if (outcome === 'CREATED') summary.upc.created += count
+        break
+      case 'NONE':
+        summary.none.matched += count
+        break
+    }
+  }
+
+  return summary
+}
+
+/**
+ * Get top missing fields sorted by count
+ */
+export function getTopMissingFields(limit = 10): Array<{ field: MissingFieldLabel; count: number }> {
+  const entries = [...missingFields.entries()]
+    .map(([field, count]) => ({ field, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+  return entries
 }

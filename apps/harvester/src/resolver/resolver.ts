@@ -38,6 +38,7 @@ import {
 import { DEFAULT_SCORING_STRATEGY } from './scoring'
 import { normalizeBrandString } from './brand-normalization'
 import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
+import { recordMatchPath, recordMissingFields, type MissingFieldLabel } from './metrics'
 
 const log = logger.resolver
 
@@ -46,6 +47,10 @@ export const RESOLVER_VERSION = '1.2.0'
 
 // Dictionary version - bump on normalization dictionary changes
 const DICTIONARY_VERSION = '1.0.0'
+
+// Identity key version - bump on identity key format changes
+// This allows coexistence of products created with different identity key algorithms
+export const IDENTITY_KEY_VERSION = 'v1'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Trust Config Cache
@@ -413,9 +418,15 @@ export async function resolveSourceProduct(
   // Check minimum required fields (§3: brandNorm, caliberNorm required)
   if (!normalized.brandNorm || !normalized.caliberNorm) {
     rulesFired.push('INSUFFICIENT_DATA')
+    recordMatchPath('NONE', 'MATCHED') // NONE path = no match possible
     const missingFields = []
     if (!normalized.brandNorm) missingFields.push('brandNorm')
     if (!normalized.caliberNorm) missingFields.push('caliberNorm')
+    // Track these missing fields
+    const missingFieldLabels: MissingFieldLabel[] = []
+    if (!normalized.brandNorm) missingFieldLabels.push('brandNorm')
+    if (!normalized.caliberNorm) missingFieldLabels.push('caliberNorm')
+    recordMissingFields(missingFieldLabels)
 
     rlog.info('INSUFFICIENT_DATA', {
       phase: 'fingerprint_match',
@@ -858,11 +869,14 @@ async function attemptUpcMatch(
           upcNorm,
           name: normalized.title,
           category: 'ammunition', // TODO: Derive from data
+          brand: normalized.brand ?? null,
           brandNorm: normalized.brandNorm,
+          caliber: normalized.caliber ?? null,
           caliberNorm: normalized.caliberNorm,
         },
       })
       isCreated = true
+      recordMatchPath('UPC', 'CREATED')
 
       rlog.info('UPC_PRODUCT_CREATED', {
         phase: 'upc_match',
@@ -874,6 +888,8 @@ async function attemptUpcMatch(
       // Handle race condition - another worker created it
       if (error.code === 'P2002') {
         rulesFired.push('PRODUCT_RACE_RETRY')
+        // Race condition - another worker created, so this is still a MATCHED outcome
+        recordMatchPath('UPC', 'MATCHED')
         rlog.warn('UPC_PRODUCT_RACE_CONDITION', {
           phase: 'upc_match',
           canonicalKey,
@@ -894,6 +910,7 @@ async function attemptUpcMatch(
       }
     }
   } else {
+    recordMatchPath('UPC', 'MATCHED')
     rlog.debug('UPC_PRODUCT_FOUND', {
       phase: 'upc_match',
       productId: product.id,
@@ -1026,11 +1043,12 @@ async function attemptFingerprintMatch(
       normalized.loadType,
       shellOrSignature,
     ].join('|')
-    const identityKey = `FP_SG:${createHash('sha256').update(fingerprintData).digest('hex')}`
+    const identityKey = `FP_SG:${IDENTITY_KEY_VERSION}:${createHash('sha256').update(fingerprintData).digest('hex')}`
 
     rlog.debug('IDENTITY_KEY_LOOKUP', {
       phase: 'identity_key',
       identityKey,
+      identityKeyVersion: IDENTITY_KEY_VERSION,
       identityKeyType: 'shotgun',
       fingerprintFields: {
         brandNorm: normalized.brandNorm,
@@ -1048,6 +1066,7 @@ async function attemptFingerprintMatch(
 
     if (existingProduct) {
       rulesFired.push('IDENTITY_KEY_MATCHED')
+      recordMatchPath('IDENTITY_KEY_SHOTGUN', 'MATCHED')
 
       rlog.info('IDENTITY_KEY_MATCHED', {
         phase: 'identity_key',
@@ -1106,13 +1125,16 @@ async function attemptFingerprintMatch(
           canonicalKey: identityKey,
           name: normalized.title,
           category: 'ammunition',
+          brand: normalized.brand ?? null,
           brandNorm: normalized.brandNorm,
+          caliber: normalized.caliber ?? null,
           caliberNorm: normalized.caliberNorm,
           roundCount: normalized.packCount ?? null,
         },
       })
       isCreated = true
       rulesFired.push('IDENTITY_KEY_CREATED')
+      recordMatchPath('IDENTITY_KEY_SHOTGUN', 'CREATED')
 
       rlog.info('IDENTITY_KEY_CREATED', {
         phase: 'identity_key',
@@ -1123,6 +1145,8 @@ async function attemptFingerprintMatch(
     } catch (error: any) {
       if (error.code === 'P2002') {
         rulesFired.push('IDENTITY_KEY_RACE_RETRY')
+        // Race condition - another worker created, so this is still a MATCHED outcome
+        recordMatchPath('IDENTITY_KEY_SHOTGUN', 'MATCHED')
         rlog.warn('IDENTITY_KEY_RACE_CONDITION', {
           phase: 'identity_key',
           identityKey,
@@ -1157,7 +1181,7 @@ async function attemptFingerprintMatch(
       return {
         productId: product.id,
         matchType: 'FINGERPRINT' as const,
-        status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+        status: isCreated ? 'CREATED' : 'MATCHED',
         reasonCode: null,
         confidence: 1.0,
         resolverVersion: RESOLVER_VERSION,
@@ -1177,6 +1201,7 @@ async function attemptFingerprintMatch(
       }
     }
 
+    recordMatchPath('IDENTITY_KEY_SHOTGUN', 'FALLTHROUGH')
     rlog.warn('IDENTITY_KEY_FALLTHROUGH', {
       phase: 'identity_key',
       identityKey,
@@ -1194,11 +1219,12 @@ async function attemptFingerprintMatch(
       String(normalized.packCount),
       normalized.titleSignature,
     ].join('|')
-    const identityKey = `FP:${createHash('sha256').update(fingerprintData).digest('hex')}`
+    const identityKey = `FP:${IDENTITY_KEY_VERSION}:${createHash('sha256').update(fingerprintData).digest('hex')}`
 
     rlog.debug('IDENTITY_KEY_LOOKUP', {
       phase: 'identity_key',
       identityKey,
+      identityKeyVersion: IDENTITY_KEY_VERSION,
       fingerprintFields: {
         brandNorm: normalized.brandNorm,
         caliberNorm: normalized.caliberNorm,
@@ -1216,6 +1242,7 @@ async function attemptFingerprintMatch(
     if (existingProduct) {
       // Found exact match by identity key
       rulesFired.push('IDENTITY_KEY_MATCHED')
+      recordMatchPath('IDENTITY_KEY', 'MATCHED')
 
       rlog.info('IDENTITY_KEY_MATCHED', {
         phase: 'identity_key',
@@ -1273,7 +1300,9 @@ async function attemptFingerprintMatch(
           canonicalKey: identityKey,
           name: normalized.title,
           category: 'ammunition',
+          brand: normalized.brand ?? null,
           brandNorm: normalized.brandNorm,
+          caliber: normalized.caliber ?? null,
           caliberNorm: normalized.caliberNorm,
           grainWeight: normalized.grain ?? null,
           roundCount: normalized.packCount ?? null,
@@ -1281,6 +1310,7 @@ async function attemptFingerprintMatch(
       })
       isCreated = true
       rulesFired.push('IDENTITY_KEY_CREATED')
+      recordMatchPath('IDENTITY_KEY', 'CREATED')
 
       rlog.info('IDENTITY_KEY_CREATED', {
         phase: 'identity_key',
@@ -1291,6 +1321,8 @@ async function attemptFingerprintMatch(
       // Handle race condition - another worker created it
       if (error.code === 'P2002') {
         rulesFired.push('IDENTITY_KEY_RACE_RETRY')
+        // Race condition - another worker created, so this is still a MATCHED outcome
+        recordMatchPath('IDENTITY_KEY', 'MATCHED')
         rlog.warn('IDENTITY_KEY_RACE_CONDITION', {
           phase: 'identity_key',
           identityKey,
@@ -1322,7 +1354,7 @@ async function attemptFingerprintMatch(
       return {
         productId: product.id,
         matchType: 'FINGERPRINT' as const,
-        status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+        status: isCreated ? 'CREATED' : 'MATCHED',
         reasonCode: null,
         confidence: 1.0,
         resolverVersion: RESOLVER_VERSION,
@@ -1343,6 +1375,7 @@ async function attemptFingerprintMatch(
     }
 
     // Extremely rare: race retry returned null, fall through to fuzzy scoring
+    recordMatchPath('IDENTITY_KEY', 'FALLTHROUGH')
     rlog.warn('IDENTITY_KEY_FALLTHROUGH', {
       phase: 'identity_key',
       identityKey,
@@ -1353,6 +1386,21 @@ async function attemptFingerprintMatch(
   // ============================================================================
   // FUZZY SCORING: Fall back when identity fields are incomplete
   // ============================================================================
+
+  // Track missing fields that caused fuzzy fallback
+  const missingFieldsList: MissingFieldLabel[] = []
+  if (!normalized.brandNorm) missingFieldsList.push('brandNorm')
+  if (!normalized.caliberNorm) missingFieldsList.push('caliberNorm')
+  if (!normalized.titleSignature) missingFieldsList.push('titleSignature')
+  if (!hasGrain) missingFieldsList.push('grain')
+  if (!hasPackCount) missingFieldsList.push('packCount')
+  if (isShotgun && !normalized.loadType) missingFieldsList.push('loadType')
+  if (isShotgun && !normalized.shellLength) missingFieldsList.push('shellLength')
+
+  if (missingFieldsList.length > 0) {
+    recordMissingFields(missingFieldsList)
+  }
+
   rlog.debug('FINGERPRINT_CANDIDATE_QUERY', {
     phase: 'fingerprint_match',
     reason: hasCompleteIdentity ? 'identity_key_fallthrough' : 'incomplete_identity_fields',
@@ -1369,6 +1417,7 @@ async function attemptFingerprintMatch(
       loadType: isShotgun ? !normalized.loadType : undefined,
       shellLength: isShotgun ? !normalized.shellLength : undefined,
     },
+    missingFieldsList,
     maxCandidates: config.maxCandidates,
     scoringStrategy: {
       name: scoringStrategy.name,
@@ -1567,7 +1616,7 @@ async function attemptFingerprintMatch(
     }
 
     // Generate deterministic canonicalKey for fingerprint-based product
-    // Format: FP:<sha256 hash> per schema comment
+    // Format: FP:<version>:<sha256 hash> per schema comment
     const fingerprintData = [
       normalized.brandNorm,
       normalized.caliberNorm,
@@ -1575,7 +1624,7 @@ async function attemptFingerprintMatch(
       String(normalized.packCount),
       normalized.titleSignature,
     ].join('|')
-    const canonicalKey = `FP:${createHash('sha256').update(fingerprintData).digest('hex')}`
+    const canonicalKey = `FP:${IDENTITY_KEY_VERSION}:${createHash('sha256').update(fingerprintData).digest('hex')}`
 
     rlog.info('FINGERPRINT_PRODUCT_CREATE_ATTEMPT', {
       phase: 'fingerprint_match',
@@ -1600,7 +1649,9 @@ async function attemptFingerprintMatch(
           canonicalKey,
           name: normalized.title,
           category: 'ammunition',
+          brand: normalized.brand ?? null,
           brandNorm: normalized.brandNorm,
+          caliber: normalized.caliber ?? null,
           caliberNorm: normalized.caliberNorm,
           grainWeight: normalized.grain ?? null,
           roundCount: normalized.packCount ?? null,
@@ -1608,6 +1659,7 @@ async function attemptFingerprintMatch(
       })
       isCreated = true
       rulesFired.push('FINGERPRINT_PRODUCT_CREATED')
+      recordMatchPath('FUZZY', 'CREATED')
 
       rlog.info('FINGERPRINT_PRODUCT_CREATED', {
         phase: 'fingerprint_match',
@@ -1618,6 +1670,8 @@ async function attemptFingerprintMatch(
       // Handle race condition - another worker created it
       if (error.code === 'P2002') {
         rulesFired.push('FINGERPRINT_PRODUCT_RACE_RETRY')
+        // Race condition - another worker created, so this is still a MATCHED outcome
+        recordMatchPath('FUZZY', 'MATCHED')
         rlog.warn('FINGERPRINT_PRODUCT_RACE_CONDITION', {
           phase: 'fingerprint_match',
           canonicalKey,
@@ -1667,7 +1721,7 @@ async function attemptFingerprintMatch(
     return {
       productId: product.id,
       matchType: 'FINGERPRINT' as const,
-      status: (isCreated ? 'CREATED' : 'MATCHED') as const,
+      status: isCreated ? 'CREATED' : 'MATCHED',
       reasonCode: null,
       confidence: 1.0,
       resolverVersion: RESOLVER_VERSION,
@@ -1730,9 +1784,10 @@ async function attemptFingerprintMatch(
     )
   }
 
-  // Best match found
+  // Best match found via fuzzy scoring
   const bestCandidate = scoredCandidates[0]
   rulesFired.push('FINGERPRINT_MATCHED')
+  recordMatchPath('FUZZY', 'MATCHED')
 
   rlog.debug('FINGERPRINT_BEST_CANDIDATE', {
     phase: 'fingerprint_match',

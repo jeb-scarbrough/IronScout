@@ -51,7 +51,6 @@ if (-not $SkipEnvCheck) {
         @{ Name = "NEXTAUTH_SECRET"; Description = "NextAuth secret key" },
         @{ Name = "STRIPE_SECRET_KEY"; Description = "Stripe API key" },
         @{ Name = "OPENAI_API_KEY"; Description = "OpenAI API key" },
-        @{ Name = "ANTHROPIC_API_KEY"; Description = "Anthropic API key" },
         @{ Name = "RESEND_API_KEY"; Description = "Resend email API key" }
     )
 

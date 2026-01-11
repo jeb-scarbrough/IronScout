@@ -235,6 +235,16 @@ model AffiliateFeedRunError {
 }
 ```
 
+#### QuarantinedRecord (Generic)
+
+Quarantine records are stored in a single generic table for all feed types.
+This avoids maintaining parallel quarantine tables and allows a shared UI.
+
+**Table:** `quarantined_records`  
+**Key fields:** `feedType` (enum: RETAILER | AFFILIATE), `feedId` (string)  
+**Constraint:** Remove FK to `retailer_feeds` (no per-feed table dependency)  
+**Note:** `retailerId` remains for grouping and UI context.
+
 ### 2.2 Source Model Additions
 
 > **⚠️ INVARIANT:** `Source.retailerId` is **required**. Affiliate sources must be attached to a Retailer. In v1, mapping is operator-defined and typically 1:1 with the Impact advertiser.
@@ -1761,6 +1771,21 @@ UPCs are fixed-length codes where leading zeros are significant.
 | `backordered`, `preorder`, `pre-order`, `sold out`, `discontinued` | `false` | Unavailable variants |
 | (unrecognized) | `true` | Default to in stock if ambiguous |
 
+### 7.1.2 Row Validation and Quarantine (Affiliate)
+
+**Validation happens after all extraction attempts** (Attributes JSON, URL signals, title normalization).
+
+**Quarantine trigger (v1):**
+- If `caliber` is still missing after extraction, quarantine the row and skip resolver/upsert.
+- Record `blockingErrors` with `MISSING_CALIBER` and increment `productsRejected`.
+- Quarantine storage uses generic `quarantined_records` with `feedType = AFFILIATE` and `feedId = affiliate_feeds.id`.
+
+**Data quality signals (no quarantine):**
+- Missing `brand` does not block ingestion; track `missingBrandCount`.
+- Missing `roundCount` does not block ingestion; track `missingRoundCountCount`.
+
+These counts are logged for observability but do not affect pipeline flow.
+
 ### 7.2 Ingest Write Pattern (Phase 1)
 
 For each row:
@@ -2548,6 +2573,15 @@ Tabs:
 - Run History (paginated table)
 - Metrics (future)
 
+### 12.3.1 Freshness Status (Affiliate Feeds)
+
+Show per-feed freshness derived from `getExpiryStatus()` (circuit-breaker semantics):
+- Active: `lastSeenSuccessAt` within `expiryHours`
+- Pending: `lastSeenSuccessAt` is NULL but `lastSeenAt` exists
+- Expired: `lastSeenSuccessAt` older than `expiryHours`
+
+This is visibility only; no new state is stored.
+
 ### 12.4 Credential UI Handling
 
 - Show masked placeholder: "••••••••"
@@ -2994,7 +3028,7 @@ interface BaseLogContext {
 | WARN | `PARSE_ROW_SKIPPED` | `rowNumber`, `reason`, `rawRow` (truncated) | Row failed validation |
 | WARN | `PARSE_COLUMN_MISSING` | `rowNumber`, `columnName`, `required` | Expected column missing |
 | DEBUG | `PARSE_BATCH_COMPLETE` | `batchNumber`, `rowsInBatch`, `durationMs` | Batch boundary reached |
-| INFO | `PARSE_COMPLETE` | `totalRows`, `parsedRows`, `skippedRows`, `durationMs` | Parsing finished |
+| INFO | `PARSE_COMPLETE` | `totalRows`, `parsedRows`, `skippedRows`, `durationMs`, `quarantinedRows`, `missingBrandCount`, `missingRoundCountCount` | Parsing finished |
 
 ### 17.6 Transform Stage Logs
 
@@ -3307,6 +3341,9 @@ Per `context/reference/testing.md`:
 - [ ] Credential decryption only in worker
 - [ ] Advisory lock prevents concurrent runs
 - [ ] Spike detection thresholds
+- [ ] Normalization fixture corpus (parse -> normalize regression test)
+- [ ] Affiliate quarantine on missing caliber (post-extraction)
+- [ ] Freshness status output from `getExpiryStatus()` surfaced in admin UI
 
 ---
 

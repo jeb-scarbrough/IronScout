@@ -1,0 +1,50 @@
+Reviewed the canonical docs per README.md (public promises, scope, release criteria, ADRs, UX charter) plus current apps/architecture/operations/specs; archive/examples treated as non‑authoritative background.
+
+30 Ideas (Wide Funnel)
+
+Identity‑key‑first resolver for all ammo types with strict field requirements to cut review volume without risky merges.
+Expand caliber/pack/grain extraction rules (title + URL + attributes) with deterministic patterns and test fixtures.
+Add lastSeenAt/presence tracking for source products to avoid stale listings and drive clean “out of stock” behavior.
+Feed‑quality scoring per execution (missing brand/caliber/pack, parse errors) surfaced in admin/merchant UI.
+Auto‑quarantine feeds on error spikes or schema drift, with explicit manual re‑enable and audit.
+Brand‑alias impact preview tied to recent source_products brandNorm counts to prevent high‑blast changes.
+Admin merge/split tools for canonical products with audit logs and append‑only corrections.
+Centralized visibility predicate helper used by search/product/alerts to prevent leakage.
+Hash‑based “no‑op if unchanged” writes for prices to preserve append‑only history without noise.
+Materialized “latest price per product+retailer” view to speed search/product pages.
+Precomputed price‑history summaries (min/median/last‑30/last‑90) for fast tier‑shaped responses.
+Search indexing upgrades (GIN/trigram on normalized title/brand) for deterministic speedups.
+Short‑TTL API response caching for common filter combos to reduce p95 latency.
+Async embedding generation with backfill queue to keep search fast on ingest spikes.
+Resolver match‑rate KPIs by feed with alerting on spikes in NEEDS_REVIEW/INSUFFICIENT_DATA.
+Ingestion runbook auto‑linking to last failed execution and common fixes (ops ergonomics).
+Merchant pre‑ingest validation (schema + sample parse) to catch malformed feeds early.
+Consumer product “compare offers” table with consistent attributes and availability.
+“Watch” CTA and state on search cards to reinforce search → save → monitor loop.
+Alert history panel showing last alert type/time per saved item (no rationale, just facts).
+Data freshness labels (“last seen X hours ago”) to set expectations without guarantees.
+Corrections overlay UI for ops to fix known bad data without overwriting history.
+Deterministic ranking tie‑breakers (availability, price recency) to avoid noisy reorders.
+Remove any client‑trusted tier resolution (e.g., header) and enforce server‑side only.
+Backfill canonical grouping for historical data via resolver batch jobs.
+Admin audit coverage expansion (listing, eligibility, feed state) with before/after values.
+CanonicalKey uniqueness enforcement + retry logic in all create paths to avoid dupes.
+UX empty‑state improvements that distinguish “no eligible retailers” vs “no data” vs “filtered out.”
+Merchant feed health dashboard showing impact of listing/unlisting on consumer visibility.
+Unit normalization hardening (gr, oz, in, pack) with shared utils and regression tests.
+Top 5 (Best → Good, With Rationale)
+
+1) Identity‑Key‑First Resolver With Strict Field Requirements
+This is the fastest path to “review is the exception.” When identity fields are complete, direct lookup by deterministic key yields either a safe match or a safe create, and the ambiguity logic only runs on incomplete data. Users perceive this as cleaner product grouping and fewer “broken” review items; ops perceives fewer manual links. Implementation is localized: canonicalKey generation, required‑field gates per ammo type (rifle/pistol/shotgun), and P2002 retry to keep idempotency. This aligns with ADR‑019 and ADR‑009 (fail‑closed on ambiguity) while dramatically improving throughput.
+
+2) Feed‑Quality Loop (Metrics → UI → Quarantine)
+Most errors are upstream. A per‑feed quality score (missing brand/caliber/pack, parse errors, schema drift) reduces hidden fragility and gives merchants/admins immediate, actionable diagnostics. Users experience fewer missing fields and cleaner search; ops gets early warning and a kill‑switch. Implementation is pragmatic: compute stats per execution in harvester, store in a small table, surface in admin/merchant UI, and auto‑quarantine only on clear thresholds with explicit audit. This is a reliability win without scope creep.
+
+3) “Latest Price” Materialized View + History Summaries
+Search/product latency is a trust problem. A latest_prices materialized view (or table updated on ingest) and precomputed price history summaries deliver deterministic, low‑latency responses without changing behavior. Users see faster search and consistent product pages; ops sees fewer performance incidents. Implementation is mostly DB‑side: a view or table keyed by (productId, retailerId), plus indexes and a refresh strategy tied to ingestion batches. This stays within scope and improves perceived quality.
+
+4) Centralized Visibility Predicate + Cross‑Surface Tests
+Visibility leakage is a ship‑blocker per release criteria. A single shared predicate (eligibility + listing + relationship ACTIVE) reused across search, product views, alerts, and dashboard prevents drift. Users and merchants get consistent behavior; ops avoids “why is this retailer showing up?” incidents. Implementation: a shared query helper in API and alert pipelines, plus integration tests that assert blocked/unlisted retailers never appear. This directly protects public promises.
+
+5) Consumer Compare Table + Freshness Labels (No Explanations)
+The product promise is “watching the market,” not “AI reasoning.” A clear, consistent offer table with normalized attributes and a simple freshness label (“last seen X hours ago”) makes results more intuitive without violating the UX charter. Users can compare across retailers quickly; trust improves because the data feels structured and current (without guarantees). Implementation: extend the product page to render normalized attributes, and expose lastSeenAt from ingestion for freshness display. It’s a high‑impact UX upgrade that stays firmly within the guardrails.

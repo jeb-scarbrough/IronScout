@@ -35,6 +35,7 @@ export const SETTING_KEYS = {
   VECTOR_SEARCH_ENABLED: 'VECTOR_SEARCH_ENABLED',
   EMAIL_NOTIFICATIONS_ENABLED: 'EMAIL_NOTIFICATIONS_ENABLED',
   ALERT_PROCESSING_ENABLED: 'ALERT_PROCESSING_ENABLED',
+  AUTO_EMBEDDING_ENABLED: 'AUTO_EMBEDDING_ENABLED',
 } as const;
 
 export type SettingKey = typeof SETTING_KEYS[keyof typeof SETTING_KEYS];
@@ -77,6 +78,7 @@ export const FEATURE_FLAG_KEYS = [
   SETTING_KEYS.VECTOR_SEARCH_ENABLED,
   SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED,
   SETTING_KEYS.ALERT_PROCESSING_ENABLED,
+  SETTING_KEYS.AUTO_EMBEDDING_ENABLED,
 ] as const;
 
 // =============================================================================
@@ -115,6 +117,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, boolean | number | string> = {
   [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: true,
   [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: true,
   [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: true,
+  [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: false,
 };
 
 // =============================================================================
@@ -153,6 +156,7 @@ export const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
   [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: 'Enable vector-enhanced search results',
   [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: 'Enable sending email notifications (global kill switch)',
   [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: 'Enable alert evaluation and notification',
+  [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: 'Automatically generate embeddings when products are resolved',
 };
 
 // =============================================================================
@@ -193,6 +197,7 @@ export const SETTING_TYPES: Record<SettingKey, SettingType> = {
   [SETTING_KEYS.VECTOR_SEARCH_ENABLED]: 'boolean',
   [SETTING_KEYS.EMAIL_NOTIFICATIONS_ENABLED]: 'boolean',
   [SETTING_KEYS.ALERT_PROCESSING_ENABLED]: 'boolean',
+  [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: 'boolean',
 };
 
 // =============================================================================
@@ -385,5 +390,11 @@ export const SETTING_TOOLTIPS: Record<SettingKey, SettingTooltip> = {
     whenEnabled: 'Price changes trigger alert evaluation and notifications are sent to users.',
     whenDisabled: 'Alert processing is paused. Alerts accumulate but are not evaluated or sent.',
     note: 'When re-enabled, accumulated alerts will be processed. Consider clearing old alerts first if disabled for a long time.',
+  },
+  [SETTING_KEYS.AUTO_EMBEDDING_ENABLED]: {
+    summary: 'Automatically generates vector embeddings when products are created or updated by the resolver.',
+    whenEnabled: 'New and updated products are queued for embedding generation after resolution completes.',
+    whenDisabled: 'Embeddings must be generated manually via admin UI or API. Use backfill for bulk updates.',
+    note: 'Requires OPENAI_API_KEY to be set. Embeddings are used by vector search for semantic matching.',
   },
 };
