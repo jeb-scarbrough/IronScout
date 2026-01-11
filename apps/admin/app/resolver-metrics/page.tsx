@@ -9,6 +9,9 @@ import {
   Barcode,
   HelpCircle,
   Hand,
+  Key,
+  Shuffle,
+  Target,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +42,10 @@ const matchTypeColors: Record<string, string> = {
 };
 
 export default async function ResolverMetricsPage() {
+  // Use a stable date reference for all queries (fixes hydration mismatch)
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
   // Get total link counts by status
   const statusCounts = await prisma.product_links.groupBy({
     by: ['status'],
@@ -66,10 +73,43 @@ export default async function ResolverMetricsPage() {
     take: 10,
   });
 
+  // Count products by canonicalKey prefix for identity-key analysis
+  const allProducts = await prisma.products.findMany({
+    select: { canonicalKey: true },
+  });
+
+  // Categorize by prefix
+  const identityKeyStats = {
+    upc: 0,
+    identityKeyRifle: 0,  // FP:v1: prefix
+    identityKeyShotgun: 0, // FP_SG:v1: prefix
+    legacyFingerprint: 0,  // FP: without version
+    other: 0,
+  };
+
+  for (const product of allProducts) {
+    const key = product.canonicalKey || '';
+    if (key.startsWith('UPC:')) {
+      identityKeyStats.upc++;
+    } else if (key.startsWith('FP:v')) {
+      identityKeyStats.identityKeyRifle++;
+    } else if (key.startsWith('FP_SG:v')) {
+      identityKeyStats.identityKeyShotgun++;
+    } else if (key.startsWith('FP:') || key.startsWith('FP_SG:')) {
+      identityKeyStats.legacyFingerprint++;
+    } else {
+      identityKeyStats.other++;
+    }
+  }
+
+  const totalProducts = allProducts.length;
+  const identityKeyTotal = identityKeyStats.identityKeyRifle + identityKeyStats.identityKeyShotgun;
+  const identityKeyRate = totalProducts > 0 ? (identityKeyTotal / totalProducts) * 100 : 0;
+
   // Get recent links (last 24h)
   const recentLinks = await prisma.product_links.findMany({
     where: {
-      resolvedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      resolvedAt: { gte: twentyFourHoursAgo },
     },
     orderBy: { resolvedAt: 'desc' },
     take: 20,
@@ -95,7 +135,7 @@ export default async function ResolverMetricsPage() {
   // Links resolved in last 24h
   const last24hCount = await prisma.product_links.count({
     where: {
-      resolvedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      resolvedAt: { gte: twentyFourHoursAgo },
     },
   });
 
@@ -175,6 +215,112 @@ export default async function ResolverMetricsPage() {
                   </dd>
                 </dl>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Identity-Key Metrics */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Key className="h-5 w-5 text-indigo-500" />
+          <h2 className="text-lg font-medium text-gray-900">Identity-Key Resolution</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Products created via deterministic identity-key matching (vs fuzzy scoring fallback)
+        </p>
+
+        {/* Identity-Key Rate Summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+          <div className="bg-indigo-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-indigo-600" />
+              <span className="text-sm font-medium text-indigo-900">Identity-Key Rate</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-indigo-700">{identityKeyRate.toFixed(1)}%</div>
+          </div>
+          <div className="bg-emerald-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Barcode className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-medium text-emerald-900">UPC</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-emerald-700">{identityKeyStats.upc.toLocaleString()}</div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-purple-600" />
+              <span className="text-sm font-medium text-purple-900">Rifle/Pistol</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-purple-700">{identityKeyStats.identityKeyRifle.toLocaleString()}</div>
+          </div>
+          <div className="bg-pink-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-pink-600" />
+              <span className="text-sm font-medium text-pink-900">Shotgun</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-pink-700">{identityKeyStats.identityKeyShotgun.toLocaleString()}</div>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Shuffle className="h-4 w-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-900">Legacy/Fuzzy</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-gray-700">{(identityKeyStats.legacyFingerprint + identityKeyStats.other).toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-600">Product Distribution by Key Type</span>
+            <span className="text-gray-500">{totalProducts.toLocaleString()} total products</span>
+          </div>
+          <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden flex">
+            {identityKeyStats.upc > 0 && (
+              <div
+                className="h-full bg-emerald-500"
+                style={{ width: `${(identityKeyStats.upc / totalProducts) * 100}%` }}
+                title={`UPC: ${identityKeyStats.upc}`}
+              />
+            )}
+            {identityKeyStats.identityKeyRifle > 0 && (
+              <div
+                className="h-full bg-purple-500"
+                style={{ width: `${(identityKeyStats.identityKeyRifle / totalProducts) * 100}%` }}
+                title={`Identity Key (Rifle/Pistol): ${identityKeyStats.identityKeyRifle}`}
+              />
+            )}
+            {identityKeyStats.identityKeyShotgun > 0 && (
+              <div
+                className="h-full bg-pink-500"
+                style={{ width: `${(identityKeyStats.identityKeyShotgun / totalProducts) * 100}%` }}
+                title={`Identity Key (Shotgun): ${identityKeyStats.identityKeyShotgun}`}
+              />
+            )}
+            {(identityKeyStats.legacyFingerprint + identityKeyStats.other) > 0 && (
+              <div
+                className="h-full bg-gray-400"
+                style={{ width: `${((identityKeyStats.legacyFingerprint + identityKeyStats.other) / totalProducts) * 100}%` }}
+                title={`Legacy/Other: ${identityKeyStats.legacyFingerprint + identityKeyStats.other}`}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-emerald-500" />
+              <span>UPC</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-purple-500" />
+              <span>Identity Key (Rifle/Pistol)</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-pink-500" />
+              <span>Identity Key (Shotgun)</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-gray-400" />
+              <span>Legacy/Fuzzy</span>
             </div>
           </div>
         </div>
@@ -369,12 +515,7 @@ export default async function ResolverMetricsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {link.resolvedAt
-                        ? new Date(link.resolvedAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                        ? new Date(link.resolvedAt).toISOString().replace('T', ' ').slice(0, 16)
                         : '—'}
                     </td>
                   </tr>
