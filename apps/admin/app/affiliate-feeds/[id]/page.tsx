@@ -19,6 +19,7 @@ import { RunsTable } from './runs-table';
 import { EditFeedSettings } from './edit-feed-settings';
 import { TestConnectionButton } from './test-connection-button';
 import { TrustConfigToggle } from './trust-config-toggle';
+import { FreshnessPanel } from './freshness-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -237,6 +238,9 @@ export default async function AffiliateFeedDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Freshness Status */}
+      <FreshnessPanel feedId={id} />
 
       {/* Configuration Details */}
       <div className="bg-white shadow rounded-lg">

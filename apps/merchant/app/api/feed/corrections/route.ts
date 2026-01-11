@@ -130,9 +130,6 @@ export async function POST(request: Request) {
         id: quarantinedRecordId,
         retailerId,
       },
-      include: {
-        retailer_feeds: true,
-      },
     });
 
     if (!quarantinedRecord) {

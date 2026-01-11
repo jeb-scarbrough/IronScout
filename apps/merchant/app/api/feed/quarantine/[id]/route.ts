@@ -36,6 +36,7 @@ export async function GET(
     const retailerContext = await requireRetailerContext(session, inputRetailerId);
     const { retailerId } = retailerContext;
 
+    // Get quarantine record with corrections
     const record = await prisma.quarantined_records.findFirst({
       where: {
         id,
@@ -45,20 +46,24 @@ export async function GET(
         feed_corrections: {
           orderBy: { createdAt: 'desc' },
         },
-        retailer_feeds: {
-          select: {
-            name: true,
-            formatType: true,
-          },
-        },
       },
     });
+
+    // Fetch feed info separately if needed (FK removed for unified quarantine)
+    let feedInfo = null;
+    if (record?.feedId) {
+      const feed = await prisma.retailer_feeds.findUnique({
+        where: { id: record.feedId },
+        select: { name: true, formatType: true },
+      });
+      feedInfo = feed;
+    }
 
     if (!record) {
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ record, retailerContext });
+    return NextResponse.json({ record: { ...record, feedInfo }, retailerContext });
   } catch (error) {
     if (error instanceof RetailerContextError) {
       reqLogger.warn('Retailer context error', { code: error.code, message: error.message });

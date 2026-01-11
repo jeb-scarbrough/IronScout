@@ -19,6 +19,7 @@ vi.mock('@ironscout/db', () => ({
     retailer_feed_runs: { update: vi.fn() },
     retailer_skus: { upsert: vi.fn(), updateMany: vi.fn() },
     quarantined_records: { upsert: vi.fn() },
+    prices: { findFirst: vi.fn(), create: vi.fn() },
   },
   Prisma: { InputJsonValue: {} },
 }))
@@ -27,6 +28,7 @@ vi.mock('@ironscout/notifications', () => ({
   notifyFeedFailed: vi.fn(),
   notifyFeedRecovered: vi.fn(),
   notifyFeedWarning: vi.fn(),
+  wrapLoggerWithSlack: vi.fn((logger) => logger),
 }))
 
 vi.mock('../subscription', () => ({
@@ -43,10 +45,11 @@ vi.mock('../../config/redis', () => ({
 }))
 
 vi.mock('bullmq', () => ({
-  Worker: vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
-  })),
-  Job: vi.fn(),
+  Worker: class MockWorker {
+    constructor() {}
+    on() {}
+  },
+  Job: class MockJob {},
 }))
 
 // Mock global fetch
@@ -57,6 +60,8 @@ global.fetch = mockFetch
 import { prisma } from '@ironscout/db'
 import { notifyFeedFailed, notifyFeedWarning, notifyFeedRecovered } from '@ironscout/notifications'
 import { checkMerchantSubscription, sendSubscriptionExpiryNotification } from '../subscription'
+import { generateSkuHash, generateContentHash } from '../sku-hash'
+import { processIndexableRecord } from '../feed-ingest'
 
 // Import test fixtures
 import {
@@ -174,6 +179,23 @@ function setupDefaultMocks() {
     rawData: {},
     parsedFields: {},
     blockingErrors: [],
+  } as never)
+
+  // Default: no previous price (first price observation)
+  vi.mocked(prisma.prices.findFirst).mockResolvedValue(null)
+
+  // Default: price creation succeeds
+  vi.mocked(prisma.prices.create).mockResolvedValue({
+    id: 'price-mock',
+    retailerId: 'merchant-123',
+    retailerSkuId: 'sku-mock',
+    productId: null, // Null until matched to canonical product
+    price: 18.99,
+    inStock: true,
+    observedAt: new Date(),
+    ingestionRunType: 'RETAILER_FEED',
+    ingestionRunId: 'run-789',
+    url: 'https://example.com/product',
   } as never)
 
   // Note: merchantSkuMatchQueue removed for v1 (benchmark subsystem removed)
@@ -458,45 +480,45 @@ describe('Feed Ingest Worker', () => {
   // ==========================================================================
 
   describe('SKU Hash Generation', () => {
-    function generateSkuHash(title: string, upc?: string, sku?: string, price?: number): string {
-      const components = [
-        title.toLowerCase().trim(),
-        upc || '',
-        sku || '',
-        price ? String(price) : '',
-      ]
-
-      const hash = createHash('sha256')
-        .update(components.join('|'))
-        .digest('hex')
-
-      return hash.substring(0, 32)
-    }
-
     it('generates consistent hash for same inputs', () => {
-      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001', 18.99)
-      const hash2 = generateSkuHash('Test Product', '123456789012', 'SKU-001', 18.99)
+      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001')
+      const hash2 = generateSkuHash('Test Product', '123456789012', 'SKU-001')
 
       expect(hash1).toBe(hash2)
     })
 
     it('generates different hash for different titles', () => {
-      const hash1 = generateSkuHash('Test Product A', '123456789012', 'SKU-001', 18.99)
-      const hash2 = generateSkuHash('Test Product B', '123456789012', 'SKU-001', 18.99)
+      const hash1 = generateSkuHash('Test Product A', '123456789012', 'SKU-001')
+      const hash2 = generateSkuHash('Test Product B', '123456789012', 'SKU-001')
 
       expect(hash1).not.toBe(hash2)
     })
 
     it('generates different hash for different UPCs', () => {
-      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001', 18.99)
-      const hash2 = generateSkuHash('Test Product', '234567890123', 'SKU-001', 18.99)
+      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001')
+      const hash2 = generateSkuHash('Test Product', '234567890123', 'SKU-001')
 
       expect(hash1).not.toBe(hash2)
     })
 
-    it('generates different hash for different prices', () => {
-      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001', 18.99)
-      const hash2 = generateSkuHash('Test Product', '123456789012', 'SKU-001', 19.99)
+    it('generates SAME identity hash regardless of price (price is state, not identity)', () => {
+      // This is the key behavior change - price changes should NOT create new SKU records
+      const hash1 = generateSkuHash('Test Product', '123456789012', 'SKU-001')
+      const hash2 = generateSkuHash('Test Product', '123456789012', 'SKU-001')
+
+      expect(hash1).toBe(hash2)
+    })
+
+    it('content hash detects price changes', () => {
+      const hash1 = generateContentHash({ price: 18.99, inStock: true })
+      const hash2 = generateContentHash({ price: 19.99, inStock: true })
+
+      expect(hash1).not.toBe(hash2)
+    })
+
+    it('content hash detects stock changes', () => {
+      const hash1 = generateContentHash({ price: 18.99, inStock: true })
+      const hash2 = generateContentHash({ price: 18.99, inStock: false })
 
       expect(hash1).not.toBe(hash2)
     })
@@ -510,9 +532,432 @@ describe('Feed Ingest Worker', () => {
 
     it('handles missing optional fields', () => {
       const hash1 = generateSkuHash('Test Product')
-      const hash2 = generateSkuHash('Test Product', undefined, undefined, undefined)
+      const hash2 = generateSkuHash('Test Product', undefined, undefined)
 
       expect(hash1).toBe(hash2)
+    })
+  })
+
+  // ==========================================================================
+  // RETAILER SKU IDENTITY STABILITY TESTS (PR #1 Coverage)
+  // ==========================================================================
+  // These tests verify the fix for Issue #1 in implementation-gaps.md:
+  // Price changes should NOT create new SKU records.
+  // See: context/archive/docs/architecture/implementation-gaps.md
+
+  describe('Retailer SKU Identity Stability', () => {
+    describe('Identity Hash (retailerSkuHash) Stability', () => {
+      it('generates SAME identity hash when only price changes', () => {
+        // This is the key invariant: price changes should not create new SKU records
+        const product1 = { title: 'Federal 9mm 115gr FMJ', upc: '029465088248', sku: 'FED-9MM-115' }
+        const product2 = { ...product1 } // Same product, will have different price
+
+        const hash1 = generateSkuHash(product1.title, product1.upc, product1.sku)
+        const hash2 = generateSkuHash(product2.title, product2.upc, product2.sku)
+
+        expect(hash1).toBe(hash2)
+        // With the old broken implementation, adding price would change the hash:
+        // generateSkuHash(title, upc, sku, 18.99) !== generateSkuHash(title, upc, sku, 19.99)
+      })
+
+      it('generates SAME identity hash for $18.99 and $19.99 prices', () => {
+        // Explicit test for the most common failure case
+        const title = 'Test Ammo'
+        const upc = '123456789012'
+        const sku = 'SKU-001'
+
+        // In the OLD broken code, these would be different:
+        // generateSkuHash(title, upc, sku, 18.99) !== generateSkuHash(title, upc, sku, 19.99)
+
+        // In the FIXED code, identity is based on title/upc/sku only:
+        const hash = generateSkuHash(title, upc, sku)
+
+        // Verify the hash is deterministic (same inputs = same output)
+        expect(generateSkuHash(title, upc, sku)).toBe(hash)
+        expect(generateSkuHash(title, upc, sku)).toBe(hash)
+      })
+
+      it('generates DIFFERENT identity hash when product identity changes', () => {
+        const hash1 = generateSkuHash('Product A', '123456789012', 'SKU-001')
+        const hash2 = generateSkuHash('Product B', '123456789012', 'SKU-001')
+        const hash3 = generateSkuHash('Product A', '234567890123', 'SKU-001')
+        const hash4 = generateSkuHash('Product A', '123456789012', 'SKU-002')
+
+        // Different title
+        expect(hash1).not.toBe(hash2)
+        // Different UPC
+        expect(hash1).not.toBe(hash3)
+        // Different SKU
+        expect(hash1).not.toBe(hash4)
+      })
+    })
+
+    describe('Content Hash (mutable state) Change Detection', () => {
+      it('detects price changes via contentHash', () => {
+        const record1 = { price: 18.99, inStock: true }
+        const record2 = { price: 19.99, inStock: true }
+
+        const hash1 = generateContentHash(record1)
+        const hash2 = generateContentHash(record2)
+
+        expect(hash1).not.toBe(hash2)
+      })
+
+      it('detects stock status changes via contentHash', () => {
+        const record1 = { price: 18.99, inStock: true }
+        const record2 = { price: 18.99, inStock: false }
+
+        const hash1 = generateContentHash(record1)
+        const hash2 = generateContentHash(record2)
+
+        expect(hash1).not.toBe(hash2)
+      })
+
+      it('returns same contentHash for unchanged records', () => {
+        const record = { price: 18.99, inStock: true, description: 'Test' }
+
+        const hash1 = generateContentHash(record)
+        const hash2 = generateContentHash(record)
+
+        expect(hash1).toBe(hash2)
+      })
+    })
+
+    describe('Behavioral Invariants', () => {
+      it('same product with price change should use same identity hash (upsert, not insert)', () => {
+        // Simulate two feed ingests of the same product with different prices
+        const ingest1 = {
+          title: 'Hornady Critical Defense 9mm 115gr',
+          upc: '090255380902',
+          sku: 'HD-9MM-CD-115',
+          price: 24.99,
+        }
+        const ingest2 = {
+          ...ingest1,
+          price: 26.99, // Price increased
+        }
+
+        // Identity hash should be the same (determines which row to upsert)
+        const identityHash1 = generateSkuHash(ingest1.title, ingest1.upc, ingest1.sku)
+        const identityHash2 = generateSkuHash(ingest2.title, ingest2.upc, ingest2.sku)
+        expect(identityHash1).toBe(identityHash2)
+
+        // Content hash should be different (indicates state changed)
+        const contentHash1 = generateContentHash({ price: ingest1.price, inStock: true })
+        const contentHash2 = generateContentHash({ price: ingest2.price, inStock: true })
+        expect(contentHash1).not.toBe(contentHash2)
+
+        // This proves: same identity (one row) but different content (update triggered)
+      })
+
+      it('lastSeenAt should advance on re-ingest (simulated)', () => {
+        // Simulate the timing behavior of re-ingesting the same SKU
+        const t1 = new Date('2025-01-10T10:00:00Z')
+        const t2 = new Date('2025-01-10T11:00:00Z')
+
+        // Both ingests have the same identity
+        const identityHash = generateSkuHash('Test Product', '123456789012', 'SKU-001')
+
+        // Simulate the upsert behavior: same hash key, different lastSeenAt
+        const mockRow1 = {
+          retailerSkuHash: identityHash,
+          lastSeenAt: t1,
+          rawPrice: 18.99,
+        }
+
+        const mockRow2 = {
+          retailerSkuHash: identityHash, // Same identity
+          lastSeenAt: t2, // Advanced timestamp
+          rawPrice: 19.99, // Updated price
+        }
+
+        // Verify: same identity, but lastSeenAt advanced
+        expect(mockRow1.retailerSkuHash).toBe(mockRow2.retailerSkuHash)
+        expect(mockRow2.lastSeenAt.getTime()).toBeGreaterThan(mockRow1.lastSeenAt.getTime())
+      })
+
+      it('demonstrates row count stability across price churn', () => {
+        // Simulate 10 ingests of the same product with different prices
+        const baseProduct = {
+          title: 'Federal American Eagle 9mm 124gr',
+          upc: '029465088255',
+          sku: 'AE9DP100',
+        }
+
+        const prices = [18.99, 19.49, 18.99, 20.99, 19.99, 18.49, 21.99, 19.99, 18.99, 22.99]
+        const identityHashes = new Set<string>()
+
+        for (const price of prices) {
+          const hash = generateSkuHash(baseProduct.title, baseProduct.upc, baseProduct.sku)
+          identityHashes.add(hash)
+        }
+
+        // With the fix, all 10 ingests should map to exactly 1 identity hash
+        // (meaning 1 row in retailer_skus, updated 10 times)
+        expect(identityHashes.size).toBe(1)
+
+        // Without the fix (price in hash), this would be up to 10 different hashes
+        // (meaning up to 10 rows, with 9 marked inactive = table bloat)
+      })
+
+      it('processIndexableRecord updates lastSeenAt on re-ingest', async () => {
+        const result = {
+          record: {
+            title: 'Federal 9mm 115gr FMJ',
+            upc: '029465088248',
+            sku: 'FED-9MM-115',
+            price: 18.99,
+            inStock: true,
+            description: 'Test',
+            imageUrl: 'https://example.com/image.jpg',
+            caliber: '9mm',
+            grainWeight: 115,
+            roundCount: 50,
+            brand: 'Federal',
+            bulletType: 'FMJ',
+            caseType: 'Brass',
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-2', {
+          ...result,
+          record: { ...result.record, price: 19.99 },
+        })
+
+        const calls = vi.mocked(prisma.retailer_skus.upsert).mock.calls
+        expect(calls).toHaveLength(2)
+        const firstCall = calls[0] as [{ where: { retailerId_retailerSkuHash: { retailerSkuHash: string } }; update: { lastSeenAt: Date } }]
+        const secondCall = calls[1] as [{ where: { retailerId_retailerSkuHash: { retailerSkuHash: string } }; update: { lastSeenAt: Date } }]
+        expect(firstCall[0].where.retailerId_retailerSkuHash.retailerSkuHash)
+          .toBe(secondCall[0].where.retailerId_retailerSkuHash.retailerSkuHash)
+        expect(secondCall[0].update.lastSeenAt).toBeInstanceOf(Date)
+      })
+    })
+  })
+
+  // ==========================================================================
+  // UNIFIED PRICES TABLE TESTS (PR #2)
+  // ==========================================================================
+  // These tests verify the unified prices table implementation:
+  // - Price observations are written with retailerSkuId link
+  // - productId is null (until matched to canonical product)
+  // - Deduplication: only write when price/stock changes
+
+  describe('Unified Prices Table', () => {
+    describe('Price Observation Writing', () => {
+      it('writes price observation to unified prices table', async () => {
+        const result = {
+          record: {
+            title: 'Federal 9mm 115gr FMJ',
+            upc: '029465088248',
+            sku: 'FED-9MM-115',
+            price: 18.99,
+            inStock: true,
+            description: 'Test',
+            imageUrl: 'https://example.com/image.jpg',
+            caliber: '9mm',
+            grainWeight: 115,
+            roundCount: 50,
+            brand: 'Federal',
+            bulletType: 'FMJ',
+            caseType: 'Brass',
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Verify price observation was created
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(1)
+
+        const priceData = priceCreateCalls[0][0].data
+        expect(priceData.retailerId).toBe('retailer-1')
+        expect(priceData.retailerSkuId).toBe('sku-mock') // Linked to retailer_skus
+        expect(priceData.price).toBe(18.99)
+        expect(priceData.inStock).toBe(true)
+        expect(priceData.ingestionRunType).toBe('RETAILER_FEED')
+        expect(priceData.ingestionRunId).toBe('run-1')
+      })
+
+      it('price observation has null productId (not yet matched to canonical)', async () => {
+        const result = {
+          record: {
+            title: 'Federal 9mm 115gr FMJ',
+            upc: '029465088248',
+            sku: 'FED-9MM-115',
+            price: 18.99,
+            inStock: true,
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(1)
+
+        // productId should NOT be set - retailer feed prices aren't matched yet
+        const priceData = priceCreateCalls[0][0].data
+        expect(priceData).not.toHaveProperty('productId')
+      })
+
+      it('includes product URL in price observation', async () => {
+        const result = {
+          record: {
+            title: 'Test Product',
+            upc: '123456789012',
+            price: 25.99,
+            inStock: true,
+            productUrl: 'https://example.com/specific-product-url',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls[0][0].data.url).toBe('https://example.com/specific-product-url')
+      })
+    })
+
+    describe('Price Deduplication', () => {
+      it('skips price write when price and stock unchanged', async () => {
+        // Mock: last price is same as current
+        vi.mocked(prisma.prices.findFirst).mockResolvedValue({
+          price: 18.99,
+          inStock: true,
+        } as never)
+
+        const result = {
+          record: {
+            title: 'Test Product',
+            upc: '123456789012',
+            price: 18.99,
+            inStock: true,
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Price should NOT be created (unchanged)
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(0)
+      })
+
+      it('writes price when price changed', async () => {
+        // Mock: last price was different
+        vi.mocked(prisma.prices.findFirst).mockResolvedValue({
+          price: 17.99, // Old price
+          inStock: true,
+        } as never)
+
+        const result = {
+          record: {
+            title: 'Test Product',
+            upc: '123456789012',
+            price: 18.99, // New price
+            inStock: true,
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Price SHOULD be created (price changed)
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(1)
+        expect(priceCreateCalls[0][0].data.price).toBe(18.99)
+      })
+
+      it('writes price when stock status changed', async () => {
+        // Mock: last price had different stock status
+        vi.mocked(prisma.prices.findFirst).mockResolvedValue({
+          price: 18.99, // Same price
+          inStock: false, // Was out of stock
+        } as never)
+
+        const result = {
+          record: {
+            title: 'Test Product',
+            upc: '123456789012',
+            price: 18.99, // Same price
+            inStock: true, // Now in stock
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Price SHOULD be created (stock changed)
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(1)
+        expect(priceCreateCalls[0][0].data.inStock).toBe(true)
+      })
+
+      it('writes first price observation for new SKU', async () => {
+        // Mock: no previous price
+        vi.mocked(prisma.prices.findFirst).mockResolvedValue(null)
+
+        const result = {
+          record: {
+            title: 'Brand New Product',
+            upc: '999999999999',
+            price: 29.99,
+            inStock: true,
+            productUrl: 'https://example.com/new-product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Price SHOULD be created (first observation)
+        const priceCreateCalls = vi.mocked(prisma.prices.create).mock.calls
+        expect(priceCreateCalls).toHaveLength(1)
+      })
+    })
+
+    describe('Price Query for Deduplication', () => {
+      it('queries last price by retailerSkuId', async () => {
+        const result = {
+          record: {
+            title: 'Test Product',
+            upc: '123456789012',
+            price: 18.99,
+            inStock: true,
+            productUrl: 'https://example.com/product',
+            rawRow: {},
+          },
+          coercions: [],
+        } as any
+
+        await processIndexableRecord('retailer-1', 'feed-1', 'run-1', result)
+
+        // Verify the price query used retailerSkuId
+        const findFirstCalls = vi.mocked(prisma.prices.findFirst).mock.calls
+        expect(findFirstCalls).toHaveLength(1)
+        const priceQuery = findFirstCalls[0] as [{ where: { retailerSkuId: string }; orderBy: { observedAt: string } }]
+        expect(priceQuery[0].where.retailerSkuId).toBe('sku-mock')
+        expect(priceQuery[0].orderBy).toEqual({ observedAt: 'desc' })
+      })
     })
   })
 

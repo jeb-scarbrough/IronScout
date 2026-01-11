@@ -7,6 +7,7 @@
  * - Quarantine Lane: Records without UPC -> QuarantinedRecord
  */
 
+import { createHash } from 'crypto'
 import { Worker, Job } from 'bullmq'
 import { prisma, Prisma } from '@ironscout/db'
 import type { FeedFormatType } from '@ironscout/db'
@@ -15,7 +16,7 @@ import {
   QUEUE_NAMES,
   RetailerFeedIngestJobData,
 } from '../config/queues'
-import { createHash } from 'crypto'
+import { generateSkuHash, generateContentHash } from './sku-hash'
 import {
   getConnector,
   detectConnector,
@@ -36,6 +37,7 @@ import {
 import { fetchFeedViaFtp } from './ftp-fetcher'
 import { logger } from '../config/logger'
 import { createRunFileLogger, type RunFileLogger } from '../config/run-file-logger'
+import { emitIngestRunSummary } from '../config/ingest-summary'
 
 const log = logger.merchant
 
@@ -161,20 +163,12 @@ async function fetchFeed(
 // SKU HASH FOR DEDUPLICATION
 // ============================================================================
 
-function generateSkuHash(title: string, upc?: string, sku?: string, price?: number): string {
-  const components = [
-    title.toLowerCase().trim(),
-    upc || '',
-    sku || '',
-    price ? String(price) : '',
-  ]
-
-  const hash = createHash('sha256')
-    .update(components.join('|'))
-    .digest('hex')
-
-  return hash.substring(0, 32)
-}
+/**
+ * Generate a stable identity hash for a SKU.
+ * This hash identifies the LISTING, not its current state.
+ * Price changes should NOT create new SKU records.
+ */
+// generateSkuHash and generateContentHash are shared to enforce test coverage.
 
 /**
  * Generate a match key for quarantine deduplication
@@ -608,6 +602,39 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
       rejectRatio: rejectRatio.toFixed(3),
     })
 
+    // Emit standardized INGEST_RUN_SUMMARY event
+    // This provides a consistent format for monitoring across all pipelines
+    emitIngestRunSummary({
+      pipeline: 'RETAILER',
+      runId: feedRunId,
+      sourceId: feedId,
+      retailerId,
+      status: feedStatus === 'FAILED' ? 'FAILED' : feedStatus === 'WARNING' ? 'WARNING' : 'SUCCESS',
+      durationMs: totalDurationMs,
+      timing: {
+        fetchMs: fetchDurationMs,
+        parseMs: parseDurationMs,
+        processMs: processDurationMs,
+      },
+      input: {
+        totalRows: parseResult.totalRows,
+      },
+      output: {
+        listingsCreated: merchantSkuIds.length, // New SKUs created (retailer pipeline doesn't track updates separately)
+        listingsUpdated: 0, // TODO: Track updates when contentHash changes
+        pricesWritten: 0, // Retailer pipeline doesn't write to prices table yet
+        quarantined: quarantinedIds.length,
+        rejected: errors.length,
+        matched: 0, // Retailer pipeline doesn't match to canonical products
+        enqueuedForResolver: 0, // Retailer pipeline doesn't use resolver
+      },
+      errors: {
+        count: errors.length,
+        primaryCode: primaryErrorCode || undefined,
+        codes: parseResult.errorCodes,
+      },
+    })
+
     // Close run file logger
     await runFileLogger.close().catch((err) => {
       log.warn('Failed to close run file logger', { feedRunId }, err)
@@ -718,7 +745,7 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
 /**
  * Process an indexable record (has valid UPC)
  */
-async function processIndexableRecord(
+export async function processIndexableRecord(
   retailerId: string,
   feedId: string,
   feedRunId: string,
@@ -726,7 +753,22 @@ async function processIndexableRecord(
 ): Promise<string | null> {
   const { record, coercions } = result
 
-  const skuHash = generateSkuHash(record.title, record.upc, record.sku, record.price)
+  // Identity hash - stable across price changes
+  const skuHash = generateSkuHash(record.title, record.upc, record.sku)
+
+  // Content hash - detects when mutable fields change
+  const contentHash = generateContentHash({
+    price: record.price,
+    inStock: record.inStock,
+    description: record.description,
+    imageUrl: record.imageUrl,
+    caliber: record.caliber,
+    grainWeight: record.grainWeight,
+    roundCount: record.roundCount,
+    brand: record.brand,
+    bulletType: record.bulletType,
+    caseType: record.caseType,
+  })
 
   const retailerSku = await prisma.retailer_skus.upsert({
     where: {
@@ -740,6 +782,7 @@ async function processIndexableRecord(
       feedId,
       feedRunId,
       retailerSkuHash: skuHash,
+      contentHash,
       rawTitle: record.title,
       rawDescription: record.description,
       rawPrice: record.price,
@@ -756,18 +799,53 @@ async function processIndexableRecord(
       rawImageUrl: record.imageUrl,
       coercionsApplied: coercions.length > 0 ? (coercions as unknown as Prisma.InputJsonValue) : undefined,
       isActive: true,
+      lastSeenAt: new Date(),
     },
     update: {
       feedRunId,
+      contentHash,
       rawPrice: record.price,
       rawInStock: record.inStock,
       rawDescription: record.description,
       rawImageUrl: record.imageUrl,
       coercionsApplied: coercions.length > 0 ? (coercions as unknown as Prisma.InputJsonValue) : undefined,
       isActive: true,
+      lastSeenAt: new Date(),
       updatedAt: new Date(),
     },
   })
+
+  // PR #2: Write price observation to unified prices table (append-only)
+  // Check the last price for this specific SKU to avoid duplicate observations
+  const lastPrice = await prisma.prices.findFirst({
+    where: {
+      retailerSkuId: retailerSku.id,
+    },
+    orderBy: { observedAt: 'desc' },
+    select: { price: true, inStock: true },
+  })
+
+  // Only write if price or stock status changed
+  const newPrice = record.price
+  const shouldWritePrice = !lastPrice ||
+    parseFloat(lastPrice.price.toString()) !== newPrice ||
+    lastPrice.inStock !== record.inStock
+
+  if (shouldWritePrice) {
+    await prisma.prices.create({
+      data: {
+        retailerId,
+        retailerSkuId: retailerSku.id,
+        // productId is null - will be linked later when matched to canonical product
+        price: newPrice,
+        inStock: record.inStock,
+        url: record.productUrl || '',
+        observedAt: new Date(),
+        ingestionRunType: 'RETAILER_FEED',
+        ingestionRunId: feedRunId,
+      },
+    })
+  }
 
   return retailerSku.id
 }
@@ -802,6 +880,7 @@ async function processQuarantineRecord(
       },
     },
     create: {
+      feedType: 'RETAILER',
       retailerId,
       feedId,
       runId: feedRunId,

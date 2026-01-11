@@ -1,0 +1,254 @@
+{
+  "description": "Golden corpus for parse-normalize regression testing",
+  "version": "1.0.2",
+  "notes": [
+    "9mm variants normalize to '9mm' (not '9mm Luger')",
+    "7.62x39mm suffix should normalize to '7.62x39mm'",
+    "URL extraction uses last path segment only"
+  ],
+  "fixtures": [
+    {
+      "id": "federal-9mm-fmj",
+      "description": "Standard 9mm FMJ from title",
+      "input": {
+        "name": "Federal American Eagle 9mm Luger 115gr FMJ - 50 Rounds",
+        "url": "https://example.com/federal-american-eagle-9mm-115gr",
+        "price": 18.99,
+        "inStock": true,
+        "brand": "Federal",
+        "sku": "AE9DP"
+      },
+      "expected": {
+        "caliber": "9mm",
+        "grainWeight": 115,
+        "roundCount": 50,
+        "brand": "Federal"
+      }
+    },
+    {
+      "id": "winchester-556-nato",
+      "description": "5.56 NATO variants should normalize to 5.56 NATO",
+      "input": {
+        "name": "Winchester USA 5.56mm NATO M193 55gr FMJ",
+        "url": "https://example.com/winchester-556-m193",
+        "price": 12.99,
+        "inStock": true,
+        "brand": "Winchester",
+        "sku": "USA556M1"
+      },
+      "expected": {
+        "caliber": "5.56 NATO",
+        "grainWeight": 55,
+        "brand": "Winchester"
+      }
+    },
+    {
+      "id": "hornady-223-remington",
+      "description": ".223 Remington should stay as is (not normalize to 5.56)",
+      "input": {
+        "name": "Hornady .223 Remington 55gr V-MAX",
+        "url": "https://example.com/hornady-223-vmax",
+        "price": 24.99,
+        "inStock": true,
+        "brand": "Hornady",
+        "sku": "83274"
+      },
+      "expected": {
+        "caliber": ".223 Remington",
+        "grainWeight": 55,
+        "brand": "Hornady"
+      }
+    },
+    {
+      "id": "remington-12-gauge",
+      "description": "Shotgun gauge normalization",
+      "input": {
+        "name": "Remington Express 12 Gauge 2-3/4\" 00 Buckshot",
+        "url": "https://example.com/remington-12ga-00buck",
+        "price": 14.99,
+        "inStock": true,
+        "brand": "Remington",
+        "sku": "20411"
+      },
+      "expected": {
+        "caliber": "12 Gauge",
+        "brand": "Remington"
+      }
+    },
+    {
+      "id": "pmc-45-acp",
+      "description": ".45 ACP normalization",
+      "input": {
+        "name": "PMC Bronze .45 ACP 230gr FMJ - 50 Rounds",
+        "url": "https://example.com/pmc-45acp-230gr",
+        "price": 26.99,
+        "inStock": true,
+        "brand": "PMC",
+        "sku": "45A"
+      },
+      "expected": {
+        "caliber": ".45 ACP",
+        "grainWeight": 230,
+        "roundCount": 50,
+        "brand": "PMC"
+      }
+    },
+    {
+      "id": "cci-22lr",
+      "description": ".22 LR rimfire",
+      "input": {
+        "name": "CCI Mini-Mag .22 LR 40gr CPRN - 100 Rounds",
+        "url": "https://example.com/cci-22lr-minimag",
+        "price": 8.99,
+        "inStock": true,
+        "brand": "CCI",
+        "sku": "0030"
+      },
+      "expected": {
+        "caliber": ".22 LR",
+        "grainWeight": 40,
+        "roundCount": 100,
+        "brand": "CCI"
+      }
+    },
+    {
+      "id": "speer-40-sw",
+      "description": ".40 S&W normalization",
+      "input": {
+        "name": "Speer Gold Dot .40 S&W 180gr HP - 20 Rounds",
+        "url": "https://example.com/speer-golddot-40sw",
+        "price": 29.99,
+        "inStock": true,
+        "brand": "Speer",
+        "sku": "53961"
+      },
+      "expected": {
+        "caliber": ".40 S&W",
+        "grainWeight": 180,
+        "roundCount": 20,
+        "brand": "Speer"
+      }
+    },
+    {
+      "id": "sig-357-sig",
+      "description": ".357 SIG normalization",
+      "input": {
+        "name": "Sig Sauer Elite V-Crown .357 SIG 125gr JHP - 20 Rounds",
+        "url": "https://example.com/sig-357sig-125gr",
+        "price": 34.99,
+        "inStock": true,
+        "brand": "Sig Sauer",
+        "sku": "E357S1"
+      },
+      "expected": {
+        "caliber": ".357 SIG",
+        "grainWeight": 125,
+        "roundCount": 20,
+        "brand": "Sig Sauer"
+      }
+    },
+    {
+      "id": "hornady-308-win",
+      "description": ".308 Winchester rifle",
+      "input": {
+        "name": "Hornady American Gunner .308 Win 155gr BTHP - 50 Rounds",
+        "url": "https://example.com/hornady-308-155gr",
+        "price": 54.99,
+        "inStock": true,
+        "brand": "Hornady",
+        "sku": "80966"
+      },
+      "expected": {
+        "caliber": ".308 Winchester",
+        "grainWeight": 155,
+        "roundCount": 50,
+        "brand": "Hornady"
+      }
+    },
+    {
+      "id": "federal-762x39",
+      "description": "7.62x39 metric caliber",
+      "input": {
+        "name": "Federal Power-Shok 7.62x39 123gr SP",
+        "url": "https://example.com/federal-762x39-123gr",
+        "price": 18.99,
+        "inStock": true,
+        "brand": "Federal",
+        "sku": "76239B"
+      },
+      "expected": {
+        "caliber": "7.62x39mm",
+        "grainWeight": 123,
+        "brand": "Federal"
+      }
+    },
+    {
+      "id": "federal-762x39mm",
+      "description": "7.62x39mm suffix normalization",
+      "input": {
+        "name": "Federal Power-Shok 7.62x39mm 123gr SP",
+        "url": "https://example.com/federal-762x39mm-123gr",
+        "price": 18.99,
+        "inStock": true,
+        "brand": "Federal",
+        "sku": "76239MM"
+      },
+      "expected": {
+        "caliber": "7.62x39mm",
+        "grainWeight": 123,
+        "brand": "Federal"
+      }
+    },
+    {
+      "id": "fiocchi-380-acp",
+      "description": ".380 ACP pocket pistol",
+      "input": {
+        "name": "Fiocchi Shooting Dynamics .380 ACP 95gr FMJ - 50 Rounds",
+        "url": "https://example.com/fiocchi-380acp-95gr",
+        "price": 19.99,
+        "inStock": true,
+        "brand": "Fiocchi",
+        "sku": "380AP"
+      },
+      "expected": {
+        "caliber": ".380 ACP",
+        "grainWeight": 95,
+        "roundCount": 50,
+        "brand": "Fiocchi"
+      }
+    },
+    {
+      "id": "bulk-pack-extraction",
+      "description": "Extract round count from bulk pack title",
+      "input": {
+        "name": "Blazer Brass 9mm 115gr FMJ Bulk Pack - 1000 Rounds",
+        "url": "https://example.com/blazer-9mm-bulk-1000",
+        "price": 299.99,
+        "inStock": true,
+        "brand": "Blazer",
+        "sku": "52021000"
+      },
+      "expected": {
+        "caliber": "9mm",
+        "grainWeight": 115,
+        "roundCount": 1000,
+        "brand": "Blazer"
+      }
+    },
+    {
+      "id": "url-slug-caliber",
+      "description": "Extract caliber from URL slug (last path segment)",
+      "input": {
+        "name": "Premium Target Ammunition",
+        "url": "https://example.com/ammo/premium-target-9mm-115gr-fmj",
+        "price": 22.99,
+        "inStock": true,
+        "sku": "PREM-9MM"
+      },
+      "expected": {
+        "caliber": "9mm"
+      }
+    }
+  ],
+  "knownGaps": []
+}

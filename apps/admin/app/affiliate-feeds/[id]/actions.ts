@@ -256,3 +256,94 @@ async function testFtpConnection(
     client.close();
   }
 }
+
+/**
+ * Freshness status for a feed
+ */
+export interface FeedFreshnessStatus {
+  activeCount: number;
+  expiredCount: number;
+  pendingCount: number;
+  expiryHours: number;
+  lastRunAt: Date | null;
+  lastSuccessAt: Date | null;
+}
+
+/**
+ * Get freshness status for an affiliate feed
+ * Shows active/pending/expired product counts based on lastSeenSuccessAt
+ */
+export async function getFeedFreshness(feedId: string): Promise<{
+  success: boolean;
+  data?: FeedFreshnessStatus;
+  error?: string;
+}> {
+  const session = await getAdminSession();
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  const feed = await prisma.affiliate_feeds.findUnique({
+    where: { id: feedId },
+    select: {
+      id: true,
+      sourceId: true,
+      expiryHours: true,
+      lastRunAt: true,
+      affiliate_feed_runs: {
+        where: { status: 'SUCCEEDED' },
+        orderBy: { finishedAt: 'desc' },
+        take: 1,
+        select: { finishedAt: true },
+      },
+    },
+  });
+
+  if (!feed) {
+    return { success: false, error: 'Feed not found' };
+  }
+
+  const now = new Date();
+  const expiryThreshold = new Date(now.getTime() - feed.expiryHours * 3600000);
+
+  // Active: lastSeenSuccessAt within window
+  const activeCount = await prisma.source_product_presence.count({
+    where: {
+      source_products: { sourceId: feed.sourceId },
+      lastSeenSuccessAt: { gte: expiryThreshold },
+    },
+  });
+
+  // Expired: lastSeenSuccessAt outside window or NULL
+  const expiredCount = await prisma.source_product_presence.count({
+    where: {
+      source_products: { sourceId: feed.sourceId },
+      OR: [
+        { lastSeenSuccessAt: { lt: expiryThreshold } },
+        { lastSeenSuccessAt: null },
+      ],
+    },
+  });
+
+  // Pending: seen but not yet promoted (lastSeenAt > lastSeenSuccessAt)
+  const pendingResult = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(*) as count
+    FROM source_product_presence spp
+    INNER JOIN source_products sp ON sp.id = spp."sourceProductId"
+    WHERE sp."sourceId" = ${feed.sourceId}
+      AND spp."lastSeenAt" > COALESCE(spp."lastSeenSuccessAt", '1970-01-01'::timestamp)
+  `;
+  const pendingCount = Number(pendingResult[0]?.count ?? 0);
+
+  return {
+    success: true,
+    data: {
+      activeCount,
+      expiredCount,
+      pendingCount,
+      expiryHours: feed.expiryHours,
+      lastRunAt: feed.lastRunAt,
+      lastSuccessAt: feed.affiliate_feed_runs[0]?.finishedAt ?? null,
+    },
+  };
+}

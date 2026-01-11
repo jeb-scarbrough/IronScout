@@ -35,6 +35,7 @@ import type {
   IdentityType,
 } from './types'
 import { ERROR_CODES, AffiliateFeedError } from './types'
+import { emitIngestRunSummary } from '../config/ingest-summary'
 
 const log = logger.affiliate
 
@@ -141,9 +142,12 @@ export async function processProducts(
   let productsUpserted = 0
   let pricesWritten = 0
   let productsRejected = 0
+  let productsQuarantined = 0
   let duplicateKeyCount = 0
   let urlHashFallbackCount = 0
   let productsMatched = 0
+  let missingBrandCount = 0
+  let missingRoundCountCount = 0
   const errors: ParseError[] = []
 
   // Run-local price cache - maintained across all chunks
@@ -215,12 +219,40 @@ export async function processProducts(
         continue
       }
 
+      // Step 1b: Quarantine products missing caliber (trust-critical field)
+      // Products without caliber can't be matched to canonical products effectively
+      const { valid: validProducts, quarantined: toQuarantine } = filterMissingCaliber(deduped)
+
+      // Track quality metrics (not blocking, just metrics)
+      for (const { product } of deduped) {
+        if (!product.brand) missingBrandCount++
+        if (!product.roundCount) missingRoundCountCount++
+      }
+
+      // Quarantine products missing caliber
+      if (toQuarantine.length > 0) {
+        await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine)
+        productsQuarantined += toQuarantine.length
+
+        log.info('QUARANTINE_BATCH', {
+          runId: run.id,
+          chunkNum,
+          quarantinedCount: toQuarantine.length,
+          reason: 'MISSING_CALIBER',
+        })
+      }
+
+      if (validProducts.length === 0) {
+        log.debug('Chunk skipped - all quarantined', { runId: run.id, chunkNum })
+        continue
+      }
+
       // Step 2: Batch upsert SourceProducts
-      log.debug('Upserting source products', { runId: run.id, chunkNum, count: deduped.length })
+      log.debug('Upserting source products', { runId: run.id, chunkNum, count: validProducts.length })
       const upsertStart = Date.now()
       const upsertedProducts = await batchUpsertSourceProducts(
         sourceId,
-        deduped,
+        validProducts,
         run.id
       )
       log.debug('Source products upserted', {
@@ -235,7 +267,7 @@ export async function processProducts(
       // Step 2b: Match source products to canonical products via UPC
       // Build lookup from identityKey to product (for UPC access)
       const identityKeyToProduct = new Map<string, ParsedFeedProduct>()
-      for (const { product, identityKey } of deduped) {
+      for (const { product, identityKey } of validProducts) {
         identityKeyToProduct.set(identityKey, product)
       }
 
@@ -467,6 +499,8 @@ export async function processProducts(
 
   // Log final progress
   const matcherStats = productMatcher.getStats()
+  const totalDurationMs = Date.now() - t0.getTime()
+
   log.info('Processing complete', {
     runId: run.id,
     productsUpserted,
@@ -477,6 +511,41 @@ export async function processProducts(
     errors: errors.length,
     uniqueProductsSeen: lastPriceCache.size,
     productMatchStats: matcherStats,
+  })
+
+  // Emit standardized INGEST_RUN_SUMMARY event
+  // This provides a consistent format for monitoring across all pipelines
+  emitIngestRunSummary({
+    pipeline: 'AFFILIATE',
+    runId: run.id,
+    sourceId: sourceId,
+    retailerId: retailerId,
+    status: errors.length > 0 ? 'WARNING' : 'SUCCESS',
+    durationMs: totalDurationMs,
+    input: {
+      totalRows: products.length,
+    },
+    output: {
+      listingsCreated: productsUpserted - (matcherStats.cacheHits + matcherStats.matchesFound),
+      listingsUpdated: matcherStats.cacheHits + matcherStats.matchesFound,
+      pricesWritten,
+      quarantined: productsQuarantined,
+      rejected: productsRejected,
+      matched: productsMatched,
+      enqueuedForResolver: productsUpserted - productsMatched,
+    },
+    errors: {
+      count: errors.length,
+      primaryCode: errors.length > 0 ? errors[0].code : undefined,
+    },
+    deduplication: {
+      duplicatesSkipped: duplicateKeyCount,
+      urlHashFallbacks: urlHashFallbackCount,
+    },
+    qualityMetrics: {
+      missingBrand: missingBrandCount,
+      missingRoundCount: missingRoundCountCount,
+    },
   })
 
   return {
@@ -695,6 +764,95 @@ function filterToWinningRows(
   }
 
   return result
+}
+
+/**
+ * Filter out products missing caliber (trust-critical field).
+ * Products without caliber cannot be effectively matched to canonical products.
+ */
+function filterMissingCaliber(
+  products: ProductWithIdentity[]
+): { valid: ProductWithIdentity[]; quarantined: ProductWithIdentity[] } {
+  const valid: ProductWithIdentity[] = []
+  const quarantined: ProductWithIdentity[] = []
+
+  for (const p of products) {
+    if (p.product.caliber) {
+      valid.push(p)
+    } else {
+      quarantined.push(p)
+    }
+  }
+
+  return { valid, quarantined }
+}
+
+/**
+ * Batch quarantine products missing trust-critical fields.
+ * Inserts records into unified quarantined_records table with feedType='AFFILIATE'.
+ */
+async function batchQuarantineProducts(
+  feedId: string,
+  runId: string,
+  sourceId: string,
+  products: ProductWithIdentity[]
+): Promise<void> {
+  if (products.length === 0) return
+
+  const now = new Date()
+
+  // Batch upsert quarantine records
+  for (const p of products) {
+    // Use identityKey as matchKey for deduplication
+    const matchKey = p.identityKey
+
+    await prisma.quarantined_records.upsert({
+      where: {
+        feedId_matchKey: {
+          feedId,
+          matchKey,
+        },
+      },
+      create: {
+        feedType: 'AFFILIATE',
+        feedId,
+        runId,
+        sourceId,
+        matchKey,
+        rawData: {
+          name: p.product.name,
+          url: p.product.url,
+          price: p.product.price,
+          inStock: p.product.inStock,
+          brand: p.product.brand,
+          sku: p.product.sku,
+          upc: p.product.upc,
+          impactItemId: p.product.impactItemId,
+          grainWeight: p.product.grainWeight,
+          roundCount: p.product.roundCount,
+        },
+        blockingErrors: [{ code: 'MISSING_CALIBER', message: 'Product is missing caliber field' }],
+        status: 'QUARANTINED',
+      },
+      update: {
+        runId,
+        rawData: {
+          name: p.product.name,
+          url: p.product.url,
+          price: p.product.price,
+          inStock: p.product.inStock,
+          brand: p.product.brand,
+          sku: p.product.sku,
+          upc: p.product.upc,
+          impactItemId: p.product.impactItemId,
+          grainWeight: p.product.grainWeight,
+          roundCount: p.product.roundCount,
+        },
+        blockingErrors: [{ code: 'MISSING_CALIBER', message: 'Product is missing caliber field' }],
+        updatedAt: now,
+      },
+    })
+  }
 }
 
 /**

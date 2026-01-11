@@ -12,6 +12,7 @@ import {
   Activity,
   ClipboardList,
   Tags,
+  AlertTriangle,
 } from 'lucide-react';
 import type { AdminSession } from '@/lib/auth';
 
@@ -23,6 +24,7 @@ const navItems = [
   { name: 'Merchants', href: '/merchants', icon: Users },
   { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
+  { name: 'Quarantine', href: '/quarantine', icon: AlertTriangle },
   { name: 'Brand Aliases', href: '/brand-aliases', icon: Tags },
   { name: 'Resolver Metrics', href: '/resolver-metrics', icon: Activity },
   { name: 'Review Queue', href: '/review-queue', icon: ClipboardList },

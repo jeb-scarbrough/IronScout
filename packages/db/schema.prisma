@@ -359,7 +359,6 @@ model retailer_feeds {
   retailers               retailers                 @relation(fields: [retailerId], references: [id], onDelete: Cascade)
   retailer_skus           retailer_skus[]
   feed_corrections        feed_corrections[]
-  quarantined_records     quarantined_records[]
 
   @@index([retailerId])
   @@index([enabled])
@@ -424,15 +423,17 @@ model retailer_skus {
   parsedBrand      String?
   parseConfidence  Decimal?        @db.Decimal(3, 2)
   retailerSkuHash  String?
+  contentHash      String?         // Hash of mutable fields for change detection
   isActive         Boolean         @default(true)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
-  lastSeenAt       DateTime?
+  lastSeenAt       DateTime?       @default(now())
   missingCount     Int             @default(0)
   productType      String?
   coercionsApplied Json?
   retailers        retailers       @relation(fields: [retailerId], references: [id], onDelete: Cascade)
   retailer_feeds   retailer_feeds? @relation(fields: [feedId], references: [id])
+  prices           prices[]        // PR #2: Unified price history for retailer SKUs
 
   @@unique([retailerId, retailerSkuHash])
   @@index([retailerId])
@@ -647,12 +648,17 @@ model pixel_events {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// Per ADR-015: Price history is append-only. Provenance fields enable corrections.
+/// PR #2: Unified prices table supports both canonical products AND retailer SKUs.
+/// - productId: Set when linked to canonical product (affiliate/crawl pipelines)
+/// - retailerSkuId: Set when linked to retailer SKU (retailer pipeline)
+/// - Both can be null initially; linked later via resolver
 model prices {
   id                  String     @id @default(cuid())
   productId           String?
   retailerId          String
   merchantId          String?
   sourceId            String?
+  retailerSkuId       String?    // PR #2: Link to retailer_skus for unified price history
   price               Decimal    @db.Decimal(10, 2)
   currency            String     @default("USD")
   url                 String
@@ -685,6 +691,7 @@ model prices {
   merchants           merchants?           @relation(fields: [merchantId], references: [id], onDelete: SetNull)
   sources             sources?             @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   source_products     source_products?     @relation(fields: [sourceProductId], references: [id])
+  retailer_skus       retailer_skus?       @relation(fields: [retailerSkuId], references: [id], onDelete: SetNull)
   product_reports     product_reports[]
 
   @@index([inStock])
@@ -693,6 +700,7 @@ model prices {
   @@index([sourceProductId])
   @@index([merchantId])
   @@index([sourceId])
+  @@index([retailerSkuId])
   @@index([ingestionRunType])
   @@index([ingestionRunId])
   @@index([observedAt])
@@ -825,26 +833,31 @@ model products {
   @@index([brandNorm, caliberNorm])
 }
 
+/// Unified quarantine table for all feed types (retailer and affiliate)
+/// Records that fail trust-critical validation are stored here for review
 model quarantined_records {
-  id               String             @id @default(cuid())
-  retailerId       String
-  feedId           String
+  id               String              @id @default(cuid())
+  feedType         QuarantineFeedType  @default(RETAILER)
+  feedId           String              // ID of retailer_feeds or affiliate_feeds (no FK for flexibility)
   runId            String?
+  retailerId       String?             // For retailer feeds: denormalized retailerId
+  sourceId         String?             // For affiliate feeds: sourceId for grouping
   productType      String?
-  matchKey         String
-  rawData          Json
-  parsedFields     Json?
-  blockingErrors   Json
-  status           QuarantineStatus   @default(QUARANTINED)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  matchKey         String              // Identity key for deduplication
+  rawData          Json                // Original parsed product data
+  parsedFields     Json?               // Partially normalized fields
+  blockingErrors   Json                // Array of error codes/messages
+  status           QuarantineStatus    @default(QUARANTINED)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   feed_corrections feed_corrections[]
-  retailer_feeds   retailer_feeds     @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@unique([feedId, matchKey])
-  @@index([retailerId])
+  @@index([feedType])
   @@index([feedId, status])
   @@index([status])
+  @@index([retailerId])
+  @@index([sourceId])
 }
 
 model retailers {
@@ -1632,6 +1645,11 @@ enum QuarantineStatus {
   QUARANTINED
   RESOLVED
   DISMISSED
+}
+
+enum QuarantineFeedType {
+  RETAILER
+  AFFILIATE
 }
 
 enum ReportStatus {

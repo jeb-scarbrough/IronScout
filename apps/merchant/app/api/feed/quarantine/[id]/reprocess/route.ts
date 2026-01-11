@@ -56,7 +56,6 @@ export async function POST(
         feed_corrections: {
           orderBy: { createdAt: 'desc' },
         },
-        retailer_feeds: true,
       },
     });
 
@@ -113,13 +112,20 @@ export async function POST(
       );
     }
 
-    // Generate SKU hash
+    // Generate identity hash (stable across price changes)
     const skuHash = generateSkuHash(
       title,
       upc,
-      correctedFields.sku as string | undefined,
-      price
+      correctedFields.sku as string | undefined
     );
+
+    // Generate content hash for change tracking
+    const contentHash = generateContentHash({
+      price,
+      inStock: correctedFields.inStock as boolean | undefined,
+      brand: correctedFields.brand as string | undefined,
+      caliber: correctedFields.caliber as string | undefined,
+    });
 
     // Create RetailerSku from corrected data
     const retailerSku = await prisma.retailer_skus.upsert({
@@ -133,6 +139,7 @@ export async function POST(
         retailerId,
         feedId: record.feedId,
         retailerSkuHash: skuHash,
+        contentHash,
         rawTitle: title,
         rawPrice: price,
         rawUpc: upc,
@@ -141,11 +148,14 @@ export async function POST(
         rawCaliber: correctedFields.caliber as string | undefined,
         rawInStock: (correctedFields.inStock as boolean) ?? true,
         isActive: true,
+        lastSeenAt: new Date(),
       },
       update: {
+        contentHash,
         rawPrice: price,
         rawInStock: (correctedFields.inStock as boolean) ?? true,
         isActive: true,
+        lastSeenAt: new Date(),
         updatedAt: new Date(),
       },
     });
@@ -186,19 +196,43 @@ function isValidUPC(upc: string): boolean {
 }
 
 /**
- * Generate SKU hash for deduplication
+ * Generate a stable identity hash for a SKU.
+ * This hash identifies the LISTING, not its current state.
+ * Price changes should NOT create new SKU records.
  */
 function generateSkuHash(
   title: string,
   upc?: string,
-  sku?: string,
-  price?: number
+  sku?: string
 ): string {
   const components = [
     title.toLowerCase().trim(),
     upc || '',
     sku || '',
-    price ? String(price) : '',
+    // NOTE: price intentionally excluded - price is state, not identity
+  ];
+
+  const hash = createHash('sha256')
+    .update(components.join('|'))
+    .digest('hex');
+
+  return hash.substring(0, 32);
+}
+
+/**
+ * Generate a content hash for change detection.
+ */
+function generateContentHash(record: {
+  price?: number
+  inStock?: boolean
+  brand?: string
+  caliber?: string
+}): string {
+  const components = [
+    record.price != null ? String(record.price) : '',
+    record.inStock != null ? String(record.inStock) : '',
+    record.brand || '',
+    record.caliber || '',
   ];
 
   const hash = createHash('sha256')
