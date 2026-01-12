@@ -294,9 +294,9 @@ try {
 
     # Check critical columns exist in actual database schema
     # Note: Only check tables that exist in schema.prisma
+    # Note: pricing_snapshots was removed in v1 (benchmark subsystem removed)
     $criticalChecks = @(
         @{ Table = "prices"; Column = "productId"; Required = $true },
-        @{ Table = "pricing_snapshots"; Column = "merchantId"; Required = $true },
         @{ Table = "alerts"; Column = "userId"; Required = $true },
         @{ Table = "watchlist_items"; Column = "userId"; Required = $true },
         @{ Table = "retailer_feeds"; Column = "retailerId"; Required = $true }
