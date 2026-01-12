@@ -90,6 +90,8 @@ jspm_packages/
 # Database backups (may contain secrets)
 backups/
 *.sql
+# But allow Prisma migration files
+!packages/db/migrations/**/*.sql
 
 # IDE
 .vscode/

@@ -45,6 +45,6 @@
     "prisma": "^7.2.0",
     "testcontainers": "^10.18.0",
     "tsx": "^4.21.0",
-    "vitest": "^4.3.8"
+    "vitest": "^4.0.16"
   }
 }
