@@ -271,7 +271,7 @@ describe('Feed Parser Output Contract', () => {
       ]
 
       for (let i = 0; i < variations.length; i++) {
-        const product = mockParseCSVRow(variations[i] as Record<string, string>, i + 1)
+        const product = mockParseCSVRow(variations[i] as unknown as Record<string, string>, i + 1)
         expect(product).not.toBeNull()
         expect(validateProduct(product!)).toHaveLength(0)
       }

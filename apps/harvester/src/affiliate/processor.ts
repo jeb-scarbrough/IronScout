@@ -1533,7 +1533,7 @@ function decidePriceWrites(
       product.currency ?? null, // Pass raw value for fail-closed behavior
       productId,
       sourceProductId,
-      lastPrice
+      lastPrice ?? null
     )
 
     // Track skip reasons for observability logging
