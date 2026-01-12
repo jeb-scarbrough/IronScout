@@ -12,9 +12,7 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { TrendingDown, TrendingUp, Minus, Crown, Lock } from 'lucide-react'
-import Link from 'next/link'
+import { TrendingDown, TrendingUp, Minus } from 'lucide-react'
 import { createLogger } from '@/lib/logger'
 
 const logger = createLogger('price-history-chart')
@@ -49,19 +47,15 @@ interface PriceHistoryData {
 
 const CHART_COLOR = '#3b82f6'
 
-export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
+export function PriceHistoryChart({ productId, isPremium: _isPremium }: PriceHistoryProps) {
   const [data, setData] = useState<PriceHistoryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [days, setDays] = useState(30)
 
   useEffect(() => {
-    if (isPremium) {
-      fetchPriceHistory()
-    } else {
-      setLoading(false)
-    }
-  }, [productId, days, isPremium])
+    fetchPriceHistory()
+  }, [productId, days])
 
   const fetchPriceHistory = async () => {
     try {
@@ -72,10 +66,6 @@ export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
       const response = await fetch(`${API_BASE_URL}/api/products/${productId}/history?days=${days}`)
       
       if (!response.ok) {
-        if (response.status === 403) {
-          setError('premium')
-          return
-        }
         throw new Error('Failed to fetch price history')
       }
       
@@ -89,40 +79,6 @@ export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
     }
   }
 
-  // Show upgrade prompt for non-Premium users
-  if (!isPremium) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Price History
-            <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-              <Crown className="h-3 w-3 mr-1" />
-              Premium
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            Track price changes over time to find the best deals
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 flex flex-col items-center justify-center bg-muted/20 rounded-lg border-2 border-dashed border-muted">
-            <Lock className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground text-center mb-4">
-              Price history charts are available for Premium members
-            </p>
-            <Button asChild className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
-              <Link href="/pricing">
-                <Crown className="h-4 w-4 mr-2" />
-                Upgrade to Premium
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   if (loading) {
     return (
       <Card>
@@ -132,27 +88,6 @@ export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
         <CardContent>
           <div className="flex items-center justify-center h-64">
             <div className="animate-pulse text-muted-foreground">Loading price history...</div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (error === 'premium') {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Price History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 flex flex-col items-center justify-center">
-            <Crown className="h-10 w-10 text-amber-500 mb-3" />
-            <p className="text-muted-foreground text-center mb-4">
-              Upgrade to Premium to view price history
-            </p>
-            <Button asChild variant="outline">
-              <Link href="/pricing">View Plans</Link>
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -195,10 +130,6 @@ export function PriceHistoryChart({ productId, isPremium }: PriceHistoryProps) {
           <div>
             <CardTitle className="flex items-center gap-2">
               Price History
-              <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-                <Crown className="h-3 w-3 mr-1" />
-                Premium
-              </Badge>
             </CardTitle>
             <CardDescription>
               Track price changes over the last {days} days

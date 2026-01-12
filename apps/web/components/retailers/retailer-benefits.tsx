@@ -15,7 +15,7 @@ const benefits = [
   {
     icon: TrendingUp,
     title: 'Increased Sales',
-    description: 'Premium partners see an average 25% increase in sales within the first quarter.'
+    description: 'Top partners see an average 25% increase in sales within the first quarter.'
   },
   {
     icon: Shield,

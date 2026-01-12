@@ -37,7 +37,7 @@ const plans = [
       'Custom promotional campaigns',
       'API access for inventory sync'
     ],
-    cta: 'Upgrade to Premium',
+    cta: 'Contact Sales',
     href: RETAILER_REGISTER_URL,
     popular: true,
     icon: Crown

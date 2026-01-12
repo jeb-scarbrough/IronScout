@@ -45,7 +45,7 @@ const getPurposeBadge = (purpose?: string) => {
   return { label: purpose, className: 'bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300' }
 }
 
-export function ProductCard({ product, showRelevance = false, showPremiumFeatures = false }: ProductCardProps) {
+export function ProductCard({ product, showRelevance = false, showPremiumFeatures = true }: ProductCardProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false)
 
   // Guard against empty prices array to prevent crashes
@@ -121,7 +121,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
                   <div className="space-y-2">
-                    <p className="font-medium text-sm">Premium AI Match Score</p>
+                    <p className="font-medium text-sm">AI Match Score</p>
                     {explanation && (
                       <p className="text-xs text-muted-foreground">{explanation}</p>
                     )}

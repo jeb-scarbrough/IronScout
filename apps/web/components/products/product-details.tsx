@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
 import { ProductImage } from './product-image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,11 +15,7 @@ interface ProductDetailsProps {
 }
 
 export function ProductDetails({ product }: ProductDetailsProps) {
-  const { data: session } = useSession()
   const [showSaveDialog, setShowSaveDialog] = useState(false)
-
-  // Check if user is Premium
-  const isPremium = (session?.user as any)?.tier === 'PREMIUM'
 
   // Guard against empty prices array to prevent crashes
   if (!product.prices || product.prices.length === 0) {
@@ -252,7 +247,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
       </Card>
 
       {/* Price History Chart */}
-      <PriceHistoryChart productId={product.id} isPremium={isPremium} />
+      <PriceHistoryChart productId={product.id} isPremium />
 
       <CreateAlertDialog
         product={product}
