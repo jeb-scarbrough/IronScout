@@ -101,7 +101,7 @@ try {
 
     $migrateStatus = (pnpm exec prisma migrate status 2>&1) -join "`n"
 
-    if ($migrateStatus -match "Following migrations have not yet been applied") {
+    if ($migrateStatus -match "Following migrations? have not yet been applied") {
         Write-Err "Pending migrations found!"
         Write-Info "Run: pnpm exec prisma migrate deploy"
         $migrateStatus -split "`n" | Where-Object { $_ -match "^\d{14}" } | ForEach-Object {
