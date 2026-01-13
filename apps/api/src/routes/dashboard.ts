@@ -210,14 +210,20 @@ router.get('/pulse', async (req: Request, res: Response) => {
         const windowStart = new Date(asOf)
         windowStart.setDate(windowStart.getDate() - windowDays)
 
+        // ADR-005: Apply full visibility predicate to exclude ineligible/unlisted retailers
         const historicalPricesRaw = await prisma.$queryRaw<Array<{ price: any }>>`
           SELECT pr.price
           FROM prices pr
           JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
           JOIN products p ON p.id = pl."productId"
+          JOIN retailers r ON r.id = pr."retailerId"
+          JOIN merchant_retailers mr ON mr."retailerId" = r.id
           WHERE p.caliber = ${caliber}
             AND pl.status IN ('MATCHED', 'CREATED')
             AND pr."createdAt" < ${windowStart}
+            AND r."visibilityStatus" = 'ELIGIBLE'
+            AND mr."listingStatus" = 'LISTED'
+            AND mr.status = 'ACTIVE'
           ORDER BY pr."createdAt" DESC
           LIMIT 50
         `
@@ -609,6 +615,7 @@ router.get('/price-history/:caliber', async (req: Request, res: Response) => {
 
     // Get price history aggregated by day
     // Per Spec v1.2 §0.0: Query through product_links for prices
+    // ADR-005: Apply full visibility predicate to exclude ineligible/unlisted retailers
     const decodedCaliber = decodeURIComponent(caliber)
     const prices = await prisma.$queryRaw<Array<{ price: any; createdAt: Date }>>`
       SELECT pr.price, pr."createdAt"
@@ -616,10 +623,13 @@ router.get('/price-history/:caliber', async (req: Request, res: Response) => {
       JOIN product_links pl ON pl."sourceProductId" = pr."sourceProductId"
       JOIN products p ON p.id = pl."productId"
       JOIN retailers r ON r.id = pr."retailerId"
+      JOIN merchant_retailers mr ON mr."retailerId" = r.id
       WHERE p.caliber = ${decodedCaliber}
         AND pl.status IN ('MATCHED', 'CREATED')
         AND pr."createdAt" >= ${startDate}
         AND r."visibilityStatus" = 'ELIGIBLE'
+        AND mr."listingStatus" = 'LISTED'
+        AND mr.status = 'ACTIVE'
       ORDER BY pr."createdAt" ASC
     `
 
