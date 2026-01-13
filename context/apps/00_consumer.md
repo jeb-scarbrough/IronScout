@@ -205,6 +205,33 @@ See `06_ux_charter.md` for enforcement rules.
 
 ---
 
+## Offline Behavior (PWA)
+
+The consumer app includes basic Progressive Web App (PWA) support for resilience.
+
+**Behavior:**
+- Critical assets are cached on first visit (homepage, offline page, icons)
+- Network-first fetch strategy: always tries network, falls back to cache
+- When offline, navigation requests show a friendly offline page
+- API requests are not cached (fail naturally when offline)
+
+**Files:**
+- `apps/web/public/sw.js` — Service worker
+- `apps/web/public/offline.html` — Offline fallback page
+- `apps/web/public/manifest.json` — PWA manifest
+
+**Not included in v1:**
+- Push notifications (infrastructure exists but not active)
+- Background sync (stub exists for future alert retry)
+- Offline data access or queuing
+
+**No guarantees:**
+- Offline support is best-effort UX improvement
+- No SLA or uptime promises are implied
+- Users are expected to have network connectivity for core functionality
+
+---
+
 ## Summary
 
 The consumer app is designed to:
@@ -212,6 +239,6 @@ The consumer app is designed to:
 - Preserve trust
 - Surface moments selectively
 
-Silence is intentional.  
-Monitoring is continuous.  
+Silence is intentional.
+Monitoring is continuous.
 Action appears only when it matters.

@@ -3,7 +3,7 @@
 **Status:** Authoritative  
 **Applies to:** IronScout Dashboard v4  
 **Audience:** Product, Engineering, Design  
-**Last updated:** 2026-01-03
+**Last updated:** 2026-01-13
 
 ---
 
@@ -33,8 +33,9 @@ Order:
 1. Dashboard
 2. Search
 3. Watchlist
-4. Billing
-5. Settings
+4. Settings
+
+Note: Billing is not included in consumer nav for v1 (no consumer Premium tier).
 
 ### 3.2 Highlighted Search Entry
 - Search MUST appear as a visually emphasized primary nav item
@@ -55,8 +56,9 @@ Order:
 
 **Dashboard Behavior**
 - Hero search module rendered at top
-- Copy: “Buy now at the best price. We’ll watch what happens next.”
-- CTA: “Find ammo deals” → routes to Search
+- Copy: "Save items to watch. We'll monitor price changes."
+- Secondary: "Add items to your watchlist so we can monitor prices."
+- CTA: "Find ammo deals" → routes to Search
 - No watchlist section rendered
 - Best Prices module visible but secondary
 
