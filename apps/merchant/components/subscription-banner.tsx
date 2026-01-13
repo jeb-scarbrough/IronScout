@@ -1,21 +1,27 @@
 'use client';
 
-import { AlertTriangle, XCircle, CreditCard } from 'lucide-react';
+import { AlertTriangle, XCircle, CreditCard, Info } from 'lucide-react';
 import Link from 'next/link';
 
 interface SubscriptionBannerProps {
   message: string;
-  type: 'warning' | 'error';
+  type: 'warning' | 'error' | 'info';
 }
 
 export function SubscriptionBanner({ message, type }: SubscriptionBannerProps) {
   const isError = type === 'error';
+  const isInfo = type === 'info';
+
+  // Info banners (e.g., admin impersonation) don't show renewal CTA
+  const showRenewalCta = !isInfo;
 
   return (
     <div
       className={`${
         isError
           ? 'bg-red-600 text-white'
+          : isInfo
+          ? 'bg-blue-600 text-white'
           : 'bg-amber-500 text-white'
       }`}
     >
@@ -24,22 +30,26 @@ export function SubscriptionBanner({ message, type }: SubscriptionBannerProps) {
           <div className="flex items-center gap-3">
             {isError ? (
               <XCircle className="h-5 w-5 flex-shrink-0" />
+            ) : isInfo ? (
+              <Info className="h-5 w-5 flex-shrink-0" />
             ) : (
               <AlertTriangle className="h-5 w-5 flex-shrink-0" />
             )}
             <p className="text-sm font-medium">{message}</p>
           </div>
-          <Link
-            href="/settings"
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
-              isError
-                ? 'bg-white text-red-600 hover:bg-red-50'
-                : 'bg-white text-amber-600 hover:bg-amber-50'
-            }`}
-          >
-            <CreditCard className="h-4 w-4" />
-            Renew Now
-          </Link>
+          {showRenewalCta && (
+            <Link
+              href="/settings"
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                isError
+                  ? 'bg-white text-red-600 hover:bg-red-50'
+                  : 'bg-white text-amber-600 hover:bg-amber-50'
+              }`}
+            >
+              <CreditCard className="h-4 w-4" />
+              Renew Now
+            </Link>
+          )}
         </div>
       </div>
     </div>

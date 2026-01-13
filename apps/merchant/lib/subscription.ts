@@ -28,33 +28,56 @@ export interface SubscriptionStatus {
   expiresAt: Date | null;
   redirectTo: string | null;
   bannerMessage: string | null;
-  bannerType: 'warning' | 'error' | null;
+  bannerType: 'warning' | 'error' | 'info' | null;
+  /** True when admin is impersonating this merchant */
+  isImpersonating?: boolean;
 }
 
 const DEFAULT_GRACE_DAYS = 7;
 
 /**
  * Check subscription status and determine portal access level
+ *
+ * Per ADR and release criteria:
+ * - Admin impersonation does NOT bypass subscription enforcement
+ * - Impersonating admins see accurate subscription status
+ * - Redirects are disabled for impersonation (to allow navigation)
+ * - Banner shows impersonation context
  */
 export function checkSubscriptionStatus(
   merchant: Merchant,
   isImpersonating: boolean = false
 ): SubscriptionStatus {
-  // Admin impersonation bypasses all subscription checks
+  // Calculate the real subscription status first (no bypass)
+  const realStatus = calculateSubscriptionStatus(merchant);
+
+  // For impersonation: show real status but disable redirects for navigation
+  // Per release criteria: impersonation must NOT bypass subscription enforcement
   if (isImpersonating) {
+    const impersonationBanner = realStatus.isExpired
+      ? `[ADMIN VIEW] Merchant subscription is ${realStatus.isInGracePeriod ? 'in grace period' : 'expired/blocked'}. Status: ${merchant.subscriptionStatus}`
+      : `[ADMIN VIEW] Viewing as merchant. Subscription status: ${merchant.subscriptionStatus}`;
+
     return {
-      accessLevel: 'full',
-      isExpired: false,
-      isInGracePeriod: false,
-      daysUntilExpiry: null,
-      daysOverdue: 0,
-      expiresAt: merchant.subscriptionExpiresAt,
+      ...realStatus,
+      // Disable redirects so admin can navigate for troubleshooting
       redirectTo: null,
-      bannerMessage: null,
-      bannerType: null,
+      // Show impersonation context in banner (preserves any existing message)
+      bannerMessage: realStatus.bannerMessage
+        ? `${impersonationBanner} | ${realStatus.bannerMessage}`
+        : impersonationBanner,
+      bannerType: realStatus.bannerType || 'info',
+      isImpersonating: true,
     };
   }
 
+  return realStatus;
+}
+
+/**
+ * Internal: Calculate raw subscription status without impersonation modifications
+ */
+function calculateSubscriptionStatus(merchant: Merchant): SubscriptionStatus {
   // FOUNDING tier merchants get 1 year free - still check expiration
   // (No special bypass - they follow the same expiration logic as other tiers)
 
