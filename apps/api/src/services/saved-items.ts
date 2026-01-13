@@ -366,6 +366,89 @@ export async function countSavedItems(userId: string): Promise<number> {
 }
 
 // ============================================================================
+// Alert History
+// ============================================================================
+
+export interface AlertHistoryEntry {
+  id: string
+  type: 'PRICE_DROP' | 'BACK_IN_STOCK'
+  productId: string
+  productName: string
+  triggeredAt: string
+  reason: string
+  metadata: {
+    oldPrice?: number
+    newPrice?: number
+    retailer?: string
+  }
+}
+
+/**
+ * Get alert notification history for a user
+ *
+ * Queries execution_logs for ALERT_NOTIFY and ALERT_DELAYED_SENT events
+ * where the userId matches in the metadata JSON field.
+ *
+ * Returns notifications in reverse chronological order.
+ */
+export async function getAlertHistory(
+  userId: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<{ history: AlertHistoryEntry[]; total: number }> {
+  // Query execution_logs for alert notifications sent to this user
+  // Using raw query for JSON field filtering
+  const [logs, countResult] = await Promise.all([
+    prisma.$queryRaw<Array<{
+      id: string
+      event: string
+      message: string
+      metadata: any
+      timestamp: Date
+    }>>`
+      SELECT el.id, el.event, el.message, el.metadata, el.timestamp
+      FROM execution_logs el
+      WHERE el.event IN ('ALERT_NOTIFY', 'ALERT_DELAYED_SENT')
+        AND el.metadata->>'userId' = ${userId}
+      ORDER BY el.timestamp DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `,
+    prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*) as count
+      FROM execution_logs el
+      WHERE el.event IN ('ALERT_NOTIFY', 'ALERT_DELAYED_SENT')
+        AND el.metadata->>'userId' = ${userId}
+    `,
+  ])
+
+  const total = Number(countResult[0]?.count ?? 0)
+
+  // Map to AlertHistoryEntry format
+  const history: AlertHistoryEntry[] = logs.map((log) => {
+    const meta = log.metadata || {}
+    const isBackInStock = meta.reason?.includes('BACK_IN_STOCK') ||
+                          meta.ruleType === 'BACK_IN_STOCK'
+
+    return {
+      id: log.id,
+      type: isBackInStock ? 'BACK_IN_STOCK' : 'PRICE_DROP',
+      productId: meta.productId || '',
+      productName: meta.productName || 'Unknown Product',
+      triggeredAt: log.timestamp.toISOString(),
+      reason: meta.reason || log.message,
+      metadata: {
+        oldPrice: meta.oldPrice,
+        newPrice: meta.newPrice,
+        retailer: meta.retailerName,
+      },
+    }
+  })
+
+  return { history, total }
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

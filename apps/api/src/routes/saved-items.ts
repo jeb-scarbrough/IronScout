@@ -20,6 +20,7 @@ import {
   getSavedItemByProductId,
   updateSavedItemPrefs,
   countSavedItems,
+  getAlertHistory,
 } from '../services/saved-items'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
@@ -39,6 +40,44 @@ const updatePrefsSchema = z.object({
   minDropPercent: z.number().int().min(0).max(100).optional(),
   minDropAmount: z.number().min(0).optional(),
   stockAlertCooldownHours: z.number().int().min(1).max(168).optional(),
+})
+
+// ============================================================================
+// GET /api/saved-items/history - Get alert notification history
+// ============================================================================
+
+const historyQuerySchema = z.object({
+  limit: z.string().default('50'),
+  offset: z.string().default('0'),
+})
+
+router.get('/history', async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req)
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const { limit, offset } = historyQuerySchema.parse(req.query)
+    const limitNum = Math.min(parseInt(limit), 100) // Max 100 per request
+    const offsetNum = parseInt(offset)
+
+    const { history, total } = await getAlertHistory(userId, limitNum, offsetNum)
+
+    res.json({
+      history,
+      _meta: {
+        total,
+        limit: limitNum,
+        offset: offsetNum,
+        hasMore: offsetNum + history.length < total,
+      },
+    })
+  } catch (error) {
+    const err = error as Error
+    log.error('Get alert history error', { message: err.message }, err)
+    res.status(500).json({ error: 'Failed to fetch alert history' })
+  }
 })
 
 // ============================================================================
