@@ -2,7 +2,7 @@
 
 > NOTE: This doc describes the Merchant portal. File path may remain `apps/dealer` temporarily for migration reasons.
 
-This document describes the **merchant-facing application** for IronScout v1.  
+This document describes the **merchant-facing application** for IronScout.  
 It defines what merchants can do, see, and expect, and where explicit constraints apply.
 
 This document must remain aligned with:
@@ -18,7 +18,7 @@ If merchant UI behavior conflicts with those documents, this document is wrong.
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets.
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -40,7 +40,7 @@ It is not designed to:
 
 ---
 
-## Core Merchant Flows (v1)
+## Core Merchant Flows
 
 ### Authentication and Access
 
@@ -141,7 +141,7 @@ Disallowed outputs include:
 
 - Billing is Merchant-level; billing unit is per Retailer listing. Merchants pay per Retailer listing.
 - Consumer visibility is never gated by subscription status; only eligibility + listing + active relationship apply.
-- v1: each Retailer belongs to exactly one Merchant.
+- Retailer-Merchant relationships exist; listing applies only when a relationship exists.
 
 ### Starter
 
@@ -154,7 +154,7 @@ Starter merchants do not have:
 - Market benchmarks
 - Historical context
 - Performance analytics
-- Usage-based billing UI (v1)
+- Usage-based billing UI
 
 ---
 
@@ -233,7 +233,7 @@ Merchant-facing errors must:
 
 ---
 
-## Known Constraints and Decisions (v1)
+## Known Constraints and Decisions
 
 These are intentional:
 

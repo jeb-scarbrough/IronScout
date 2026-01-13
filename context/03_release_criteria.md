@@ -38,57 +38,39 @@ All criteria below exist to enforce this rule.
 - Canonical product grouping is stable and deterministic
 - Prices shown to users are tied to a specific source and timestamp
 - Historical price context is derived from stored data, not inference
-- Consumer prices are keyed by `retailerId`; benchmarks/pricing_snapshots are keyed by `merchantId`.
+- Consumer prices are keyed by `retailerId` and sourced from affiliate feeds in v1.
 - Blocked, ineligible, or unlisted Retailers never appear in:
   - search results
   - alerts
   - watchlists
   - direct product views
 - Consumer visibility is enforced at the Retailer level via query-time predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`. Merchant subscription status does not directly control consumer visibility.
-- Delinquency/suspension auto-unlists all Merchant listings; recovery does not auto-relist.
 
 ### Must Not Ship If
 
 - Retailers can appear after being blocked or suspended
 - Retailers can appear while unlisted
-- Delinquent/suspended Merchants retain listed retailers or auto-relist on recovery
 - Duplicate SKUs fragment canonical groupings
 - Price history is missing without explanation
 - Users can see inventory they should not be eligible to see
 
 ---
 
-## Merchant Subscription Enforcement
+## Affiliate Ingestion & Harvester Behavior
 
 ### Required
 
-- Merchant subscription status is enforced server-side for portal access and feed processing
-- Expired subscriptions correctly transition through grace states
-- Blocked subscriptions result in loss of access where defined
-
-### Must Not Ship If
-
-- Subscription enforcement is only hidden in the UI
-- Admin impersonation bypasses subscription enforcement
-- Merchants receive portal access while suspended, or Retailer visibility is granted while ineligible
-
----
-
-## Merchant Ingestion & Harvester Behavior
-
-### Required
-
-- Feed ingestion respects Merchant subscription status and Retailer eligibility
-- SKIPPED feeds do not produce downstream effects
-- Ingestion jobs are idempotent
+- Affiliate feed ingestion is idempotent
 - Duplicate scheduling cannot produce duplicate writes
 - Broken feeds can be quarantined without system-wide impact
+- Alerts only fire on price drop or back-in-stock events for canonical products
+- Scheduler runs as a singleton or lock-protected worker
 
 ### Must Not Ship If
 
-- Multiple harvester instances can double-ingest
-- SKIPPED feeds still generate benchmarks or alerts
-- Manual intervention is required to stop bad data propagation
+- Multiple harvester instances can double-ingest affiliate feeds
+- Duplicate affiliate runs produce duplicate price rows beyond dedupe safeguards
+- Manual intervention is required to stop bad affiliate data propagation
 
 ---
 
@@ -167,9 +149,8 @@ Before shipping v1, confirm:
 
 - [ ] All public copy reviewed against `00_public_promises.md`
 - [ ] All v1 features verified against `02_v1_scope_and_cut_list.md`
-- [ ] Tier enforcement verified via direct API access
 - [ ] Retailer visibility eligibility + listing predicate tested end-to-end
-- [ ] Delinquency auto-unlist and explicit relist flow verified
+- [ ] Affiliate feed ingestion verified end-to-end
 - [ ] Harvester duplication tested under concurrency
 - [ ] At least one full rollback completed successfully
 

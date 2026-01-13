@@ -93,7 +93,7 @@ These tests often assert **absence**, not presence.
 - Pixel-perfect UI behavior
 - Styling changes
 - Non-user-facing admin convenience features
-- Experimental or deferred features
+- Experimental or out-of-scope features
 
 Do not waste test budget here.
 
@@ -133,8 +133,8 @@ If a test does not protect a release criterion or ADR, question its value.
 
 Before shipping v1:
 
-- [ ] Tier enforcement tested via API
-- [ ] Merchant suspension → Retailer visibility tested end-to-end
+- [ ] Uniform capability shaping tested via API
+- [ ] Retailer eligibility changes → visibility tested end-to-end
 - [ ] Harvester SKIPPED execution tested
 - [ ] Alert suppression tested
 - [ ] Fail-closed behavior tested

@@ -1,6 +1,6 @@
 # Admin App
 
-This document describes the **admin-facing application** for IronScout v1.  
+This document describes the **admin-facing application** for IronScout.  
 It defines admin capabilities, boundaries, and enforcement rules.
 
 The admin app is a **trust-critical surface**. Any ambiguity or overreach here undermines every other system guarantee.
@@ -17,7 +17,7 @@ If admin behavior conflicts with those documents, this document is wrong.
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary).
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -27,7 +27,7 @@ If admin behavior conflicts with those documents, this document is wrong.
 
 The admin app exists to:
 - Support operations and troubleshooting
-- Manage merchant lifecycle and subscriptions
+- Manage affiliate feed ingestion and retailer visibility
 - Safely intervene when automated systems fail
 - Preserve system integrity and trust
 
@@ -51,41 +51,25 @@ If roles are not implemented, all admins are assumed fully privileged but audite
 
 ---
 
-## Core Admin Capabilities (v1)
+## Core Admin Capabilities
 
-### Merchant Lifecycle Management
-
-Admins may:
-- Approve or onboard merchants
-- Suspend or reactivate merchants
-- Change merchant subscription tier
-- Extend or modify subscription expiration
-- Change billing method (e.g. invoice vs platform billing)
-
-All lifecycle changes must:
-- Be explicit
-- Be reversible
-- Be auditable
-
-### Retailer Linking, Eligibility, and Listing
+### Retailer Eligibility and Visibility
 
 Admins may:
-- Link/unlink Merchants to Retailers (manage `merchant_retailers`)
-- Set `listingStatus` (LISTED/UNLISTED) and relationship `status` (ACTIVE/SUSPENDED)
 - Flip `retailers.visibilityStatus` (ELIGIBLE/INELIGIBLE/SUSPENDED) per policy
+- Manage source and affiliate feed linkage for retailer identity
 
 Constraints:
 - All actions must be audited with before/after values.
-- Subscription status is not a consumer visibility gate; listing/eligibility changes must be explicit.
+- Subscription status is not a consumer visibility gate; eligibility changes must be explicit.
 - Overrides must be reversible and fail closed.
-- Billing unit is per Retailer listing; v1 constraint: each Retailer belongs to exactly one Merchant.
 
 ---
 
 ### Feed and Ingestion Control
 
 Admins may:
-- Enable or disable Merchant-configured feeds (for administered Retailers)
+- Enable or disable affiliate feeds
 - Quarantine broken feeds
 - View feed execution history and errors
 - Stop propagation of bad data
@@ -114,26 +98,6 @@ Impersonation must not:
 Impersonation must be clearly indicated in the UI and session context.
 
 ---
-
-## Subscription and Billing Controls
-
-### Allowed Actions
-
-Admins may:
-- Change subscription tier
-- Change subscription status
-- Apply or remove grace periods
-- Extend expiration dates
-
-### Required Constraints
-
-- All changes must be logged with before/after state
-- Subscription mutations must be transactionally coupled with audit logging
-- Billing method must remain mutually exclusive (invoice vs platform billing)
-
-If subscription or billing state becomes ambiguous:
-- Access must default to restricted
-- Visibility must be removed
 
 ---
 
@@ -168,7 +132,7 @@ Admin UI language must:
 - Avoid implying recommendations or guarantees
 
 Admin UI must not:
-- Expose experimental or deferred features
+- Expose experimental or out-of-scope features
 - Leak internal feature flags or future plans
 - Encourage unsafe overrides
 
@@ -190,7 +154,7 @@ Bulk operations (if any) must:
 
 ---
 
-## Known Constraints and Decisions (v1)
+## Known Constraints and Decisions
 
 These are intentional limitations:
 

@@ -15,7 +15,7 @@ If you want machine-level precision, add `openapi.yaml` and treat it as the sour
 
 - Tier enforcement, if reintroduced, must be server-side (ADR-002).
 - Retailer visibility is filtered at query time (ADR-005) using eligibility + listing entitlement; subscription status is not a consumer visibility gate.
-- v1: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
+- v1: Retailers may have no Merchant relationship; listing applies only when a relationship exists.
 - Price history is append-only (ADR-004).
 - AI output is assistive only (ADR-003).
 - Fail closed on ambiguity (ADR-009).
@@ -30,11 +30,7 @@ Expected: session or JWT derived from the consumer app auth.
 Server requirements:
 - API must determine user identity from verified auth context.
 - API must not accept `X-User-Id` or similar headers as truth.
-- Consumer queries MUST NOT read or use subscription state; visibility predicate is `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND `merchant_retailers.status = ACTIVE`.
-
-### Merchant API (portal; legacy path: /dealer/*)
-Expected: merchant portal auth.
-Merchant endpoints must not leak cross-merchant data. Canonical naming is Merchant (not dealer); legacy paths may remain.
+- Consumer queries MUST NOT read or use subscription state; visibility uses eligibility and listing/status only when a Merchant relationship exists.
 
 ### Admin
 Expected: admin portal auth.
@@ -192,38 +188,9 @@ Remove item.
 
 ---
 
-## Merchant API (portal; legacy path: /dealer/*)
-
-These may live inside `apps/dealer` route handlers or in `apps/api` under `/dealer/*`. Path uses legacy "dealer" naming; semantics are Merchant-scoped.
-
-### POST /dealer/feeds
-Create/update a feed configuration.
-
-### GET /dealer/feeds
-List feeds and health.
-
-### POST /dealer/feeds/:id/quarantine
-Quarantine a feed.
-
-MUST:
-- Never expose other Merchants' data.
-- Enforce subscription for merchant portal features.
-- Manage listing/entitlement explicitly (list/unlist retailers) rather than gating consumer visibility by subscription.
-
----
-
 ## Admin
 
 Admin endpoints may live in `apps/admin` route handlers or `apps/api` under `/admin/*`.
-
-### POST /admin/dealers/:id/suspend (legacy path)
-Suspend Merchant (affects Retailer visibility for administered Retailers).
-
-### POST /admin/dealers/:id/reactivate (legacy path)
-Reactivate Merchant.
-
-### POST /admin/dealers/:id/subscription (legacy path)
-Change subscription status/billing method.
 
 ### GET /admin/rate-limits
 Get rate limit metrics for all auth endpoints.

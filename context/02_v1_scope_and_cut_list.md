@@ -12,8 +12,8 @@ This document has higher authority than roadmaps, ideas, or partially implemente
 Terminology note:
 - Merchant = portal account, billing, auth boundary.
 - Retailer = consumer storefront, price visibility boundary.
-- v1: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
-All scope items below use this model.
+- v1 uses affiliate feeds only. Merchant onboarding, retailer feed ingestion, and subscription billing are deferred to v1.1.
+Where Merchant/Retailer terms appear, they describe the future model.
 
 ---
 
@@ -23,7 +23,7 @@ v1 is considered successful if IronScout:
 
 - Delivers clear, trustworthy price context to consumers
 - Makes AI-powered search meaningfully better than keyword-only alternatives
-- Proves at least one monetization path without creating trust debt
+- Proves affiliate-feed ingestion as a reliable source for consumer search and alerts
 - Is operable by a small team without constant manual intervention
 
 v1 is **not** required to be feature-complete or optimized for scale.
@@ -40,34 +40,16 @@ v1 is **not** required to be feature-complete or optimized for scale.
 - Historical price context (uniform for all users)
 - Basic price and availability alerts
 - Watchlists
+- Affiliate feeds are the only ingestion source in v1
 - No consumer Premium in v1; all consumer capabilities are available to every user
-
----
-
-### Merchant Portal (legacy app path: apps/dealer)
-
-- Merchant-submitted feed ingestion (CSV, XML, JSON)
-- SKU normalization and canonical matching
-- Deterministic eligibility + listing rules for Retailer visibility
-- Explicit Merchant↔Retailer mapping and listing management (list/unlist) with audit
-- Retailer inventory (administered by the Merchant) appearing in consumer search when eligible AND listed
-- Plan-based access to market pricing context
-- Historical benchmarks where available
-- Merchant subscription enforcement (portal access and feed processing)
-- Subscription is never a consumer visibility predicate.
-
-Merchant portal functionality is limited to **visibility and context**, not automation.
 
 ---
 
 ### Admin & Operations
 
 - Admin impersonation for support and troubleshooting
-- Subscription management with audit logging
 - Feed enable/disable and quarantine controls
-- Retailer linking, eligibility flips, and listing overrides with audit
 - Deterministic Retailer visibility enforcement
-- Auto-unlist on delinquency/suspension; explicit relist on recovery
 - Operational dashboards and logs
 - Manual recovery workflows (documented)
 
@@ -75,10 +57,9 @@ Merchant portal functionality is limited to **visibility and context**, not auto
 
 ### Platform & Infrastructure
 
-- Harvester-based ingestion pipeline
+- Harvester-based affiliate ingestion pipeline
 - Idempotent scheduling and job execution
 - Batched database writes
-- Tier enforcement at the API level
 - Retailer visibility enforcement at query time (predicate: eligibility + listing; no subscription gating)
 - Conservative, enforced UI language
 - Observability sufficient to debug issues without guesswork
@@ -137,10 +118,14 @@ These items must not be shipped, marketed, or implied in v1.
 
 These may exist in docs, code, or experiments but must remain disabled or internal.
 
+- Merchant portal (all features)
+- Retailer/merchant feed ingestion (CSV/XML/JSON)
+- Merchant subscription and billing workflows
+- Merchant benchmarks and pricing_snapshots
+- Merchant analytics and insights
 - Usage-based Merchant billing
 - Advanced alerting logic
 - Confidence tiering and degradation models
-- Expanded Merchant analytics
 - Deeper AI explanations tied to confidence scoring
 - Design automation and review agents
 
@@ -169,3 +154,4 @@ Any change to this document requires:
 ## Guiding Principle
 
 > v1 succeeds by being clear, trustworthy, and operable — not by being exhaustive.
+

@@ -7,6 +7,8 @@ This document defines the canonical meaning of **Merchant** and **Retailer** in 
 This is a **reference document**, not an ADR.  
 It is authoritative. If implementation conflicts with this document, the implementation is wrong.
 
+**Scope note:** v1 scope is defined in `context/02_v1_scope_and_cut_list.md`.
+
 ---
 
 ## Core Definitions

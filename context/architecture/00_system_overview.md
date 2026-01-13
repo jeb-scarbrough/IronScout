@@ -22,7 +22,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Includes user flows (signup, dashboard, search, pricing) and a lightweight admin area for embeddings/executions/logs/sources.
 
 - **Merchant Portal (`apps/dealer` legacy path)**
-  - Next.js App Router UI for Merchant onboarding and feed management (including quarantine and corrections workflows).
+  - Next.js App Router UI for Merchant onboarding and feed management.
   - Merchant-specific dashboard and analytics surfaces.
 
 - **Admin Portal (`apps/admin`)**
@@ -30,8 +30,8 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Includes Merchant approval/suspension/reactivation routes and Merchant detail views.
 
 - **Harvester (`apps/harvester`)**
-  - Node worker process using BullMQ queues to ingest and normalize Retailer price data (including Merchant-submitted feeds).
-  - Runs pipeline workers and legacy dealer-named ingestion/benchmark/insight jobs (Merchant portal ingestion).
+  - Node worker process using BullMQ queues to ingest and normalize affiliate feed data for consumer prices (v1).
+  - Retailer crawl/feed ingestion and Merchant portal jobs exist in code.
 
 ### Shared Data Layer
 
@@ -67,27 +67,28 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
 
 ---
 
-### 2) Retailer and Affiliate Ingestion (Harvester Pipeline)
+### 2) Affiliate Ingestion (Harvester Pipeline, v1)
 
-Harvester is a queue pipeline. The rough sequence is:
+In v1, affiliate feeds are the only ingestion source. The rough sequence is:
 
-1. **Schedule** enabled sources -> create execution record -> enqueue crawl/fetch work
-2. **Fetch** source URLs (HTTP)
-3. **Extract** offers from pages/feed payloads
-4. **Normalize** extracted items (ammo-specific normalization)
-5. **Write** upserts into Postgres
-6. **Alert** triggers as appropriate
+1. **Schedule** enabled affiliate feeds -> create run record -> enqueue processing work
+2. **Fetch** feed files (FTP/SFTP)
+3. **Parse** offers and normalize ammo attributes
+4. **Write** append-only price records into Postgres
+5. **Alert** triggers as appropriate
 
 **Key components in Harvester**
-- `src/scheduler/*` for crawl scheduling
-- `src/fetcher/*`, `src/extractor/*`, `src/normalizer/*`, `src/writer/*`, `src/alerter/*`
+- `src/affiliate/*` for affiliate scheduling and processing
+- `src/normalizer/*`, `src/writer/*`, `src/alerter/*`
 - BullMQ queues defined in `src/config/queues.ts`
+
+Retailer crawl/feed ingestion exists in code.
 
 ---
 
 ### 3) Merchant Portal Feed Ingestion (legacy dealer pipeline naming)
 
-Merchants provide feeds. Harvester supports Merchant portal jobs (legacy dealer-* names):
+Merchant portal ingestion exists in code. Harvester supports Merchant portal jobs (legacy dealer-* names):
 
 - feed ingest
 - SKU match
@@ -108,10 +109,10 @@ Merchant portal job scheduling runs inside the worker process via a scheduler fu
 ## Visibility Stack (Canonical)
 
 - **Eligibility** (Retailer): `retailers.visibilityStatus = ELIGIBLE`
-- **Entitlement** (Merchant↔Retailer listing): `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`
+- **Entitlement** (Merchant-Retailer listing): `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE` when a relationship exists.
 - **Corrections overlay**: Adjusts facts (prices) only; does not change eligibility/listing.
-- **Query-time predicate**: consumer offers must satisfy eligibility AND entitlement. Subscription status is not a consumer visibility gate.
-- **v1 constraint**: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
+- **Query-time predicate**: consumer offers must satisfy eligibility and listing where a relationship exists. Subscription status is not a consumer visibility gate.
+- **v1 constraint**: Retailers may have no Merchant relationship in v1; when a relationship exists, listing status still applies.
 
 This stack must be enforced in all consumer reads (search, product, dashboard, alerts).
 
@@ -132,7 +133,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Includes user flows (signup, dashboard, search, pricing) and a lightweight admin area for embeddings/executions/logs/sources.
 
 - **Merchant Portal (`apps/dealer` legacy path)**
-  - Next.js App Router UI for Merchant onboarding and feed management (including quarantine and corrections workflows).
+  - Next.js App Router UI for Merchant onboarding and feed management.
   - Merchant-specific dashboard and analytics surfaces.
 
 - **Admin Portal (`apps/admin`)**
@@ -140,8 +141,8 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Includes Merchant approval/suspension/reactivation routes and Merchant detail views.
 
 - **Harvester (`apps/harvester`)**
-  - Node worker process using BullMQ queues to ingest and normalize Retailer price data (including Merchant-submitted feeds).
-  - Runs pipeline workers and legacy dealer-named ingestion/benchmark/insight jobs (Merchant portal ingestion).
+  - Node worker process using BullMQ queues to ingest and normalize affiliate feed data for consumer prices (v1).
+  - Retailer crawl/feed ingestion and Merchant portal jobs exist in code.
 
 ### Shared Data Layer
 
@@ -177,27 +178,28 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
 
 ---
 
-### 2) Retailer and Affiliate Ingestion (Harvester Pipeline)
+### 2) Affiliate Ingestion (Harvester Pipeline, v1)
 
-Harvester is a queue pipeline. The rough sequence is:
+In v1, affiliate feeds are the only ingestion source. The rough sequence is:
 
-1. **Schedule** enabled sources -> create execution record -> enqueue crawl/fetch work
-2. **Fetch** source URLs (HTTP)
-3. **Extract** offers from pages/feed payloads
-4. **Normalize** extracted items (ammo-specific normalization)
-5. **Write** upserts into Postgres
-6. **Alert** triggers as appropriate
+1. **Schedule** enabled affiliate feeds -> create run record -> enqueue processing work
+2. **Fetch** feed files (FTP/SFTP)
+3. **Parse** offers and normalize ammo attributes
+4. **Write** append-only price records into Postgres
+5. **Alert** triggers as appropriate
 
 **Key components in Harvester**
-- `src/scheduler/*` for crawl scheduling
-- `src/fetcher/*`, `src/extractor/*`, `src/normalizer/*`, `src/writer/*`, `src/alerter/*`
+- `src/affiliate/*` for affiliate scheduling and processing
+- `src/normalizer/*`, `src/writer/*`, `src/alerter/*`
 - BullMQ queues defined in `src/config/queues.ts`
+
+Retailer crawl/feed ingestion exists in code.
 
 ---
 
 ### 3) Merchant Portal Feed Ingestion (legacy dealer pipeline naming)
 
-Merchants provide feeds. Harvester supports Merchant portal jobs (legacy dealer-* names):
+Merchant portal ingestion exists in code. Harvester supports Merchant portal jobs (legacy dealer-* names):
 
 - feed ingest
 - SKU match
@@ -218,10 +220,10 @@ Merchant portal job scheduling runs inside the worker process via a scheduler fu
 ## Visibility Stack (Canonical)
 
 - **Eligibility** (Retailer): `retailers.visibilityStatus = ELIGIBLE`
-- **Entitlement** (Merchant↔Retailer listing): `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`
+- **Entitlement** (Merchant-Retailer listing): `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE` when a relationship exists.
 - **Corrections overlay**: Adjusts facts (prices) only; does not change eligibility/listing.
-- **Query-time predicate**: consumer offers must satisfy eligibility AND entitlement. Subscription status is not a consumer visibility gate.
-- **v1 constraint**: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
+- **Query-time predicate**: consumer offers must satisfy eligibility and listing where a relationship exists. Subscription status is not a consumer visibility gate.
+- **v1 constraint**: Retailers may have no Merchant relationship in v1; when a relationship exists, listing status still applies.
 
 This stack must be enforced in all consumer reads (search, product, dashboard, alerts).
 
@@ -236,7 +238,7 @@ This stack must be enforced in all consumer reads (search, product, dashboard, a
 
 ### Merchant identity
 
-- Merchant portal has its own auth flows under `apps/dealer/app/api/auth/*` (legacy path).
+- Merchant portal auth flows exist under `apps/dealer/app/api/auth/*` (legacy path),.
 - Retailer feed management and quarantine endpoints exist in the portal under `apps/dealer/app/api/feed/*` (legacy path).
 
 ### Admin identity
@@ -246,7 +248,7 @@ This stack must be enforced in all consumer reads (search, product, dashboard, a
 
 ### Subscription enforcement (merchant)
 
-- Consumer visibility is governed by the visibility stack: Retailer eligibility (`visibilityStatus = ELIGIBLE`) + Merchant↔Retailer entitlement (`listingStatus = LISTED` and relationship `status = ACTIVE`). Subscription status is not a consumer visibility predicate.
+- Consumer visibility remains governed by Retailer eligibility and listing where a relationship exists.
 
 ---
 
@@ -295,7 +297,7 @@ This section calls out concrete mismatches between code and current context docs
   - Embeddings are generated asynchronously in harvester/queue (spec direction).
 
 **Likely code/doc change**
-- If staying API-centric for v1, architecture docs should reflect that and treat queue-based embedding as deferred.
+- If staying API-centric for v1, architecture docs should reflect that and treat queue-based embedding as out of scope for v1.
 
 ---
 

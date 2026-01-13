@@ -89,7 +89,7 @@ interface ScoringResult {
 }
 ```
 
-**Current Implementation**: `weighted-exact` (v1.1.0)
+**Current Implementation**: `weighted-exact` (current)
 - TF-IDF cosine similarity for title matching
 - Exact match bonuses for brand, caliber, grain, round count
 - Configurable weights via `WeightedExactConfig`

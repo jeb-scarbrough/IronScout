@@ -6,7 +6,7 @@ This document is intentionally operational and conservative. It describes **what
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary).
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -34,9 +34,9 @@ The harvester is designed for **correctness, traceability, and idempotency**, no
 - Uses **BullMQ + Redis** for job orchestration
 - Writes directly to Postgres via Prisma
 - Runs multiple pipelines in the same worker process:
-  - Retailer / affiliate ingestion
-  - Merchant-portal feed ingestion (legacy dealer naming)
-  - Merchant-portal benchmarks and insights (legacy dealer naming)
+  - Affiliate ingestion (v1)
+  - Retailer crawl/feed ingestion
+  - Merchant-portal feed ingestion and benchmarks/insights (legacy dealer naming)
 
 This architecture favors simplicity over isolation in v1.
 
@@ -44,12 +44,12 @@ This architecture favors simplicity over isolation in v1.
 
 ## Ingestion Pipelines
 
-This pipeline processes Merchant-configured ingestion to produce Retailer-keyed consumer prices (`prices.retailerId`).
-All consumer price outputs are keyed by `retailerId`, regardless of which Merchant configured or submitted the feed.
+This pipeline processes affiliate ingestion to produce Retailer-keyed consumer prices (`prices.retailerId`).
+All consumer price outputs are keyed by `retailerId` (affiliate feeds only in v1).
 
-### 1) Retailer / Affiliate Ingestion
+### 1) Affiliate Ingestion (v1)
 
-This pipeline ingests third-party retailer or affiliate sources.
+This pipeline ingests affiliate sources.
 
 **High-level stages:**
 1. Schedule crawl
@@ -133,8 +133,8 @@ Retailer feeds are ingested through a separate pipeline (legacy dealer-* naming)
 
 ### Current State
 
-- Retailer feed scheduling uses `setInterval` inside the worker process (legacy dealer naming).
-- Retailer scheduling appears to follow a similar in-process pattern.
+- Affiliate feed scheduling uses a DB-locked claim loop (`FOR UPDATE SKIP LOCKED`) and is safe to run with multiple workers.
+- Retailer and Merchant schedulers use in-process `setInterval` patterns.
 
 ### Implication
 
@@ -148,7 +148,7 @@ This is a **hard scaling constraint**.
 
 ### Decision Required: Scheduler Ownership
 
-For v1, one of the following must be explicitly chosen and documented:
+Affiliate scheduling is lock-protected. For retailer/merchant schedulers, one of the following must be explicitly chosen and documented:
 
 1. **Singleton Scheduler (Recommended for v1)**
    - Only one harvester instance runs schedulers
@@ -164,7 +164,7 @@ For v1, one of the following must be explicitly chosen and documented:
    - Replace intervals with BullMQ repeatable jobs
    - Most robust, highest complexity
 
-**If no decision is made, v1 should assume a singleton scheduler.**
+**If no decision is made, assume a singleton scheduler.**
 
 ---
 
@@ -201,6 +201,7 @@ For v1, one of the following must be explicitly chosen and documented:
 
 ### Retailer Inventory (administered by Merchants)
 
+
 - Retailer SKUs anchor Retailer offers
 - SKU-to-product mapping must be stable
 - Failed mappings must be visible to ops
@@ -216,11 +217,11 @@ For v1, one of the following must be explicitly chosen and documented:
 
 ### Required Behavior
 
-- Retailer feeds must respect Merchant subscription status and Retailer eligibility
-- If a Retailer is ineligible:
+- Affiliate feeds must respect Retailer eligibility and feed health
+- If a Retailer is ineligible or a feed is quarantined:
   - Execution is marked SKIPPED
   - No downstream jobs run
-  - No benchmarks or insights are generated
+  - No downstream alerts or write-side effects are generated
 
 ### Trust Requirement
 

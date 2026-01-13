@@ -13,7 +13,7 @@ If an incident occurs and there is no applicable runbook, that is a documentatio
 
 Runbooks exist to:
 - Restore correct behavior quickly
-- Minimize user and merchant impact
+- Minimize user impact
 - Prevent data corruption
 - Preserve trust boundaries
 
@@ -44,8 +44,7 @@ Apply these principles to all incidents:
 Examples:
 - Ineligible Retailer inventory visible to consumers
 - Cross-account data exposure
-- Tier enforcement bypass
-- Billing or eligibility corruption
+- Eligibility corruption
 
 **Response goals**
 - Immediate containment
@@ -90,7 +89,7 @@ Examples:
 
 **Immediate Actions**
 1. Set `retailers.visibilityStatus` to INELIGIBLE if policy violation is confirmed.
-2. Set `merchant_retailers.listingStatus` to UNLISTED (and/or relationship `status` to SUSPENDED) for the affected pairing.
+2. If a Merchant relationship exists, set `merchant_retailers.listingStatus` to UNLISTED (and/or relationship `status` to SUSPENDED) for the affected pairing.
 3. Disable/quarantine the Retailer's feed(s) and ignore the offending ingestion run(s) (ADR-015).
 4. Verify query-time filtering uses eligibility + listing predicate in API/search.
 5. Verify alert suppression for affected Retailer.
@@ -149,47 +148,6 @@ Examples:
 - Fix idempotency logic
 - Add execution-level guards
 - Document root cause
-
----
-
-### Runbook: Tier Enforcement Failure
-
-**Symptoms**
-
-**Immediate Actions**
-1. Identify affected endpoints
-2. Disable feature flags if applicable
-
-**Verification**
-
-**Follow-Up**
-- Remove client-side enforcement paths
-- Add server-side checks
-- Add monitoring for recurrence
-
----
-
-### Runbook: Billing Delinquency Unlisting
-
-**Symptoms**
-- Merchant delinquency/suspension did not auto-unlist Retailer listings
-- Retailers became visible again immediately after recovery without explicit relist
-
-**Immediate Actions**
-1. Confirm subscription status transition event/webhook was received.
-2. Manually set `merchant_retailers.listingStatus` to UNLISTED for affected pairings; set relationship `status` to SUSPENDED if required.
-3. Verify `retailers.visibilityStatus` is still ELIGIBLE/INELIGIBLE as appropriate (do not change unless policy violation).
-4. Verify query-time predicate excludes unlisted retailers.
-
-**Verification**
-- Auto-unlist job/webhook executed or manual unlist in place.
-- Search, product, dashboard, alerts show no offers from unlisted retailers.
-- After payment recovery, listings remain UNLISTED until explicitly relisted.
-
-**Follow-Up**
-- Fix delinquency webhook/job that triggers unlisting.
-- Add monitoring for listing status changes on subscription events.
-- Add test coverage for delinquency/recovery flows.
 
 ---
 

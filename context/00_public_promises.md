@@ -14,7 +14,7 @@ If something is not promised in this document, it must be treated as **not guara
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary).
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -48,6 +48,7 @@ IronScout promises that consumers can:
 - Compare prices across retailers in a consistent format
 - Track price and availability changes over time
 - Receive alerts when prices or availability change
+- In v1, pricing data is sourced from affiliate feeds only
 
 IronScout does **not** promise:
 - The lowest price
@@ -82,18 +83,6 @@ Premium is not offered in v1. All consumer capabilities are available to every u
 
 ---
 
-## Merchant Promises
-
-- Merchants receive ingestion and normalization for the Retailers they administer.
-- Retailer SKUs are canonically matched where possible.
-- Merchants receive market context and benchmarks appropriate to their plan.
-- Retailer inventory visibility is governed by eligibility and listing policies (query-time predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`).
-- Eligibility applies to Retailer visibility, not Merchant existence. Merchant subscription tier controls portal capabilities, not whether a Retailer can exist or be visible to consumers.
-
-No guarantees are made about completeness, accuracy, or continuous availability of any Retailer’s prices.
-
----
-
 ## Availability and Data Freshness
 
 IronScout promises to make reasonable efforts to:
@@ -120,7 +109,6 @@ IronScout does not provide legal, regulatory, or compliance advice.
 
 These promises are enforced by:
 - Retailer eligibility + listing rules (query-time predicate)
-- Subscription enforcement for Merchant portal features (not consumer visibility)
 - Conservative UI language
 - Explicit exclusions where guarantees cannot be made
 

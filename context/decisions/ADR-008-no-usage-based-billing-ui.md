@@ -17,4 +17,4 @@ Merchant billing is subscription-based only. Usage metrics are internal and not 
 Simpler billing at the cost of pricing granularity.
 
 ## Notes
-May be revisited post-v1.
+May be revisited in a future release.

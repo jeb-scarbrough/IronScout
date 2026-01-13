@@ -16,7 +16,7 @@ If Harvester behavior contradicts those documents, this document is wrong.
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary).
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -40,8 +40,7 @@ It is an operational system whose correctness directly affects trust.
 ### Data Ingestion
 
 Harvester is responsible for ingesting:
-- Retailer and affiliate sources
-- Merchant-submitted feeds that produce Retailer price data
+- Affiliate sources only (v1)
 
 Responsibilities include:
 - Fetching external data
@@ -89,21 +88,19 @@ If data cannot be trusted, it must not be written.
 
 Eligibility applies to **Retailer visibility**, not Merchant existence.
 
-- **Merchants** authenticate and administer one or more Retailers.
+- Retailers may have no Merchant relationship; listing applies only when a relationship exists.
 - **Retailers** are the consumer-facing storefronts shown in search results.
 - Consumer `prices` are keyed by `retailerId`.
-- Merchant benchmarks (`pricing_snapshots`) are keyed by `merchantId`.
 
 ### What eligibility does
 If a **Retailer is ineligible**, its consumer-facing price events are excluded from user-visible reads and from alert evaluation.
 
 ### What eligibility does not do
-Eligibility does not delete data and does not disable a Merchant account. Merchant access to the portal is governed by Merchant subscription and account status.
+Eligibility does not delete data.
 
 ### Feeds vs outputs
-Merchants may configure or submit feeds, but ingestion outputs are:
-- Consumer prices → `prices` (keyed by `retailerId`)
-- Merchant-submitted benchmarks → `pricing_snapshots` (keyed by `merchantId`)
+In v1, affiliate feeds are the only ingestion source. Outputs are:
+- Consumer prices -> `prices` (keyed by `retailerId`)
 
 Any remaining `dealer-*` pipeline names or folders are legacy naming only and must not be interpreted as “dealer == storefront.”
 

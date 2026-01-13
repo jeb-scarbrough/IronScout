@@ -43,7 +43,7 @@ If isolation cannot be guaranteed, the environment must not be used.
 
 ### Purpose
 
-Production is the live environment used by real consumers and dealers.
+Production is the live environment used by real consumers.
 
 It must:
 - Enforce all trust and eligibility rules
@@ -70,7 +70,7 @@ All changes must go through the standard deployment process.
 Staging is used to:
 - Validate deployments
 - Test ingestion and eligibility behavior
-- Verify merchant subscription enforcement
+- Verify affiliate ingestion and retailer visibility enforcement
 - Reproduce production issues safely
 
 Staging should be **as close to production as possible** without risking live data.

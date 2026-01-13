@@ -771,7 +771,7 @@ Labels: none (or source_kind if needed)
 
 B3) Future metrics (v2+)
 
-The following metrics are defined in the spec but deferred to future implementation:
+The following metrics are defined in the spec but not implemented in v1:
 
 resolver_queue_lag_seconds (Gauge) - queue depth monitoring
 

@@ -1,6 +1,6 @@
 # Data Model
 
-This document describes IronScout's current data model as represented in the existing documentation and reflected by how the apps behave (API search, harvester ingestion, retailer feeds, subscriptions).
+This document describes IronScout's current data model as represented in the existing documentation and reflected by how the apps behave.
 
 **Source of truth note:** the only Prisma schema we have in the provided materials is the excerpt in `database.md`, and it contains `...` placeholders. That means some fields and relations are intentionally omitted. Before treating this as final, the repo should expose the actual Prisma schema (e.g. `prisma/schema.prisma` or `packages/db/prisma/schema.prisma`) and this document should be reconciled against it.
 
@@ -10,7 +10,7 @@ This document describes IronScout's current data model as represented in the exi
 
 Per `reference/Merchant-and-Retailer-Reference.md`:
 
-- **Merchant**: B2B portal account with authentication, billing, and subscription. Merchants may administer one or more Retailers.
+- **Merchant**: B2B portal account with authentication, billing, and subscription.
 - **Retailer**: Consumer-facing storefront whose prices appear in search results. Prices are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of price data. Explains provenance, not ownership.
 - **Eligibility**: Applies to Retailer visibility, not Merchant existence or portal access.
@@ -24,8 +24,7 @@ Per `reference/Merchant-and-Retailer-Reference.md`:
 - Represent consumer-facing Retailers whose prices appear in search results.
 - Track price history in a queryable, uniform format.
 - Support alerts and watchlists without cross-account leakage.
-- Support merchant ingestion, feed health, benchmarking, and insights.
-- Support merchant subscription enforcement and admin auditability.
+- Support affiliate feed ingestion and admin observability for consumer pricing.
 
 ---
 
@@ -39,10 +38,10 @@ At a high level:
 - **Price** is the time-series record of a consumer price (keyed by `retailerId` + `productId`).
 - **Alert** is a user-defined trigger referencing product/filters.
 - **RetailerFeed / RetailerSku** model retailer inventory ingestion and mapping to canonical products.
-- **MarketBenchmark / MerchantInsight** model "context" for merchants (not recommendations).
+- **MarketBenchmark / MerchantInsight** model "context" for merchants.
 - **Source / Execution** model harvester ingestion operations.
 - **AdminAuditLog** captures privileged actions.
-- v1 constraint: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing.
+- Retailers may have no Merchant relationship; listing applies only when a relationship exists.
 
 ---
 
@@ -77,7 +76,7 @@ Typical fields (per docs and other design intent):
 - normalized descriptors for filtering and AI search
 
 Invariants:
-- Product should be stable and deterministic for grouping.
+- Product-Retailer linkage for consumer offers is expressed through `prices` only (no implicit foreign keys elsewhere).
 - Normalized attributes should be the only ones used for filtering/ranking logic.
 
 **Decision to confirm**
@@ -98,8 +97,8 @@ Invariants:
 - Retailer eligibility/listing determine consumer visibility.
 - Eligibility is enforced at query time (ADR-005).
 - `visibilityStatus` (ELIGIBLE | INELIGIBLE | SUSPENDED) is the authoritative eligibility flag.
-- Product↔Retailer linkage for consumer offers is expressed through `prices` only (no implicit foreign keys elsewhere).
-- Consumer visibility predicate: `retailers.visibilityStatus = ELIGIBLE` AND `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE`; subscription state is never part of this predicate.
+- Product-Retailer linkage for consumer offers is expressed through `prices` only (no implicit foreign keys elsewhere).
+- Consumer visibility predicate: `retailers.visibilityStatus = ELIGIBLE` with listing/status applied only when a Merchant relationship exists; subscription state is never part of this predicate.
 
 ---
 
@@ -140,6 +139,7 @@ Invariants:
 
 ## Merchant Domain Model
 
+
 ### Merchant
 Represents a B2B portal account (subscription, billing, auth boundary).
 
@@ -155,7 +155,7 @@ Key responsibilities:
 - **Eligibility applies to Retailer visibility, not Merchant existence.**
 
 **Doc excerpt indicates**
-- subscription status and tier exist (details are in subscription management docs).
+- subscription status and tier exist (details live in subscription management docs).
 - relations to feeds, users, contacts, SKUs.
 
 ---
@@ -168,7 +168,7 @@ Invariants:
 - Merchant portal data must not leak across Merchants.
 - Merchant portal permissions should be explicit (if you have roles).
 
-### Merchant ↔ Retailer Relationship (Entitlement)
+### Merchant-Retailer Relationship (Entitlement)
 Represents the explicit mapping between a Merchant and the Retailers it administers.
 
 Key responsibilities:
@@ -177,8 +177,8 @@ Key responsibilities:
 - Enable per-user, per-retailer permissions (e.g., `merchant_user_retailers`).
 
 Invariants:
-- Mapping is explicit (v1: UNIQUE(retailerId) per Merchant) and auditable.
-- Consumer visibility predicate includes `visibilityStatus = ELIGIBLE` AND `listingStatus = LISTED` AND relationship `status = ACTIVE`.
+- Mapping is explicit and auditable; listing applies when a relationship exists.
+- Consumer visibility predicate includes eligibility and listing/status checks only when a Merchant relationship exists.
 
 ---
 
@@ -191,7 +191,7 @@ Key responsibilities:
 
 Operational invariants:
 - Feed health affects Retailer eligibility for visibility (per public promises).
-- If a feed is "SKIPPED" due to subscription status, it must not produce downstream outputs (benchmarks/insights).
+- If a feed is "SKIPPED", it must not produce downstream outputs (benchmarks/insights).
 
 ---
 
@@ -250,7 +250,7 @@ Publishing merchant data into consumer prices requires an explicit mapping to a 
 ## Harvester Operational Model
 
 ### Source
-Represents a crawlable/ingestable source for the harvester (retailer feed/page).
+Represents a crawlable/ingestable source for the harvester (the harvester).
 
 Key responsibilities:
 - Configuration and enable/disable state.
@@ -278,7 +278,7 @@ Invariants:
 Represents an auditable record of privileged changes.
 
 Required coverage:
-- Subscription changes
+- Subscription changes 
 - Retailer eligibility changes
 - Feed enable/disable/quarantine
 - Any override that changes visibility or billing state
@@ -302,9 +302,7 @@ From `database.md`, the model relies on enums such as:
 **Decision to confirm**
 - Ensure eligibility-related enums are centralized and referenced consistently across:
   - API shaping
-  - merchant portal
   - admin portal
-  - harvester SKIPPED logic
 
 ---
 
@@ -334,12 +332,12 @@ From `database.md`, the model relies on enums such as:
 ## Canonical Statements (Required)
 
 This document explicitly supports:
-- **Merchants authenticate; Retailers do not**
+- **Merchants authenticate; Retailers do not **
 - **Consumer prices are keyed by `retailerId`**
 - **Benchmarks/pricing_snapshots are keyed by `merchantId`**
 - **Eligibility applies to Retailer visibility, not Merchant existence**
-- **Merchant↔Retailer mapping is explicit (v1 UNIQUE(retailerId)); per-retailer listing/permissions gate visibility**
-- **Consumer visibility predicate: visibilityStatus = ELIGIBLE AND listingStatus = LISTED AND relationship status = ACTIVE (no subscription gating)**
+- **Merchant-Retailer mapping is explicit; listing/permissions gate visibility when a relationship exists**
+- **Consumer visibility predicate: visibilityStatus = ELIGIBLE with listing/status applied only when a relationship exists (no subscription gating)**
 
 ---
 

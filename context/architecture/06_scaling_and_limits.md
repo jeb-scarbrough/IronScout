@@ -204,7 +204,7 @@ IronScout v1 does **not** aim to support:
 - Enterprise-scale Merchant networks
 - Autonomous agents or pricing automation
 
-Any work toward these goals must be explicitly scoped as post-v1.
+Any work toward these goals must be explicitly scoped as future work.
 
 ---
 

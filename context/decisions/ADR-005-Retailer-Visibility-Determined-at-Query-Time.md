@@ -38,7 +38,7 @@ Specifically:
   - `merchant_retailers.listingStatus = LISTED`
   - `merchant_retailers.status = ACTIVE`
 - Subscription status MUST NOT be used as a visibility gate in consumer queries.
-- v1 constraint: each Retailer belongs to exactly one Merchant.
+- v1: Retailers may have no Merchant relationship; listing applies only when a relationship exists.
 - Eligibility and listing are resolved dynamically based on current state.
 - Ingestion may still skip writing data for ineligible or unlisted Retailers, but query-time enforcement is mandatory.
 - Alerts must check Retailer eligibility/listing at evaluation time.
@@ -85,4 +85,5 @@ This ADR explicitly supports:
 - Eligibility applies to Retailer visibility, not Merchant existence
 - Listing is an explicit Merchant↔Retailer entitlement; both eligibility and listing must be true for consumer visibility
 - Merchant subscription status is not a consumer visibility predicate
-- v1: each Retailer belongs to exactly one Merchant; Merchants pay per Retailer listing (entitlement unit)
+- v1: Retailers may have no Merchant relationship; listing applies only when a relationship exists
+- Merchant billing per Retailer listing is an entitlement unit when billing exists

@@ -14,7 +14,7 @@ If a behavior cannot be secured or explained clearly, it must not be shipped.
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary).
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -53,7 +53,6 @@ Trust is maintained by:
 - Auth boundary = Merchant. Retailers do not authenticate. All access is via Merchant users with explicit Retailer permissions.
 
 Visibility boundary = Retailer. Eligibility and visibility are enforced by:
-- Subscription state (merchant)
 - Feed health
 - Platform policies
 
@@ -64,7 +63,6 @@ Visibility boundary = Retailer. Eligibility and visibility are enforced by:
 - Admin access is restricted and explicit
 - Admin impersonation exists for support and troubleshooting only
 - Impersonation does not bypass:
-  - subscription enforcement
   - Retailer visibility rules
   - billing logic
 
@@ -87,7 +85,7 @@ If isolation cannot be guaranteed, the feature must be removed or restricted.
 
 - Only eligible Retailer inventory may appear in consumer experiences
 - Eligibility changes propagate deterministically
-- Suspended or blocked Merchants lose portal access; ineligible Retailers must be removed from:
+- In v1, ineligible Retailers must be removed from:
   - search results
   - alerts
   - watchlists
@@ -134,11 +132,6 @@ Language is part of the security surface.
 ---
 
 ## Billing and Subscription Integrity
-
-- Subscription state is enforced server-side
-- Tier benefits are derived from data shaping, not UI gating
-- Expired and suspended states are respected across all services
-- Billing-related admin actions are logged and auditable
 
 If billing state is ambiguous, access must default to restricted.
 

@@ -58,20 +58,20 @@ The following guides are required for v1 operations.
 ### Guide: Debugging a Broken Retailer Feed (legacy naming)
 
 **When to use**
-- Merchant reports missing or incorrect inventory
-- Ingestion errors appear for a Retailer feed
+- Feed contact reports missing or incorrect inventory
+- Ingestion errors appear for an affiliate feed
 
 **Steps**
-1. Open Admin app → Merchants → Feeds
+1. Open Admin app → Affiliate Feeds
 2. Identify feed status and last execution
 3. Inspect execution logs and error summaries
 4. Determine if issue is format, connectivity, or mapping
 5. Quarantine feed if data integrity is at risk
-6. Notify Merchant of issue and next steps
+6. Notify the feed contact of issue and next steps
 
 **Verification**
 - Feed no longer propagates bad data
-- No downstream benchmarks or alerts run
+- No downstream alerts run
 
 ---
 
@@ -96,14 +96,13 @@ The following guides are required for v1 operations.
 ### Guide: Verifying Retailer Eligibility Enforcement
 
 **When to use**
-- Merchant subscription changes
+- Retailer eligibility changes
 - Visibility-related incidents
 
 **Steps**
-1. Check Merchant subscription status
-2. Confirm feed health
-3. Verify API search results exclude Retailer when ineligible
-4. Verify alerts are suppressed
+1. Confirm Retailer eligibility status and feed health
+2. Verify API search results exclude Retailer when ineligible
+3. Verify alerts are suppressed
 
 **Verification**
 - Retailer inventory is not visible in any consumer path
@@ -231,12 +230,12 @@ The following guides are required for v1 operations.
 
 ---
 
-### Guide: Validating pricing_snapshots Retailer↔Merchant Alignment
+### Guide: Validating pricing_snapshots Retailer-Merchant Alignment
 
 **Context**
 - `pricing_snapshots` records can have both `retailerId` (optional) and `merchantId` (required)
 - When `retailerId` IS set, the pair `(retailerId, merchantId)` must be valid per `merchant_retailers`
-- V1 constraint: one retailer belongs to exactly one merchant
+- Assumption: one retailer belongs to exactly one merchant
 - Composite index `pricing_snapshots_retailer_merchant_idx` supports efficient validation queries
 
 **When to use**

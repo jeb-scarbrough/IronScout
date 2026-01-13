@@ -1,12 +1,13 @@
 # Subscription and Billing (Merchant-scoped)
 
+
 This document describes how subscriptions and billing are modeled and enforced in IronScout **as implemented today**, with explicit callouts where behavior, documentation, or code paths require decisions or tightening.
 
 This document defines **mechanics and enforcement**, not pricing language. Pricing promises live in `context/04_pricing_and_tiers.md`.
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets.
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -20,7 +21,7 @@ Subscriptions apply to **Merchants** (B2B portal accounts). Merchants authentica
 - Billing unit = per Retailer listing (entitlement). Merchants pay per Retailer listing.
 - Pricing and consumer visibility are per-Retailer listing (entitlement) and eligibility, not subscription.
 - Eligibility applies to **Retailer visibility**, not Merchant existence. Listing is an explicit Merchant↔Retailer entitlement.
-- v1 constraint: each Retailer belongs to exactly one Merchant.
+- Retailer-Merchant relationships may exist; listing applies only when a relationship exists.
 
 
 ## Data model mapping
@@ -32,7 +33,7 @@ Subscriptions apply to **Merchants** (B2B portal accounts). Merchants authentica
 
 > Legacy note: some code paths, env vars, queues, or folders may still use the prefix `dealer` during migration. This is naming only. The canonical concept is Merchant.
 
-## Goals (v1)
+## Goals
 
 Subscriptions and billing must:
 - Enforce access deterministically
@@ -40,13 +41,13 @@ Subscriptions and billing must:
 - Fail closed when state is ambiguous
 - Avoid creating trust or support debt
 
-v1 prioritizes correctness and simplicity over billing sophistication.
+This system prioritizes correctness and simplicity over billing sophistication.
 
 ---
 
 ## Subscription Domains
 
-IronScout has one subscription domain in v1:
+IronScout has one subscription domain when merchant billing is enabled :
 
 1. **Merchants**
 
@@ -55,6 +56,7 @@ Consumer subscriptions are not offered in v1.
 ---
 
 ## Merchant Subscriptions
+
 
 ### Model
 

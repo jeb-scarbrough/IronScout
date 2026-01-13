@@ -99,7 +99,7 @@ Documented in: `context/operations/04_guides.md` → "Guide: Deleting a Retailer
 
 ### pricing_snapshots Alignment Constraint
 
-`pricing_snapshots` has both `retailerId` (optional) and `merchantId` (required). When `retailerId` IS set, the pair `(retailerId, merchantId)` should be valid per `merchant_retailers` (v1 constraint: one retailer → one merchant).
+`pricing_snapshots` has both `retailerId` (optional) and `merchantId` (required). When `retailerId` IS set, the pair `(retailerId, merchantId)` should be valid per `merchant_retailers` (assumption: one retailer → one merchant).
 
 **Current State**:
 - Composite index `pricing_snapshots_retailer_merchant_idx` exists for efficient validation queries

@@ -48,7 +48,7 @@ If this constraint cannot be enforced operationally, Harvester must be deployed 
 - Limits horizontal scaling of schedulers
 - Requires explicit operational discipline
 
-This decision may be revisited post-v1 if ingestion volume or team size increases.
+This decision may be revisited in a future release if ingestion volume or team size increases.
 
 ## Notes
 

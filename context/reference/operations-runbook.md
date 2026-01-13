@@ -4,7 +4,7 @@ This document covers operational procedures for monitoring, debugging, and maint
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets.
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -28,12 +28,12 @@ Bull Board provides a web UI for monitoring all BullMQ queues in the harvester. 
 | `normalize` | Data normalization and validation |
 | `write` | Database writes and price updates |
 | `alert` | Price/availability alert triggers |
-| `retailer-feed-ingest` | Retailer product feed ingestion |
+| `retailer-feed-ingest` | Retailer product feed ingestion (inactive in v1) |
 | `affiliate-feed` | Affiliate feed processing (FTP/SFTP) |
 | `affiliate-feed-scheduler` | Affiliate feed scheduling ticks |
 | `product-resolve` | Product identity resolution (Spec v1.2) |
 
-> **Removed for v1**: `merchant-sku-match`, `merchant-benchmark`, `merchant-insight` queues were removed. See `apps/harvester/src/config/queues.ts` for details.
+> **Inactive in v1**: `merchant-sku-match`, `merchant-benchmark`, `merchant-insight` queues are not active in v1. See `apps/harvester/src/config/queues.ts` for details.
 
 ### Starting Bull Board
 
@@ -153,8 +153,8 @@ Workers log startup and heartbeat messages. Check logs for:
 
 ## FAQ: Monitoring, Silence, and Alerts
 
-- **Why didn’t I get an alert?**  
-  Alerts fire only for explicitly saved items when a meaningful price drop or back-in-stock event occurs. Caps apply: max 1 per item per 24h, max 1 per user per 6h, max 3 per user per day. If caps are reached or signals are minor, the alert is suppressed. Free users also receive delayed delivery.
+- **Why didn't I get an alert?**  
+  Alerts fire only for explicitly saved items when a meaningful price drop or back-in-stock event occurs. Caps apply: max 1 per item per 24h, max 1 per user per 6h, max 3 per user per day. If caps are reached or signals are minor, the alert is suppressed.
 
 - **Why does my dashboard look empty?**  
   Silence is expected. The dashboard shows at most one hero when confidence is high; otherwise it shows a calm “nothing urgent” state and your saved items. No filler or trends are shown when nothing qualifies.

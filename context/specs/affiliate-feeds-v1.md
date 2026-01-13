@@ -619,7 +619,7 @@ This constraint is best-effort backup, not relied upon exclusively. Application 
 
 **Accepted for v1.** This is the simpler model: one source of truth for expiry. Audit log on change provides explainability.
 
-**Post-v1 option:** Store `expiryHoursAtRun` on `AffiliateFeedRun` for debugging/explainability. Allows answering: "what expiry window did this run use?"
+**Optional future:** Store `expiryHoursAtRun` on `AffiliateFeedRun` for debugging/explainability. Allows answering: "what expiry window did this run use?"
 
 ---
 
@@ -646,18 +646,18 @@ Identity type is immutable once set. If a higher-priority identifier appears lat
 
 **Observability:** Emit `IDENTITY_UPGRADE_DETECTED` warning when this occurs.
 
-### 3.3.1 Identity Flap Detection (Post-v1)
+### 3.3.1 Identity Flap Detection (Future)
 
-**Status: DEFERRED.** The URL_HASH quality gate (Section 3.3.2) provides sufficient protection for v1. Flap detection is a "nice warning" feature, not a safety feature.
+**Status: out of scope for v1.** The URL_HASH quality gate (Section 3.3.2) provides sufficient protection for v1. Flap detection is a "nice warning" feature, not a safety feature.
 
 **Problem it would solve:** A feed with intermittent data quality issues (SKU present in some runs, missing in others) can create runaway duplicate SourceProducts. Each "upgrade" creates a new product, and the cycle repeats.
 
-**Post-v1 implementation:**
+**Future implementation:**
 - Track identity type changes per normalized URL across runs
 - Emit `IDENTITY_FLAP_DETECTED` if same URL produces different `identityType` values within last N runs
 - Consider auto-pause if flap count exceeds threshold
 
-**Why deferred:** URL_HASH spike blocking (Section 3.3.2) catches the primary failure mode (excessive URL_HASH fallback). Flap detection adds observability but not safety. Cutting this speeds v1 delivery.
+**Why out of scope:** URL_HASH spike blocking (Section 3.3.2) catches the primary failure mode (excessive URL_HASH fallback). Flap detection adds observability but not safety. Cutting this speeds v1 delivery.
 
 ### 3.3.2 URL_HASH Quality Gate
 
@@ -762,16 +762,16 @@ async function checkPathCaseCollision(url: string, sourceId: string): Promise<vo
 
   // To find collisions, we'd need a stored caseInsensitiveHash column
   // For v1: skip DB lookup, just log URL_HASH usage as a data quality signal
-  // Post-v1: add normalizedUrlHashInsensitive column if collisions become an issue
+  // Future: add normalizedUrlHashInsensitive column if collisions become an issue
 }
 ```
 
 **v1 simplified approach:**
 - Log `URL_HASH_FALLBACK` when URL-hash identity is used (data quality signal)
-- Defer collision detection to post-v1 if URL_HASH usage is high for a feed
+- Consider collision detection if URL_HASH usage is high for a feed
 - Avoids computing two hashes per row
 
-**Future (post-v1):**
+**Future:**
 - Add `normalizedUrlHashInsensitive` column to SourceProduct
 - Per-feed `urlNormalizationMode` option: `PRESERVE_PATH_CASE` (default) or `LOWERCASE_PATH`
 - Admin can flip mode for retailers with case-insensitive servers
@@ -1020,7 +1020,7 @@ ON prices(source_product_id, created_at DESC);
 
 Without this index, the lateral join in search queries will be expensive at scale.
 
-**Future optimization (post-v1):**
+**Future optimization:**
 
 If query performance degrades, consider a materialized `latest_prices` table:
 - Populated by trigger or async job on Price insert
@@ -1114,7 +1114,7 @@ This is acceptable for v1:
 - No data corruption - just a delayed run
 - Ops should not assume guaranteed cadence
 
-**Post-v1 improvement (if needed):** Add outbox table `affiliate_feed_schedule_claims(feedId, claimedAt, enqueuedAt)`. Claim writes to outbox, separate process enqueues and marks `enqueuedAt`. Recovers from crashes by re-enqueuing uncompleted claims.
+**Future improvement (if needed):** Add outbox table `affiliate_feed_schedule_claims(feedId, claimedAt, enqueuedAt)`. Claim writes to outbox, separate process enqueues and marks `enqueuedAt`. Recovers from crashes by re-enqueuing uncompleted claims.
 
 **Why this pattern:**
 - `FOR UPDATE SKIP LOCKED` ensures only one scheduler claims each row
@@ -1251,7 +1251,7 @@ If advisory lock not acquired for a **manual** run (from `manualRunPending`):
 
 This eliminates noisy `CANCELED` records entirely.
 
-**Queue visibility (v1):** Use BullMQ's built-in UI or logs to observe queued jobs. Do not overload run status for queue state. If structured job event tracking is needed post-v1, consider a separate `affiliate_feed_job_events` append-only table.
+**Queue visibility (v1):** Use BullMQ's built-in UI or logs to observe queued jobs. Do not overload run status for queue state. If structured job event tracking is needed later, consider a separate `affiliate_feed_job_events` append-only table.
 
 ### 6.4 Complete Worker Flow
 
@@ -1672,7 +1672,7 @@ enum AffiliateFeedRunStatus {
 }
 ```
 
-**Queue visibility (v1):** Use BullMQ's built-in UI or logs to observe queued jobs. Do not overload run status for queue state. If structured job event tracking is needed post-v1, consider a separate `affiliate_feed_job_events` append-only table rather than polluting run history with non-runs.
+**Queue visibility (v1):** Use BullMQ's built-in UI or logs to observe queued jobs. Do not overload run status for queue state. If structured job event tracking is needed later, consider a separate `affiliate_feed_job_events` append-only table rather than polluting run history with non-runs.
 
 ---
 
@@ -2019,7 +2019,7 @@ WHERE seen.run_id = :runId
 **Performance notes:**
 - Single UPDATE is efficient in PostgreSQL for 50K+ rows
 - v1: Keep single UPDATE, monitor `promoteRowsUpdated` and `durationMs` in `PROMOTE_COMPLETE` log
-- Post-v1: If lock time becomes problematic, chunk by `source_product_id` ranges
+- Future: If lock time becomes problematic, chunk by `source_product_id` ranges
 
 ### 8.3 Why This Works
 
@@ -2397,7 +2397,7 @@ Credentials are encrypted using AES-256-GCM. The symmetric key is provided via e
 - Format: Base64-encoded 32-byte key (AES-256)
 - Validation: Decode base64, ensure length is exactly 32 bytes. **Hard fail on startup if invalid.**
 
-**Rotation:** Post-v1. For v1, single key is acceptable. `secretKeyId`/`secretVersion` fields are placeholders for future KMS migration.
+**Rotation:** Future. For v1, single key is acceptable. `secretKeyId`/`secretVersion` fields are placeholders for future KMS migration.
 
 ### 10.2 Ciphertext Payload Format
 
@@ -2681,7 +2681,7 @@ WHERE (
 **v1 reality:**
 - Affiliate products: `SourceProduct` + `SourceProductPresence` + `Price`
 - DIRECT products: Existing DealerSku pipeline (unchanged)
-- Search unification is post-v1
+- Search unification is future work
 
 **Display primary behavior by source kind:**
 
@@ -2707,7 +2707,7 @@ In v1, search queries return `SourceProduct` records directly. There is no join 
 - No `canonicalSkuId` FK exists on `SourceProduct`
 - Search results are grouped/deduplicated at the application layer if needed
 
-**Future (post-v1): Canonical SKU merge**
+**Future: Canonical SKU merge**
 
 When canonical merge is implemented:
 - Add `canonicalSkuId` FK to `SourceProduct` (nullable, filled when exact match exists)
@@ -2748,7 +2748,7 @@ Same rules as existing sources. Tiers affect features, not product visibility.
 - `buildTrackingUrl(offer, source)` function
 - Uses `Source.affiliateTrackingTemplate`
 
-### 14.2 Deferred
+### 14.2 Future
 
 - Click redirect endpoint
 - Click event logging
@@ -3065,7 +3065,7 @@ interface BaseLogContext {
 | INFO | `CIRCUIT_BREAKER_PASSED` | `wouldExpireCount`, `expirePercent`, `thresholdPercent`, `thresholdAbsolute` | No spike, proceeding |
 | WARN | `CIRCUIT_BREAKER_TRIPPED` | `wouldExpireCount`, `expirePercent`, `thresholdPercent`, `thresholdAbsolute`, `reason` | Spike detected, blocking |
 | INFO | `PROMOTE_START` | `productsToPromote` | Beginning success timestamp promotion |
-| DEBUG | `PROMOTE_PROGRESS` | `promoted`, `total`, `percentComplete` | Every 1000 products (if chunking post-v1) |
+| DEBUG | `PROMOTE_PROGRESS` | `promoted`, `total`, `percentComplete` | Every 1000 products (if chunking is added) |
 | INFO | `PROMOTE_COMPLETE` | `promoteRowsUpdated`, `productsExpired`, `durationMs` | Promotion finished (monitor for lock time issues) |
 
 ### 17.9 Admin Action Logs
@@ -3391,10 +3391,10 @@ This appendix records all architecture decisions made during the specification p
 | ID | Question | Decision |
 |----|----------|----------|
 | Q5.1.1 | Null Schedule Frequency | Null = manual only. No auto-runs. |
-| Q5.1.2 | Scheduling Granularity | Hours only (1, 2, 4, 6, 12, 24) for v1. Cron expressions deferred. |
+| Q5.1.2 | Scheduling Granularity | Hours only (1, 2, 4, 6, 12, 24) for v1. Cron expressions are not in v1. |
 | Q5.1.3 | Computing nextRunAt | Use explicit `nextRunAt` field. Scheduler queries `nextRunAt <= now()`, then sets `nextRunAt = now() + frequency`. Prevents drift and defines backlog behavior (1 run, not N). |
 | Q5.1.4 | Atomic Feed Claiming | Use `FOR UPDATE SKIP LOCKED` in scheduler to atomically claim due feeds. Prevents duplicate scheduling even with multiple scheduler instances. |
-| Q5.1.5 | Scheduler Delivery Guarantee | At-most-once per interval. If scheduler crashes after claim but before enqueue, run is skipped until next `nextRunAt`. Acceptable for v1; outbox pattern documented for post-v1 if needed. |
+| Q5.1.5 | Scheduler Delivery Guarantee | At-most-once per interval. If scheduler crashes after claim but before enqueue, run is skipped until next `nextRunAt`. Acceptable for v1; outbox pattern documented for future use if needed. |
 | Q5.3.1 | Run Mutual Exclusion | Advisory lock only, no BullMQ jobId dedupe. JobId dedupe interacts badly with `manualRunPending` follow-up enqueues (can strand pending=true). Lock-busy handling is sufficient: multiple jobs may queue but only one runs, others exit cleanly. |
 | Q5.3.2 | Run Now Button | Always set `manualRunPending=true` then enqueue (idempotent, no TOCTOU race). Job either acquires lock and clears flag, or finds lock busy and exits (flag stays true for active run to pick up). |
 | Q5.3.3 | Lock-Busy Behavior | No CANCELED run records. Scheduled runs: skip silently (DEBUG log). Manual runs: keep `manualRunPending=true` for retry. Run records created only after lock acquired. |
@@ -3414,7 +3414,7 @@ This appendix records all architecture decisions made during the specification p
 | Q6.1.1 | Normalized URL Hash | Remove tracking params, preserve product params. Lowercase host, remove protocol, sort params, SHA-256. |
 | Q6.1.2 | Store Secondary Identifiers | Store all identifiers on SourceProduct. Use only resolved one for identity. Others are informational. |
 | Q6.1.3 | Identity Type Changes | Identity type is immutable. Higher-priority identifier creates new SourceProduct. Emit `IDENTITY_UPGRADE_DETECTED`. |
-| Q6.1.4 | Identity Flap Detection | **DEFERRED to post-v1.** URL_HASH quality gate provides sufficient protection. Flap detection adds observability, not safety. Cut to speed v1 delivery. |
+| Q6.1.4 | Identity Flap Detection | **Out of scope for v1.** URL_HASH quality gate provides sufficient protection. Flap detection adds observability, not safety. Cut to speed v1 delivery. |
 | Q6.1.5 | URL_HASH Quality Gate | Track `urlHashFallbackCount` per run. Block promotion if >50% or >1000 products use URL_HASH. `expiryBlocked=true`, `reason='DATA_QUALITY_URL_HASH_SPIKE'`. Admin can approve if acceptable for feed. Prevents runaway duplicates from unstable identifiers. |
 | Q6.2.1 | Partial Failure Handling | Keep successful upserts, mark run FAILED, set `isPartial = true`. No expiry on failed runs. |
 | Q6.2.2 | lastSeenAt on Failed Runs | Update `lastSeenAt` as processed. Add `lastSeenSuccessAt` for expiry (updated only after circuit breaker passes). |
@@ -3434,13 +3434,13 @@ This appendix records all architecture decisions made during the specification p
 | Q7.2.3 | Admin Approval Action | "Approve Activation" with guardrails: must be SUCCEEDED + blocked + not already approved + no newer successful run exists. Prevents promoting stale state. |
 | Q7.2.4 | Approval Concurrency | Acquire feed advisory lock before approval (prevents ingest race). Use conditional `UPDATE ... WHERE expiryApprovedAt IS NULL` to prevent double-approve atomically. Check rows affected. |
 | Q7.2.5 | expiryHours Validation | Enforce range 1-168 hours at all API boundaries (create, update, enable). Zero/negative breaks time-window model. Unbounded disables expiration. DB CHECK constraint as defense-in-depth, application validation is primary. |
-| Q7.2.6 | expiryHours Change Semantics | Changing `expiryHours` retroactively affects "active" definition. Immediate effect on search visibility and circuit breaker. Accepted for v1 (simpler). Emit `EXPIRY_HOURS_CHANGED` audit log at WARN level. Post-v1: consider `expiryHoursAtRun` on run record for explainability. |
+| Q7.2.6 | expiryHours Change Semantics | Changing `expiryHours` retroactively affects "active" definition. Immediate effect on search visibility and circuit breaker. Accepted for v1 (simpler). Emit `EXPIRY_HOURS_CHANGED` audit log at WARN level. Future: consider `expiryHoursAtRun` on run record for explainability. |
 
 ### A.6 FTP Decisions
 
 | ID | Question | Decision |
 |----|----------|----------|
-| Q8.1.1 | Protocol Support | SFTP (default, encrypted) and FTP (opt-in with warning, env kill switch, audit log). FTPS deferred. |
+| Q8.1.1 | Protocol Support | SFTP (default, encrypted) and FTP (opt-in with warning, env kill switch, audit log). FTPS is not in v1. |
 | Q8.1.2 | FTP Mode | Passive mode only. |
 | Q8.2.1 | File Selection | Fixed path per feed. Pattern matching out of scope for v1. |
 | Q8.2.2 | Reprocessing Protection | Both mtime/size precheck AND content hash. mtime as optimization, hash as source of truth. |
@@ -3459,9 +3459,9 @@ This appendix records all architecture decisions made during the specification p
 
 | ID | Question | Decision |
 |----|----------|----------|
-| Q10.3.1 | Search/Display Integration | v1: SourceProduct-based search, no canonical merge. `canonicalSkuId` FK deferred to post-v1. Fail-open query pattern. |
+| Q10.3.1 | Search/Display Integration | v1: SourceProduct-based search, no canonical merge. `canonicalSkuId` FK is reserved for future use. Fail-open query pattern. |
 | Q10.3.2 | Tier Enforcement | Same rules as existing sources. Tiers affect features, not visibility. |
-| Q10.4.1 | Click Tracking Scope | v1: `buildTrackingUrl()` only. Deferred: redirect endpoint, click logging, attribution. |
+| Q10.4.1 | Click Tracking Scope | v1: `buildTrackingUrl()` only. Future: redirect endpoint, click logging, attribution. |
 | Q10.5.1 | Multi-Network Schema | Single table with discriminator. `configJson` removed for v1 - no known Impact field-mapping variance. Impact column names hardcoded in ingest code. Re-introduce as versioned `impactConfig Json` when variance is observed. |
 
 ### A.9 Operational Decisions
@@ -3495,10 +3495,10 @@ This appendix records all architecture decisions made during the specification p
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Rollback Strategy | Deferred | Consider adding `invalidatedAt`, `invalidatedByRunId` to SourceProduct for run-level invalidation. Acceptable to add post-launch. |
+| Rollback Strategy | Future | Consider adding `invalidatedAt`, `invalidatedByRunId` to SourceProduct for run-level invalidation. Acceptable to add post-launch. |
 | secretKeyId/secretVersion | Included | Fields present for future KMS migration. Could be removed for v1 if schema simplicity preferred. |
 | last_seen_success_at vs run-level flag | Included | Per-product timestamps chosen over run-level flag for better partial failure handling. |
-| SourceProduct Archival | Deferred | Identity upgrades and URL rotations create orphaned SourceProducts that "expire naturally" but rows remain forever. Post-v1: add archival job to delete SourceProducts where: (1) `lastSeenSuccessAt IS NULL` or stale > N days, (2) no Price records, (3) created > M days ago. Prevents unbounded table growth from URL_HASH fallbacks. |
+| SourceProduct Archival | Future | Identity upgrades and URL rotations create orphaned SourceProducts that "expire naturally" but rows remain forever. Future: add archival job to delete SourceProducts where: (1) `lastSeenSuccessAt IS NULL` or stale > N days, (2) no Price records, (3) created > M days ago. Prevents unbounded table growth from URL_HASH fallbacks. |
 
 ---
 

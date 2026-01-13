@@ -229,12 +229,12 @@ Rejection detection:
    - Alert if migration incomplete after 1 hour.
    - Rollback: revert code only (old version rows remain valid; no data migration needed).
 
-## v1.1 Migration Guardrails (CanonicalBrandId-ready)
+## Future Migration Guardrails (CanonicalBrandId-ready)
 
 Design must not block adding `canonicalBrandId` later. Guardrails:
 - Preserve `canonicalName` + `canonicalNorm` even after IDs are introduced (needed for rollback and audits).
 - Keep `normalizationVersion` on `brand_aliases` and bump when normalization rules change.
-- When v1.1 introduces `canonicalBrandId`:
+- When `canonicalBrandId` is introduced:
   - Add nullable `canonicalBrandId` to `brand_aliases` first (no behavior change).
   - Backfill IDs by mapping `canonicalNorm` to the new canonical brand table.
   - Dual-write: set both `canonicalNorm` and `canonicalBrandId` on create/update.

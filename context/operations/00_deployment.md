@@ -44,7 +44,7 @@ Cross-environment access is not permitted.
 IronScout is deployed as multiple independent applications:
 
 - `apps/web` – Consumer-facing UI
-- `apps/dealer` – Merchant portal (legacy path name)
+- `apps/dealer` - Merchant portal (legacy path name)
 
 Legacy note: directory name `apps/dealer` is a migration artifact. Functionally this is the Merchant portal.
 - `apps/admin` – Admin portal
@@ -181,7 +181,6 @@ Before deploying to production, confirm:
 - [ ] Migrations applied successfully
 - [ ] API capability shaping verified (uniform)
 - [ ] Retailer eligibility + listing entitlement enforcement verified (query-time predicate)
-- [ ] Delinquency/suspension auto-unlist job/webhook verified
 - [ ] Harvester scheduler mode confirmed
 - [ ] Rollback path verified
 - [ ] Monitoring active

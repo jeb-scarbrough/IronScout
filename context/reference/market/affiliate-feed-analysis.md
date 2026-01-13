@@ -383,7 +383,7 @@ function buildTrackingUrl(productUrl: string, context: AffiliateContext): string
 **Acceptance Criteria:**
 - [x] One canonical `buildTrackingUrl` function (`apps/api/src/services/affiliate-tracking.ts`)
 - [x] Unit tests per network for template placeholder substitution and URL encoding (`apps/api/src/services/__tests__/affiliate-tracking.test.ts` - 12 tests)
-- [ ] Integration test: ingest stores canonical URL, click endpoint returns wrapped URL (deferred until click endpoint exists)
+- [ ] Integration test: ingest stores canonical URL, click endpoint returns wrapped URL (pending until click endpoint exists)
 
 ---
 

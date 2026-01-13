@@ -6,7 +6,7 @@ If this document conflicts with the actual repo layout, the repo wins. Update th
 
 ## Terminology (Canonical)
 
-- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets (e.g., `pricing_snapshots`).
+- **Merchant**: B2B portal account (subscription, billing, auth boundary). Merchant has users. Merchant submits merchant-scoped datasets.
 - **Retailer**: Consumer-facing storefront shown in search results. Consumer `prices` are keyed by `retailerId`. Retailers do not authenticate.
 - **Source/Feed**: Technical origin of a consumer price record (affiliate, scraper, direct feed). Source is not Merchant.
 - **Admin rights**: Merchant users are explicitly granted permissions per Retailer.
@@ -34,7 +34,7 @@ Primary responsibilities:
 - Search endpoints (text + filters)
 - Product endpoints (canonical product + offers + history)
 - Alerts/watchlists endpoints
-- Tier shaping and enforcement
+- Uniform v1 capability shaping (no consumer tiers)
 - Retailer visibility filtering at query time
 - AI search integration (intent parsing, embeddings, optional explanations)
 
@@ -60,7 +60,6 @@ Primary responsibilities:
 - Consumer search UI
 - Product views (offers + history)
 - Alerts/watchlist UI
-- Subscription UI and upgrade flows
 - Conservative copy and trust-safe UX
 
 Likely structure:
@@ -82,7 +81,7 @@ Primary responsibilities:
 - Feed configuration
 - Feed health visibility
 - SKU match visibility
-- Merchant context (benchmarks) by plan
+- Merchant context (benchmarks) by plan (inactive in v1)
 - Explicit enforcement of "no recommendations" stance in UI
 
 Likely structure (legacy path `apps/dealer/`):
@@ -95,11 +94,10 @@ Likely structure (legacy path `apps/dealer/`):
 ## apps/admin (Admin Portal)
 
 Primary responsibilities:
-- Merchant lifecycle actions (approve, suspend, reactivate)
-- Subscription status changes
-- Billing method management
+- Affiliate feed operations and retailer eligibility (v1)
 - Audit visibility
-- Safe impersonation (must not bypass enforcement)
+- Safe impersonation (must not bypass enforcement, inactive in v1)
+- Merchant lifecycle and billing (inactive in v1)
 
 Likely structure:
 - `apps/admin/app/` App Router routes
@@ -110,8 +108,9 @@ Likely structure:
 ## apps/harvester (Worker)
 
 Primary responsibilities:
-- Retailer ingestion pipeline (fetch → extract → normalize → write)
-- Merchant ingestion pipeline (legacy dealer naming: feed ingest → sku match → benchmarks → insights)
+- Affiliate ingestion pipeline (v1)
+- Retailer ingestion pipeline (inactive in v1)
+- Merchant ingestion pipeline (legacy dealer naming: feed ingest → sku match → benchmarks → insights, inactive in v1)
 - BullMQ queues orchestration
 - Execution records + logs generation
 - Legacy queue names may be prefixed `dealer-*`; treat as Merchant ingestion queues only (consumer outputs remain Retailer-keyed).

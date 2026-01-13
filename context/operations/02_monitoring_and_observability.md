@@ -52,7 +52,7 @@ Required API signals:
 - Request count by endpoint
 - Error rate by endpoint
 - Authentication and authorization failures
-- Tier enforcement failures
+- Uniform capability shaping checks (no consumer tiers in v1)
 - Retailer eligibility filter hits
 
 These signals help answer:
@@ -68,9 +68,9 @@ Harvester is a trust-critical system and requires deeper visibility.
 
 Required signals:
 - Job counts (enqueued, processing, completed, failed)
-- Execution status per source and Retailer feed (legacy naming)
+- Execution status per source and affiliate feed
 - SKIPPED execution counts and reasons
-- Write counts (prices, inventory, benchmarks)
+- Write counts (prices, inventory)
 - Error summaries by stage (fetch, normalize, write)
 
 Operators must be able to answer:
@@ -149,7 +149,7 @@ Required checks:
 - Count of results filtered due to ineligibility
 - Count of alerts suppressed due to eligibility
 - Attempts to access restricted features (if any) in v1
-- Attempts by suspended Merchants to ingest data
+- Attempts by ineligible Retailers or quarantined feeds to ingest data
 
 Unexpected spikes in these signals indicate bugs or abuse.
 
@@ -178,7 +178,7 @@ Dashboards should exist for:
 - API health
 - Harvester health
 - Queue health
-- Subscription and eligibility enforcement
+- Eligibility enforcement
 
 Dashboards must be:
 - Readable at a glance
