@@ -240,8 +240,17 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
     // =========================================================================
     // SUBSCRIPTION CHECK
     // =========================================================================
-    // Check merchant subscription status before processing (unless admin override)
-    if (!adminOverride && merchantId) {
+    // Per release criteria: admin override must NOT bypass subscription enforcement
+    // If admin needs to help a merchant, they should reactivate subscription first
+    if (adminOverride) {
+      log.info('Admin-triggered feed (subscription still enforced)', {
+        merchantId,
+        merchantName,
+        adminId: adminId || 'unknown',
+      })
+    }
+
+    if (merchantId) {
       const subscriptionResult = await checkMerchantSubscription(merchantId)
 
       if (!subscriptionResult.isActive) {
@@ -250,6 +259,7 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
           merchantName,
           subscriptionStatus: subscriptionResult.status,
           reason: subscriptionResult.reason,
+          adminTriggered: adminOverride || false,
         })
 
         // Update feed run as skipped
@@ -262,7 +272,7 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
             primaryErrorCode: 'SUBSCRIPTION_EXPIRED',
             errors: [{
               row: 0,
-              error: `Feed skipped: ${subscriptionResult.reason}`,
+              error: `Feed skipped: ${subscriptionResult.reason}${adminOverride ? ' (admin-triggered but subscription expired)' : ''}`,
               code: 'SUBSCRIPTION_EXPIRED',
             }],
           },
@@ -285,10 +295,12 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
           endedAt: new Date().toISOString(),
           durationMs: Date.now() - startTime,
           workerPid: process.pid,
+          adminTriggered: adminOverride || false,
         })
         runFileLogger.info('Run skipped - subscription expired', {
           subscriptionStatus: subscriptionResult.status,
           reason: subscriptionResult.reason,
+          adminTriggered: adminOverride || false,
         })
         await runFileLogger.close().catch(() => {})
 
@@ -299,8 +311,6 @@ async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
           message: subscriptionResult.reason,
         }
       }
-    } else if (adminOverride) {
-      log.info('Admin override active', { merchantId, merchantName, adminId: adminId || 'unknown' })
     }
 
     // Update feed run status
