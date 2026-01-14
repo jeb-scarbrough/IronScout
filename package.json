@@ -30,13 +30,36 @@
     "db:studio": "pnpm --filter @ironscout/db db:studio",
     "db:up": "docker compose -f docker/docker-compose.dev.yml up -d postgres",
     "db:down": "docker compose -f docker/docker-compose.dev.yml down",
-    "db:reset": "pnpm db:down && docker compose -f docker/docker-compose.dev.yml up -d postgres && sleep 2 && pnpm --filter @ironscout/db prisma migrate reset --force"
+    "db:reset": "pnpm db:down && docker compose -f docker/docker-compose.dev.yml up -d postgres && sleep 2 && pnpm --filter @ironscout/db prisma migrate reset --force",
+    "test:up": "docker compose -f docker/docker-compose.test.yml up -d --wait",
+    "test:down": "docker compose -f docker/docker-compose.test.yml down",
+    "test:api": "pnpm --filter @ironscout/api test:run",
+    "test:harvester": "pnpm --filter @ironscout/harvester test:run",
+    "test:db": "pnpm --filter @ironscout/db test",
+    "test:e2e": "playwright test",
+    "test": "pnpm test:api && pnpm test:harvester && pnpm test:db",
+    "preflight": "node scripts/preflight.mjs",
+    "preflight:quick": "node scripts/preflight.mjs --skip-build",
+    "preflight:verbose": "node scripts/preflight.mjs --verbose",
+    "start:all": "node scripts/dev/start-all.mjs",
+    "start:dev": "node scripts/dev/start-all.mjs --terminals",
+    "stop:all": "node scripts/dev/stop-all.mjs",
+    "logs": "node scripts/dev/logs.mjs",
+    "build:all": "node scripts/build/build-all.mjs",
+    "verify:all": "node scripts/build/verify-all.mjs",
+    "validate:schema": "node scripts/validate-db-schema.mjs"
   },
   "devDependencies": {
-    "@types/node": "^25.0.3",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.8",
     "sharp": "^0.34.5",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.28.0"
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "overrides": {
+      "@prisma/dev>hono": ">=4.11.4"
+    }
+  }
 }

@@ -5,6 +5,28 @@
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./test-utils": {
+      "types": "./test-utils.d.ts",
+      "import": "./test-utils.js",
+      "default": "./test-utils.js"
+    },
+    "./generated/prisma": {
+      "types": "./generated/prisma/index.d.ts",
+      "import": "./generated/prisma/index.js",
+      "default": "./generated/prisma/index.js"
+    },
+    "./visibility.js": {
+      "types": "./visibility.d.ts",
+      "import": "./visibility.js",
+      "default": "./visibility.js"
+    }
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
@@ -30,7 +52,9 @@
     "check:client": "tsx scripts/check-client-fresh.ts",
     "check:client:strict": "tsx scripts/check-client-fresh.ts strict",
     "validate:schema": "tsx scripts/runtime-schema-check.ts",
-    "test:schema": "vitest run __tests__/schema-integrity.test.ts"
+    "test:schema": "vitest run __tests__/schema-integrity.test.ts",
+    "test": "vitest run",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",
