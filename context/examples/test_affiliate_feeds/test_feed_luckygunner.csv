@@ -1,21 +1,21 @@
-item_id,title,link,ImageURL,price,availability,brand,description,caliber,grain_weight,bullet_type,rounds_per_box,cost_per_round,case_quantity,shipping
-LG-9MM-115-FMJ-50,Federal American Eagle 9mm Ammo - 115 Grain FMJ - 50 Rounds,https://luckygunner.com/federal-ae-9mm-115-fmj?utm_source=impact,https://cdn.luckygunner.com/img/fed-ae-9mm.jpg,17.49,in stock,Federal,"Reliable American made target ammunition for range days and training.",9mm Luger,115,FMJ,50,0.35,1000,9.95
-LG-9MM-124-HST-50,Federal Premium HST 9mm - 124 Grain JHP - 50 Rounds,https://luckygunner.com/federal-hst-9mm-124?irclickid=lg002,https://cdn.luckygunner.com/img/fed-hst-9mm.jpg,44.99,in stock,Federal,"Duty ammunition with consistent expansion and barrier performance.",9mm Luger,124,JHP,50,0.90,500,9.95
-LG-556-55-XM193-20,Lake City XM193 5.56 NATO - 55 Grain FMJ - 20 Rounds,https://luckygunner.com/lake-city-xm193,https://cdn.luckygunner.com/img/lc-xm193.jpg,10.99,in stock,Lake City,"Military spec ammunition manufactured at Lake City.",5.56x45mm NATO,55,FMJ,20,0.55,1000,12.95
-LG-556-62-M855-420,Lake City M855 Green Tip 5.56 - 62 Grain Penetrator - 420 Round Can,https://luckygunner.com/lake-city-m855-can,https://cdn.luckygunner.com/img/lc-m855-can.jpg,219.99,low stock,Lake City,"Surplus ammunition in reusable can with steel core penetrator.",5.56x45mm NATO,62,FMJ,420,0.52,420,0.00
-LG-45ACP-230-FMJ-50,Winchester White Box 45 ACP - 230 Grain FMJ - 50 Rounds,https://luckygunner.com/winchester-45-acp-fmj,https://cdn.luckygunner.com/img/win-45-fmj.jpg,29.99,in stock,Winchester,"Affordable range ammunition for full size 1911s and other pistols.",45 ACP,230,FMJ,50,0.60,500,11.95
-LG-45ACP-230-HST-20,Federal Premium HST 45 ACP - 230 Grain JHP - 20 Rounds,https://luckygunner.com/federal-hst-45,https://cdn.luckygunner.com/img/fed-hst-45.jpg,32.99,in stock,Federal,"Premium defensive ammunition with consistent expansion.",45 ACP,230,JHP,20,1.65,500,9.95
-LG-40SW-180-FMJ-50,Blazer Brass 40 S&W - 180 Grain FMJ - 50 Rounds,https://luckygunner.com/blazer-40sw-fmj,https://cdn.luckygunner.com/img/blazer-40.jpg,22.99,in stock,CCI/Blazer,"Clean burning range ammo with reloadable brass cases.",40 S&W,180,FMJ,50,0.46,1000,9.95
-LG-40SW-180-JHP-20,Speer Gold Dot 40 S&W - 180 Grain GDHP - 20 Rounds,https://luckygunner.com/speer-gd-40sw,https://cdn.luckygunner.com/img/speer-gd-40.jpg,29.99,in stock,Speer,"Bonded core hollow point trusted by law enforcement.",40 S&W,180,JHP,20,1.50,500,9.95
-,Fiocchi 380 ACP - 95 Grain FMJ - 50 Rounds,https://luckygunner.com/fiocchi-380-fmj?utm_campaign=impact,https://cdn.luckygunner.com/img/fiocchi-380.jpg,21.49,in stock,Fiocchi,"Italian made quality ammunition for compact carry pistols.",380 ACP,95,FMJ,50,0.43,1000,9.95
-LG-380-90-XTP-25,Hornady Critical Defense 380 ACP - 90 Grain FTX - 25 Rounds,https://luckygunner.com/hornady-cd-380,https://cdn.luckygunner.com/img/hdy-cd-380.jpg,27.99,in stock,Hornady,"Optimized for short barrels with FTX bullet technology.",380 ACP,90,FTX,25,1.12,500,9.95
-LG-22LR-40-SVSP-500,Federal Champion 22 LR - 40 Grain - 500 Round Brick,https://luckygunner.com/federal-22lr-brick,https://cdn.luckygunner.com/img/fed-22-brick.jpg,44.99,in stock,Federal,"High velocity rimfire ammunition for plinking and small game.",22 LR,40,LRN,500,0.09,5000,8.95
-LG-22LR-36-HP-50,CCI Stinger 22 LR - 32 Grain CPHP - 50 Rounds,https://luckygunner.com/cci-stinger,https://cdn.luckygunner.com/img/cci-stinger.jpg,12.99,out of stock,CCI,"Hyper velocity hunting round with strong terminal performance.",22 LR,32,CPHP,50,0.26,5000,8.95
-LG-12GA-00BK-5,Federal Power-Shok 12 Gauge - 00 Buck - 5 Rounds,https://luckygunner.com/federal-12ga-00buck,https://cdn.luckygunner.com/img/fed-12-00.jpg,8.49,in stock,Federal,"Nine pellet buckshot load for home defense and hunting.",12 Gauge 2.75in,00 Buck,1325fps,5,1.70,250,11.95
-LG-12GA-SLUG-5,Remington Slugger 12 Gauge - 1oz Rifled Slug - 5 Rounds,https://luckygunner.com/remington-slugger,https://cdn.luckygunner.com/img/rem-slugger.jpg,7.99,in stock,Remington,"Classic rifled slug for smoothbore shotguns.",12 Gauge 2.75in,Rifled Slug,1680fps,5,1.60,250,11.95
-LG-308-147-FMJBT-20,Federal Gold Medal 308 Win - 168 Grain SMK - 20 Rounds,https://luckygunner.com/federal-gm-308,https://cdn.luckygunner.com/img/fed-gm-308.jpg,39.99,in stock,Federal,"Match grade accuracy with Sierra MatchKing bullets.",308 Winchester,168,BTHP,20,2.00,500,12.95
-LG-308-150-SP-20,Winchester Power Point 308 Win - 150 Grain SP - 20 Rounds,https://luckygunner.com/winchester-pp-308,https://cdn.luckygunner.com/img/win-pp-308.jpg,27.99,in stock,Winchester,"Rapid expansion hunting ammunition for medium game.",308 Winchester,150,SP,20,1.40,500,12.95
-LG-300BLK-125-OTM-20,Sig Sauer Elite Performance 300 BLK - 125 Grain OTM - 20 Rounds,https://luckygunner.com/sig-300blk-otm,https://cdn.luckygunner.com/img/sig-300blk.jpg,28.99,in stock,Sig Sauer,"Supersonic load optimized for short barrel rifles and suppressors.",300 Blackout,125,OTM,20,1.45,500,12.95
-LG-300BLK-220-SMK-20,Sig Sauer Elite 300 BLK Subsonic - 220 Grain SMK - 20 Rounds,https://luckygunner.com/sig-300blk-sub,https://cdn.luckygunner.com/img/sig-300sub.jpg,32.99,low stock,Sig Sauer,"Subsonic ammunition designed for suppressed platforms.",300 Blackout,220,OTM,20,1.65,500,12.95
-LG-6.5CM-140-ELD-20,Hornady ELD Match 6.5 Creedmoor - 140 Grain ELD-M - 20 Rounds,https://luckygunner.com/hornady-eld-65cm,https://cdn.luckygunner.com/img/hdy-eld-65.jpg,38.99,in stock,Hornady,"Competition grade ammunition with heat resistant polymer tip.",6.5 Creedmoor,140,ELD-M,20,1.95,500,12.95
-LG-6.5CM-143-ELD-20,Hornady Precision Hunter 6.5 CM - 143 Grain ELD-X - 20 Rounds,https://luckygunner.com/hornady-ph-65cm,https://cdn.luckygunner.com/img/hdy-eldx-65.jpg,42.99,in stock,Hornady,"Premium hunting ammunition with controlled expansion.",6.5 Creedmoor,143,ELD-X,20,2.15,500,12.95
+"item_id,title,link,ImageURL,price,availability,brand,description,caliber,grain_weight,bullet_type,rounds_per_box,cost_per_round,case_quantity,shipping"
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""
+""

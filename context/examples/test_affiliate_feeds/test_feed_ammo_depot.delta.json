@@ -1,0 +1,10 @@
+{
+  "file": "test_feed_ammo_depot.csv",
+  "deltaFile": "test_feed_ammo_depot.delta.csv",
+  "totalRows": 20000,
+  "priceDrops": 1000,
+  "priceIncreases": 600,
+  "backInStock": 400,
+  "outOfStock": 400,
+  "seed": 42
+}

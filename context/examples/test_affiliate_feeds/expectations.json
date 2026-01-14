@@ -1,0 +1,229 @@
+{
+  "generatedAt": "2026-01-14T22:06:07.993Z",
+  "expectations": [
+    {
+      "file": "impact_edge_cases.csv",
+      "totalRows": 7,
+      "parsedRows": 5,
+      "rejectedRows": 2,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 1,
+        "invalidUrl": 1,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 2,
+      "needsResolverRows": 1,
+      "urlHashFallbackRows": 1,
+      "duplicateIdentityRows": 1
+    },
+    {
+      "file": "impact_large_messy.csv",
+      "totalRows": 20000,
+      "parsedRows": 19940,
+      "rejectedRows": 60,
+      "rejectedBreakdown": {
+        "missingName": 16,
+        "missingUrl": 14,
+        "invalidUrl": 15,
+        "invalidPrice": 15
+      },
+      "quarantinedRows": 200,
+      "needsResolverRows": 400,
+      "urlHashFallbackRows": 100,
+      "duplicateIdentityRows": 60
+    },
+    {
+      "file": "impact_medium_typical.csv",
+      "totalRows": 3000,
+      "parsedRows": 2985,
+      "rejectedRows": 15,
+      "rejectedBreakdown": {
+        "missingName": 2,
+        "missingUrl": 6,
+        "invalidUrl": 2,
+        "invalidPrice": 5
+      },
+      "quarantinedRows": 45,
+      "needsResolverRows": 60,
+      "urlHashFallbackRows": 30,
+      "duplicateIdentityRows": 15
+    },
+    {
+      "file": "impact_quarantine.csv",
+      "totalRows": 7,
+      "parsedRows": 6,
+      "rejectedRows": 1,
+      "rejectedBreakdown": {
+        "missingName": 1,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 4,
+      "needsResolverRows": 1,
+      "urlHashFallbackRows": 1,
+      "duplicateIdentityRows": 0
+    },
+    {
+      "file": "impact_shotgun_focus.csv",
+      "totalRows": 9,
+      "parsedRows": 9,
+      "rejectedRows": 0,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 0,
+      "needsResolverRows": 0,
+      "urlHashFallbackRows": 0,
+      "duplicateIdentityRows": 0
+    },
+    {
+      "file": "impact_small_clean.csv",
+      "totalRows": 100,
+      "parsedRows": 99,
+      "rejectedRows": 1,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 1
+      },
+      "quarantinedRows": 2,
+      "needsResolverRows": 2,
+      "urlHashFallbackRows": 1,
+      "duplicateIdentityRows": 1
+    },
+    {
+      "file": "test_feed_ammo_depot.csv",
+      "totalRows": 20000,
+      "parsedRows": 19940,
+      "rejectedRows": 60,
+      "rejectedBreakdown": {
+        "missingName": 9,
+        "missingUrl": 15,
+        "invalidUrl": 19,
+        "invalidPrice": 17
+      },
+      "quarantinedRows": 200,
+      "needsResolverRows": 400,
+      "urlHashFallbackRows": 100,
+      "duplicateIdentityRows": 60
+    },
+    {
+      "file": "test_feed_brownells.csv",
+      "totalRows": 20,
+      "parsedRows": 20,
+      "rejectedRows": 0,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 0,
+      "needsResolverRows": 0,
+      "urlHashFallbackRows": 0,
+      "duplicateIdentityRows": 0
+    },
+    {
+      "file": "test_feed_budsgunshop.csv",
+      "totalRows": 500,
+      "parsedRows": 495,
+      "rejectedRows": 5,
+      "rejectedBreakdown": {
+        "missingName": 1,
+        "missingUrl": 1,
+        "invalidUrl": 1,
+        "invalidPrice": 2
+      },
+      "quarantinedRows": 10,
+      "needsResolverRows": 10,
+      "urlHashFallbackRows": 5,
+      "duplicateIdentityRows": 5
+    },
+    {
+      "file": "test_feed_luckygunner.csv",
+      "totalRows": 20,
+      "parsedRows": 20,
+      "rejectedRows": 0,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 0,
+      "needsResolverRows": 0,
+      "urlHashFallbackRows": 0,
+      "duplicateIdentityRows": 0
+    },
+    {
+      "file": "test_feed_natchez.csv",
+      "totalRows": 20,
+      "parsedRows": 20,
+      "rejectedRows": 0,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 0,
+      "needsResolverRows": 0,
+      "urlHashFallbackRows": 0,
+      "duplicateIdentityRows": 0
+    },
+    {
+      "file": "test_feed_psa.csv",
+      "totalRows": 2000,
+      "parsedRows": 1990,
+      "rejectedRows": 10,
+      "rejectedBreakdown": {
+        "missingName": 4,
+        "missingUrl": 3,
+        "invalidUrl": 3,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 30,
+      "needsResolverRows": 40,
+      "urlHashFallbackRows": 20,
+      "duplicateIdentityRows": 10
+    },
+    {
+      "file": "test_feed_sgammo.csv",
+      "totalRows": 1000,
+      "parsedRows": 990,
+      "rejectedRows": 10,
+      "rejectedBreakdown": {
+        "missingName": 2,
+        "missingUrl": 4,
+        "invalidUrl": 2,
+        "invalidPrice": 2
+      },
+      "quarantinedRows": 20,
+      "needsResolverRows": 20,
+      "urlHashFallbackRows": 10,
+      "duplicateIdentityRows": 10
+    },
+    {
+      "file": "test_feed_sportsmans.csv",
+      "totalRows": 21,
+      "parsedRows": 21,
+      "rejectedRows": 0,
+      "rejectedBreakdown": {
+        "missingName": 0,
+        "missingUrl": 0,
+        "invalidUrl": 0,
+        "invalidPrice": 0
+      },
+      "quarantinedRows": 0,
+      "needsResolverRows": 0,
+      "urlHashFallbackRows": 0,
+      "duplicateIdentityRows": 0
+    }
+  ]
+}
