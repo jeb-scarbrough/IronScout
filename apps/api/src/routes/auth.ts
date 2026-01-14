@@ -312,7 +312,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
         },
       },
       include: {
-        users: {
+        user: {
           select: {
             id: true,
             email: true,
@@ -327,7 +327,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
     })
 
     if (existingAccount) {
-      const existingUser = existingAccount.users
+      const existingUser = existingAccount.user
 
       // Block deleted accounts
       if (existingUser.status === 'DELETED') {
