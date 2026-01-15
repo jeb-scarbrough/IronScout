@@ -177,10 +177,18 @@ async function schedulerTick(): Promise<{ processed: number }> {
       // This happens BEFORE enqueuing, so if we crash after this,
       // the feed won't be re-claimed (it's scheduled for the future)
       for (const feed of dueFeeds) {
-        if (feed.scheduleFrequencyHours) {
-          const nextRunAt = new Date(
-            now.getTime() + feed.scheduleFrequencyHours * 3600000
+        if (feed.scheduleFrequencyHours && feed.nextRunAt) {
+          // Calculate next run based on PREVIOUS nextRunAt to maintain schedule consistency
+          // This ensures feeds stay on their configured schedule (e.g., every 6h at X:30)
+          // rather than drifting based on when the job actually ran
+          let nextRunAt = new Date(
+            feed.nextRunAt.getTime() + feed.scheduleFrequencyHours * 3600000
           )
+          // If the calculated next run is still in the past (feed was very delayed),
+          // use now + frequency as fallback to avoid scheduling in the past
+          if (nextRunAt <= now) {
+            nextRunAt = new Date(now.getTime() + feed.scheduleFrequencyHours * 3600000)
+          }
           await tx.affiliate_feeds.update({
             where: { id: feed.id },
             data: { nextRunAt },
@@ -189,6 +197,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
             feedId: feed.id,
             sourceId: feed.sourceId,
             scheduleFrequencyHours: feed.scheduleFrequencyHours,
+            previousNextRunAt: feed.nextRunAt.toISOString(),
             nextRunAt: nextRunAt.toISOString(),
           })
         }

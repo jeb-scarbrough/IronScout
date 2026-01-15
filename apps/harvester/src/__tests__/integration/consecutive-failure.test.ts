@@ -78,7 +78,7 @@ interface FinalizeContext {
 interface FinalizeResult {
   newConsecutiveFailures: number
   wasAutoDisabled: boolean
-  nextRunAt: Date | null
+  nextRunAt: Date | null | undefined // undefined = don't change (scheduler already set it)
   notifications: string[]
 }
 
@@ -92,7 +92,11 @@ function simulateFinalizeRun(
 
   let newConsecutiveFailures = feed.consecutiveFailures
   let wasAutoDisabled = false
-  let nextRunAt: Date | null = null
+  // Note: nextRunAt is now managed by the scheduler when claiming feeds.
+  // The worker only sets nextRunAt to null when auto-disabling.
+  // For all other cases, the scheduler has already set the next run time
+  // based on the previous nextRunAt to maintain schedule consistency.
+  let nextRunAt: Date | null | undefined = undefined // undefined = don't change
 
   if (status === 'SUCCEEDED') {
     // Recovery check
@@ -100,21 +104,17 @@ function simulateFinalizeRun(
       notifications.push('RECOVERY')
     }
     newConsecutiveFailures = 0
-
-    if (feed.scheduleFrequencyHours) {
-      nextRunAt = new Date(finishedAt.getTime() + feed.scheduleFrequencyHours * 3600000)
-    }
+    // nextRunAt is already set by scheduler - worker doesn't touch it
   } else if (status === 'FAILED') {
     newConsecutiveFailures = feed.consecutiveFailures + 1
     notifications.push('RUN_FAILED')
 
     if (newConsecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       wasAutoDisabled = true
-      nextRunAt = null
+      nextRunAt = null // Only case where worker sets nextRunAt
       notifications.push('AUTO_DISABLED')
-    } else if (feed.scheduleFrequencyHours) {
-      nextRunAt = new Date(finishedAt.getTime() + feed.scheduleFrequencyHours * 3600000)
     }
+    // For non-auto-disabled failures, nextRunAt is already set by scheduler
   }
 
   return {
@@ -211,7 +211,8 @@ describe('Consecutive Failure Auto-Disable', () => {
 
       expect(result.newConsecutiveFailures).toBe(2)
       expect(result.wasAutoDisabled).toBe(false)
-      expect(result.nextRunAt).not.toBeNull()
+      // nextRunAt is undefined (not changed) - scheduler already set it when claiming
+      expect(result.nextRunAt).toBeUndefined()
     })
 
     it('should auto-disable on 4th, 5th, etc failures too', () => {
@@ -315,7 +316,7 @@ describe('Consecutive Failure Auto-Disable', () => {
   })
 
   describe('Next run scheduling', () => {
-    it('should schedule next run on success', () => {
+    it('should not set nextRunAt on success (scheduler handles it)', () => {
       const feed: FeedState = {
         id: 'feed-1',
         status: 'ENABLED',
@@ -325,11 +326,11 @@ describe('Consecutive Failure Auto-Disable', () => {
 
       const result = simulateFinalizeRun({ feed, runId: 'run-1' }, 'SUCCEEDED')
 
-      expect(result.nextRunAt).not.toBeNull()
-      expect(result.nextRunAt!.getTime()).toBeGreaterThan(Date.now())
+      // Worker doesn't set nextRunAt - scheduler already set it when claiming
+      expect(result.nextRunAt).toBeUndefined()
     })
 
-    it('should schedule next run on recoverable failure', () => {
+    it('should not set nextRunAt on recoverable failure (scheduler handles it)', () => {
       const feed: FeedState = {
         id: 'feed-1',
         status: 'ENABLED',
@@ -343,10 +344,11 @@ describe('Consecutive Failure Auto-Disable', () => {
       )
 
       expect(result.wasAutoDisabled).toBe(false)
-      expect(result.nextRunAt).not.toBeNull()
+      // Worker doesn't set nextRunAt - scheduler already set it when claiming
+      expect(result.nextRunAt).toBeUndefined()
     })
 
-    it('should NOT schedule next run when auto-disabled', () => {
+    it('should set nextRunAt to null when auto-disabled', () => {
       const feed: FeedState = {
         id: 'feed-1',
         status: 'ENABLED',
@@ -360,26 +362,8 @@ describe('Consecutive Failure Auto-Disable', () => {
       )
 
       expect(result.wasAutoDisabled).toBe(true)
+      // Only case where worker explicitly sets nextRunAt
       expect(result.nextRunAt).toBeNull()
-    })
-
-    it('should respect scheduleFrequencyHours', () => {
-      const feed: FeedState = {
-        id: 'feed-1',
-        status: 'ENABLED',
-        consecutiveFailures: 0,
-        scheduleFrequencyHours: 6, // 6 hours
-      }
-
-      const now = Date.now()
-      const result = simulateFinalizeRun({ feed, runId: 'run-1' }, 'SUCCEEDED')
-
-      // Next run should be ~6 hours from now
-      const expectedNext = now + 6 * 3600000
-      const actualNext = result.nextRunAt!.getTime()
-
-      // Allow 1 second tolerance for test execution time
-      expect(Math.abs(actualNext - expectedNext)).toBeLessThan(1000)
     })
   })
 })

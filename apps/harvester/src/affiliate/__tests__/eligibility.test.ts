@@ -171,21 +171,20 @@ describe('Auto-Pause (Auto-Disable) Behavior', () => {
       expect(updateData.nextRunAt).toBeNull()
     })
 
-    it('should schedule retry if not at failure threshold', () => {
+    it('should not set nextRunAt if not at failure threshold (scheduler handles it)', () => {
+      // The scheduler is now responsible for setting nextRunAt when claiming a feed.
+      // The worker no longer updates nextRunAt on retries to preserve schedule consistency.
       const updateData: Record<string, unknown> = {}
       const newFailureCount = 2
-      const scheduleFrequencyHours = 6
-      const finishedAt = new Date()
 
       if (newFailureCount >= MAX_CONSECUTIVE_FAILURES) {
         updateData.status = 'DISABLED'
         updateData.nextRunAt = null
-      } else if (scheduleFrequencyHours) {
-        updateData.nextRunAt = new Date(finishedAt.getTime() + scheduleFrequencyHours * 3600000)
       }
+      // Note: No else branch - worker doesn't set nextRunAt on retries anymore
 
       expect(updateData.status).toBeUndefined()
-      expect(updateData.nextRunAt).toBeInstanceOf(Date)
+      expect(updateData.nextRunAt).toBeUndefined() // Scheduler already set it
     })
   })
 })

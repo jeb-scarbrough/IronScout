@@ -125,20 +125,23 @@ describe('Affiliate Feed Scheduler', () => {
     })
 
     it('should advance nextRunAt when claiming a feed', async () => {
-      const now = new Date()
+      const previousNextRunAt = new Date('2025-01-15T06:30:00Z')
       const feed = {
         id: 'feed-1',
         sourceId: 'source-1',
         scheduleFrequencyHours: 24,
+        nextRunAt: previousNextRunAt,
       }
 
       mockFeedUpdate.mockResolvedValue({})
 
-      // Calculate expected nextRunAt
-      const expectedNextRunAt = new Date(now.getTime() + 24 * 3600000)
+      // New nextRunAt is calculated from PREVIOUS nextRunAt to maintain schedule consistency
+      // This ensures feeds stay on their configured schedule (e.g., every 24h at 06:30)
+      const expectedNextRunAt = new Date(previousNextRunAt.getTime() + 24 * 3600000)
 
-      // After claiming, nextRunAt should be advanced
+      // After claiming, nextRunAt should be advanced based on previous value
       expect(feed.scheduleFrequencyHours).toBe(24)
+      expect(expectedNextRunAt.toISOString()).toBe('2025-01-16T06:30:00.000Z')
     })
 
     it('should return 0 processed when no feeds are due', async () => {
@@ -370,8 +373,12 @@ describe('Affiliate Feed Scheduler', () => {
 
   describe('Atomic Claim Pattern', () => {
     it('should claim and update nextRunAt in single transaction', async () => {
-      const now = new Date()
-      const feed = { id: 'feed-1', scheduleFrequencyHours: 24 }
+      const previousNextRunAt = new Date('2025-01-15T12:00:00Z')
+      const feed = {
+        id: 'feed-1',
+        scheduleFrequencyHours: 24,
+        nextRunAt: previousNextRunAt,
+      }
 
       let claimCount = 0
 
@@ -389,10 +396,11 @@ describe('Affiliate Feed Scheduler', () => {
       await mockTransaction(async (tx: any) => {
         const feeds = await tx.$queryRaw()
         for (const f of feeds) {
+          // nextRunAt is calculated from PREVIOUS nextRunAt to maintain schedule consistency
           await tx.affiliateFeed.update({
             where: { id: f.id },
             data: {
-              nextRunAt: new Date(now.getTime() + f.scheduleFrequencyHours * 3600000),
+              nextRunAt: new Date(f.nextRunAt.getTime() + f.scheduleFrequencyHours * 3600000),
             },
           })
         }
