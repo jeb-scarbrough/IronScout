@@ -1,5 +1,23 @@
 'use server';
 
+/**
+ * Review Queue Server Actions
+ *
+ * These actions handle linking source products to canonical products.
+ *
+ * CONCURRENCY HANDLING:
+ * - All mutations use conditional updates with status guards
+ * - `updateMany` with `WHERE status IN (...)` ensures atomic check-and-update
+ * - If another admin modifies the same record, count will be 0 and action fails gracefully
+ * - `createAndLinkProduct` uses transaction with double-check for race condition protection
+ * - All actions return user-friendly error if concurrent modification detected
+ *
+ * AUDIT LOGGING:
+ * - All actions call `logAdminAction` before returning success
+ * - Evidence JSON is preserved and augmented with manual block containing actor, timestamp, action
+ * - See ADR-010 for operational audit requirements
+ */
+
 import { prisma } from '@ironscout/db';
 import { revalidatePath } from 'next/cache';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
