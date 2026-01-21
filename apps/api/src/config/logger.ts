@@ -85,6 +85,9 @@ export const LOG_EVENTS = {
   SEARCH_SEMANTIC: 'search.semantic',
   SEARCH_SUGGESTIONS: 'search.suggestions',
 
+  // Lens Evaluation (Appendix A telemetry)
+  LENS_EVAL: 'lens_eval.v1',
+
   // Payments
   PAYMENT_INTENT_CREATED: 'payment.intent.created',
   PAYMENT_SUCCEEDED: 'payment.succeeded',
