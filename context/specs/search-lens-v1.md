@@ -1,7 +1,7 @@
 # IronScout Lens Specification
 
 ## Status
-Accepted — v1.0.3
+Accepted — v1.1.0
 
 ## Purpose
 
@@ -648,6 +648,201 @@ High ambiguous rates indicate overlapping trigger definitions.
 13. IN/NOT_IN values are always arrays
 14. candidates[] is lexicographically sorted
 15. Results are product-grouped with best-offer aggregation
+
+---
+
+## Appendix A: Lens Evaluation Telemetry Contract (v1)
+
+### A.1 Purpose
+
+To support determinism audits, lens tuning, roadmap decisions, and marketing analytics, the system MUST emit a structured, versioned log event for each lens evaluation. This telemetry is internal-only and MUST NOT alter consumer-facing behavior.
+
+### A.2 Non-goals
+
+- No new user-visible fields or UI changes.
+- No recommendations, verdicts, deal scores, or predictions.
+- No requirement for a dedicated telemetry vendor in v1. Structured server logs are sufficient.
+
+### A.3 Canonical Event
+
+Each search evaluation MUST emit exactly one canonical event:
+
+- `eventName`: `lens_eval.v1`
+- `schemaVersion`: `1`
+- Emitted server-side by the API after lens evaluation completes (success or failure).
+
+### A.4 Required Correlation Fields
+
+The event MUST include:
+
+- `timestamp` (ISO-8601 UTC)
+- `requestId` (unique per request)
+- `traceId` (if available, else omit)
+- `actor.userIdHash` or `actor.sessionId` (raw userId SHOULD NOT be logged)
+
+### A.5 Query Fields (PII-safe)
+
+The event MUST include:
+
+- `query.hash` (sha256 of normalized query)
+- `query.length`
+- `query.piiFlag` (boolean heuristic)
+
+The event MAY include:
+
+- `query.norm` (normalized query string)
+
+If stored, it MUST be redacted for obvious PII patterns (emails, phone numbers). If in doubt, omit and rely on `query.hash`.
+
+### A.6 Intent Extraction Fields
+
+The event MUST include:
+
+- `intent.extractorModelId`
+- `intent.extractorVersion` (or embed into modelId)
+- `intent.extractorTemp` (explicitly log even if 0)
+- `intent.status`: `OK` | `PARTIAL` | `FAILED`
+- `intent.signals[]`: `{ key, value, confidence }` for all extracted signals used downstream
+- `intent.failureReason` when status ≠ OK
+
+Rationale: intent signals influence lens selection and must be auditable.
+
+### A.7 Lens Selection Fields
+
+The event MUST include:
+
+- `lens.overrideId` (nullable)
+- `lens.selectedId`
+- `lens.version`
+- `lens.reasonCode`
+- `lens.candidates[]` sorted deterministically: `{ lensId, version, triggerScore }`
+
+The event MUST include a deterministic representation of trigger evaluation, either:
+
+- `lens.triggerMatches[]`: `{ triggerId, signalKey, expected, actual, passed }`, OR
+- a checksum of trigger evaluation inputs and rules.
+
+### A.8 Configuration Fields That Affect Visibility/Ordering
+
+The event MUST include:
+
+- `config.priceLookbackDays` (CURRENT_PRICE_LOOKBACK_DAYS)
+- `config.asOfTime` (timestamp used as the reference point for offer visibility)
+
+The event SHOULD include:
+
+- `config.eligibilityConfigVersion` (or checksum)
+- `config.orderingConfigVersion` (or checksum)
+
+Rationale: these values change behavior and must be logged to prevent "version drift" ambiguity.
+
+### A.9 Eligibility Summary (Counts + Reasons)
+
+The event MUST include:
+
+- `eligibility.candidates` (pre-filter count)
+- `eligibility.eligible` (post-filter count)
+- `eligibility.filteredByReason` (reasonCode → count)
+- `eligibility.zeroResults` (boolean)
+- `eligibility.zeroResultsReasonCode` when zeroResults = true
+
+The event MUST NOT log all filtered productIds (volume risk). Use counts.
+
+### A.10 Ordering Proof (Top-N Trace)
+
+To debug nondeterminism and tune ordering, the event MUST include an ordering trace for the top N results:
+
+- `results.returned`
+- `results.top[]` for N=20: `{ productId, sortKeys }`
+
+`sortKeys` MUST include all ordering fields used by the lens plus the tie-break field.
+
+The event SHOULD include:
+
+- `results.finalProductIdsTopN` (ordered list of productIds for the same top N)
+
+### A.11 Offer Aggregation Summary (Top-N Only)
+
+For the same top N results, the event SHOULD include:
+
+- `visibleOfferCount`
+- `aggregatedPrice` (min visible offer price)
+- `availabilityRank` (max availabilityRank)
+- `pricePerRound` (derived)
+- `priceMeta`: `{ windowDays, sampleCount, asOf }`
+
+The event MUST NOT log retailer URLs.
+
+### A.12 Performance Fields
+
+The event MUST include:
+
+- `perf.latencyMsTotal`
+- `perf.latencyMsIntent`
+- `perf.latencyMsOffers`
+- `perf.latencyMsRank`
+- `status`: `OK` | `DEGRADED` | `FAILED`
+
+### A.13 Determinism Requirements for Logged Data
+
+- `lens.candidates[]` MUST be logged in deterministic order (lexicographic or score-first then lexicographic).
+- `results.top[]` MUST match the returned ordering.
+- All numeric fields MUST be logged with fixed precision where relevant (e.g., pricePerRound to 4 decimals).
+
+### A.14 Retention and Access
+
+- Telemetry is internal-only.
+- Retention SHOULD be 30–90 days in v1.
+- Access MUST be restricted to engineering and authorized operators.
+
+### A.15 Prohibitions (Policy Alignment)
+
+Telemetry MUST NOT include:
+
+- purchase recommendations or verdicts
+- deal scores
+- predictions
+- internal ranking hints intended to be stripped from consumer output unless explicitly marked `_internal` and confined to logs
+
+### A.16 Minimal JSON Shape (Reference)
+
+```json
+{
+  "eventName": "lens_eval.v1",
+  "schemaVersion": 1,
+  "lensSpecVersion": "1.0.3",
+  "timestamp": "2026-01-21T15:04:05Z",
+  "requestId": "...",
+  "actor": { "userIdHash": "..." },
+  "query": { "hash": "...", "length": 12, "piiFlag": false },
+  "intent": {
+    "extractorModelId": "...",
+    "extractorTemp": 0,
+    "status": "OK",
+    "signals": [{ "key": "caliber", "value": "9mm", "confidence": 0.92 }]
+  },
+  "lens": {
+    "overrideId": null,
+    "selectedId": "ALL",
+    "version": "1.0.3",
+    "reasonCode": "NO_MATCH",
+    "candidates": [{ "lensId": "ALL", "version": "1.0.3", "triggerScore": 0.0 }]
+  },
+  "config": { "priceLookbackDays": 7, "asOfTime": "2026-01-21T15:04:05Z" },
+  "eligibility": {
+    "candidates": 812,
+    "eligible": 126,
+    "filteredByReason": { "NO_VISIBLE_OFFERS": 686 },
+    "zeroResults": false
+  },
+  "results": {
+    "returned": 50,
+    "top": [{ "productId": "p1", "sortKeys": { "price": 12.34, "ppr": 0.2500, "avail": 2, "conf": 0.88, "tie": "p1" } }]
+  },
+  "perf": { "latencyMsTotal": 183, "latencyMsIntent": 12, "latencyMsOffers": 90, "latencyMsRank": 24 },
+  "status": "OK"
+}
+```
 
 ---
 
