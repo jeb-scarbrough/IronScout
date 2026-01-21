@@ -1,15 +1,9 @@
-import { RetailerHero } from '@/components/retailers/retailer-hero'
-import { RetailerBenefits } from '@/components/retailers/retailer-benefits'
-import { RetailerPlans } from '@/components/retailers/retailer-plans'
-import { RetailerCTA } from '@/components/retailers/retailer-cta'
+import { redirect } from 'next/navigation'
 
+/**
+ * Retailers marketing page has moved to www.ironscout.ai/retailers.
+ * Redirect for any old links.
+ */
 export default function RetailersPage() {
-  return (
-    <div className="flex flex-col">
-      <RetailerHero />
-      <RetailerBenefits />
-      <RetailerPlans />
-      <RetailerCTA />
-    </div>
-  )
+  redirect('https://www.ironscout.ai/retailers')
 }

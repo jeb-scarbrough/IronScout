@@ -31,9 +31,17 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link href="/retailers" className="text-sm font-medium hover:text-primary transition-colors">
-              For Retailers
+            <Link href="/search" className="text-sm font-medium hover:text-primary transition-colors">
+              Search
             </Link>
+            <a
+              href="https://www.ironscout.ai/retailers"
+              className="text-sm font-medium hover:text-primary transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              For Retailers
+            </a>
             <ThemeToggle />
             {session ? (
               <div className="relative">
@@ -127,12 +135,21 @@ export function Header() {
           <div className="md:hidden border-t py-4">
             <nav className="flex flex-col space-y-4">
               <Link
-                href="/retailers"
+                href="/search"
                 className="text-sm font-medium hover:text-primary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
-                For Retailers
+                Search
               </Link>
+              <a
+                href="https://www.ironscout.ai/retailers"
+                className="text-sm font-medium hover:text-primary transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                For Retailers
+              </a>
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium">Theme:</span>
                 <ThemeToggle />
