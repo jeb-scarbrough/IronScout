@@ -77,6 +77,7 @@ export function EditMerchantForm({ merchant }: EditMerchantFormProps) {
     <>
       <button
         onClick={() => setIsOpen(true)}
+        data-testid="merchant-edit-open"
         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
       >
         <Pencil className="h-4 w-4" />
@@ -269,6 +270,7 @@ export function EditMerchantForm({ merchant }: EditMerchantFormProps) {
                   <button
                     type="submit"
                     disabled={isSaving}
+                    data-testid="merchant-edit-submit"
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
                   >
                     {isSaving ? (

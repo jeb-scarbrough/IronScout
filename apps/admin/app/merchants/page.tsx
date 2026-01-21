@@ -19,6 +19,36 @@ const tierConfig: Record<string, { label: string; color: string }> = {
   ENTERPRISE: { label: 'Enterprise', color: 'bg-indigo-100 text-indigo-700' },
 };
 
+const isE2E = process.env.E2E_TEST_MODE === 'true';
+const mockMerchants = [
+  {
+    id: 'e2e-merchant',
+    businessName: 'E2E Ammo',
+    websiteUrl: 'https://e2e.example',
+    status: 'PENDING',
+    tier: 'FOUNDING',
+    contactFirstName: 'E2E',
+    contactLastName: 'Merchant',
+    paymentMethod: null,
+    subscriptionExpiresAt: null,
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    merchant_users: [{ email: 'owner@e2e.example', emailVerified: true }],
+  },
+  {
+    id: 'e2e-merchant-2',
+    businessName: 'Active Outfitters',
+    websiteUrl: 'https://active.example',
+    status: 'ACTIVE',
+    tier: 'STANDARD',
+    contactFirstName: 'Active',
+    contactLastName: 'Merchant',
+    paymentMethod: 'STRIPE',
+    subscriptionExpiresAt: new Date('2025-01-15T00:00:00.000Z'),
+    createdAt: new Date('2024-02-01T00:00:00.000Z'),
+    merchant_users: [{ email: 'active@e2e.example', emailVerified: false }],
+  },
+] as const;
+
 
 interface SearchParams {
   search?: string;
@@ -42,19 +72,21 @@ export default async function MerchantsPage({
       }
     : {};
 
-  const merchants = await prisma.merchants.findMany({
-    where,
-    orderBy: [
-      { status: 'asc' }, // PENDING first
-      { createdAt: 'desc' },
-    ],
-    include: {
-      merchant_users: {
-        where: { role: 'OWNER' },
-        take: 1,
-      },
-    },
-  });
+  const merchants = isE2E
+    ? mockMerchants
+    : await prisma.merchants.findMany({
+        where,
+        orderBy: [
+          { status: 'asc' }, // PENDING first
+          { createdAt: 'desc' },
+        ],
+        include: {
+          merchant_users: {
+            where: { role: 'OWNER' },
+            take: 1,
+          },
+        },
+      });
 
   const pendingCount = merchants.filter(m => m.status === 'PENDING').length;
   const activeCount = merchants.filter(m => m.status === 'ACTIVE').length;
@@ -153,7 +185,7 @@ export default async function MerchantsPage({
 
       {/* Merchants Table */}
       <div className="bg-white shadow rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200" data-testid="merchant-list">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

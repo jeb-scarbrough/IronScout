@@ -42,6 +42,7 @@ export function MerchantSearch() {
         value={value}
         onChange={(e) => handleSearch(e.target.value)}
         placeholder="Search by business name..."
+        data-testid="merchant-search-input"
         className="block w-full rounded-md border border-gray-300 bg-white py-2 pl-10 pr-10 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
       />
       {value && (

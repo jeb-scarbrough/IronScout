@@ -34,62 +34,103 @@ export default async function MerchantDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const isE2E = process.env.E2E_TEST_MODE === 'true';
 
-  const merchant = await prisma.merchants.findUnique({
-    where: { id },
-    include: {
-      merchant_users: {
-        where: { role: 'OWNER' },
-        take: 1,
-      },
-      merchant_contacts: {
-        where: { isActive: true },
-        orderBy: [
-          { isAccountOwner: 'desc' },
-          { createdAt: 'asc' },
+  const merchant = isE2E
+    ? {
+        id,
+        businessName: 'E2E Ammo',
+        websiteUrl: 'https://e2e.example',
+        status: 'ACTIVE',
+        tier: 'FOUNDING',
+        storeType: 'ONLINE_ONLY',
+        contactFirstName: 'E2E',
+        contactLastName: 'Merchant',
+        phone: null,
+        paymentMethod: null,
+        subscriptionExpiresAt: null,
+        merchant_users: [
+          {
+            id: 'e2e-owner',
+            email: 'owner@e2e.example',
+            emailVerified: true,
+          },
         ],
-      },
-      _count: {
-        select: {
-          pixel_events: true,
+        merchant_contacts: [
+          {
+            id: 'e2e-contact',
+            firstName: 'E2E',
+            lastName: 'Merchant',
+            email: 'owner@e2e.example',
+            phone: null,
+            roles: ['PRIMARY'],
+            marketingOptIn: false,
+            communicationOptIn: true,
+            isAccountOwner: true,
+            isActive: true,
+          },
+        ],
+        _count: { pixel_events: 0 },
+      }
+    : await prisma.merchants.findUnique({
+        where: { id },
+        include: {
+          merchant_users: {
+            where: { role: 'OWNER' },
+            take: 1,
+          },
+          merchant_contacts: {
+            where: { isActive: true },
+            orderBy: [
+              { isAccountOwner: 'desc' },
+              { createdAt: 'asc' },
+            ],
+          },
+          _count: {
+            select: {
+              pixel_events: true,
+            },
+          },
         },
-      },
-    },
-  });
+      });
 
   if (!merchant) {
     notFound();
   }
 
   // Get retailer data for this merchant (V1: 1:1 relationship)
-  const merchantRetailer = await prisma.merchant_retailers.findFirst({
-    where: { merchantId: id },
-    select: { retailerId: true }
-  });
+  const merchantRetailer = isE2E
+    ? null
+    : await prisma.merchant_retailers.findFirst({
+        where: { merchantId: id },
+        select: { retailerId: true }
+      });
 
   const retailerId = merchantRetailer?.retailerId;
 
   // Get SKU, feed counts, and click events from the retailer (both legacy and affiliate systems)
-  const [legacySkuCount, legacyFeedCount, affiliateFeedCount, sourceProductCount, clickEventCount] = await Promise.all([
-    retailerId
-      ? prisma.retailer_skus.count({ where: { retailerId } })
-      : Promise.resolve(0),
-    retailerId
-      ? prisma.retailer_feeds.count({ where: { retailerId } })
-      : Promise.resolve(0),
-    // Count affiliate feeds via sources
-    retailerId
-      ? prisma.affiliate_feeds.count({ where: { sources: { retailerId } } })
-      : Promise.resolve(0),
-    // Count source products via sources
-    retailerId
-      ? prisma.source_products.count({ where: { sources: { retailerId } } })
-      : Promise.resolve(0),
-    // Count click events for the retailer
-    retailerId
-      ? prisma.click_events.count({ where: { retailerId } })
-      : Promise.resolve(0),
-  ]);
+  const [legacySkuCount, legacyFeedCount, affiliateFeedCount, sourceProductCount, clickEventCount] = isE2E
+    ? [0, 0, 0, 0, 0]
+    : await Promise.all([
+        retailerId
+          ? prisma.retailer_skus.count({ where: { retailerId } })
+          : Promise.resolve(0),
+        retailerId
+          ? prisma.retailer_feeds.count({ where: { retailerId } })
+          : Promise.resolve(0),
+        // Count affiliate feeds via sources
+        retailerId
+          ? prisma.affiliate_feeds.count({ where: { sources: { retailerId } } })
+          : Promise.resolve(0),
+        // Count source products via sources
+        retailerId
+          ? prisma.source_products.count({ where: { sources: { retailerId } } })
+          : Promise.resolve(0),
+        // Count click events for the retailer
+        retailerId
+          ? prisma.click_events.count({ where: { retailerId } })
+          : Promise.resolve(0),
+      ]);
 
   // Combined totals (legacy + affiliate systems)
   const skuCount = legacySkuCount + sourceProductCount;
