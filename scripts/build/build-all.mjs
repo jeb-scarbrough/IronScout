@@ -4,16 +4,19 @@
  * Cross-platform Node.js version
  *
  * Usage:
- *   node scripts/build/build-all.mjs              # Full build + tests
- *   node scripts/build/build-all.mjs --skip-tests # Build without running tests
- *   node scripts/build/build-all.mjs --only web,api  # Build specific apps
- *   node scripts/build/build-all.mjs --skip-install  # Skip pnpm install
- *   node scripts/build/build-all.mjs --skip-prisma   # Skip Prisma generation
+ *   node scripts/build/build-all.mjs                    # Full build + tests
+ *   node scripts/build/build-all.mjs --skip-tests       # Build without running tests
+ *   node scripts/build/build-all.mjs --only web,api     # Build specific apps
+ *   node scripts/build/build-all.mjs --skip-install     # Skip pnpm install
+ *   node scripts/build/build-all.mjs --skip-prisma      # Skip Prisma generation
+ *   node scripts/build/build-all.mjs --skip-version-check  # Skip library version check
+ *   node scripts/build/build-all.mjs --check-versions   # Check versions only (no build)
  */
 
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { createInterface } from 'readline'
 import {
   colors,
   success,
@@ -24,6 +27,7 @@ import {
   run,
   runCapture,
   parseArgs,
+  readJson,
 } from '../lib/utils.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -58,6 +62,258 @@ const TEST_SUITES = [
   },
 ]
 
+// Key libraries to check for updates
+const LIBRARIES_TO_CHECK = [
+  'next',
+  'react',
+  'react-dom',
+  'typescript',
+  'tailwindcss',
+  'postcss',
+  'autoprefixer',
+  '@types/node',
+  '@types/react',
+  '@types/react-dom',
+  'prisma',
+  '@prisma/client',
+  'zod',
+  'bullmq',
+  'ioredis',
+]
+
+/**
+ * Get the latest version of a package from npm
+ */
+function getLatestVersion(packageName) {
+  const result = runCapture(`npm view ${packageName} version`, { cwd: PROJECT_ROOT })
+  if (result.success) {
+    return result.output.trim()
+  }
+  return null
+}
+
+/**
+ * Parse a version string, removing ^ or ~ prefix
+ */
+function parseVersion(version) {
+  if (!version) return null
+  return version.replace(/^[\^~]/, '')
+}
+
+/**
+ * Compare two semver versions
+ * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ */
+function compareVersions(v1, v2) {
+  const parts1 = v1.split('.').map(Number)
+  const parts2 = v2.split('.').map(Number)
+
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const p1 = parts1[i] || 0
+    const p2 = parts2[i] || 0
+    if (p1 > p2) return 1
+    if (p1 < p2) return -1
+  }
+  return 0
+}
+
+/**
+ * Collect all dependencies from workspace package.json files
+ */
+function collectWorkspaceDependencies() {
+  const deps = new Map() // packageName -> { current: version, apps: [app names] }
+
+  // Check root package.json
+  const rootPkg = readJson(resolve(PROJECT_ROOT, 'package.json'))
+  if (rootPkg) {
+    const allDeps = { ...rootPkg.dependencies, ...rootPkg.devDependencies }
+    for (const [name, version] of Object.entries(allDeps)) {
+      if (LIBRARIES_TO_CHECK.includes(name)) {
+        deps.set(name, { current: parseVersion(version), apps: ['root'] })
+      }
+    }
+  }
+
+  // Check apps
+  const appsDir = resolve(PROJECT_ROOT, 'apps')
+  if (existsSync(appsDir)) {
+    for (const app of readdirSync(appsDir)) {
+      const pkgPath = resolve(appsDir, app, 'package.json')
+      if (existsSync(pkgPath)) {
+        const pkg = readJson(pkgPath)
+        if (pkg) {
+          const allDeps = { ...pkg.dependencies, ...pkg.devDependencies }
+          for (const [name, version] of Object.entries(allDeps)) {
+            if (LIBRARIES_TO_CHECK.includes(name)) {
+              const parsed = parseVersion(version)
+              if (deps.has(name)) {
+                const existing = deps.get(name)
+                if (!existing.apps.includes(app)) {
+                  existing.apps.push(app)
+                }
+                // Keep highest version
+                if (compareVersions(parsed, existing.current) > 0) {
+                  existing.current = parsed
+                }
+              } else {
+                deps.set(name, { current: parsed, apps: [app] })
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Check packages
+  const packagesDir = resolve(PROJECT_ROOT, 'packages')
+  if (existsSync(packagesDir)) {
+    for (const pkg of readdirSync(packagesDir)) {
+      const pkgPath = resolve(packagesDir, pkg, 'package.json')
+      if (existsSync(pkgPath)) {
+        const pkgJson = readJson(pkgPath)
+        if (pkgJson) {
+          const allDeps = { ...pkgJson.dependencies, ...pkgJson.devDependencies }
+          for (const [name, version] of Object.entries(allDeps)) {
+            if (LIBRARIES_TO_CHECK.includes(name)) {
+              const parsed = parseVersion(version)
+              if (deps.has(name)) {
+                const existing = deps.get(name)
+                if (!existing.apps.includes(`pkg:${pkg}`)) {
+                  existing.apps.push(`pkg:${pkg}`)
+                }
+                if (compareVersions(parsed, existing.current) > 0) {
+                  existing.current = parsed
+                }
+              } else {
+                deps.set(name, { current: parsed, apps: [`pkg:${pkg}`] })
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return deps
+}
+
+/**
+ * Check for library updates
+ * Returns array of { name, current, latest, updateType }
+ */
+async function checkLibraryUpdates() {
+  const deps = collectWorkspaceDependencies()
+  const updates = []
+
+  info(`Checking ${deps.size} libraries for updates...`)
+  console.log('')
+
+  for (const [name, data] of deps) {
+    const latest = getLatestVersion(name)
+    if (latest && data.current) {
+      const comparison = compareVersions(latest, data.current)
+      if (comparison > 0) {
+        // Determine update type (major, minor, patch)
+        const currentParts = data.current.split('.').map(Number)
+        const latestParts = latest.split('.').map(Number)
+
+        let updateType = 'patch'
+        if (latestParts[0] > currentParts[0]) {
+          updateType = 'major'
+        } else if (latestParts[1] > currentParts[1]) {
+          updateType = 'minor'
+        }
+
+        updates.push({
+          name,
+          current: data.current,
+          latest,
+          updateType,
+          apps: data.apps,
+        })
+      }
+    }
+  }
+
+  return updates
+}
+
+/**
+ * Display updates in a formatted table
+ */
+function displayUpdates(updates) {
+  if (updates.length === 0) {
+    success('All libraries are up to date!')
+    return
+  }
+
+  // Sort: major first, then minor, then patch
+  const order = { major: 0, minor: 1, patch: 2 }
+  updates.sort((a, b) => order[a.updateType] - order[b.updateType])
+
+  const majorUpdates = updates.filter(u => u.updateType === 'major')
+  const minorUpdates = updates.filter(u => u.updateType === 'minor')
+  const patchUpdates = updates.filter(u => u.updateType === 'patch')
+
+  console.log(`${colors.yellow}Found ${updates.length} available updates:${colors.reset}`)
+  console.log('')
+
+  // Calculate column widths
+  const nameWidth = Math.max(20, ...updates.map(u => u.name.length))
+  const versionWidth = 12
+
+  // Header
+  console.log(
+    `  ${'Package'.padEnd(nameWidth)}  ${'Current'.padEnd(versionWidth)}  ${'Latest'.padEnd(versionWidth)}  Type`
+  )
+  console.log(`  ${'-'.repeat(nameWidth)}  ${'-'.repeat(versionWidth)}  ${'-'.repeat(versionWidth)}  ------`)
+
+  // Major updates (red)
+  for (const u of majorUpdates) {
+    console.log(
+      `  ${colors.red}${u.name.padEnd(nameWidth)}${colors.reset}  ${u.current.padEnd(versionWidth)}  ${colors.red}${u.latest.padEnd(versionWidth)}${colors.reset}  ${colors.red}MAJOR${colors.reset}`
+    )
+  }
+
+  // Minor updates (yellow)
+  for (const u of minorUpdates) {
+    console.log(
+      `  ${colors.yellow}${u.name.padEnd(nameWidth)}${colors.reset}  ${u.current.padEnd(versionWidth)}  ${colors.yellow}${u.latest.padEnd(versionWidth)}${colors.reset}  ${colors.yellow}minor${colors.reset}`
+    )
+  }
+
+  // Patch updates (green)
+  for (const u of patchUpdates) {
+    console.log(
+      `  ${colors.green}${u.name.padEnd(nameWidth)}${colors.reset}  ${u.current.padEnd(versionWidth)}  ${colors.green}${u.latest.padEnd(versionWidth)}${colors.reset}  ${colors.green}patch${colors.reset}`
+    )
+  }
+
+  console.log('')
+
+  if (majorUpdates.length > 0) {
+    warn(`${majorUpdates.length} MAJOR update(s) available - review breaking changes before upgrading`)
+  }
+}
+
+/**
+ * Prompt user to continue or abort
+ */
+async function promptToContinue(message) {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+
+  return new Promise((resolve) => {
+    rl.question(`${colors.yellow}${message} [y/N]: ${colors.reset}`, (answer) => {
+      rl.close()
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes')
+    })
+  })
+}
+
 async function main() {
   const startTime = Date.now()
   const args = parseArgs()
@@ -66,10 +322,53 @@ async function main() {
   const skipPrisma = args.flags['skip-prisma']
   const skipTests = args.flags['skip-tests']
   const skipSchemaValidation = args.flags['skip-schema-validation']
+  const skipVersionCheck = args.flags['skip-version-check']
+  const checkVersionsOnly = args.flags['check-versions']
   const only = args.flags.only ? args.flags.only.split(',') : null
 
   const results = {}
   const testResults = {}
+
+  // Step 0: Check for library updates
+  if (!skipVersionCheck) {
+    header('Checking Library Versions')
+
+    const updates = await checkLibraryUpdates()
+    displayUpdates(updates)
+
+    if (checkVersionsOnly) {
+      // Just checking versions, exit after displaying
+      if (updates.length > 0) {
+        console.log(`${colors.cyan}To update, run:${colors.reset}`)
+        console.log('  pnpm update <package-name>')
+        console.log('')
+      }
+      process.exit(0)
+    }
+
+    if (updates.length > 0) {
+      const shouldContinue = await promptToContinue('Continue with build despite outdated libraries?')
+      if (!shouldContinue) {
+        info('Build aborted. Update libraries and try again.')
+        console.log('')
+        console.log(`${colors.cyan}To update all libraries:${colors.reset}`)
+        console.log('  pnpm update')
+        console.log('')
+        console.log(`${colors.cyan}To update specific packages:${colors.reset}`)
+        for (const u of updates.slice(0, 5)) {
+          console.log(`  pnpm update ${u.name}`)
+        }
+        if (updates.length > 5) {
+          console.log(`  ... and ${updates.length - 5} more`)
+        }
+        console.log('')
+        process.exit(1)
+      }
+      info('Continuing with build...')
+    }
+  } else {
+    info('Skipping library version check')
+  }
 
   // Filter apps if --only specified
   let apps = APPS
@@ -83,7 +382,7 @@ async function main() {
     info(`Building only: ${only.join(', ')}`)
   }
 
-  // Step 0: Validate database schema
+  // Step 1: Validate database schema
   if (!skipSchemaValidation) {
     header('Validating Database Schema')
     const validateScript = resolve(PROJECT_ROOT, 'scripts/validate-db-schema.mjs')
