@@ -33,9 +33,9 @@ const SERVICE_PORTS = [
   { name: 'API', port: 8000 },
   { name: 'Web', port: 3000 },
   { name: 'Web (alt)', port: 3001 },
-  { name: 'Web (alt)', port: 3004 },
   { name: 'Admin', port: 3002 },
   { name: 'Merchant', port: 3003 },
+  { name: 'WWW (marketing)', port: 3004 },
   { name: 'Bull Board', port: 3939 },
 ]
 

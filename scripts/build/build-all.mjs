@@ -34,6 +34,7 @@ const APPS = [
   { name: 'notifications', filter: '@ironscout/notifications', command: 'build' },
   { name: 'api', filter: '@ironscout/api', command: 'build' },
   { name: 'web', filter: '@ironscout/web', command: 'build' },
+  { name: 'www', filter: '@ironscout/www', command: 'build' },
   { name: 'admin', filter: '@ironscout/admin', command: 'build' },
   { name: 'merchant', filter: '@ironscout/merchant', command: 'build' },
   { name: 'harvester', filter: '@ironscout/harvester', command: 'build' },

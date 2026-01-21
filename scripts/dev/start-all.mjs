@@ -53,6 +53,13 @@ const SERVICES = [
     healthCheck: 'http://localhost:3000',
   },
   {
+    name: 'www',
+    port: 3004,
+    devCommand: 'pnpm --filter @ironscout/www dev',
+    prodCommand: null, // Static site - served by CDN in production
+    healthCheck: 'http://localhost:3004',
+  },
+  {
     name: 'admin',
     port: 3002,
     devCommand: 'pnpm --filter @ironscout/admin dev',
