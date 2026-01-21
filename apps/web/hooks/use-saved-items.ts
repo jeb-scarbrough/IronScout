@@ -53,13 +53,17 @@ export interface UseSavedItemsResult {
  * - Full CRUD with notification preferences
  */
 export function useSavedItems(): UseSavedItemsResult {
+  const isE2E = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true'
   const { data: session, status } = useSession()
   const [data, setData] = useState<SavedItemsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Memoize token extraction
-  const token = useMemo(() => (session as any)?.accessToken as string | undefined, [session])
+  const token = useMemo(
+    () => (isE2E ? 'e2e-token' : ((session as any)?.accessToken as string | undefined)),
+    [isE2E, session]
+  )
 
   // Build a lookup map for fast isSaved checks
   const savedItemsMap = useMemo(() => {
@@ -91,6 +95,10 @@ export function useSavedItems(): UseSavedItemsResult {
 
   // Fetch on mount or when token changes
   useEffect(() => {
+    if (isE2E) {
+      fetchSavedItems()
+      return
+    }
     if (status === 'loading') return // Wait for session
     if (status === 'unauthenticated') {
       setLoading(false)

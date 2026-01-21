@@ -215,6 +215,7 @@ export function ResultCard({
             <TooltipTrigger asChild>
               <button
                 onClick={handleTrackToggle}
+                data-testid={`save-item-${id}`}
                 className={cn(
                   'absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors',
                   trackingOptimistic

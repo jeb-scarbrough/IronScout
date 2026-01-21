@@ -1,6 +1,7 @@
 import { logger } from './logger'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const E2E_TEST_MODE = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true'
 
 /**
  * Custom error class for authentication failures (401)
@@ -227,6 +228,10 @@ export async function searchProducts(params: SearchParams): Promise<SearchRespon
 }
 
 export async function getAds(placement: string = 'middle', category?: string): Promise<AdsResponse> {
+  if (E2E_TEST_MODE) {
+    return { ads: [], placement, category }
+  }
+
   const searchParams = new URLSearchParams({ position: placement })
   if (category) searchParams.append('category', category)
 
@@ -529,10 +534,72 @@ export interface PremiumFiltersResponse {
   upgradeMessage?: string
 }
 
+function getE2eSearchResponse(params: AISearchParams): AISearchResponse {
+  const now = new Date().toISOString()
+  return {
+    products: [
+      {
+        id: 'e2e-product-1',
+        name: 'E2E 9mm FMJ 115gr (50 rd)',
+        category: 'HANDGUN',
+        brand: 'E2E Ammo',
+        caliber: '9mm',
+        grainWeight: 115,
+        roundCount: 50,
+        prices: [
+          {
+            id: 'e2e-price-1',
+            price: 14.99,
+            currency: 'USD',
+            url: 'https://e2e.example/9mm-fmj',
+            inStock: true,
+            retailer: {
+              id: 'e2e-retailer-1',
+              name: 'E2E Retailer',
+              tier: 'STANDARD',
+            },
+          },
+        ],
+        priceContext: {
+          contextBand: 'TYPICAL',
+          meta: { windowDays: 30, sampleCount: 12, asOf: now },
+        },
+      },
+    ],
+    intent: {
+      originalQuery: params.query,
+      confidence: 0.9,
+      explanation: 'E2E mock intent',
+    },
+    facets: {},
+    pagination: {
+      page: params.page || 1,
+      limit: params.limit || 20,
+      total: 1,
+      totalPages: 1,
+    },
+    searchMetadata: {
+      parsedFilters: {},
+      aiEnhanced: false,
+      vectorSearchUsed: false,
+      processingTimeMs: 1,
+    },
+    _meta: {
+      tier: 'FREE',
+      maxResults: 1,
+      resultsLimited: false,
+    },
+  }
+}
+
 /**
  * AI-powered semantic search
  */
 export async function aiSearch(params: AISearchParams): Promise<AISearchResponse> {
+  if (E2E_TEST_MODE) {
+    return getE2eSearchResponse(params)
+  }
+
   const { token, filters, ...searchParams } = params
 
   const headers = buildAuthHeaders(token)
@@ -1049,10 +1116,47 @@ export interface UpdateSavedItemPrefs {
   stockAlertCooldownHours?: number
 }
 
+const E2E_SAVED_ITEMS_LIMIT = 10
+let e2eSavedItems: SavedItem[] = [
+  {
+    id: 'e2e-saved-1',
+    productId: 'e2e-product-1',
+    name: 'E2E 9mm FMJ 115gr (50 rd)',
+    brand: 'E2E Ammo',
+    caliber: '9mm',
+    price: 14.99,
+    inStock: true,
+    imageUrl: null,
+    savedAt: new Date().toISOString(),
+    notificationsEnabled: true,
+    priceDropEnabled: true,
+    backInStockEnabled: true,
+    minDropPercent: 5,
+    minDropAmount: 5,
+    stockAlertCooldownHours: 24,
+  },
+]
+
+function buildE2eSavedItemsResponse(): SavedItemsResponse {
+  return {
+    items: e2eSavedItems,
+    _meta: {
+      tier: 'FREE',
+      itemCount: e2eSavedItems.length,
+      itemLimit: E2E_SAVED_ITEMS_LIMIT,
+      canAddMore: e2eSavedItems.length < E2E_SAVED_ITEMS_LIMIT,
+    },
+  }
+}
+
 /**
  * Get all saved items for the authenticated user
  */
 export async function getSavedItems(token: string): Promise<SavedItemsResponse> {
+  if (E2E_TEST_MODE) {
+    return buildE2eSavedItemsResponse()
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/saved-items`, {
     headers: buildAuthHeaders(token),
   })
@@ -1070,6 +1174,53 @@ export async function getSavedItems(token: string): Promise<SavedItemsResponse> 
  * Save a product (idempotent - returns existing if already saved)
  */
 export async function saveItem(token: string, productId: string): Promise<SaveItemResponse> {
+  if (E2E_TEST_MODE) {
+    const existing = e2eSavedItems.find((item) => item.productId === productId)
+    if (existing) {
+      return {
+        ...existing,
+        _meta: {
+          tier: 'FREE',
+          itemCount: e2eSavedItems.length,
+          itemLimit: E2E_SAVED_ITEMS_LIMIT,
+          canAddMore: e2eSavedItems.length < E2E_SAVED_ITEMS_LIMIT,
+          wasExisting: true,
+        },
+      }
+    }
+
+    const newItem: SavedItem = {
+      id: `e2e-saved-${Date.now()}`,
+      productId,
+      name: 'E2E Saved Item',
+      brand: 'E2E Ammo',
+      caliber: '9mm',
+      price: 14.99,
+      inStock: true,
+      imageUrl: null,
+      savedAt: new Date().toISOString(),
+      notificationsEnabled: true,
+      priceDropEnabled: true,
+      backInStockEnabled: true,
+      minDropPercent: 5,
+      minDropAmount: 5,
+      stockAlertCooldownHours: 24,
+    }
+
+    e2eSavedItems = [newItem, ...e2eSavedItems]
+
+    return {
+      ...newItem,
+      _meta: {
+        tier: 'FREE',
+        itemCount: e2eSavedItems.length,
+        itemLimit: E2E_SAVED_ITEMS_LIMIT,
+        canAddMore: e2eSavedItems.length < E2E_SAVED_ITEMS_LIMIT,
+        wasExisting: false,
+      },
+    }
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
     method: 'POST',
     headers: buildAuthHeaders(token),
@@ -1088,6 +1239,11 @@ export async function saveItem(token: string, productId: string): Promise<SaveIt
  * Unsave a product
  */
 export async function unsaveItem(token: string, productId: string): Promise<void> {
+  if (E2E_TEST_MODE) {
+    e2eSavedItems = e2eSavedItems.filter((item) => item.productId !== productId)
+    return
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
     method: 'DELETE',
     headers: buildAuthHeaders(token),
@@ -1107,6 +1263,20 @@ export async function updateSavedItemPrefs(
   productId: string,
   prefs: UpdateSavedItemPrefs
 ): Promise<SavedItem> {
+  if (E2E_TEST_MODE) {
+    const existing = e2eSavedItems.find((item) => item.productId === productId)
+    if (!existing) {
+      throw new Error('Saved item not found')
+    }
+
+    const updated = { ...existing, ...prefs }
+    e2eSavedItems = e2eSavedItems.map((item) =>
+      item.productId === productId ? updated : item
+    )
+
+    return updated
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
     method: 'PATCH',
     headers: buildAuthHeaders(token),

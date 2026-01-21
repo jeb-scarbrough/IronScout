@@ -37,7 +37,8 @@ export function SearchResultCard({
   onTrackChange,
 }: SearchResultCardProps) {
   const { data: session } = useSession()
-  const accessToken = (session as any)?.accessToken
+  const isE2E = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true'
+  const accessToken = (session as any)?.accessToken || (isE2E ? 'e2e-token' : undefined)
 
   // Guard against empty prices array to prevent crashes
   if (!product.prices || product.prices.length === 0) {

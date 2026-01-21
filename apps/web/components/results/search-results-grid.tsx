@@ -64,7 +64,8 @@ export function SearchResultsGrid({
   adInterval = 4,
 }: SearchResultsGridProps) {
   const { data: session } = useSession()
-  const accessToken = (session as any)?.accessToken
+  const isE2E = process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true'
+  const accessToken = (session as any)?.accessToken || (isE2E ? 'e2e-token' : undefined)
   const searchParams = useSearchParams()
   const { navigateWithLoading } = useSearchLoading()
 

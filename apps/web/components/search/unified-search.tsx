@@ -292,6 +292,7 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
               }}
               onFocus={() => setShowSuggestions(true)}
               placeholder={ROTATING_PLACEHOLDERS[placeholderIndex]}
+              data-testid="search-input"
               className="w-full pl-24 sm:pl-28 pr-36 py-5 text-lg bg-transparent border-2 border-border rounded-2xl focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/60 transition-all shadow-lg hover:shadow-xl dark:shadow-primary/5"
             />
 

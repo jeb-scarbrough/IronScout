@@ -197,6 +197,7 @@ function SavedItemRow({
                 size="sm"
                 variant="ghost"
                 title="Notification settings"
+                data-testid={`saved-item-notifications-${item.id}`}
                 className={item.notificationsEnabled ? 'text-blue-600' : 'text-muted-foreground'}
               >
                 {item.notificationsEnabled ? (
@@ -220,6 +221,7 @@ function SavedItemRow({
                     id={`notif-master-${item.id}`}
                     checked={item.notificationsEnabled}
                     onCheckedChange={(checked) => onUpdatePref('notificationsEnabled', checked)}
+                    data-testid={`saved-item-notifications-toggle-${item.id}`}
                   />
                 </div>
 
@@ -275,7 +277,13 @@ function SavedItemRow({
             </a>
           </Button>
 
-          <Button size="sm" variant="outline" onClick={onRemove} title="Remove">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRemove}
+            title="Remove"
+            data-testid={`saved-item-remove-${item.id}`}
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
