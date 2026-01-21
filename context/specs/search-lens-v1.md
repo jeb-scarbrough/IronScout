@@ -1,7 +1,7 @@
 # IronScout Lens Specification
 
 ## Status
-Accepted — v1.0.1
+Accepted — v1.0.2
 
 ## Purpose
 
@@ -206,6 +206,15 @@ lensMatches = lens.triggers.some(rule => evaluateTrigger(rule, signals))
 
 If a trigger rule references a signal not present in the extractor output, the rule does not match.
 
+### Trigger Evaluation Semantics (Deterministic)
+
+A trigger rule matches if and only if:
+- `signals[rule.signal]` exists
+- `signals[rule.signal].value === rule.value` (exact, case-sensitive string match)
+- `signals[rule.signal].confidence >= rule.minConfidence` (inclusive threshold)
+
+If `signals[rule.signal]` is missing, the rule does not match.
+
 Example:
 
 ```json
@@ -284,6 +293,12 @@ Examples:
 - `grain GTE 124` with field value `"124gr"` → FALSE (string vs number)
 
 Failure of any eligibility rule excludes the result.
+
+### String Comparison Semantics
+
+All string comparisons in eligibility rules are case-sensitive.
+Product field normalization (e.g., uppercasing bulletType) MUST occur before lens evaluation.
+Lens evaluation performs no string normalization.
 
 ---
 
@@ -619,7 +634,7 @@ High ambiguous rates indicate overlapping trigger definitions.
 1. Lenses are deterministic given intent signals
 2. Intent extraction is deterministic (pinned model, temp=0)
 3. Eligibility is binary
-4. Ordering is explainable
+4. Ordering derives from declared ordering rules only
 5. Embeddings never rank
 6. User overrides always win
 7. Invalid lens IDs are rejected, not ignored
