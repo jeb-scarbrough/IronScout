@@ -19,7 +19,7 @@ import { LENS_SPEC_VERSION } from './definitions'
 import { loggers, LOG_EVENTS } from '../../config/logger'
 import { signalsToArray, SignalExtractionResult } from './signal-extractor'
 import { extractSortKeys } from './ordering'
-import { getCandidatesForTelemetry, getTriggerMatchesForTelemetry } from './selector'
+import { getCandidatesForTelemetry, getAllTriggerMatchesForTelemetry } from './selector'
 import { getPriceLookbackDays } from '../../config/tiers'
 
 const log = loggers.search
@@ -236,8 +236,9 @@ export function buildLensEvalEvent(context: LensEvalContext): LensEvalTelemetry 
       reasonCode: selectionResult.metadata.reasonCode,
       // Use getCandidatesForTelemetry for proper trigger scores
       candidates: getCandidatesForTelemetry(extractionResult.signals),
-      // Per spec A.7: deterministic trigger evaluation proof
-      triggerMatches: getTriggerMatchesForTelemetry(selectionResult.lens, extractionResult.signals),
+      // Per spec A.7: deterministic trigger evaluation proof for ALL auto-applyable lenses
+      // This is required for NO_MATCH and AMBIGUOUS cases where selected lens is ALL
+      triggerMatches: getAllTriggerMatchesForTelemetry(extractionResult.signals),
     },
 
     config: {
@@ -284,6 +285,10 @@ export function emitLensTelemetry(context: LensEvalContext): void {
   try {
     const event = buildLensEvalEvent(context)
 
+    // Per spec "Metrics (Required)": calculate triggerMatchCount and eligibilityExclusionCount
+    const triggerMatchCount = event.lens.triggerMatches.filter(t => t.passed).length
+    const eligibilityExclusionCount = context.candidateCount - context.eligibleCount
+
     // Log as structured event
     log.info(LOG_EVENTS.LENS_EVAL, {
       event_name: event.eventName,
@@ -297,6 +302,9 @@ export function emitLensTelemetry(context: LensEvalContext): void {
       lens_override: event.lens.overrideId !== null,
       intent_status: event.intent.status,
       signal_count: event.intent.signals.length,
+      // Per spec "Metrics (Required)"
+      trigger_match_count: triggerMatchCount,
+      eligibility_exclusion_count: eligibilityExclusionCount,
       candidates: event.eligibility.candidates,
       eligible: event.eligibility.eligible,
       zero_results: event.eligibility.zeroResults,

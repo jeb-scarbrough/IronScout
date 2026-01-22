@@ -21,7 +21,7 @@ const log = loggers.server
 
 import { requestContextMiddleware } from './middleware/request-context'
 import { requestLoggerMiddleware, errorLoggerMiddleware } from './middleware/request-logger'
-import { validateAllLensDefinitions, isLensEnabled } from './services/lens'
+import { validateAllLensDefinitions } from './services/lens'
 import { productsRouter } from './routes/products'
 import { adsRouter } from './routes/ads'
 import { alertsRouter } from './routes/alerts'
@@ -47,14 +47,14 @@ import { usersRouter } from './routes/users'
 // Per search-lens-v1.md §Governance: "Lens definitions must reference only
 // fields in 'Expected Field Types'. Unknown fields fail deploy-time validation."
 // This runs at module load time and throws if lens definitions are invalid.
-if (isLensEnabled()) {
-  try {
-    validateAllLensDefinitions()
-    log.info('Lens definitions validated successfully')
-  } catch (error) {
-    log.error('Lens definition validation failed - server will not start', {}, error as Error)
-    throw error
-  }
+// NOTE: Validation runs unconditionally (regardless of ENABLE_LENS_V1) to ensure
+// definitions are always valid and safe to enable at any time.
+try {
+  validateAllLensDefinitions()
+  log.info('Lens definitions validated successfully')
+} catch (error) {
+  log.error('Lens definition validation failed - server will not start', {}, error as Error)
+  throw error
 }
 
 // ============================================================================

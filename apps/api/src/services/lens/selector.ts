@@ -337,23 +337,20 @@ export function getCandidatesForTelemetry(
 }
 
 /**
- * Generate trigger match details for telemetry.
- * Per spec A.7: provides deterministic representation of trigger evaluation.
+ * Generate trigger match details for a single lens.
  *
- * @param lens - The selected lens
+ * @param lens - The lens to evaluate
  * @param signals - The extracted signals
- * @returns Array of trigger match details
+ * @returns Array of trigger match details for this lens
  */
-export function getTriggerMatchesForTelemetry(
-  lens: Lens,
-  signals: LensSignals
-): TriggerMatch[] {
+function evaluateLensTriggers(lens: Lens, signals: LensSignals): TriggerMatch[] {
   return lens.triggers.map((rule, index) => {
     const signal = signals[rule.signal]
     const minConfidence = rule.minConfidence ?? 0.0
 
     if (!signal) {
       return {
+        lensId: lens.id,
         triggerId: index,
         signalKey: rule.signal,
         expected: rule.value,
@@ -367,6 +364,7 @@ export function getTriggerMatchesForTelemetry(
     const passed = signal.value === rule.value && signal.confidence >= minConfidence
 
     return {
+      lensId: lens.id,
       triggerId: index,
       signalKey: rule.signal,
       expected: rule.value,
@@ -376,4 +374,46 @@ export function getTriggerMatchesForTelemetry(
       passed,
     }
   })
+}
+
+/**
+ * Generate trigger match details for telemetry.
+ * Per spec A.7: provides deterministic representation of trigger evaluation.
+ *
+ * @param lens - The selected lens
+ * @param signals - The extracted signals
+ * @returns Array of trigger match details
+ * @deprecated Use getAllTriggerMatchesForTelemetry for complete trigger evaluation proof
+ */
+export function getTriggerMatchesForTelemetry(
+  lens: Lens,
+  signals: LensSignals
+): TriggerMatch[] {
+  return evaluateLensTriggers(lens, signals)
+}
+
+/**
+ * Generate trigger match details for ALL auto-applyable lenses.
+ * Per spec A.7: provides deterministic representation of trigger evaluation
+ * that led to the lens selection decision.
+ *
+ * This is required for NO_MATCH and AMBIGUOUS cases where the selected lens
+ * is ALL (which has no triggers). We need to show the trigger evaluations
+ * that determined there was no match or multiple matches.
+ *
+ * @param signals - The extracted signals
+ * @returns Array of trigger match details for all auto-applyable lenses
+ */
+export function getAllTriggerMatchesForTelemetry(
+  signals: LensSignals
+): TriggerMatch[] {
+  const autoApplyable = getAutoApplyableLenses()
+  const allMatches: TriggerMatch[] = []
+
+  // Evaluate triggers for all auto-applyable lenses (sorted by lensId for determinism)
+  for (const lens of autoApplyable.sort((a, b) => a.id.localeCompare(b.id))) {
+    allMatches.push(...evaluateLensTriggers(lens, signals))
+  }
+
+  return allMatches
 }

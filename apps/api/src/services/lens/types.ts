@@ -282,6 +282,8 @@ export type IntentStatus = 'OK' | 'PARTIAL' | 'FAILED'
  * Per spec A.7: provides deterministic representation of trigger evaluation.
  */
 export interface TriggerMatch {
+  /** The lens this trigger belongs to */
+  lensId: LensId
   /** Index of the trigger rule in the lens definition */
   triggerId: number
   /** The signal key being checked */
