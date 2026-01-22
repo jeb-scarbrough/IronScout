@@ -177,3 +177,113 @@ export function getAutoApplyableLenses(): Lens[] {
 export function getValidLensIds(): LensId[] {
   return Object.keys(LENS_REGISTRY) as LensId[]
 }
+
+// ============================================================================
+// Deploy-Time Validation
+// ============================================================================
+
+/**
+ * Expected field types per search-lens-v1.md.
+ * These are the only fields that can be used in eligibility and ordering rules.
+ */
+export const EXPECTED_FIELDS: ReadonlySet<string> = new Set([
+  // Product-level fields
+  'productId',
+  'canonicalConfidence',
+  'bulletType',
+  'grain',
+  'casing',
+  'packSize',
+  // Aggregated/derived fields
+  'price',
+  'pricePerRound',
+  'availability',
+])
+
+/**
+ * Validation error for lens definitions.
+ */
+export interface LensValidationError {
+  lensId: LensId
+  field: string
+  type: 'eligibility' | 'ordering'
+  message: string
+}
+
+/**
+ * Validate a lens definition.
+ * Per search-lens-v1.md: "Lens definitions must reference only fields in 'Expected Field Types'.
+ * Unknown fields fail deploy-time validation."
+ *
+ * @param lens - The lens to validate
+ * @returns Array of validation errors (empty if valid)
+ */
+export function validateLensDefinition(lens: Lens): LensValidationError[] {
+  const errors: LensValidationError[] = []
+
+  // Validate eligibility rule fields
+  for (const rule of lens.eligibility) {
+    if (!EXPECTED_FIELDS.has(rule.field)) {
+      errors.push({
+        lensId: lens.id,
+        field: rule.field,
+        type: 'eligibility',
+        message: `Unknown field '${rule.field}' in eligibility rule. Valid fields: ${Array.from(EXPECTED_FIELDS).join(', ')}`,
+      })
+    }
+  }
+
+  // Validate ordering rule fields
+  for (const rule of lens.ordering) {
+    if (!EXPECTED_FIELDS.has(rule.field)) {
+      errors.push({
+        lensId: lens.id,
+        field: rule.field,
+        type: 'ordering',
+        message: `Unknown field '${rule.field}' in ordering rule. Valid fields: ${Array.from(EXPECTED_FIELDS).join(', ')}`,
+      })
+    }
+  }
+
+  return errors
+}
+
+/**
+ * Validate all lens definitions in the registry.
+ * Should be called at application startup to fail fast on invalid definitions.
+ *
+ * @throws Error if any lens definition is invalid
+ */
+export function validateAllLensDefinitions(): void {
+  const allErrors: LensValidationError[] = []
+
+  for (const lens of Object.values(LENS_REGISTRY)) {
+    const errors = validateLensDefinition(lens)
+    allErrors.push(...errors)
+  }
+
+  if (allErrors.length > 0) {
+    const errorMessages = allErrors.map(e =>
+      `[${e.lensId}] ${e.type}: ${e.message}`
+    ).join('\n')
+
+    throw new Error(
+      `Lens definition validation failed with ${allErrors.length} error(s):\n${errorMessages}`
+    )
+  }
+}
+
+/**
+ * Validate lens definitions and log result.
+ * Returns true if valid, false otherwise (does not throw).
+ */
+export function validateAndLogLensDefinitions(): boolean {
+  try {
+    validateAllLensDefinitions()
+    return true
+  } catch (error) {
+    // Log but don't throw - caller decides how to handle
+    console.error('[LENS] Definition validation failed:', error)
+    return false
+  }
+}

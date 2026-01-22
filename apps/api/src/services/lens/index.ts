@@ -54,6 +54,12 @@ export {
   getLens,
   getAutoApplyableLenses,
   getValidLensIds,
+  // Deploy-time validation
+  EXPECTED_FIELDS,
+  LensValidationError,
+  validateLensDefinition,
+  validateAllLensDefinitions,
+  validateAndLogLensDefinitions,
 } from './definitions'
 
 // Eligibility
@@ -110,6 +116,7 @@ export {
 export {
   LensTelemetryConfig,
   DEFAULT_TELEMETRY_CONFIG,
+  createTelemetryConfig,
   LensPerfTiming,
   LensEvalContext,
   buildLensEvalEvent,
@@ -149,7 +156,7 @@ import { selectLens, InvalidLensError, markZeroResults } from './selector'
 import { aggregateProducts, ProductWithOffers } from './aggregation'
 import { applyEligibility, countFilterReasons } from './eligibility'
 import { applyOrdering } from './ordering'
-import { emitLensTelemetry, createTimingTracker, DEFAULT_TELEMETRY_CONFIG } from './telemetry'
+import { emitLensTelemetry, createTimingTracker, createTelemetryConfig } from './telemetry'
 import { AggregatedProduct, LensMetadata, LensId, isLensEnabled } from './types'
 
 export interface LensPipelineInput {
@@ -233,7 +240,7 @@ export async function applyLensPipeline(input: LensPipelineInput): Promise<LensP
     eligibleCount: eligible.length,
     filteredByReason: countFilterReasons(filterReasons),
     orderedProducts: ordered,
-    config: DEFAULT_TELEMETRY_CONFIG,
+    config: createTelemetryConfig(),
     timing: timing.getTiming(),
     status: extraction.status === 'FAILED' ? 'DEGRADED' : 'OK',
   })

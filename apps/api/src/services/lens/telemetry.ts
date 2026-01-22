@@ -19,6 +19,8 @@ import { LENS_SPEC_VERSION } from './definitions'
 import { loggers, LOG_EVENTS } from '../../config/logger'
 import { signalsToArray, SignalExtractionResult } from './signal-extractor'
 import { extractSortKeys } from './ordering'
+import { getCandidatesForTelemetry } from './selector'
+import { getPriceLookbackDays } from '../../config/tiers'
 
 const log = loggers.search
 
@@ -33,7 +35,19 @@ export interface LensTelemetryConfig {
 }
 
 /**
+ * Create telemetry configuration with current settings.
+ * Uses getPriceLookbackDays() for consistency with actual query filtering.
+ */
+export function createTelemetryConfig(): LensTelemetryConfig {
+  return {
+    priceLookbackDays: getPriceLookbackDays(),
+    asOfTime: new Date(),
+  }
+}
+
+/**
  * Default telemetry configuration.
+ * @deprecated Use createTelemetryConfig() for current values
  */
 export const DEFAULT_TELEMETRY_CONFIG: LensTelemetryConfig = {
   priceLookbackDays: parseInt(process.env.CURRENT_PRICE_LOOKBACK_DAYS || '7', 10),
@@ -115,6 +129,20 @@ function redactPii(query: string): string {
 }
 
 /**
+ * Get the most common filter reason from filtered reasons.
+ * Returns null if no reasons.
+ */
+function getTopFilterReason(filteredByReason: Record<string, number>): string | null {
+  const entries = Object.entries(filteredByReason)
+  if (entries.length === 0) {
+    return null
+  }
+  // Find the reason with the highest count
+  entries.sort((a, b) => b[1] - a[1])
+  return entries[0][0]
+}
+
+/**
  * Build the top-N results array for telemetry.
  *
  * @param products - Ordered products (already sorted)
@@ -175,11 +203,8 @@ export function buildLensEvalEvent(context: LensEvalContext): LensEvalTelemetry 
       selectedId: selectionResult.lens.id,
       version: selectionResult.lens.version,
       reasonCode: selectionResult.metadata.reasonCode,
-      candidates: selectionResult.matchedLensIds.map((id: LensId) => ({
-        lensId: id,
-        version: selectionResult.lens.version,
-        triggerScore: 0, // Simplified - could be enhanced
-      })),
+      // Use getCandidatesForTelemetry for proper trigger scores
+      candidates: getCandidatesForTelemetry(extractionResult.signals),
     },
 
     config: {
@@ -192,7 +217,11 @@ export function buildLensEvalEvent(context: LensEvalContext): LensEvalTelemetry 
       eligible: context.eligibleCount,
       filteredByReason: context.filteredByReason,
       zeroResults: context.eligibleCount === 0,
-      ...(context.eligibleCount === 0 ? { zeroResultsReasonCode: 'ELIGIBILITY_FILTER' } : {}),
+      // Per spec: zeroResultsReasonCode when zeroResults = true
+      // Use the most common filter reason or 'NO_MATCHES' as fallback
+      ...(context.eligibleCount === 0 ? {
+        zeroResultsReasonCode: getTopFilterReason(context.filteredByReason) || 'NO_MATCHES'
+      } : {}),
     },
 
     results: {

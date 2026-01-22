@@ -135,6 +135,55 @@ function calculatePricePerRound(price: number | null, packSize: number | null): 
 }
 
 /**
+ * Floor a confidence value to 2 decimal places.
+ * Per search-lens-v1.md: canonicalConfidence is floored to 2 decimals.
+ *
+ * @param confidence - Raw confidence value
+ * @returns Confidence floored to 2 decimal places, or null
+ */
+function floorConfidence(confidence: number | null | undefined): number | null {
+  if (confidence === null || confidence === undefined) {
+    return null
+  }
+  // Floor to 2 decimal places (e.g., 0.859 -> 0.85)
+  return Math.floor(confidence * 100) / 100
+}
+
+// ============================================================================
+// Field Normalization
+// ============================================================================
+
+/**
+ * Normalize a string field by uppercasing.
+ * Per search-lens-v1.md: product field normalization MUST occur before lens evaluation.
+ *
+ * @param value - Raw field value
+ * @returns Uppercased value, or null if input is null/undefined
+ */
+function normalizeUpperCase(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null
+  }
+  return value.toUpperCase()
+}
+
+/**
+ * Normalize bulletType for lens evaluation.
+ * Common bullet types: FMJ, HP, JHP, TMJ, SP, OTM, MATCH, etc.
+ */
+function normalizeBulletType(bulletType: string | null | undefined): string | null {
+  return normalizeUpperCase(bulletType)
+}
+
+/**
+ * Normalize casing material for lens evaluation.
+ * Common casings: BRASS, STEEL, NICKEL, ALUMINUM
+ */
+function normalizeCasing(casing: string | null | undefined): string | null {
+  return normalizeUpperCase(casing)
+}
+
+/**
  * Aggregate a product with its offers into an AggregatedProduct.
  *
  * @param product - The product with its visible offers
@@ -152,13 +201,16 @@ export function aggregateProduct(product: ProductWithOffers): AggregatedProduct 
   const pricePerRound = calculatePricePerRound(price, packSize)
 
   return {
-    // Product-level fields
+    // Product-level fields with normalization
+    // Per search-lens-v1.md: product field normalization MUST occur before lens evaluation
     productId: product.id,
-    bulletType: product.bulletType ?? null,
+    bulletType: normalizeBulletType(product.bulletType),
     grain: product.grainWeight ?? null,
-    casing: product.caseMaterial ?? null,
+    casing: normalizeCasing(product.caseMaterial),
     packSize,
-    canonicalConfidence: product.dataConfidence ?? null,
+    // Per search-lens-v1.md: canonicalConfidence is floored to 2 decimals
+    // Source: product.dataConfidence (ideally ProductResolver.matchScore from product_links)
+    canonicalConfidence: floorConfidence(product.dataConfidence),
 
     // Offer-level aggregated fields
     price,

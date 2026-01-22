@@ -287,15 +287,47 @@ export function nonIgnoredRunPriceWhere(): Prisma.pricesWhereInput {
   }
 }
 
+// ============================================================================
+// PRICE LOOKBACK FILTER (per search-lens-v1.md)
+// ============================================================================
+
+/**
+ * Get the current price lookback days setting.
+ * Per search-lens-v1.md: visible offers must be within CURRENT_PRICE_LOOKBACK_DAYS.
+ * Default: 7 days
+ */
+export function getPriceLookbackDays(): number {
+  return parseInt(process.env.CURRENT_PRICE_LOOKBACK_DAYS || '7', 10)
+}
+
+/**
+ * Prisma where clause to filter prices by lookback window.
+ * Per search-lens-v1.md: only prices observed within CURRENT_PRICE_LOOKBACK_DAYS
+ * are considered "current" for lens evaluation.
+ */
+export function priceLookbackWhere(): Prisma.pricesWhereInput {
+  const lookbackDays = getPriceLookbackDays()
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)
+
+  return {
+    observedAt: {
+      gte: cutoffDate,
+    },
+  }
+}
+
 /**
  * Complete visibility filter for consumer-facing price queries.
- * Combines ADR-005 (retailer visibility) and ADR-015 (run ignore).
+ * Combines ADR-005 (retailer visibility), ADR-015 (run ignore), and
+ * search-lens-v1.md (price lookback).
  */
 export function visiblePriceWhere(): Prisma.pricesWhereInput {
   return {
     AND: [
       visibleRetailerPriceWhere(),
       nonIgnoredRunPriceWhere(),
+      priceLookbackWhere(),
     ],
   }
 }

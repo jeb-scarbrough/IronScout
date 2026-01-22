@@ -225,17 +225,26 @@ export async function aiSearch(
 
   // Filter out products with no visible prices
   // Products may exist but have all prices filtered out by price conditions
+  // EXCEPTION: When lens is enabled, keep zero-offer products per spec
+  // (they'll have price=null, availability=OUT_OF_STOCK and sort last)
   const originalCount = products.length
-  products = products.filter((p: any) => p.prices && p.prices.length > 0)
+  if (!isLensEnabled()) {
+    products = products.filter((p: any) => p.prices && p.prices.length > 0)
 
-  if (products.length !== originalCount) {
-    log.debug('Filtered products without visible prices', {
-      before: originalCount,
-      after: products.length
+    if (products.length !== originalCount) {
+      log.debug('Filtered products without visible prices', {
+        before: originalCount,
+        after: products.length
+      })
+      // Adjust total estimate based on ratio of products with prices
+      const ratio = products.length / (originalCount || 1)
+      total = Math.max(products.length, Math.floor(total * ratio))
+    }
+  } else {
+    log.debug('Lens enabled - keeping products without visible prices', {
+      totalProducts: originalCount,
+      withPrices: products.filter((p: any) => p.prices && p.prices.length > 0).length
     })
-    // Adjust total estimate based on ratio of products with prices
-    const ratio = products.length / (originalCount || 1)
-    total = Math.max(products.length, Math.floor(total * ratio))
   }
 
   // Ensure total is at least the number of products returned on this page
@@ -295,9 +304,16 @@ export async function aiSearch(
   }
 
   // 7. Apply tier-appropriate ranking
+  // CRITICAL: When lens pipeline is active, lens ordering MUST be preserved.
+  // Per search-lens-v1.md: "Ordering derives from declared ordering rules only"
   let rankedProducts: any[]
-  
-  if (isPremium && (sortBy === 'relevance' || sortBy === 'price_context')) {
+  const lensOrderingActive = lensMetadata !== undefined
+
+  if (lensOrderingActive) {
+    // Lens pipeline already applied deterministic ordering - preserve it
+    rankedProducts = products
+    log.debug('Preserving lens ordering, skipping premium ranking')
+  } else if (isPremium && (sortBy === 'relevance' || sortBy === 'price_context')) {
     // PREMIUM: Apply performance-aware ranking with price context
     premiumFeaturesUsed.push('premium_ranking')
 
@@ -325,9 +341,10 @@ export async function aiSearch(
   } else {
     rankedProducts = products
   }
-  
+
   // 8. Apply price sorting if requested
-  if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+  // CRITICAL: Skip when lens ordering is active - lens determines order
+  if (!lensOrderingActive && (sortBy === 'price_asc' || sortBy === 'price_desc')) {
     rankedProducts = rankedProducts.sort((a: any, b: any) => {
       const aPrice = a.prices[0]?.price || Infinity
       const bPrice = b.prices[0]?.price || Infinity

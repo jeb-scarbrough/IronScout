@@ -285,10 +285,12 @@ async function parseWithAI(query: string, userTier: 'FREE' | 'PREMIUM'): Promise
     ? getPremiumSystemPrompt()
     : getFreeSystemPrompt()
 
+  // Per lens spec: temperature MUST be 0 for determinism
+  const modelId = process.env.INTENT_EXTRACTOR_MODEL || 'gpt-4o-mini'
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: modelId,
     max_tokens: isPremium ? 1000 : 500,
-    temperature: 0.1,
+    temperature: 0,  // REQUIRED: temp=0 per search-lens-v1.md
     response_format: { type: 'json_object' },
     messages: [
       {
