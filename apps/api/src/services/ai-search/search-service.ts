@@ -9,7 +9,7 @@ import {
   PremiumRankedProduct
 } from './premium-ranking'
 import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
-import { batchGetPricesViaProductLinks } from './price-resolver'
+import { batchGetPricesViaProductLinks, batchGetPricesWithConfidence } from './price-resolver'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
 import { loggers } from '../../config/logger'
 import {
@@ -260,10 +260,21 @@ export async function aiSearch(
     log.debug('Lens pipeline enabled', { lensId, productCount: products.length })
 
     try {
+      // Per search-lens-v1.md: canonicalConfidence source = ProductResolver.matchScore
+      // Fetch product_links.confidence and merge into products before lens evaluation
+      const productIds = products.map((p: any) => p.id)
+      const { confidenceMap } = await batchGetPricesWithConfidence(productIds)
+
+      // Merge linkConfidence into products for lens aggregation
+      const productsWithConfidence = products.map((p: any) => ({
+        ...p,
+        linkConfidence: confidenceMap.get(p.id) ?? null,
+      }))
+
       // Run the lens pipeline with the fetched products
       const lensResult = await applyLensPipeline({
         query,
-        products: products as ProductWithOffers[],
+        products: productsWithConfidence as ProductWithOffers[],
         userLensId: lensId,
         requestId,
       })

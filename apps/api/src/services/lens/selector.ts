@@ -29,6 +29,7 @@ import {
   LensSelectionResult,
   LensTriggerRule,
   ReasonCode,
+  TriggerMatch,
   isValidLensId,
 } from './types'
 import {
@@ -332,5 +333,47 @@ export function getCandidatesForTelemetry(
       return b.triggerScore - a.triggerScore
     }
     return a.lensId.localeCompare(b.lensId)
+  })
+}
+
+/**
+ * Generate trigger match details for telemetry.
+ * Per spec A.7: provides deterministic representation of trigger evaluation.
+ *
+ * @param lens - The selected lens
+ * @param signals - The extracted signals
+ * @returns Array of trigger match details
+ */
+export function getTriggerMatchesForTelemetry(
+  lens: Lens,
+  signals: LensSignals
+): TriggerMatch[] {
+  return lens.triggers.map((rule, index) => {
+    const signal = signals[rule.signal]
+    const minConfidence = rule.minConfidence ?? 0.0
+
+    if (!signal) {
+      return {
+        triggerId: index,
+        signalKey: rule.signal,
+        expected: rule.value,
+        actual: null,
+        actualConfidence: null,
+        minConfidence,
+        passed: false,
+      }
+    }
+
+    const passed = signal.value === rule.value && signal.confidence >= minConfidence
+
+    return {
+      triggerId: index,
+      signalKey: rule.signal,
+      expected: rule.value,
+      actual: signal.value,
+      actualConfidence: signal.confidence,
+      minConfidence,
+      passed,
+    }
   })
 }

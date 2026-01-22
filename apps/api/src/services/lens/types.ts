@@ -278,6 +278,27 @@ export interface LensSelectionResult {
 export type IntentStatus = 'OK' | 'PARTIAL' | 'FAILED'
 
 /**
+ * A single trigger match result for telemetry.
+ * Per spec A.7: provides deterministic representation of trigger evaluation.
+ */
+export interface TriggerMatch {
+  /** Index of the trigger rule in the lens definition */
+  triggerId: number
+  /** The signal key being checked */
+  signalKey: string
+  /** The expected value from the trigger rule */
+  expected: string
+  /** The actual value from the signal (null if signal missing) */
+  actual: string | null
+  /** The actual confidence from the signal (null if signal missing) */
+  actualConfidence: number | null
+  /** The minimum confidence required */
+  minConfidence: number
+  /** Whether this trigger passed */
+  passed: boolean
+}
+
+/**
  * Lens evaluation telemetry event (lens_eval.v1).
  * Emitted server-side after lens evaluation completes.
  */
@@ -302,6 +323,7 @@ export interface LensEvalTelemetry {
 
   intent: {
     extractorModelId: string
+    extractorVersion: string  // Per spec A.6: extractor version for audit
     extractorTemp: number // explicitly log even if 0
     status: IntentStatus
     signals: Array<{ key: string; value: string; confidence: number }>
@@ -318,6 +340,8 @@ export interface LensEvalTelemetry {
       version: string
       triggerScore: number
     }>
+    /** Per spec A.7: deterministic trigger evaluation proof */
+    triggerMatches: TriggerMatch[]
   }
 
   config: {

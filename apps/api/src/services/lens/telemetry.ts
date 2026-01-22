@@ -19,7 +19,7 @@ import { LENS_SPEC_VERSION } from './definitions'
 import { loggers, LOG_EVENTS } from '../../config/logger'
 import { signalsToArray, SignalExtractionResult } from './signal-extractor'
 import { extractSortKeys } from './ordering'
-import { getCandidatesForTelemetry } from './selector'
+import { getCandidatesForTelemetry, getTriggerMatchesForTelemetry } from './selector'
 import { getPriceLookbackDays } from '../../config/tiers'
 
 const log = loggers.search
@@ -82,6 +82,34 @@ export interface LensEvalContext {
   config: LensTelemetryConfig
   timing: LensPerfTiming
   status: 'OK' | 'DEGRADED' | 'FAILED'
+}
+
+/**
+ * Parse extractor version from model ID.
+ * Per spec A.6: extractorVersion should be logged for audit.
+ *
+ * Model IDs may be in formats like:
+ * - "gpt-4o-mini" → version "gpt-4o-mini"
+ * - "intent-v2.1.0" → version "v2.1.0"
+ * - "gpt-4-0125-preview" → version "0125-preview"
+ *
+ * If no version pattern found, returns the full modelId.
+ */
+function parseExtractorVersion(modelId: string): string {
+  // Try to extract version pattern like v1.0.0, v2.1.0, etc.
+  const versionMatch = modelId.match(/v\d+\.\d+\.\d+/)
+  if (versionMatch) {
+    return versionMatch[0]
+  }
+
+  // Try to extract date-based version like 0125-preview, 2024-01-25
+  const dateVersionMatch = modelId.match(/\d{4}(-\d{2})?(-\d{2})?(-\w+)?$/)
+  if (dateVersionMatch) {
+    return dateVersionMatch[0]
+  }
+
+  // Return full modelId as version
+  return modelId
 }
 
 /**
@@ -192,6 +220,9 @@ export function buildLensEvalEvent(context: LensEvalContext): LensEvalTelemetry 
 
     intent: {
       extractorModelId: extractionResult.extractorModelId,
+      // Per spec A.6: extractorVersion for audit (embedded in modelId or separate)
+      // We parse version from modelId if present, otherwise use modelId as version
+      extractorVersion: parseExtractorVersion(extractionResult.extractorModelId),
       extractorTemp: 0, // Always 0 per spec
       status: extractionResult.status,
       signals: signalsToArray(extractionResult.signals),
@@ -205,6 +236,8 @@ export function buildLensEvalEvent(context: LensEvalContext): LensEvalTelemetry 
       reasonCode: selectionResult.metadata.reasonCode,
       // Use getCandidatesForTelemetry for proper trigger scores
       candidates: getCandidatesForTelemetry(extractionResult.signals),
+      // Per spec A.7: deterministic trigger evaluation proof
+      triggerMatches: getTriggerMatchesForTelemetry(selectionResult.lens, extractionResult.signals),
     },
 
     config: {

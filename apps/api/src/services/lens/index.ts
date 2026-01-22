@@ -37,6 +37,7 @@ export {
   LensSelectionResult,
   // Telemetry types
   IntentStatus,
+  TriggerMatch,
   LensEvalTelemetry,
   // Feature flag
   isLensEnabled,
@@ -110,6 +111,7 @@ export {
   markZeroResults,
   calculateTriggerScore,
   getCandidatesForTelemetry,
+  getTriggerMatchesForTelemetry,
 } from './selector'
 
 // Telemetry

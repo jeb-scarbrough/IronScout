@@ -47,6 +47,12 @@ export interface ProductWithOffers {
   muzzleVelocityFps?: number | null
   isSubsonic?: boolean | null
   dataConfidence?: number | null
+  /**
+   * ProductResolver match confidence from product_links.
+   * Per search-lens-v1.md: canonicalConfidence source = ProductResolver.matchScore
+   * This is the max confidence across all product_links for this product.
+   */
+  linkConfidence?: number | null
 
   // Offers from product_links
   prices: VisibleOffer[]
@@ -200,6 +206,10 @@ export function aggregateProduct(product: ProductWithOffers): AggregatedProduct 
   const packSize = product.roundCount ?? null
   const pricePerRound = calculatePricePerRound(price, packSize)
 
+  // Per search-lens-v1.md: canonicalConfidence source = ProductResolver.matchScore
+  // Use linkConfidence (from product_links.confidence) if available, fall back to dataConfidence
+  const rawConfidence = product.linkConfidence ?? product.dataConfidence
+
   return {
     // Product-level fields with normalization
     // Per search-lens-v1.md: product field normalization MUST occur before lens evaluation
@@ -209,8 +219,8 @@ export function aggregateProduct(product: ProductWithOffers): AggregatedProduct 
     casing: normalizeCasing(product.caseMaterial),
     packSize,
     // Per search-lens-v1.md: canonicalConfidence is floored to 2 decimals
-    // Source: product.dataConfidence (ideally ProductResolver.matchScore from product_links)
-    canonicalConfidence: floorConfidence(product.dataConfidence),
+    // Source: product_links.confidence (ProductResolver.matchScore)
+    canonicalConfidence: floorConfidence(rawConfidence),
 
     // Offer-level aggregated fields
     price,

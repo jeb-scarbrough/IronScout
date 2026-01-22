@@ -67,6 +67,16 @@ export async function getPricesViaProductLinks(productId: string) {
 }
 
 /**
+ * Result from batch price resolution including confidence.
+ */
+export interface BatchPriceResult {
+  /** Map of productId → prices */
+  pricesMap: Map<string, any[]>
+  /** Map of productId → max product_links.confidence (ProductResolver.matchScore) */
+  confidenceMap: Map<string, number>
+}
+
+/**
  * Get prices for multiple canonical products through product_links
  * Optimized for batch operations
  *
@@ -76,6 +86,20 @@ export async function getPricesViaProductLinks(productId: string) {
 export async function batchGetPricesViaProductLinks(
   productIds: string[]
 ): Promise<Map<string, any[]>> {
+  const result = await batchGetPricesWithConfidence(productIds)
+  return result.pricesMap
+}
+
+/**
+ * Get prices and confidence for multiple canonical products through product_links.
+ * Per search-lens-v1.md: canonicalConfidence source = ProductResolver.matchScore
+ *
+ * @param productIds - Array of canonical product IDs
+ * @returns Prices and max confidence per product
+ */
+export async function batchGetPricesWithConfidence(
+  productIds: string[]
+): Promise<BatchPriceResult> {
   // Find all source_products linked to these canonical products
   // Per Spec v1.2 §0.0: Query path must include both MATCHED and CREATED links
   const links = await prisma.product_links.findMany({
@@ -91,14 +115,26 @@ export async function batchGetPricesViaProductLinks(
   })
 
   if (links.length === 0) {
-    return new Map(productIds.map(id => [id, []]))
+    return {
+      pricesMap: new Map(productIds.map(id => [id, []])),
+      confidenceMap: new Map(productIds.map(id => [id, 0])),
+    }
   }
 
   // Build sourceProductId → productId mapping
   const sourceToProduct = new Map<string, string>()
+  // Track max confidence per productId for canonicalConfidence
+  const confidenceMap = new Map<string, number>(productIds.map(id => [id, 0]))
+
   for (const link of links) {
     if (link.productId) {
       sourceToProduct.set(link.sourceProductId, link.productId)
+      // Track max confidence per product (ProductResolver.matchScore)
+      const currentMax = confidenceMap.get(link.productId) ?? 0
+      const linkConfidence = Number(link.confidence)
+      if (linkConfidence > currentMax) {
+        confidenceMap.set(link.productId, linkConfidence)
+      }
     }
   }
 
@@ -120,18 +156,18 @@ export async function batchGetPricesViaProductLinks(
   })
 
   // Group prices by canonical product
-  const result = new Map<string, any[]>(productIds.map(id => [id, []]))
+  const pricesMap = new Map<string, any[]>(productIds.map(id => [id, []]))
 
   for (const price of prices) {
     if (price.sourceProductId) {
       const productId = sourceToProduct.get(price.sourceProductId)
       if (productId) {
-        result.get(productId)?.push(price)
+        pricesMap.get(productId)?.push(price)
       }
     }
   }
 
-  return result
+  return { pricesMap, confidenceMap }
 }
 
 /**
