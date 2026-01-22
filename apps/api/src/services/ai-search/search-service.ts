@@ -12,6 +12,13 @@ import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal
 import { batchGetPricesViaProductLinks } from './price-resolver'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
 import { loggers } from '../../config/logger'
+import {
+  isLensEnabled,
+  applyLensPipeline,
+  InvalidLensError,
+  LensMetadata,
+  ProductWithOffers,
+} from '../lens'
 
 const log = loggers.ai
 
@@ -71,6 +78,8 @@ export interface AISearchResult {
     userTier: 'FREE' | 'PREMIUM'
     premiumFeaturesUsed?: string[]
   }
+  /** Lens metadata (only present when ENABLE_LENS_V1=true) */
+  lens?: LensMetadata
 }
 
 /**
@@ -83,6 +92,10 @@ export interface AISearchOptions {
   useVectorSearch?: boolean
   explicitFilters?: ExplicitFilters
   userTier?: 'FREE' | 'PREMIUM'
+  /** Optional lens ID for lens-based filtering (requires ENABLE_LENS_V1=true) */
+  lensId?: string
+  /** Request ID for telemetry correlation */
+  requestId?: string
 }
 
 /**
@@ -107,12 +120,15 @@ export async function aiSearch(
     sortBy = 'relevance',
     useVectorSearch = true,
     explicitFilters = {},
-    userTier = 'PREMIUM' // V1: All users get premium capabilities
+    userTier = 'PREMIUM', // V1: All users get premium capabilities
+    lensId,
+    requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
   } = options
 
   // V1: All users get premium features
   const isPremium = true
   const premiumFeaturesUsed: string[] = []
+  let lensMetadata: LensMetadata | undefined
   
   log.debug('Starting search', {
     query,
@@ -227,7 +243,57 @@ export async function aiSearch(
     log.warn('Count mismatch - adjusting', { productsLength: products.length, total })
     total = products.length
   }
-  
+
+  // =============================================
+  // LENS PIPELINE (when ENABLE_LENS_V1=true)
+  // =============================================
+  if (isLensEnabled()) {
+    log.debug('Lens pipeline enabled', { lensId, productCount: products.length })
+
+    try {
+      // Run the lens pipeline with the fetched products
+      const lensResult = await applyLensPipeline({
+        query,
+        products: products as ProductWithOffers[],
+        userLensId: lensId,
+        requestId,
+      })
+
+      lensMetadata = lensResult.metadata
+      premiumFeaturesUsed.push('lens_pipeline')
+
+      // Use lens-ordered products for the rest of the flow
+      // The lens pipeline already applies eligibility filtering and ordering
+      const lensProducts = lensResult.products.map(ap => ap._originalProduct)
+
+      // Update total based on lens eligibility filtering
+      if (lensResult.zeroResults) {
+        total = 0
+      } else {
+        total = lensResult.products.length
+      }
+
+      // Continue with lens-filtered products
+      products = lensProducts as any[]
+
+      log.debug('Lens pipeline completed', {
+        lensId: lensMetadata.id,
+        autoApplied: lensMetadata.autoApplied,
+        reasonCode: lensMetadata.reasonCode,
+        resultCount: products.length,
+        zeroResults: lensResult.zeroResults,
+      })
+    } catch (error) {
+      // Handle InvalidLensError by re-throwing (will be caught by route handler)
+      if (error instanceof InvalidLensError) {
+        throw error
+      }
+
+      // Log other errors but don't fail the search
+      log.error('Lens pipeline error, falling back to standard ranking', { error })
+    }
+  }
+
   // 7. Apply tier-appropriate ranking
   let rankedProducts: any[]
   
@@ -337,7 +403,9 @@ export async function aiSearch(
       processingTimeMs,
       userTier: 'PREMIUM', // V1: All users get premium
       ...(premiumFeaturesUsed.length > 0 ? { premiumFeaturesUsed } : {})
-    }
+    },
+    // Include lens metadata when lens pipeline is enabled
+    ...(lensMetadata ? { lens: lensMetadata } : {})
   }
 }
 

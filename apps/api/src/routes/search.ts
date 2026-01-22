@@ -5,6 +5,7 @@ import { enqueueEmbeddingBatch, getEmbeddingQueueStats } from '../services/ai-se
 import { prisma, isAiSearchEnabled, isVectorSearchEnabled } from '@ironscout/db'
 import { requireAdmin, rateLimit } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { InvalidLensError, VALID_LENS_IDS, isLensEnabled } from '../services/lens'
 
 const log = loggers.search
 
@@ -40,6 +41,8 @@ const semanticSearchSchema = z.object({
   page: z.number().int().positive().default(1),
   limit: z.number().int().min(1).max(100).default(20),
   sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc', 'price_context']).default('relevance'),
+  // Optional lens ID for lens-based filtering (requires ENABLE_LENS_V1=true)
+  lensId: z.string().optional(),
   // Explicit filters that override AI intent
   filters: z.object({
     // Basic filters (FREE + PREMIUM)
@@ -81,10 +84,13 @@ router.post('/semantic', async (req: Request, res: Response) => {
       })
     }
 
-    const { query, page, limit, sortBy, filters } = semanticSearchSchema.parse(req.body)
+    const { query, page, limit, sortBy, lensId, filters } = semanticSearchSchema.parse(req.body)
 
     // Check if vector search is enabled
     const vectorEnabled = await isVectorSearchEnabled()
+
+    // Generate request ID for telemetry correlation
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
     // V1: All users get full capabilities
     const result = await aiSearch(query, {
@@ -94,10 +100,18 @@ router.post('/semantic', async (req: Request, res: Response) => {
       useVectorSearch: vectorEnabled,
       explicitFilters: filters,
       userTier: 'PREMIUM',
+      lensId,
+      requestId,
     })
 
     res.json(result)
   } catch (error) {
+    // Handle InvalidLensError with 400 response
+    if (error instanceof InvalidLensError) {
+      log.warn('Invalid lens ID', { lensId: error.lensId })
+      return res.status(400).json(error.toApiError())
+    }
+
     log.error('Semantic search error', {}, error)
 
     if (error instanceof z.ZodError) {
@@ -106,7 +120,7 @@ router.post('/semantic', async (req: Request, res: Response) => {
         details: error.issues
       })
     }
-    
+
     res.status(500).json({ error: 'Search failed' })
   }
 })
@@ -410,6 +424,44 @@ router.get('/premium-filters', async (_req: Request, res: Response) => {
   } catch (error) {
     log.error('Premium filters error', {}, error)
     res.status(500).json({ error: 'Failed to get premium filters' })
+  }
+})
+
+/**
+ * Get available lenses for search
+ * GET /api/search/lenses
+ *
+ * Returns available lens IDs and their descriptions when ENABLE_LENS_V1=true.
+ * Returns 503 when lens feature is disabled.
+ */
+router.get('/lenses', async (_req: Request, res: Response) => {
+  try {
+    if (!isLensEnabled()) {
+      return res.status(503).json({
+        error: 'Lens feature is disabled',
+        code: 'LENS_DISABLED',
+        message: 'Set ENABLE_LENS_V1=true to enable lens-based filtering'
+      })
+    }
+
+    // Import definitions dynamically to avoid circular deps
+    const { LENS_REGISTRY } = await import('../services/lens')
+
+    const lenses = Object.values(LENS_REGISTRY).map(lens => ({
+      id: lens.id,
+      label: lens.label,
+      description: lens.description,
+      version: lens.version,
+    }))
+
+    res.json({
+      enabled: true,
+      lenses,
+      validIds: VALID_LENS_IDS,
+    })
+  } catch (error) {
+    log.error('Get lenses error', {}, error)
+    res.status(500).json({ error: 'Failed to get lenses' })
   }
 })
 

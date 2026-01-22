@@ -83,6 +83,11 @@ AI/Search:
 - Optional:
   - `EMBEDDING_MODEL`
   - `CHAT_MODEL`
+  - `ENABLE_LENS_V1=true|false` - Enable lens-based search filtering (default: false)
+    - When enabled, search results can be filtered and ordered by deterministic lens policies
+    - Lenses: ALL, RANGE, DEFENSIVE, MATCH
+    - See `context/specs/search-lens-v1.md` for full specification
+  - `INTENT_EXTRACTOR_MODEL` - Model ID for intent extraction (default: gpt-4o-mini)
 
 Stripe:
 - `STRIPE_SECRET_KEY`
