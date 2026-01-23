@@ -51,7 +51,7 @@ const SERVICES = [
       ? 'C:\\ProgramData\\chocolatey\\bin\\caddy.exe run'
       : 'caddy run',
     healthCheck: null, // Caddy doesn't have a simple health endpoint
-    optional: true, // Only needed for local HTTPS domains
+    optional: false, // Required for local HTTPS domains
   },
   {
     name: 'api',
@@ -449,7 +449,7 @@ async function main() {
   // Start each service
   for (const service of services) {
     // Check if optional service (like Caddy) is available
-    if (service.optional && service.name === 'caddy') {
+    if (service.name === 'caddy') {
       try {
         const { execSync } = await import('child_process')
         // Try full path on Windows first, then fallback to PATH
@@ -458,11 +458,9 @@ async function main() {
           : 'caddy version'
         execSync(caddyCmd, { stdio: 'ignore' })
       } catch {
-        warn(`Caddy not installed - skipping local HTTPS proxy`)
-        info('  Install Caddy for https://*.ironscout.local domains')
-        info('  Or set NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 in apps/web/.env.local')
-        console.log('')
-        continue
+        error('Caddy not installed - HTTPS is required for local dev')
+        info('Install Caddy for https://*.ironscout.local domains')
+        process.exit(1)
       }
     }
 
@@ -505,17 +503,13 @@ async function main() {
 
   console.log('')
 
-  // Check if Caddy is running to show appropriate URLs
-  const caddyRunning = childProcesses.some(svc => svc.name === 'caddy' && !svc.exited)
-  if (caddyRunning) {
-    info('Local HTTPS URLs (via Caddy):')
-    console.log(`${colors.gray}  https://app.ironscout.local      - Web App${colors.reset}`)
-    console.log(`${colors.gray}  https://api.ironscout.local      - API${colors.reset}`)
-    console.log(`${colors.gray}  https://admin.ironscout.local    - Admin${colors.reset}`)
-    console.log(`${colors.gray}  https://merchant.ironscout.local - Merchant${colors.reset}`)
-    console.log(`${colors.gray}  https://www.ironscout.local      - Marketing${colors.reset}`)
-    console.log('')
-  }
+  info('Local HTTPS URLs (via Caddy):')
+  console.log(`${colors.gray}  https://app.ironscout.local      - Web App${colors.reset}`)
+  console.log(`${colors.gray}  https://api.ironscout.local      - API${colors.reset}`)
+  console.log(`${colors.gray}  https://admin.ironscout.local    - Admin${colors.reset}`)
+  console.log(`${colors.gray}  https://merchant.ironscout.local - Merchant${colors.reset}`)
+  console.log(`${colors.gray}  https://www.ironscout.local      - Marketing${colors.reset}`)
+  console.log('')
 
   info('Bull Board (Queue Monitor): http://localhost:3939/admin/queues')
   console.log(`${colors.gray}  Auth: admin / ironscout2024${colors.reset}`)

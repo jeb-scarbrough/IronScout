@@ -99,6 +99,13 @@ If this constraint cannot be enforced, only one Harvester instance may run sched
 
 ---
 
+## Edge Proxy and TLS
+
+- Production traffic is expected to terminate TLS at an edge proxy (Nginx) before reaching apps.
+- Local development uses Caddy to provide HTTPS for `*.ironscout.local` domains.
+
+---
+
 ## Configuration Management
 
 ### Environment Variables
