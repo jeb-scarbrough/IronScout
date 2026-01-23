@@ -193,6 +193,7 @@ Examples:
 **Follow-Up**
 - If pub/sub is down, note that periodic refresh is the fallback (60s max)
 - If Redis is down, document staleness and restore Redis
+- On-call review/acknowledgment: single-member on-call self-ack in notes
 
 ---
 
