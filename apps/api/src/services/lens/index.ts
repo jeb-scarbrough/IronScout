@@ -67,9 +67,8 @@ export {
 } from './definitions'
 
 // Eligibility
+export type { RuleEvaluationResult, EligibilityResult } from './eligibility'
 export {
-  RuleEvaluationResult,
-  EligibilityResult,
   evaluateRule,
   evaluateEligibility,
   applyEligibility,
@@ -85,9 +84,8 @@ export {
 } from './ordering'
 
 // Aggregation
+export type { VisibleOffer, ProductWithOffers } from './aggregation'
 export {
-  VisibleOffer,
-  ProductWithOffers,
   aggregateProduct,
   aggregateProducts,
   hasVisibleOffers,
@@ -95,10 +93,9 @@ export {
 } from './aggregation'
 
 // Signal Extraction
+export type { ExtractorConfig, SignalExtractionResult } from './signal-extractor'
 export {
-  ExtractorConfig,
   DEFAULT_EXTRACTOR_CONFIG,
-  SignalExtractionResult,
   intentToSignals,
   extractLensSignals,
   signalsToArray,
@@ -118,12 +115,10 @@ export {
 } from './selector'
 
 // Telemetry
+export type { LensTelemetryConfig, LensPerfTiming, LensEvalContext } from './telemetry'
 export {
-  LensTelemetryConfig,
   DEFAULT_TELEMETRY_CONFIG,
   createTelemetryConfig,
-  LensPerfTiming,
-  LensEvalContext,
   buildLensEvalEvent,
   emitLensTelemetry,
   createTimingTracker,
