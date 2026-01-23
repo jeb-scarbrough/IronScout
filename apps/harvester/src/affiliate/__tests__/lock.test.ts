@@ -6,20 +6,22 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock Prisma client
-const mockQueryRaw = vi.fn()
+// Shared mock reference that persists across module resets
+let mockQueryRaw: ReturnType<typeof vi.fn>
 
-vi.mock('@ironscout/db', () => ({
-  prisma: {
-    $queryRaw: mockQueryRaw,
-  },
-}))
+// Set up mock before tests run
+beforeEach(() => {
+  vi.resetModules()
+  mockQueryRaw = vi.fn()
+
+  vi.doMock('@ironscout/db', () => ({
+    prisma: {
+      $queryRaw: mockQueryRaw,
+    },
+  }))
+})
 
 describe('Advisory Lock', () => {
-  beforeEach(() => {
-    mockQueryRaw.mockReset()
-  })
-
   describe('acquireAdvisoryLock', () => {
     it('should return true when lock is acquired', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
