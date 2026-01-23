@@ -15,12 +15,22 @@ import { CANONICAL_CALIBERS, normalizeCaliber, type CaliberValue } from './gun-l
 // ============================================================================
 // CONFIGURATION
 // Per spec: These limits should be documented and configurable
+// ⚠️ WARNING: These limits can silently drop eligible deals and affect hero selection.
+// If products or deals exceed limits, results may not include all eligible items.
 // ============================================================================
 
-/** Maximum products to evaluate for deals (query limit) */
+/**
+ * Maximum products to evaluate for deals (query limit)
+ * ⚠️ If more than this many products have recent prices, only the first 500
+ * (by lowest price) are evaluated. This can cause eligible deals to be missed.
+ */
 const MAX_PRODUCTS_TO_EVALUATE = 500
 
-/** Maximum deals to return in response */
+/**
+ * Maximum deals to return in response
+ * ⚠️ If more deals are eligible, only the top 10 (by deterministic sort order)
+ * are returned. This truncation is logged when it occurs.
+ */
 const MAX_DEALS_RETURNED = 10
 
 /** Minimum price drop percentage to qualify as PRICE_DROP deal */
@@ -307,6 +317,21 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
 
   // Select hero (first item after deterministic sorting)
   const hero = deals.length > 0 ? deals[0] : null
+
+  // Log warning if limits caused truncation (for operational visibility)
+  if (currentPrices.length >= MAX_PRODUCTS_TO_EVALUATE) {
+    console.warn('[MarketDeals] Product evaluation limit reached', {
+      limit: MAX_PRODUCTS_TO_EVALUATE,
+      message: 'Some eligible deals may have been missed due to query limit',
+    })
+  }
+  if (deals.length > MAX_DEALS_RETURNED) {
+    console.warn('[MarketDeals] Deal return limit reached', {
+      totalEligible: deals.length,
+      returned: MAX_DEALS_RETURNED,
+      truncated: deals.length - MAX_DEALS_RETURNED,
+    })
+  }
 
   return {
     deals: deals.slice(0, MAX_DEALS_RETURNED),

@@ -130,6 +130,7 @@ export interface Gun {
 /**
  * Get all guns in user's Gun Locker
  * Per spec: Output MUST use canonical caliber enum values
+ * Per spec: Guns with unmapped calibers are EXCLUDED from output (data integrity)
  */
 export async function getGuns(userId: string): Promise<Gun[]> {
   const guns = await prisma.user_guns.findMany({
@@ -137,16 +138,27 @@ export async function getGuns(userId: string): Promise<Gun[]> {
     orderBy: { createdAt: 'desc' },
   })
 
-  return guns.map((g) => {
-    // Runtime normalize to ensure canonical output (handles legacy data)
-    const caliber = normalizeCaliber(g.caliber) || (g.caliber as CaliberValue)
-    return {
-      id: g.id,
-      caliber,
-      nickname: g.nickname,
-      createdAt: g.createdAt,
-    }
-  })
+  // Filter and normalize - EXCLUDE guns with unmapped calibers
+  // This ensures output always uses canonical enum values per spec
+  return guns
+    .map((g) => {
+      const caliber = normalizeCaliber(g.caliber)
+      if (!caliber) {
+        // Log warning for data quality monitoring, but don't expose non-canonical data
+        console.warn('[GunLocker] Excluding gun with unmapped caliber', {
+          gunId: g.id,
+          rawCaliber: g.caliber,
+        })
+        return null
+      }
+      return {
+        id: g.id,
+        caliber,
+        nickname: g.nickname,
+        createdAt: g.createdAt,
+      }
+    })
+    .filter((g): g is Gun => g !== null)
 }
 
 /**
@@ -216,6 +228,7 @@ export async function countGuns(userId: string): Promise<number> {
 /**
  * Get user's calibers (unique list) for deal personalization
  * Per spec: Output MUST use canonical caliber enum values
+ * Per spec: Unmapped calibers are EXCLUDED from output
  */
 export async function getUserCalibers(userId: string): Promise<CaliberValue[]> {
   const guns = await prisma.user_guns.findMany({
@@ -224,9 +237,11 @@ export async function getUserCalibers(userId: string): Promise<CaliberValue[]> {
     distinct: ['caliber'],
   })
 
-  // Runtime normalize to ensure canonical output (handles legacy data)
+  // Normalize and filter - EXCLUDE unmapped calibers
+  // This ensures output always uses canonical enum values per spec
   const calibers = guns
-    .map((g) => normalizeCaliber(g.caliber) || (g.caliber as CaliberValue))
+    .map((g) => normalizeCaliber(g.caliber))
+    .filter((c): c is CaliberValue => c !== null)
     .filter((c, i, arr) => arr.indexOf(c) === i) // Dedupe after normalization
   return calibers
 }
