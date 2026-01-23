@@ -5,6 +5,7 @@ import { hasPriceHistoryAccess, getPriceHistoryDays, shapePriceHistory } from '.
 import { getUserTier } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { batchGetPricesViaProductLinks, getPricesViaProductLinks } from '../services/ai-search/price-resolver'
+import { lookupByUpc } from '../services/upc-lookup'
 
 const log = loggers.products
 
@@ -245,6 +246,28 @@ router.get('/search', async (req: Request, res: Response) => {
   } catch (error) {
     log.error('Search error', { error }, error as Error)
     res.status(400).json({ error: 'Invalid search parameters' })
+  }
+})
+
+// UPC Lookup - GET /api/products/lookup/upc/:upc
+// Used by barcode scanning on price-check page
+router.get('/lookup/upc/:upc', async (req: Request, res: Response) => {
+  try {
+    const upc = req.params.upc as string
+
+    if (!upc || upc.length < 8) {
+      return res.status(400).json({
+        error: 'Invalid UPC',
+        message: 'UPC must be at least 8 digits',
+      })
+    }
+
+    const result = await lookupByUpc(upc)
+
+    res.json(result)
+  } catch (error) {
+    log.error('UPC lookup error', { error }, error as Error)
+    res.status(500).json({ error: 'Failed to lookup UPC' })
   }
 })
 

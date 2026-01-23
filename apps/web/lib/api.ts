@@ -1567,3 +1567,61 @@ export async function checkPrice(params: PriceCheckParams, token?: string): Prom
 
   return response.json()
 }
+
+// ============================================
+// UPC Lookup API
+// ============================================
+
+/**
+ * Product data returned from UPC lookup
+ */
+export interface UpcLookupProduct {
+  id: string
+  name: string
+  caliber: string | null
+  brand: string | null
+  grainWeight: number | null
+  roundCount: number | null
+  imageUrl: string | null
+}
+
+/**
+ * UPC lookup result
+ */
+export interface UpcLookupResult {
+  found: boolean
+  product: UpcLookupProduct | null
+}
+
+/**
+ * Look up a product by UPC code (for barcode scanning)
+ */
+export async function lookupProductByUpc(upc: string): Promise<UpcLookupResult> {
+  if (E2E_TEST_MODE) {
+    // E2E mock: return a found product for any valid-looking UPC
+    if (upc && upc.length >= 8) {
+      return {
+        found: true,
+        product: {
+          id: 'e2e-product-1',
+          name: 'E2E 9mm FMJ 115gr (50 rd)',
+          caliber: '9mm',
+          brand: 'E2E Ammo',
+          grainWeight: 115,
+          roundCount: 50,
+          imageUrl: null,
+        },
+      }
+    }
+    return { found: false, product: null }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/products/lookup/upc/${encodeURIComponent(upc)}`)
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to lookup UPC')
+  }
+
+  return response.json()
+}
