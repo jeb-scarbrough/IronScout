@@ -47,6 +47,7 @@ export {
 } from './types'
 
 // Definitions
+export type { LensValidationError } from './definitions'
 export {
   LENS_SPEC_VERSION,
   LENS_DEFINITION_VERSION,
@@ -60,7 +61,6 @@ export {
   getValidLensIds,
   // Deploy-time validation
   EXPECTED_FIELDS,
-  LensValidationError,
   validateLensDefinition,
   validateAllLensDefinitions,
   validateAndLogLensDefinitions,
