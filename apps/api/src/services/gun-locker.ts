@@ -14,14 +14,14 @@ import { randomUUID } from 'crypto'
  */
 export const CANONICAL_CALIBERS = [
   '9mm',
-  '.45_acp',
-  '.40_sw',
-  '.380_acp',
-  '.22_lr',
-  '.223_556',
-  '.308_762x51',
+  '.45 ACP',
+  '.40 S&W',
+  '.380 ACP',
+  '.22 LR',
+  '.223/5.56',
+  '.308/7.62x51',
   '.30-06',
-  '6.5_creedmoor',
+  '6.5 Creedmoor',
   '7.62x39',
   '12ga',
   '20ga',
@@ -30,10 +30,94 @@ export const CANONICAL_CALIBERS = [
 export type CaliberValue = typeof CANONICAL_CALIBERS[number]
 
 /**
- * Validate that a caliber value is in the canonical enum
+ * Alias mapping per gun_locker_v1_spec.md
+ * Maps common aliases to canonical values
  */
-export function isValidCaliber(caliber: string): caliber is CaliberValue {
-  return CANONICAL_CALIBERS.includes(caliber as CaliberValue)
+const CALIBER_ALIASES: Record<string, CaliberValue> = {
+  // 9mm aliases
+  '9x19mm': '9mm',
+  '9x19': '9mm',
+  '9mm luger': '9mm',
+  '9mm parabellum': '9mm',
+  // .223/5.56 aliases
+  '5.56 nato': '.223/5.56',
+  '5.56x45mm': '.223/5.56',
+  '5.56x45': '.223/5.56',
+  '5.56mm': '.223/5.56',
+  '5.56': '.223/5.56',
+  '.223 rem': '.223/5.56',
+  '.223 remington': '.223/5.56',
+  '223 rem': '.223/5.56',
+  // .308/7.62x51 aliases
+  '7.62x51mm': '.308/7.62x51',
+  '7.62x51': '.308/7.62x51',
+  '7.62 nato': '.308/7.62x51',
+  '.308 win': '.308/7.62x51',
+  '.308 winchester': '.308/7.62x51',
+  '308 win': '.308/7.62x51',
+  // .45 ACP aliases
+  '.45 auto': '.45 ACP',
+  '45 acp': '.45 ACP',
+  '.45acp': '.45 ACP',
+  // .40 S&W aliases
+  '40 s&w': '.40 S&W',
+  '.40sw': '.40 S&W',
+  '.40 smith & wesson': '.40 S&W',
+  // .380 ACP aliases
+  '380 acp': '.380 ACP',
+  '.380acp': '.380 ACP',
+  '.380 auto': '.380 ACP',
+  // .22 LR aliases
+  '22 lr': '.22 LR',
+  '.22lr': '.22 LR',
+  '22lr': '.22 LR',
+  '.22 long rifle': '.22 LR',
+  // 6.5 Creedmoor aliases
+  '6.5mm creedmoor': '6.5 Creedmoor',
+  '6.5 cm': '6.5 Creedmoor',
+  // 7.62x39 aliases
+  '7.62x39mm': '7.62x39',
+  // .30-06 aliases
+  '30-06': '.30-06',
+  '.30-06 springfield': '.30-06',
+  '.30-06 sprg': '.30-06',
+  // Shotgun aliases
+  '12 gauge': '12ga',
+  '12 ga': '12ga',
+  '12g': '12ga',
+  '20 gauge': '20ga',
+  '20 ga': '20ga',
+  '20g': '20ga',
+}
+
+/**
+ * Normalize a caliber input to canonical value
+ * Returns the canonical value if valid, null if unmapped
+ */
+export function normalizeCaliber(input: string): CaliberValue | null {
+  const normalized = input.trim()
+
+  // Check direct match (case-insensitive for canonical)
+  for (const canonical of CANONICAL_CALIBERS) {
+    if (canonical.toLowerCase() === normalized.toLowerCase()) {
+      return canonical
+    }
+  }
+
+  // Check alias mapping (case-insensitive)
+  const alias = CALIBER_ALIASES[normalized.toLowerCase()]
+  if (alias) {
+    return alias
+  }
+
+  return null
+}
+
+/**
+ * Validate that a caliber value is in the canonical enum or can be normalized
+ */
+export function isValidCaliber(caliber: string): boolean {
+  return normalizeCaliber(caliber) !== null
 }
 
 export interface Gun {
@@ -62,15 +146,17 @@ export async function getGuns(userId: string): Promise<Gun[]> {
 
 /**
  * Add a gun to user's Gun Locker
- * @throws Error if caliber is not in canonical enum
+ * Normalizes caliber aliases to canonical values per spec
+ * @throws Error if caliber cannot be normalized to canonical enum
  */
 export async function addGun(
   userId: string,
   caliber: string,
   nickname?: string | null
 ): Promise<Gun> {
-  // Validate caliber is in canonical enum per spec
-  if (!isValidCaliber(caliber)) {
+  // Normalize caliber input to canonical value (handles aliases)
+  const normalizedCaliber = normalizeCaliber(caliber)
+  if (!normalizedCaliber) {
     throw new Error(`Invalid caliber: ${caliber}. Must be one of: ${CANONICAL_CALIBERS.join(', ')}`)
   }
 
@@ -78,7 +164,7 @@ export async function addGun(
     data: {
       id: randomUUID(),
       userId,
-      caliber,
+      caliber: normalizedCaliber, // Store canonical value
       nickname: nickname || null,
     },
   })

@@ -57,7 +57,8 @@ export async function checkPrice(
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
   // Normalize caliber for database query (handle aliases)
-  const caliberConditions = getCaliberConditions(caliber)
+  // caliber is validated as CaliberValue on line 51
+  const caliberConditions = getCaliberConditions(caliber as CaliberValue)
 
   // Build brand/grain filters
   let brandCondition = ''
@@ -204,14 +205,14 @@ function getCaliberConditions(caliber: CaliberValue): { sql: string; params: str
   // Map canonical caliber to possible database values
   const aliasGroups: Record<CaliberValue, string[]> = {
     '9mm': ['9mm', '9mm luger', '9mm parabellum', '9x19', '9x19mm'],
-    '.45_acp': ['.45 acp', '45 acp', '.45acp', '.45 auto'],
-    '.40_sw': ['.40 s&w', '40 s&w', '.40sw', '.40 smith & wesson'],
-    '.380_acp': ['.380 acp', '380 acp', '.380acp', '.380 auto'],
-    '.22_lr': ['.22 lr', '22 lr', '.22lr', '22lr', '.22 long rifle'],
-    '.223_556': ['.223 rem', '.223 remington', '223 rem', '5.56', '5.56mm', '5.56x45', '5.56 nato', '.223/5.56'],
-    '.308_762x51': ['.308 win', '.308 winchester', '308 win', '7.62x51', '7.62x51mm', '7.62 nato', '.308/7.62x51'],
+    '.45 ACP': ['.45 acp', '45 acp', '.45acp', '.45 auto'],
+    '.40 S&W': ['.40 s&w', '40 s&w', '.40sw', '.40 smith & wesson'],
+    '.380 ACP': ['.380 acp', '380 acp', '.380acp', '.380 auto'],
+    '.22 LR': ['.22 lr', '22 lr', '.22lr', '22lr', '.22 long rifle'],
+    '.223/5.56': ['.223 rem', '.223 remington', '223 rem', '5.56', '5.56mm', '5.56x45', '5.56 nato', '.223/5.56'],
+    '.308/7.62x51': ['.308 win', '.308 winchester', '308 win', '7.62x51', '7.62x51mm', '7.62 nato', '.308/7.62x51'],
     '.30-06': ['.30-06', '30-06', '.30-06 springfield', '.30-06 sprg'],
-    '6.5_creedmoor': ['6.5 creedmoor', '6.5mm creedmoor', '6.5 cm'],
+    '6.5 Creedmoor': ['6.5 creedmoor', '6.5mm creedmoor', '6.5 cm'],
     '7.62x39': ['7.62x39', '7.62x39mm'],
     '12ga': ['12 gauge', '12 ga', '12ga', '12g'],
     '20ga': ['20 gauge', '20 ga', '20ga', '20g'],
@@ -230,21 +231,21 @@ function getCaliberConditions(caliber: CaliberValue): { sql: string; params: str
  * Get human-readable caliber label
  */
 function getCaliberLabel(caliber: string): string {
-  const labels: Record<string, string> = {
+  const labels: Record<CaliberValue, string> = {
     '9mm': '9mm',
-    '.45_acp': '.45 ACP',
-    '.40_sw': '.40 S&W',
-    '.380_acp': '.380 ACP',
-    '.22_lr': '.22 LR',
-    '.223_556': '.223 / 5.56',
-    '.308_762x51': '.308 / 7.62x51',
+    '.45 ACP': '.45 ACP',
+    '.40 S&W': '.40 S&W',
+    '.380 ACP': '.380 ACP',
+    '.22 LR': '.22 LR',
+    '.223/5.56': '.223 / 5.56',
+    '.308/7.62x51': '.308 / 7.62x51',
     '.30-06': '.30-06',
-    '6.5_creedmoor': '6.5 Creedmoor',
+    '6.5 Creedmoor': '6.5 Creedmoor',
     '7.62x39': '7.62x39',
     '12ga': '12 Gauge',
     '20ga': '20 Gauge',
   }
-  return labels[caliber] || caliber
+  return labels[caliber as CaliberValue] || caliber
 }
 
 function round(value: number, decimals: number): number {
@@ -254,4 +255,52 @@ function round(value: number, decimals: number): number {
 
 function formatPrice(price: number): string {
   return price.toFixed(2)
+}
+
+/**
+ * PriceCheckEvent per mobile_price_check_v1_spec.md
+ *
+ * Intent signal for analytics (internal only)
+ *
+ * PRIVACY RULES (ENFORCED):
+ * - NO individual-level persistence: Raw enteredPrice must not be stored in user-linked records
+ * - Aggregation only: Events aggregated to caliber-level statistics before long-term storage
+ * - Retention: Raw event logs retained ≤7 days for debugging, then purged or aggregated
+ * - No user linking: Events must not be joinable to user identity after aggregation
+ */
+export interface PriceCheckEvent {
+  caliber: CaliberValue
+  enteredPrice: number
+  classification: PriceClassification
+  hasGunLocker: boolean
+  clickedOffer: boolean
+  timestamp: Date
+}
+
+/**
+ * Emit a PriceCheckEvent for analytics
+ *
+ * STUB: Currently logs to console only
+ * TODO: Implement aggregation pipeline per privacy rules
+ *
+ * @param event - The PriceCheckEvent data (without user identity)
+ */
+export function emitPriceCheckEvent(event: PriceCheckEvent): void {
+  // PRIVACY: This function must NEVER receive or store user IDs
+  // Any caller providing user identity would violate spec privacy rules
+
+  // Log for debugging (retained ≤7 days per spec)
+  console.log('[PriceCheckEvent]', JSON.stringify({
+    caliber: event.caliber,
+    // Note: In production, enteredPrice would be bucketed/anonymized before aggregation
+    classification: event.classification,
+    hasGunLocker: event.hasGunLocker,
+    clickedOffer: event.clickedOffer,
+    timestamp: event.timestamp.toISOString(),
+  }))
+
+  // TODO: Implement aggregation pipeline
+  // - Aggregate to caliber-level counts (e.g., "9mm: 150 checks, 45 LOWER, 80 TYPICAL, 25 HIGHER")
+  // - Store only aggregated statistics for long-term retention
+  // - Purge raw event logs after 7 days
 }

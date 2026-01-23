@@ -3,27 +3,29 @@
  *
  * Per dashboard_market_deals_v1_spec.md:
  * - Surfaces market-wide notable price events
- * - Eligibility: ≥15% below 30-day median, back in stock after 7+ days, or lowest in 90 days
- * - Hero selection: largest price drop %, then earliest timestamp, then productId ASC
+ * - Eligibility: ≥15% below 30-day median, back in stock after 7+ days OOS, or lowest in 90 days
+ * - Hero selection: largest price drop %, then earliest timestamp, then productId ASC (deterministic)
+ * - Products with unmapped calibers are EXCLUDED (per normalization requirement)
+ * - Gun Locker affects ordering/labeling ONLY, not hero selection
  */
 
 import { prisma } from '@ironscout/db'
-import { CANONICAL_CALIBERS, type CaliberValue } from './gun-locker'
+import { CANONICAL_CALIBERS, normalizeCaliber, type CaliberValue } from './gun-locker'
 
 /**
  * Market Deal data contract per spec
+ * Note: caliber is non-null because we exclude unmapped calibers
  */
 export interface MarketDeal {
   productId: string
   productName: string
-  caliber: CaliberValue | null
-  pricePerRound: number
+  caliber: CaliberValue  // NOT nullable - unmapped calibers are excluded
+  pricePerRound: number | null  // null if roundCount unavailable
   price: number
   retailerName: string
   retailerId: string
   url: string
   contextLine: string
-  dropPercent: number | null
   detectedAt: Date
   reason: 'PRICE_DROP' | 'BACK_IN_STOCK' | 'LOWEST_90D'
 }
@@ -48,7 +50,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
   const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-  // Get current best prices per product with caliber normalization
+  // Get current best prices per product
   // ADR-005: Apply full visibility predicate
   const currentPrices = await prisma.$queryRaw<
     Array<{
@@ -56,12 +58,11 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
       productName: string
       caliber: string | null
       price: any
-      pricePerRound: any
+      roundCount: number | null
       retailerId: string
       retailerName: string
       url: string
       observedAt: Date
-      roundCount: number | null
     }>
   >`
     WITH ranked_prices AS (
@@ -71,7 +72,6 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
         p.caliber,
         p."roundCount",
         pr.price,
-        CASE WHEN p."roundCount" > 0 THEN pr.price / p."roundCount" ELSE NULL END as "pricePerRound",
         r.id as "retailerId",
         r.name as "retailerName",
         pr.url,
@@ -154,32 +154,59 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
 
   const lowestMap = new Map(lowestPrices.map((l) => [l.productId, parseFloat(l.lowestPrice.toString())]))
 
-  // Get products that were out of stock for 7+ days but now in stock
-  // (Back in stock detection)
+  // Get products that were out of stock (zero visible offers) for ≥7 consecutive days
+  // Per spec: "Product had zero visible offers for ≥7 consecutive days, now has ≥1"
+  // This requires checking for a gap of at least 7 days with no in-stock offers
   const backInStockProducts = await prisma.$queryRaw<Array<{ productId: string }>>`
-    WITH last_stock_check AS (
+    WITH daily_stock AS (
       SELECT
         pl."productId",
-        MAX(CASE WHEN pr."inStock" = false THEN pr."observedAt" END) as last_oos,
-        MAX(CASE WHEN pr."inStock" = true THEN pr."observedAt" END) as last_in_stock
+        DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as day,
+        MAX(CASE WHEN pr."inStock" THEN 1 ELSE 0 END) as had_stock
       FROM product_links pl
       JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
+      JOIN retailers r ON r.id = pr."retailerId"
+      LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
       WHERE pl."productId" = ANY(${productIds})
         AND pl.status IN ('MATCHED', 'CREATED')
-        AND pr."observedAt" >= ${sevenDaysAgo}
-      GROUP BY pl."productId"
+        AND pr."observedAt" >= ${thirtyDaysAgo}
+        AND r."visibilityStatus" = 'ELIGIBLE'
+        AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
+      GROUP BY pl."productId", DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
+    ),
+    with_gaps AS (
+      SELECT
+        "productId",
+        day,
+        had_stock,
+        day - (ROW_NUMBER() OVER (PARTITION BY "productId", had_stock ORDER BY day) * INTERVAL '1 day') as grp
+      FROM daily_stock
+    ),
+    oos_streaks AS (
+      SELECT
+        "productId",
+        MIN(day) as streak_start,
+        MAX(day) as streak_end,
+        COUNT(*) as streak_days
+      FROM with_gaps
+      WHERE had_stock = 0
+      GROUP BY "productId", grp
+      HAVING COUNT(*) >= 7
+    ),
+    recently_restocked AS (
+      SELECT DISTINCT os."productId"
+      FROM oos_streaks os
+      JOIN daily_stock ds ON ds."productId" = os."productId"
+      WHERE ds.day > os.streak_end
+        AND ds.had_stock = 1
+        AND ds.day >= ${sevenDaysAgo}
     )
-    SELECT "productId"
-    FROM last_stock_check
-    WHERE last_oos IS NOT NULL
-      AND last_in_stock IS NOT NULL
-      AND last_in_stock > last_oos
-      AND last_oos >= ${sevenDaysAgo}
+    SELECT "productId" FROM recently_restocked
   `
 
   const backInStockSet = new Set(backInStockProducts.map((p) => p.productId))
 
-  // Build deals list
+  // Build deals list - EXCLUDING products with unmapped calibers
   const deals: MarketDeal[] = []
 
   for (const current of currentPrices) {
@@ -187,22 +214,31 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     const median = medianMap.get(current.productId)
     const lowest90d = lowestMap.get(current.productId)
 
-    // Normalize caliber to canonical enum
-    const normalizedCaliber = normalizeCaliberToCanonical(current.caliber)
+    // Normalize caliber to canonical enum - SKIP if unmapped
+    const normalizedCaliber = normalizeCaliber(current.caliber || '')
+    if (!normalizedCaliber) {
+      // Per spec: "Products with unmapped calibers are excluded from Market Deals"
+      continue
+    }
+
+    // Calculate price per round - null if roundCount unavailable (per spec)
+    const pricePerRound = current.roundCount && current.roundCount > 0
+      ? currentPrice / current.roundCount
+      : null
 
     // Check eligibility criteria
     let reason: MarketDeal['reason'] | null = null
-    let dropPercent: number | null = null
     let contextLine = ''
 
     // Check ≥15% below 30-day median (need at least 5 price points)
     if (median && median.priceCount >= 5) {
       const medianPrice = parseFloat(median.medianPrice.toString())
-      dropPercent = ((medianPrice - currentPrice) / medianPrice) * 100
+      const dropPercent = ((medianPrice - currentPrice) / medianPrice) * 100
 
       if (dropPercent >= 15) {
         reason = 'PRICE_DROP'
-        contextLine = `${Math.round(dropPercent)}% below 30-day median`
+        // Context line without percentage (to avoid user-facing score)
+        contextLine = 'Below 30-day median'
       }
     }
 
@@ -212,7 +248,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
       contextLine = 'Lowest price in 90 days'
     }
 
-    // Check back in stock after 7+ days
+    // Check back in stock after 7+ consecutive days OOS
     if (!reason && backInStockSet.has(current.productId)) {
       reason = 'BACK_IN_STOCK'
       contextLine = 'Back in stock'
@@ -224,28 +260,25 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
         productName: current.productName,
         caliber: normalizedCaliber,
         price: currentPrice,
-        pricePerRound: current.pricePerRound ? parseFloat(current.pricePerRound.toString()) : currentPrice,
+        pricePerRound,
         retailerName: current.retailerName,
         retailerId: current.retailerId,
         url: current.url,
         contextLine,
-        dropPercent: reason === 'PRICE_DROP' ? dropPercent : null,
         detectedAt: current.observedAt,
         reason,
       })
     }
   }
 
-  // Sort by hero selection rule: largest drop %, then earliest timestamp, then productId ASC
+  // Sort by hero selection rule (deterministic):
+  // 1. PRICE_DROP deals first (implicit priority by being notable)
+  // 2. Then by earliest detection timestamp
+  // 3. Finally by productId ASC (lexicographic)
   deals.sort((a, b) => {
-    // Price drops first, sorted by drop %
+    // Price drops first
     if (a.reason === 'PRICE_DROP' && b.reason !== 'PRICE_DROP') return -1
     if (b.reason === 'PRICE_DROP' && a.reason !== 'PRICE_DROP') return 1
-
-    if (a.reason === 'PRICE_DROP' && b.reason === 'PRICE_DROP') {
-      const dropDiff = (b.dropPercent || 0) - (a.dropPercent || 0)
-      if (dropDiff !== 0) return dropDiff
-    }
 
     // Then by earliest detection timestamp
     const timeDiff = a.detectedAt.getTime() - b.detectedAt.getTime()
@@ -255,7 +288,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     return a.productId.localeCompare(b.productId)
   })
 
-  // Select hero (first item after sorting)
+  // Select hero (first item after deterministic sorting)
   const hero = deals.length > 0 ? deals[0] : null
 
   return {
@@ -266,108 +299,39 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
 }
 
 /**
- * Get market deals personalized by Gun Locker calibers
+ * Get market deals with Gun Locker calibers for personalized ordering
+ * Per spec: Gun Locker affects ordering and labeling ONLY, NOT hero selection
  */
 export async function getMarketDealsWithGunLocker(
   userCalibers: CaliberValue[]
 ): Promise<{
   forYourGuns: MarketDeal[]
   otherDeals: MarketDeal[]
-  hero: MarketDeal | null
+  hero: MarketDeal | null  // Hero is deterministic, NOT personalized
   lastCheckedAt: string
 }> {
+  // Get base deals with deterministic hero
   const { deals, hero, lastCheckedAt } = await getMarketDeals()
 
   if (userCalibers.length === 0) {
     return {
       forYourGuns: [],
       otherDeals: deals,
-      hero,
+      hero,  // Keep deterministic hero
       lastCheckedAt,
     }
   }
 
   const caliberSet = new Set(userCalibers)
 
-  const forYourGuns = deals.filter((d) => d.caliber && caliberSet.has(d.caliber))
-  const otherDeals = deals.filter((d) => !d.caliber || !caliberSet.has(d.caliber))
-
-  // Re-select hero prioritizing user's calibers
-  let newHero = hero
-  if (forYourGuns.length > 0) {
-    // Hero from user's calibers takes priority
-    newHero = forYourGuns[0]
-  }
+  // Split deals by matching caliber - Gun Locker affects ORDERING only
+  const forYourGuns = deals.filter((d) => caliberSet.has(d.caliber))
+  const otherDeals = deals.filter((d) => !caliberSet.has(d.caliber))
 
   return {
     forYourGuns: forYourGuns.slice(0, 5),
     otherDeals: otherDeals.slice(0, 5),
-    hero: newHero,
+    hero,  // Hero stays deterministic - NOT re-selected based on Gun Locker
     lastCheckedAt,
   }
-}
-
-/**
- * Normalize a caliber string to canonical enum value
- * Returns null if not mappable
- */
-function normalizeCaliberToCanonical(caliber: string | null): CaliberValue | null {
-  if (!caliber) return null
-
-  const normalized = caliber.toLowerCase().trim()
-
-  // Direct matches
-  if (CANONICAL_CALIBERS.includes(caliber as CaliberValue)) {
-    return caliber as CaliberValue
-  }
-
-  // Alias mapping
-  const aliasMap: Record<string, CaliberValue> = {
-    '9mm luger': '9mm',
-    '9mm parabellum': '9mm',
-    '9x19': '9mm',
-    '9x19mm': '9mm',
-    '.45 acp': '.45_acp',
-    '45 acp': '.45_acp',
-    '.45acp': '.45_acp',
-    '.40 s&w': '.40_sw',
-    '40 s&w': '.40_sw',
-    '.40sw': '.40_sw',
-    '.380 acp': '.380_acp',
-    '380 acp': '.380_acp',
-    '.380acp': '.380_acp',
-    '.380 auto': '.380_acp',
-    '.22 lr': '.22_lr',
-    '22 lr': '.22_lr',
-    '.22lr': '.22_lr',
-    '22lr': '.22_lr',
-    '.22 long rifle': '.22_lr',
-    '.223 rem': '.223_556',
-    '.223 remington': '.223_556',
-    '223 rem': '.223_556',
-    '5.56': '.223_556',
-    '5.56mm': '.223_556',
-    '5.56x45': '.223_556',
-    '5.56 nato': '.223_556',
-    '.308 win': '.308_762x51',
-    '.308 winchester': '.308_762x51',
-    '308 win': '.308_762x51',
-    '7.62x51': '.308_762x51',
-    '7.62x51mm': '.308_762x51',
-    '7.62 nato': '.308_762x51',
-    '.30-06 springfield': '.30-06',
-    '30-06': '.30-06',
-    '.30-06 sprg': '.30-06',
-    '6.5 creedmoor': '6.5_creedmoor',
-    '6.5mm creedmoor': '6.5_creedmoor',
-    '7.62x39mm': '7.62x39',
-    '12 gauge': '12ga',
-    '12 ga': '12ga',
-    '12g': '12ga',
-    '20 gauge': '20ga',
-    '20 ga': '20ga',
-    '20g': '20ga',
-  }
-
-  return aliasMap[normalized] || null
 }

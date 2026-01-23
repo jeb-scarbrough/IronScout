@@ -44,6 +44,18 @@ No verdicts or recommendations.
 - No BUY / WAIT / SKIP
 - No guarantees
 
+### Classification Thresholds
+
+Classification is based on percentile position within the 30-day price distribution:
+
+| Classification | Threshold |
+|----------------|-----------|
+| **Lower than usual** | At or below 25th percentile (p25) |
+| **Typical range** | Between 25th and 75th percentile |
+| **Higher than usual** | At or above 75th percentile (p75) |
+
+**Rationale**: Percentile-based classification is deterministic, avoids value judgments, and provides meaningful context without implying recommendations. The 25th/75th boundaries create a balanced distribution where ~50% of prices fall in "typical".
+
 ### Sparse Data Rule
 Classification requires ≥5 price points for caliber in trailing 30 days.
 

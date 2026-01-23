@@ -139,7 +139,7 @@ function HeroDeal({ deal }: { deal: MarketDeal }) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <ReasonBadge reason={deal.reason} dropPercent={deal.dropPercent} />
+              <ReasonBadge reason={deal.reason} />
               {deal.caliber && (
                 <Badge variant="outline" className="text-xs">
                   {formatCaliber(deal.caliber)}
@@ -151,7 +151,9 @@ function HeroDeal({ deal }: { deal: MarketDeal }) {
             <p className="text-xs text-muted-foreground/80 mt-0.5">{deal.contextLine}</p>
           </div>
           <div className="text-right flex-shrink-0">
-            <p className="font-semibold text-lg">${deal.pricePerRound.toFixed(2)}/rd</p>
+            <p className="font-semibold text-lg">
+              {deal.pricePerRound != null ? `$${deal.pricePerRound.toFixed(2)}/rd` : `$${deal.price.toFixed(2)}`}
+            </p>
             <a
               href={deal.url}
               target="_blank"
@@ -175,7 +177,7 @@ function DealItem({ deal }: { deal: MarketDeal }) {
     <div className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <ReasonBadge reason={deal.reason} dropPercent={deal.dropPercent} small />
+          <ReasonBadge reason={deal.reason} small />
           {deal.caliber && (
             <span className="text-xs text-muted-foreground">
               {formatCaliber(deal.caliber)}
@@ -186,7 +188,9 @@ function DealItem({ deal }: { deal: MarketDeal }) {
         <p className="text-xs text-muted-foreground">{deal.retailerName}</p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="font-medium">${deal.pricePerRound.toFixed(2)}/rd</p>
+        <p className="font-medium">
+          {deal.pricePerRound != null ? `$${deal.pricePerRound.toFixed(2)}/rd` : `$${deal.price.toFixed(2)}`}
+        </p>
         <a
           href={deal.url}
           target="_blank"
@@ -202,14 +206,13 @@ function DealItem({ deal }: { deal: MarketDeal }) {
 
 /**
  * Badge showing reason for deal
+ * Per spec: No user-facing rankings or scores - uses contextLine only
  */
 function ReasonBadge({
   reason,
-  dropPercent,
   small,
 }: {
   reason: MarketDeal['reason']
-  dropPercent: number | null
   small?: boolean
 }) {
   const sizeClass = small ? 'text-[10px] px-1.5 py-0' : 'text-xs'
@@ -219,7 +222,7 @@ function ReasonBadge({
       return (
         <Badge variant="default" className={`bg-green-600 hover:bg-green-600 ${sizeClass}`}>
           <TrendingDown className={small ? 'h-2.5 w-2.5 mr-0.5' : 'h-3 w-3 mr-1'} />
-          {dropPercent ? `${Math.round(dropPercent)}% off` : 'Price Drop'}
+          Price Drop
         </Badge>
       )
     case 'BACK_IN_STOCK':
@@ -242,21 +245,14 @@ function ReasonBadge({
 
 /**
  * Format caliber for display
+ * Per spec: canonical values are already display-friendly
  */
 function formatCaliber(caliber: string): string {
-  const labels: Record<string, string> = {
-    '9mm': '9mm',
-    '.45_acp': '.45 ACP',
-    '.40_sw': '.40 S&W',
-    '.380_acp': '.380 ACP',
-    '.22_lr': '.22 LR',
-    '.223_556': '.223/5.56',
-    '.308_762x51': '.308/7.62',
-    '.30-06': '.30-06',
-    '6.5_creedmoor': '6.5 CM',
-    '7.62x39': '7.62x39',
-    '12ga': '12ga',
-    '20ga': '20ga',
+  // Canonical values per gun_locker_v1_spec.md are already display-ready
+  // Just provide short labels for longer values
+  const shortLabels: Record<string, string> = {
+    '.308/7.62x51': '.308/7.62',
+    '6.5 Creedmoor': '6.5 CM',
   }
-  return labels[caliber] || caliber
+  return shortLabels[caliber] || caliber
 }
