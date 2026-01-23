@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+import { randomUUID } from 'crypto'
 import { PrismaClient } from '@ironscout/db/generated/prisma'
 
 // Skip if no test database configured
@@ -93,9 +94,11 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
   async function createEligibleRetailer(suffix: string) {
     const retailer = await prisma.retailers.create({
       data: {
+        id: randomUUID(),
         name: `Test Retailer A1 ${suffix} ${Date.now()}`,
         website: `https://test-a1-${suffix}-${Date.now()}.example.com`,
         visibilityStatus: 'ELIGIBLE',
+        updatedAt: new Date(),
       },
     })
     createdRetailerIds.push(retailer.id)
@@ -108,11 +111,13 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
   async function createMerchant(suffix: string) {
     const merchant = await prisma.merchants.create({
       data: {
+        id: randomUUID(),
         businessName: `Test Merchant A1 ${suffix}`,
         websiteUrl: `https://test-a1-${suffix}.example.com`,
         contactFirstName: 'Test',
         contactLastName: 'User',
         subscriptionStatus: 'ACTIVE',
+        updatedAt: new Date(),
       },
     })
     createdMerchantIds.push(merchant.id)
@@ -125,8 +130,10 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
   async function createProduct(suffix: string) {
     const product = await prisma.products.create({
       data: {
+        id: randomUUID(),
         name: `Test Product A1 ${suffix} ${Date.now()}`,
         category: 'ammunition',
+        updatedAt: new Date(),
       },
     })
     createdProductIds.push(product.id)
@@ -139,6 +146,7 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
   async function createPrice(productId: string, retailerId: string) {
     const price = await prisma.prices.create({
       data: {
+        id: randomUUID(),
         productId,
         retailerId,
         price: 19.99,
@@ -198,10 +206,12 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // Create SUSPENDED relationship
     await prisma.merchant_retailers.create({
       data: {
+        id: randomUUID(),
         merchantId: merchant.id,
         retailerId: retailer.id,
         status: 'SUSPENDED',
         listingStatus: 'LISTED', // Doesn't matter when SUSPENDED
+        updatedAt: new Date(),
       },
     })
 
@@ -231,10 +241,12 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // Create ACTIVE + UNLISTED relationship (delinquency case)
     await prisma.merchant_retailers.create({
       data: {
+        id: randomUUID(),
         merchantId: merchant.id,
         retailerId: retailer.id,
         status: 'ACTIVE',
         listingStatus: 'UNLISTED',
+        updatedAt: new Date(),
       },
     })
 
@@ -268,10 +280,12 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // Create ACTIVE + LISTED relationship (normal merchant-managed case)
     await prisma.merchant_retailers.create({
       data: {
+        id: randomUUID(),
         merchantId: merchant.id,
         retailerId: retailer.id,
         status: 'ACTIVE',
         listingStatus: 'LISTED',
+        updatedAt: new Date(),
       },
     })
 
@@ -295,9 +309,11 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // Setup: INELIGIBLE retailer (should never be visible regardless of relationships)
     const retailer = await prisma.retailers.create({
       data: {
+        id: randomUUID(),
         name: `Test Retailer A1 ineligible ${Date.now()}`,
         website: `https://test-a1-ineligible-${Date.now()}.example.com`,
         visibilityStatus: 'INELIGIBLE',
+        updatedAt: new Date(),
       },
     })
     createdRetailerIds.push(retailer.id)
