@@ -14,7 +14,8 @@
  */
 
 import { spawn } from 'child_process'
-import { existsSync, mkdirSync, createWriteStream } from 'fs'
+import { existsSync, mkdirSync, createWriteStream, readFileSync } from 'fs'
+import { createConnection } from 'net'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import {
@@ -39,6 +40,19 @@ const PROJECT_ROOT = resolve(__dirname, '../..')
 // Service definitions
 // Note: Using 127.0.0.1 instead of localhost for reliable health checks on Windows
 const SERVICES = [
+  {
+    name: 'caddy',
+    port: 443,
+    // Use full path on Windows since Chocolatey may not be in Git Bash PATH
+    devCommand: process.platform === 'win32'
+      ? 'C:\\ProgramData\\chocolatey\\bin\\caddy.exe run'
+      : 'caddy run',
+    prodCommand: process.platform === 'win32'
+      ? 'C:\\ProgramData\\chocolatey\\bin\\caddy.exe run'
+      : 'caddy run',
+    healthCheck: null, // Caddy doesn't have a simple health endpoint
+    optional: true, // Only needed for local HTTPS domains
+  },
   {
     name: 'api',
     port: 8000,
@@ -113,8 +127,11 @@ let allServicesStarted = false
 function checkAllExited() {
   if (!allServicesStarted) return // Don't check until all services have been started
 
-  const allExited = childProcesses.every(svc => svc.exited || svc.process.exitCode !== null)
-  if (allExited && childProcesses.length > 0) {
+  const managed = childProcesses.filter(svc => svc.process)
+  if (managed.length === 0) return
+
+  const allExited = managed.every(svc => svc.exited || svc.process.exitCode !== null)
+  if (allExited) {
     console.log('')
     error('All services have exited. Check logs for details.')
     info('Logs are in: logs/*.log')
@@ -140,6 +157,44 @@ function checkEnvVars() {
   return conflicts
 }
 
+function loadExistingPids() {
+  if (!existsSync(PID_FILE)) return []
+  try {
+    const raw = readFileSync(PID_FILE, 'utf8')
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed?.services) ? parsed.services : []
+  } catch (err) {
+    warn(`Failed to read ${PID_FILE}: ${err.message}`)
+    return []
+  }
+}
+
+function isPidRunning(pid) {
+  if (!pid) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err.code === 'EPERM'
+  }
+}
+
+function isPortOpen(port, host = '127.0.0.1', timeoutMs = 500) {
+  return new Promise((resolvePort) => {
+    const socket = createConnection({ port, host })
+    const done = (result) => {
+      socket.removeAllListeners()
+      socket.destroy()
+      resolvePort(result)
+    }
+
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
 /**
  * Start a service in a new terminal window (Windows)
  */
@@ -153,7 +208,7 @@ function startServiceInTerminal(service, devMode) {
   }
 
   // Use Windows 'start' command to open a new terminal
-  const startCmd = `start "${title}" cmd /k "cd /d ${PROJECT_ROOT} && ${command}"`
+  const startCmd = `start "${title}" cmd /k "title ${title} & cd /d ${PROJECT_ROOT} && ${command}"`
 
   const child = spawn(startCmd, [], {
     cwd: PROJECT_ROOT,
@@ -275,8 +330,8 @@ async function displayStatus(services) {
 
     let running = false
 
-    if (svc.terminal) {
-      // For terminal-launched services, check health endpoint
+    if (svc.terminal || svc.external) {
+      // For terminal-launched or externally running services, check health endpoint
       if (svc.service.healthCheck) {
         running = await healthCheck(svc.service.healthCheck, 1000)
       } else {
@@ -338,6 +393,8 @@ async function main() {
     info(`Starting only: ${only.join(', ')}`)
   }
 
+  const existingPids = loadExistingPids()
+
   // Check environment variables
   if (!skipEnvCheck) {
     header('Checking Environment Variables')
@@ -391,6 +448,47 @@ async function main() {
 
   // Start each service
   for (const service of services) {
+    // Check if optional service (like Caddy) is available
+    if (service.optional && service.name === 'caddy') {
+      try {
+        const { execSync } = await import('child_process')
+        // Try full path on Windows first, then fallback to PATH
+        const caddyCmd = process.platform === 'win32'
+          ? 'C:\\ProgramData\\chocolatey\\bin\\caddy.exe version'
+          : 'caddy version'
+        execSync(caddyCmd, { stdio: 'ignore' })
+      } catch {
+        warn(`Caddy not installed - skipping local HTTPS proxy`)
+        info('  Install Caddy for https://*.ironscout.local domains')
+        info('  Or set NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 in apps/web/.env.local')
+        console.log('')
+        continue
+      }
+    }
+
+    if (service.healthCheck) {
+      const alreadyRunning = await healthCheck(service.healthCheck, 1000)
+      if (alreadyRunning) {
+        warn(`${service.name} already running at ${service.healthCheck}; skipping start`)
+        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
+        continue
+      }
+    } else if (service.port) {
+      const portOpen = await isPortOpen(service.port)
+      if (portOpen) {
+        warn(`${service.name} already running on port ${service.port}; skipping start`)
+        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
+        continue
+      }
+    } else {
+      const existing = existingPids.find((entry) => entry.name === service.name && entry.pid)
+      if (existing && isPidRunning(existing.pid)) {
+        warn(`${service.name} already running (pid ${existing.pid}); skipping start`)
+        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
+        continue
+      }
+    }
+
     startService(service, devMode, logsDir, useTerminals)
     await sleep(useTerminals ? 500 : 2000) // Shorter delay for terminals
   }
@@ -406,6 +504,19 @@ async function main() {
   await displayStatus(childProcesses)
 
   console.log('')
+
+  // Check if Caddy is running to show appropriate URLs
+  const caddyRunning = childProcesses.some(svc => svc.name === 'caddy' && !svc.exited)
+  if (caddyRunning) {
+    info('Local HTTPS URLs (via Caddy):')
+    console.log(`${colors.gray}  https://app.ironscout.local      - Web App${colors.reset}`)
+    console.log(`${colors.gray}  https://api.ironscout.local      - API${colors.reset}`)
+    console.log(`${colors.gray}  https://admin.ironscout.local    - Admin${colors.reset}`)
+    console.log(`${colors.gray}  https://merchant.ironscout.local - Merchant${colors.reset}`)
+    console.log(`${colors.gray}  https://www.ironscout.local      - Marketing${colors.reset}`)
+    console.log('')
+  }
+
   info('Bull Board (Queue Monitor): http://localhost:3939/admin/queues')
   console.log(`${colors.gray}  Auth: admin / ironscout2024${colors.reset}`)
   console.log('')
