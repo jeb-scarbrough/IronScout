@@ -459,7 +459,7 @@ async function main() {
         execSync(caddyCmd, { stdio: 'ignore' })
       } catch {
         error('Caddy not installed - HTTPS is required for local dev')
-        info('Install Caddy for https://*.ironscout.local domains')
+        info('Install Caddy for https://*.local.ironscout.ai domains')
         process.exit(1)
       }
     }
@@ -504,11 +504,11 @@ async function main() {
   console.log('')
 
   info('Local HTTPS URLs (via Caddy):')
-  console.log(`${colors.gray}  https://app.ironscout.local      - Web App${colors.reset}`)
-  console.log(`${colors.gray}  https://api.ironscout.local      - API${colors.reset}`)
-  console.log(`${colors.gray}  https://admin.ironscout.local    - Admin${colors.reset}`)
-  console.log(`${colors.gray}  https://merchant.ironscout.local - Merchant${colors.reset}`)
-  console.log(`${colors.gray}  https://www.ironscout.local      - Marketing${colors.reset}`)
+  console.log(`${colors.gray}  https://app.local.ironscout.ai      - Web App${colors.reset}`)
+  console.log(`${colors.gray}  https://api.local.ironscout.ai      - API${colors.reset}`)
+  console.log(`${colors.gray}  https://admin.local.ironscout.ai    - Admin${colors.reset}`)
+  console.log(`${colors.gray}  https://merchant.local.ironscout.ai - Merchant${colors.reset}`)
+  console.log(`${colors.gray}  https://www.local.ironscout.ai      - Marketing${colors.reset}`)
   console.log('')
 
   info('Bull Board (Queue Monitor): http://localhost:3939/admin/queues')

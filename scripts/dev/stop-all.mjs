@@ -30,6 +30,7 @@ const PID_FILE = resolve(PROJECT_ROOT, '.ironscout', 'pids.json')
 
 // Service ports to check
 const SERVICE_PORTS = [
+  { name: 'Caddy (HTTPS proxy)', port: 443 },
   { name: 'API', port: 8000 },
   { name: 'Web', port: 3000 },
   { name: 'Web (alt)', port: 3001 },
@@ -117,6 +118,7 @@ function findIronScoutProcesses(verbose) {
             cmdLine.includes('ironscout') ||
             cmdLine.includes('@ironscout') ||
             cmdLine.match(/apps[\\/](web|api|admin|merchant|harvester)/) ||
+            cmdLine.match(/caddy(\.exe)?\s+run/i) ||
             cmdLine.includes('dist\\index.js') ||
             cmdLine.includes('dist/index.js') ||
             cmdLine.includes('dist\\worker.js') ||
@@ -128,6 +130,7 @@ function findIronScoutProcesses(verbose) {
             else if (cmdLine.includes('apps/api') || cmdLine.includes('apps\\api')) appName = 'API'
             else if (cmdLine.includes('apps/admin') || cmdLine.includes('apps\\admin')) appName = 'Admin'
             else if (cmdLine.includes('apps/merchant') || cmdLine.includes('apps\\merchant')) appName = 'Merchant'
+            else if (cmdLine.match(/caddy(\.exe)?\s+run/i)) appName = 'Caddy'
 
             processes.push({ pid, name: appName, cmdLine })
           }
@@ -155,6 +158,7 @@ function findIronScoutProcesses(verbose) {
                 cmdLine.includes('ironscout') ||
                 cmdLine.includes('@ironscout') ||
                 cmdLine.match(/apps[\\/](web|api|admin|merchant|harvester)/) ||
+                cmdLine.match(/caddy(\.exe)?\s+run/i) ||
                 cmdLine.includes('dist\\index.js') ||
                 cmdLine.includes('dist/index.js') ||
                 cmdLine.includes('dist\\worker.js') ||
@@ -166,6 +170,7 @@ function findIronScoutProcesses(verbose) {
               else if (cmdLine.includes('apps/api') || cmdLine.includes('apps\\api')) appName = 'API'
               else if (cmdLine.includes('apps/admin') || cmdLine.includes('apps\\admin')) appName = 'Admin'
               else if (cmdLine.includes('apps/merchant') || cmdLine.includes('apps\\merchant')) appName = 'Merchant'
+              else if (cmdLine.match(/caddy(\.exe)?\s+run/i)) appName = 'Caddy'
 
               processes.push({ pid, name: appName, cmdLine })
             }
@@ -175,7 +180,7 @@ function findIronScoutProcesses(verbose) {
     }
   } else {
     // Use pgrep and ps on Unix
-    const result = runCapture("pgrep -f 'node.*ironscout|node.*@ironscout' || true")
+    const result = runCapture("pgrep -f 'node.*ironscout|node.*@ironscout|caddy\\s+run' || true")
     if (result.success && result.output) {
       const pids = result.output.split('\n').filter((p) => p.trim())
       for (const pidStr of pids) {

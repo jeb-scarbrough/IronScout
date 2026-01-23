@@ -1,35 +1,37 @@
 # IronScout Local Development Proxy
 #
-# Provides HTTPS domain aliases for local development to match production URLs.
-# Requires: mkcert certificates in project root
+# Provides HTTPS domain aliases for local development.
+# Uses *.local.ironscout.ai which resolves to 127.0.0.1 via DNS.
+#
+# DNS Setup (one-time):
+#   Add A record: *.local.ironscout.ai → 127.0.0.1
 #
 # Usage:
-#   1. Run: scripts/dev/setup-local-domains.ps1 (or .sh)
-#   2. Start apps: pnpm dev:all (or node scripts/dev/start-all.mjs)
-#   3. Start proxy: caddy run
+#   1. Start apps: pnpm dev:all (or node scripts/dev/start-all.mjs)
+#   2. Start proxy: caddy run
 #
 # Then access:
-#   https://www.ironscout.local     - Marketing site
-#   https://app.ironscout.local     - Main web app
-#   https://api.ironscout.local     - API server
-#   https://admin.ironscout.local   - Admin portal
-#   https://merchant.ironscout.local - Merchant portal
+#   https://www.local.ironscout.ai     - Marketing site
+#   https://app.local.ironscout.ai     - Main web app
+#   https://api.local.ironscout.ai     - API server
+#   https://admin.local.ironscout.ai   - Admin portal
+#   https://merchant.local.ironscout.ai - Merchant portal
 
 # Marketing site (www)
-www.ironscout.local {
-	tls ./.certs/_wildcard.ironscout.local.pem ./.certs/_wildcard.ironscout.local-key.pem
+www.local.ironscout.ai {
+	tls internal
 	reverse_proxy localhost:3004
 }
 
 # Main web application
-app.ironscout.local {
-	tls ./.certs/_wildcard.ironscout.local.pem ./.certs/_wildcard.ironscout.local-key.pem
+app.local.ironscout.ai {
+	tls internal
 	reverse_proxy localhost:3000
 }
 
 # API server
-api.ironscout.local {
-	tls ./.certs/_wildcard.ironscout.local.pem ./.certs/_wildcard.ironscout.local-key.pem
+api.local.ironscout.ai {
+	tls internal
 	reverse_proxy localhost:8000 {
 		# Pass original host for CORS
 		header_up Host {host}
@@ -40,13 +42,13 @@ api.ironscout.local {
 }
 
 # Admin portal
-admin.ironscout.local {
-	tls ./.certs/_wildcard.ironscout.local.pem ./.certs/_wildcard.ironscout.local-key.pem
+admin.local.ironscout.ai {
+	tls internal
 	reverse_proxy localhost:3002
 }
 
 # Merchant portal
-merchant.ironscout.local {
-	tls ./.certs/_wildcard.ironscout.local.pem ./.certs/_wildcard.ironscout.local-key.pem
+merchant.local.ironscout.ai {
+	tls internal
 	reverse_proxy localhost:3003
 }
