@@ -55,7 +55,7 @@
     "build:www": "pnpm --filter @ironscout/www build"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.58.0",
     "@types/node": "^25.0.10",
     "sharp": "^0.34.5",
     "tsx": "^4.21.0",
