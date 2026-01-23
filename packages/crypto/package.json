@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:run": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {

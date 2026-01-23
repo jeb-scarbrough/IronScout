@@ -5,7 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['__tests__/**/*.{test,spec}.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    // Integration tests require test containers - run separately with test:integration
+    exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
 
     // DB tests need longer timeout for connection/queries
     testTimeout: 30000,

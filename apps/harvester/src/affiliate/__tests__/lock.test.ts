@@ -6,28 +6,44 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Shared mock reference that persists across module resets
-let mockQueryRaw: ReturnType<typeof vi.fn>
+// Mock at the top level
+vi.mock('@ironscout/db', () => ({
+  prisma: {
+    $queryRaw: vi.fn(),
+  },
+}))
 
-// Set up mock before tests run
-beforeEach(() => {
-  vi.resetModules()
-  mockQueryRaw = vi.fn()
-
-  vi.doMock('@ironscout/db', () => ({
-    prisma: {
-      $queryRaw: mockQueryRaw,
+// Mock the logger to avoid side effects
+vi.mock('../../config/logger', () => ({
+  logger: {
+    affiliate: {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
     },
-  }))
-})
+  },
+}))
+
+// Import after mocking
+import { prisma } from '@ironscout/db'
+import {
+  acquireAdvisoryLock,
+  releaseAdvisoryLock,
+  isLockHeld,
+  withAdvisoryLock,
+} from '../lock'
+
+// Cast to mock for type-safe mock access
+const mockQueryRaw = prisma.$queryRaw as ReturnType<typeof vi.fn>
 
 describe('Advisory Lock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   describe('acquireAdvisoryLock', () => {
     it('should return true when lock is acquired', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-
-      // Import after mocking
-      const { acquireAdvisoryLock } = await import('../lock')
 
       const feedLockId = BigInt(12345)
       const acquired = await acquireAdvisoryLock(feedLockId)
@@ -39,8 +55,6 @@ describe('Advisory Lock', () => {
     it('should return false when lock is already held', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
 
-      const { acquireAdvisoryLock } = await import('../lock')
-
       const feedLockId = BigInt(12345)
       const acquired = await acquireAdvisoryLock(feedLockId)
 
@@ -49,8 +63,6 @@ describe('Advisory Lock', () => {
 
     it('should use pg_try_advisory_lock for non-blocking acquisition', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-
-      const { acquireAdvisoryLock } = await import('../lock')
 
       await acquireAdvisoryLock(BigInt(12345))
 
@@ -63,8 +75,6 @@ describe('Advisory Lock', () => {
     it('should call pg_advisory_unlock', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ result: true }])
 
-      const { releaseAdvisoryLock } = await import('../lock')
-
       const feedLockId = BigInt(12345)
       await releaseAdvisoryLock(feedLockId)
 
@@ -73,8 +83,6 @@ describe('Advisory Lock', () => {
 
     it('should not throw on release error', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ result: false }])
-
-      const { releaseAdvisoryLock } = await import('../lock')
 
       // Should not throw even if release returns false
       await expect(releaseAdvisoryLock(BigInt(12345))).resolves.not.toThrow()
@@ -85,8 +93,6 @@ describe('Advisory Lock', () => {
     it('should return true when lock is held by current session', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ held: true }])
 
-      const { isLockHeld } = await import('../lock')
-
       const feedLockId = BigInt(12345)
       const held = await isLockHeld(feedLockId)
 
@@ -95,8 +101,6 @@ describe('Advisory Lock', () => {
 
     it('should return false when lock is not held', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ held: false }])
-
-      const { isLockHeld } = await import('../lock')
 
       const feedLockId = BigInt(12345)
       const held = await isLockHeld(feedLockId)
@@ -111,8 +115,6 @@ describe('Advisory Lock', () => {
         .mockResolvedValueOnce([{ acquired: true }]) // acquire
         .mockResolvedValueOnce([{ result: true }]) // release
 
-      const { withAdvisoryLock } = await import('../lock')
-
       const callback = vi.fn().mockResolvedValue('result')
 
       const result = await withAdvisoryLock(BigInt(12345), callback)
@@ -123,8 +125,6 @@ describe('Advisory Lock', () => {
 
     it('should not execute callback when lock cannot be acquired', async () => {
       mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
-
-      const { withAdvisoryLock } = await import('../lock')
 
       const callback = vi.fn()
 
@@ -139,8 +139,6 @@ describe('Advisory Lock', () => {
         .mockResolvedValueOnce([{ acquired: true }]) // acquire
         .mockResolvedValueOnce([{ result: true }]) // release
 
-      const { withAdvisoryLock } = await import('../lock')
-
       const callback = vi.fn().mockRejectedValue(new Error('test error'))
 
       await expect(withAdvisoryLock(BigInt(12345), callback)).rejects.toThrow('test error')
@@ -152,10 +150,12 @@ describe('Advisory Lock', () => {
 })
 
 describe('Lock ID Generation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('should support large lock IDs (bigint)', async () => {
     mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-
-    const { acquireAdvisoryLock } = await import('../lock')
 
     // Large lock ID that exceeds 32-bit integer
     const largeLockId = BigInt('9223372036854775807') // Max 64-bit signed integer
@@ -166,20 +166,20 @@ describe('Lock ID Generation', () => {
   it('should handle lock ID of 0', async () => {
     mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
 
-    const { acquireAdvisoryLock } = await import('../lock')
-
     await expect(acquireAdvisoryLock(BigInt(0))).resolves.not.toThrow()
   })
 })
 
 describe('Mutual Exclusion Guarantee', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('should prevent concurrent processing of same feed', async () => {
     // First call acquires lock
     mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
     // Second call finds lock held
     mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
-
-    const { acquireAdvisoryLock } = await import('../lock')
 
     const feedLockId = BigInt(12345)
 
@@ -195,8 +195,6 @@ describe('Mutual Exclusion Guarantee', () => {
     mockQueryRaw
       .mockResolvedValueOnce([{ acquired: true }])
       .mockResolvedValueOnce([{ acquired: true }])
-
-    const { acquireAdvisoryLock } = await import('../lock')
 
     const feed1LockId = BigInt(11111)
     const feed2LockId = BigInt(22222)

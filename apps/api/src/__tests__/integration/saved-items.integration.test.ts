@@ -59,7 +59,7 @@ describe('/api/saved-items', () => {
     process.env.JWT_SECRET = JWT_SECRET
 
     // Dynamic import after env setup
-    const appModule = await import('../src/app')
+    const appModule = await import('../../app')
     app = appModule.app
 
     const testUtils = await import('@ironscout/db/test-utils')

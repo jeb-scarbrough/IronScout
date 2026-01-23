@@ -11,7 +11,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:integration": "vitest run src/__tests__/integration/**/*.test.ts"
+    "test:integration": "vitest run src/__tests__/integration/**/*.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
