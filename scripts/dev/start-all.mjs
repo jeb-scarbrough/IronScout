@@ -256,8 +256,9 @@ async function waitForServices(services, timeout = 60000) {
 
 /**
  * Display service status
+ * For terminal-launched services, we check health endpoints since we don't have process refs
  */
-function displayStatus(services) {
+async function displayStatus(services) {
   console.log('')
   console.log(
     `${colors.white}Service          Port      Status     URL${colors.reset}`
@@ -269,11 +270,26 @@ function displayStatus(services) {
   for (const svc of services) {
     const name = svc.name.padEnd(16)
     const port = svc.service.port ? String(svc.service.port).padEnd(10) : 'N/A'.padEnd(10)
-    // exitCode is null while process is running, set to a number once it exits
-    const running = svc.process && svc.process.exitCode === null
+    const url = svc.service.healthCheck || '(worker)'
+
+    let running = false
+
+    if (svc.terminal) {
+      // For terminal-launched services, check health endpoint
+      if (svc.service.healthCheck) {
+        running = await healthCheck(svc.service.healthCheck, 1000)
+      } else {
+        // Background worker in terminal - assume running (can't verify)
+        running = true
+      }
+    } else {
+      // For managed processes, check exitCode
+      // exitCode is null while process is running, set to a number once it exits
+      running = svc.process && svc.process.exitCode === null
+    }
+
     const status = running ? 'Running' : 'Stopped'
     const statusColor = running ? colors.green : colors.red
-    const url = svc.service.healthCheck || '(worker)'
 
     console.log(`${name} ${port} ${statusColor}${status.padEnd(10)}${colors.reset} ${url}`)
   }
@@ -386,7 +402,7 @@ async function main() {
 
   header('Service Status')
 
-  displayStatus(childProcesses)
+  await displayStatus(childProcesses)
 
   console.log('')
   info('Bull Board (Queue Monitor): http://localhost:3939/admin/queues')
