@@ -1,10 +1,20 @@
 'use client';
 
-import type { retailer_feed_runs as RetailerFeedRun } from '@ironscout/db';
 import { CheckCircle, AlertTriangle, XCircle, Clock, Loader2, SkipForward } from 'lucide-react';
 
+interface FeedRun {
+  id: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'WARNING' | 'FAILURE' | 'SKIPPED';
+  startedAt: Date;
+  duration: number | null;
+  rowCount: number;
+  indexedCount: number;
+  quarantinedCount: number;
+  rejectedCount: number;
+}
+
 interface FeedRunsTableProps {
-  runs: RetailerFeedRun[];
+  runs: FeedRun[];
 }
 
 const statusConfig = {

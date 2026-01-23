@@ -48,8 +48,8 @@ describe('merchant api/auth/register route', () => {
   it('returns 200 and success payload when registration succeeds', async () => {
     mockedRegisterMerchant.mockResolvedValue({
       success: true,
-      merchant: { id: 'merchant-1', businessName: 'Acme Ammo' },
-      merchantUser: { id: 'user-1', email: 'owner@acme.example', verifyToken: 'verify-token' },
+      merchant: { id: 'merchant-1', businessName: 'Acme Ammo' } as any,
+      merchantUser: { id: 'user-1', email: 'owner@acme.example', verifyToken: 'verify-token' } as any,
     })
 
     mockedSendVerification.mockResolvedValue({ success: true, messageId: 'email-1' })

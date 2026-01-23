@@ -15,12 +15,17 @@ async function getQueue() {
     logger.debug('Initializing BullMQ queue connection');
     const { Queue } = await import('bullmq');
 
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    logger.debug('Connecting to Redis', { redisUrl: redisUrl.replace(/\/\/.*@/, '//***@') });
+    const redisHost = process.env.REDIS_HOST || 'localhost';
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisPassword = process.env.REDIS_PASSWORD || undefined;
+
+    logger.debug('Connecting to Redis', { host: redisHost, port: redisPort, passwordSet: !!redisPassword });
 
     retailerFeedIngestQueue = new Queue('retailer-feed-ingest', {
       connection: {
-        url: redisUrl,
+        host: redisHost,
+        port: redisPort,
+        password: redisPassword,
         maxRetriesPerRequest: null,
       },
     });
