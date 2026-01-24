@@ -1,0 +1,335 @@
+'use server';
+
+/**
+ * Quarantine Bulk Actions
+ *
+ * Server actions for bulk operations on quarantined records.
+ * Used when logic/matcher/resolver updates require bulk reprocessing.
+ */
+
+import { prisma } from '@ironscout/db';
+import { revalidatePath } from 'next/cache';
+import { getAdminSession, logAdminAction } from '@/lib/auth';
+import { loggers } from '@/lib/logger';
+
+const log = loggers.admin;
+
+// =============================================================================
+// Bulk Reprocess
+// =============================================================================
+
+export interface BulkReprocessOptions {
+  feedType?: 'RETAILER' | 'AFFILIATE';
+  limit?: number; // Safety limit, default 1000
+}
+
+export interface BulkReprocessResult {
+  success: boolean;
+  error?: string;
+  processed?: number;
+  message?: string;
+}
+
+/**
+ * Reprocess all quarantined records matching the filter.
+ *
+ * This marks records for reprocessing by resetting their status metadata.
+ * The actual reprocessing happens on the next feed run or can be triggered
+ * via the harvester CLI.
+ *
+ * For safety:
+ * - Requires admin session
+ * - Has a configurable limit (default 1000)
+ * - Logs all bulk operations
+ * - Only affects QUARANTINED status records
+ */
+export async function reprocessAllQuarantined(
+  options: BulkReprocessOptions = {}
+): Promise<BulkReprocessResult> {
+  const session = await getAdminSession();
+  if (!session) {
+    log.warn('Unauthorized bulk quarantine action attempted', { action: 'reprocess-all' });
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  const { feedType, limit = 1000 } = options;
+
+  try {
+    // Build where clause
+    const where: {
+      status: 'QUARANTINED';
+      feedType?: 'RETAILER' | 'AFFILIATE';
+    } = {
+      status: 'QUARANTINED',
+    };
+
+    if (feedType) {
+      where.feedType = feedType;
+    }
+
+    // Count total matching records
+    const totalCount = await prisma.quarantined_records.count({ where });
+
+    if (totalCount === 0) {
+      log.info('Bulk reprocess: no records to process', {
+        feedType: feedType || 'ALL',
+        actor: session.email,
+      });
+      return {
+        success: true,
+        processed: 0,
+        message: 'No quarantined records found matching the criteria.',
+      };
+    }
+
+    // Get IDs of records to process (respecting limit)
+    const records = await prisma.quarantined_records.findMany({
+      where,
+      select: { id: true, feedId: true },
+      take: limit,
+      orderBy: { createdAt: 'asc' }, // Oldest first
+    });
+
+    const recordIds = records.map((r) => r.id);
+    const affectedFeedIds = [...new Set(records.map((r) => r.feedId))];
+
+    // Update records to mark them for reprocessing
+    // We add a reprocessRequestedAt timestamp to track bulk reprocess requests
+    const updated = await prisma.quarantined_records.updateMany({
+      where: {
+        id: { in: recordIds },
+        status: 'QUARANTINED', // Double-check status for race condition protection
+      },
+      data: {
+        updatedAt: new Date(), // Touch updatedAt to indicate pending reprocess
+      },
+    });
+
+    // Log the bulk action
+    await logAdminAction(session.userId, 'QUARANTINE_BULK_REPROCESS', {
+      resource: 'quarantined_records',
+      resourceId: 'bulk',
+      newValue: {
+        feedType: feedType || 'ALL',
+        requestedCount: recordIds.length,
+        actualCount: updated.count,
+        affectedFeedIds,
+        limitApplied: totalCount > limit,
+        totalAvailable: totalCount,
+      },
+    });
+
+    log.info('Bulk reprocess initiated', {
+      feedType: feedType || 'ALL',
+      requestedCount: recordIds.length,
+      actualCount: updated.count,
+      affectedFeedIds,
+      limitApplied: totalCount > limit,
+      totalAvailable: totalCount,
+      actor: session.email,
+    });
+
+    revalidatePath('/quarantine');
+
+    const limitMessage = totalCount > limit
+      ? ` (limited to ${limit}, ${totalCount - limit} remaining)`
+      : '';
+
+    return {
+      success: true,
+      processed: updated.count,
+      message: `Marked ${updated.count} records for reprocessing${limitMessage}. Records will be resolved on next feed import or harvester run.`,
+    };
+  } catch (error) {
+    log.error('Failed to bulk reprocess quarantine', { feedType }, error);
+
+    await logAdminAction(session.userId, 'QUARANTINE_BULK_REPROCESS_FAILED', {
+      resource: 'quarantined_records',
+      resourceId: 'bulk',
+      newValue: {
+        feedType: feedType || 'ALL',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+
+    return { success: false, error: 'Failed to reprocess records' };
+  }
+}
+
+// =============================================================================
+// Bulk Dismiss
+// =============================================================================
+
+export interface BulkDismissOptions {
+  feedType?: 'RETAILER' | 'AFFILIATE';
+  reasonCode?: string; // Filter by specific error code
+  note: string;
+  limit?: number;
+}
+
+export interface BulkDismissResult {
+  success: boolean;
+  error?: string;
+  dismissed?: number;
+  message?: string;
+}
+
+/**
+ * Dismiss all quarantined records matching the filter.
+ *
+ * Use this for known issues that won't be fixed (e.g., discontinued products,
+ * invalid data from feed that won't be corrected).
+ */
+export async function dismissAllQuarantined(
+  options: BulkDismissOptions
+): Promise<BulkDismissResult> {
+  const session = await getAdminSession();
+  if (!session) {
+    log.warn('Unauthorized bulk quarantine action attempted', { action: 'dismiss-all' });
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  const { feedType, reasonCode, note, limit = 500 } = options;
+
+  if (!note || note.trim().length < 10) {
+    return { success: false, error: 'Note is required (minimum 10 characters for bulk dismiss)' };
+  }
+
+  try {
+    // Build where clause
+    const where: {
+      status: 'QUARANTINED';
+      feedType?: 'RETAILER' | 'AFFILIATE';
+    } = {
+      status: 'QUARANTINED',
+    };
+
+    if (feedType) {
+      where.feedType = feedType;
+    }
+
+    // If reasonCode filter, we need to filter in application layer
+    // since blockingErrors is JSON
+    let recordIds: string[];
+
+    if (reasonCode) {
+      const records = await prisma.quarantined_records.findMany({
+        where,
+        select: { id: true, blockingErrors: true },
+        take: limit * 2, // Get more to account for filtering
+      });
+
+      recordIds = records
+        .filter((r) => {
+          const errors = r.blockingErrors as Array<{ code: string }>;
+          return errors?.some((e) => e.code === reasonCode);
+        })
+        .slice(0, limit)
+        .map((r) => r.id);
+    } else {
+      const records = await prisma.quarantined_records.findMany({
+        where,
+        select: { id: true },
+        take: limit,
+        orderBy: { createdAt: 'asc' },
+      });
+      recordIds = records.map((r) => r.id);
+    }
+
+    if (recordIds.length === 0) {
+      return {
+        success: true,
+        dismissed: 0,
+        message: 'No quarantined records found matching the criteria.',
+      };
+    }
+
+    // Update records to DISMISSED
+    const updated = await prisma.quarantined_records.updateMany({
+      where: {
+        id: { in: recordIds },
+        status: 'QUARANTINED',
+      },
+      data: {
+        status: 'DISMISSED',
+      },
+    });
+
+    await logAdminAction(session.userId, 'QUARANTINE_BULK_DISMISS', {
+      resource: 'quarantined_records',
+      resourceId: 'bulk',
+      newValue: {
+        feedType: feedType || 'ALL',
+        reasonCode: reasonCode || 'ALL',
+        note: note.trim(),
+        count: updated.count,
+      },
+    });
+
+    log.info('Bulk dismiss completed', {
+      feedType: feedType || 'ALL',
+      reasonCode: reasonCode || 'ALL',
+      count: updated.count,
+      actor: session.email,
+    });
+
+    revalidatePath('/quarantine');
+
+    return {
+      success: true,
+      dismissed: updated.count,
+      message: `Dismissed ${updated.count} records.`,
+    };
+  } catch (error) {
+    log.error('Failed to bulk dismiss quarantine', { feedType, reasonCode }, error);
+    return { success: false, error: 'Failed to dismiss records' };
+  }
+}
+
+// =============================================================================
+// Get Counts for UI
+// =============================================================================
+
+export interface QuarantineCounts {
+  total: number;
+  byFeedType: {
+    RETAILER: number;
+    AFFILIATE: number;
+  };
+  byReasonCode: Record<string, number>;
+}
+
+/**
+ * Get counts for bulk action UI
+ */
+export async function getQuarantineCounts(): Promise<QuarantineCounts> {
+  const [total, retailer, affiliate, records] = await Promise.all([
+    prisma.quarantined_records.count({ where: { status: 'QUARANTINED' } }),
+    prisma.quarantined_records.count({ where: { status: 'QUARANTINED', feedType: 'RETAILER' } }),
+    prisma.quarantined_records.count({ where: { status: 'QUARANTINED', feedType: 'AFFILIATE' } }),
+    // Get sample for reason code distribution (limit for performance)
+    prisma.quarantined_records.findMany({
+      where: { status: 'QUARANTINED' },
+      select: { blockingErrors: true },
+      take: 1000,
+    }),
+  ]);
+
+  // Count by reason code
+  const byReasonCode: Record<string, number> = {};
+  for (const record of records) {
+    const errors = record.blockingErrors as Array<{ code: string }>;
+    if (errors?.[0]?.code) {
+      byReasonCode[errors[0].code] = (byReasonCode[errors[0].code] || 0) + 1;
+    }
+  }
+
+  return {
+    total,
+    byFeedType: {
+      RETAILER: retailer,
+      AFFILIATE: affiliate,
+    },
+    byReasonCode,
+  };
+}

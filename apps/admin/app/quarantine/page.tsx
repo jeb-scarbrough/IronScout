@@ -2,6 +2,7 @@ import { prisma } from '@ironscout/db';
 import Link from 'next/link';
 import { AlertTriangle, Filter, ChevronRight, Eye } from 'lucide-react';
 import { QuarantineFilters } from './quarantine-filters';
+import { BulkActions } from './bulk-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,11 @@ export default async function QuarantinePage({ searchParams }: PageProps) {
             </p>
           </div>
         </div>
+        <BulkActions
+          totalCount={total}
+          retailerCount={retailerCount}
+          affiliateCount={affiliateCount}
+        />
       </div>
 
       {/* Filters */}
