@@ -20,6 +20,9 @@ CREATE TYPE "DataSource" AS ENUM (
 );
 
 -- Add new columns to products table
+-- Ensure legacy column exists for index creation (shadow DBs may not have it)
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "caliber" TEXT;
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "purpose" TEXT;
 ALTER TABLE "products" ADD COLUMN "bulletType" "BulletType";
 ALTER TABLE "products" ADD COLUMN "pressureRating" "PressureRating" DEFAULT 'STANDARD';
 ALTER TABLE "products" ADD COLUMN "muzzleVelocityFps" INTEGER;
