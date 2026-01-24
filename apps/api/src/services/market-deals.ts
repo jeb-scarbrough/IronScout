@@ -11,6 +11,14 @@
 
 import { prisma } from '@ironscout/db'
 import { CANONICAL_CALIBERS, normalizeCaliber, type CaliberValue } from './gun-locker'
+import { getRedisClient } from '../config/redis'
+import { loggers } from '../config/logger'
+
+const log = loggers.dashboard
+
+// Cache configuration
+const MARKET_DEALS_CACHE_KEY = 'dashboard:market-deals'
+const MARKET_DEALS_CACHE_TTL = 60 // 60 seconds
 
 // ============================================================================
 // CONFIGURATION
@@ -67,6 +75,34 @@ export interface MarketDealsResponse {
  * Get market deals based on eligibility criteria
  */
 export async function getMarketDeals(): Promise<MarketDealsResponse> {
+  const functionStart = performance.now()
+
+  // Check cache first
+  try {
+    const redis = getRedisClient()
+    const cached = await redis.get(MARKET_DEALS_CACHE_KEY)
+    if (cached) {
+      const parsed = JSON.parse(cached) as MarketDealsResponse
+      // Restore Date objects from ISO strings
+      parsed.deals = parsed.deals.map(d => ({
+        ...d,
+        detectedAt: new Date(d.detectedAt)
+      }))
+      if (parsed.hero) {
+        parsed.hero.detectedAt = new Date(parsed.hero.detectedAt)
+      }
+      log.debug('MARKET_DEALS_CACHE_HIT', {
+        durationMs: Math.round(performance.now() - functionStart)
+      })
+      return parsed
+    }
+    log.debug('MARKET_DEALS_CACHE_MISS')
+  } catch (cacheError) {
+    log.warn('MARKET_DEALS_CACHE_ERROR', {
+      error: cacheError instanceof Error ? cacheError.message : String(cacheError)
+    })
+  }
+
   const now = new Date()
   const thirtyDaysAgo = new Date(now)
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -76,6 +112,11 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
 
   const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+  // ============================================================================
+  // QUERY 1: Current best prices per product
+  // ============================================================================
+  const query1Start = performance.now()
 
   // Get current best prices per product
   // ADR-005: Apply full visibility predicate
@@ -119,13 +160,30 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     LIMIT 500 -- MAX_PRODUCTS_TO_EVALUATE: documented limit to prevent unbounded queries
   `
 
+  const query1DurationMs = Math.round(performance.now() - query1Start)
+  log.info('MARKET_DEALS_QUERY_1_CURRENT_PRICES', {
+    durationMs: query1DurationMs,
+    rowCount: currentPrices.length
+  })
+
   if (currentPrices.length === 0) {
-    return {
+    const result = {
       deals: [],
       hero: null,
       lastCheckedAt: now.toISOString(),
     }
+    log.info('MARKET_DEALS_TOTAL', {
+      durationMs: Math.round(performance.now() - functionStart),
+      dealsFound: 0,
+      cacheHit: false
+    })
+    return result
   }
+
+  // ============================================================================
+  // QUERY 2: 30-day median prices per product
+  // ============================================================================
+  const query2Start = performance.now()
 
   // Get 30-day median prices per product
   const productIds = currentPrices.map((p) => p.productId)
@@ -157,7 +215,19 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     GROUP BY "productId"
   `
 
+  const query2DurationMs = Math.round(performance.now() - query2Start)
+  log.info('MARKET_DEALS_QUERY_2_MEDIAN_PRICES', {
+    durationMs: query2DurationMs,
+    rowCount: medianPrices.length,
+    productCount: productIds.length
+  })
+
   const medianMap = new Map(medianPrices.map((m) => [m.productId, m]))
+
+  // ============================================================================
+  // QUERY 3: 90-day lowest prices per product
+  // ============================================================================
+  const query3Start = performance.now()
 
   // Get 90-day lowest prices per product
   const lowestPrices = await prisma.$queryRaw<
@@ -179,7 +249,18 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     GROUP BY p.id
   `
 
+  const query3DurationMs = Math.round(performance.now() - query3Start)
+  log.info('MARKET_DEALS_QUERY_3_LOWEST_PRICES', {
+    durationMs: query3DurationMs,
+    rowCount: lowestPrices.length
+  })
+
   const lowestMap = new Map(lowestPrices.map((l) => [l.productId, parseFloat(l.lowestPrice.toString())]))
+
+  // ============================================================================
+  // QUERY 4: Back-in-stock detection (gap analysis)
+  // ============================================================================
+  const query4Start = performance.now()
 
   // Get products that were out of stock (zero visible offers) for ≥7 consecutive days
   // Per spec: "Product had zero visible offers for ≥7 consecutive days, now has ≥1"
@@ -230,6 +311,12 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     )
     SELECT "productId" FROM recently_restocked
   `
+
+  const query4DurationMs = Math.round(performance.now() - query4Start)
+  log.info('MARKET_DEALS_QUERY_4_BACK_IN_STOCK', {
+    durationMs: query4DurationMs,
+    rowCount: backInStockProducts.length
+  })
 
   const backInStockSet = new Set(backInStockProducts.map((p) => p.productId))
 
@@ -320,24 +407,50 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
 
   // Log warning if limits caused truncation (for operational visibility)
   if (currentPrices.length >= MAX_PRODUCTS_TO_EVALUATE) {
-    console.warn('[MarketDeals] Product evaluation limit reached', {
+    log.warn('MARKET_DEALS_PRODUCT_LIMIT_REACHED', {
       limit: MAX_PRODUCTS_TO_EVALUATE,
       message: 'Some eligible deals may have been missed due to query limit',
     })
   }
   if (deals.length > MAX_DEALS_RETURNED) {
-    console.warn('[MarketDeals] Deal return limit reached', {
+    log.warn('MARKET_DEALS_LIMIT_REACHED', {
       totalEligible: deals.length,
       returned: MAX_DEALS_RETURNED,
       truncated: deals.length - MAX_DEALS_RETURNED,
     })
   }
 
-  return {
+  const result = {
     deals: deals.slice(0, MAX_DEALS_RETURNED),
     hero,
     lastCheckedAt: now.toISOString(),
   }
+
+  // Cache the result
+  try {
+    const redis = getRedisClient()
+    await redis.setex(MARKET_DEALS_CACHE_KEY, MARKET_DEALS_CACHE_TTL, JSON.stringify(result))
+    log.debug('MARKET_DEALS_CACHE_SET', { ttlSeconds: MARKET_DEALS_CACHE_TTL })
+  } catch (cacheError) {
+    log.warn('MARKET_DEALS_CACHE_SET_ERROR', {
+      error: cacheError instanceof Error ? cacheError.message : String(cacheError)
+    })
+  }
+
+  // Log total timing
+  const totalDurationMs = Math.round(performance.now() - functionStart)
+  log.info('MARKET_DEALS_TOTAL', {
+    durationMs: totalDurationMs,
+    query1Ms: query1DurationMs,
+    query2Ms: query2DurationMs,
+    query3Ms: query3DurationMs,
+    query4Ms: query4DurationMs,
+    dealsFound: deals.length,
+    heroProductId: hero?.productId ?? null,
+    cacheHit: false
+  })
+
+  return result
 }
 
 /**
