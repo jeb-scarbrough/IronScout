@@ -1,14 +1,29 @@
 /**
  * Dashboard v5 Components
  *
- * Per ADR-020, dashboard-product-spec-v5.md, and v5-patch-001
+ * Per ADR-020, dashboard-product-spec-v5.md, v5-patch-001, and ambient-vitality spec
  */
+
+// ============================================
+// Final Implementation (with Ambient Vitality)
+// ============================================
+
+// Main layout (with ambient vitality)
+export { DashboardV5Vital, DashboardV5VitalSkeleton } from './dashboard-v5-vital'
+export type { DashboardV5VitalData } from './dashboard-v5-vital'
+
+// Ambient vitality components
+export { ActiveMonitoringHeader, selectMonitoringVariant } from './active-monitoring-header'
+export { MarketPulseStrip, generateCaliberTrends } from './market-pulse-strip'
+export type { CaliberTrend } from './market-pulse-strip'
+export { CoverageContext, generateCoverageObservation, COVERAGE_TEMPLATES } from './coverage-context'
+export type { CoverageObservation, CoverageObservationType } from './coverage-context'
 
 // ============================================
 // Updated Components (per v5-patch-001)
 // ============================================
 
-// Main layout (updated)
+// Main layout (updated, pre-vitality)
 export { DashboardV5Updated, DashboardV5UpdatedSkeleton } from './dashboard-v5-updated'
 export type { DashboardV5UpdatedData } from './dashboard-v5-updated'
 
@@ -24,7 +39,7 @@ export type { WatchlistTableItem, WatchlistStatusType } from './watchlist-table'
 export { PriceMovementAccordion } from './price-movement-accordion'
 export type { PriceChange } from './price-movement-accordion'
 
-// Vitality components
+// Vitality components (basic)
 export { MonitoringSummary } from './monitoring-summary'
 export { MarketContext, generateMarketObservation } from './market-context'
 export type { MarketObservation, MarketObservationType } from './market-context'
