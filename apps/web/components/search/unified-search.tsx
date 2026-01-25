@@ -284,6 +284,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
             <input
               ref={inputRef}
+              id="search-query"
+              name="q"
               type="text"
               value={query}
               onChange={(e) => {
@@ -488,6 +490,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
                 <div className="relative flex-1">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <input
+                    id="min-price"
+                    name="minPrice"
                     type="number"
                     value={filters.minPrice}
                     onChange={(e) => handlePriceChange('minPrice', e.target.value)}
@@ -501,6 +505,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
                 <div className="relative flex-1">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <input
+                    id="max-price"
+                    name="maxPrice"
                     type="number"
                     value={filters.maxPrice}
                     onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
@@ -515,8 +521,10 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
             {/* In Stock Toggle */}
             <div className="flex items-end">
-              <label className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
+              <label htmlFor="in-stock" className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
                 <input
+                  id="in-stock"
+                  name="inStock"
                   type="checkbox"
                   checked={filters.inStock}
                   onChange={(e) => handleCheckboxChange(e.target.checked)}

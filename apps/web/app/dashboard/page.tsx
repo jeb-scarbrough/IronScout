@@ -1,34 +1,29 @@
 'use client'
 
-import { useDashboardState } from '@/hooks/use-dashboard-state'
-import { StateBanner } from '@/components/dashboard/organisms/state-banner'
-import { WatchlistPreviewV4 } from '@/components/dashboard/organisms/watchlist-preview-v4'
-import { BestPrices } from '@/components/dashboard/organisms/best-prices'
-import { MarketDeals } from '@/components/dashboard/market-deals'
+import { useDashboardV5 } from '@/hooks/use-dashboard-v5'
+import { DashboardV5 } from '@/components/dashboard/v5'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 
 /**
- * Dashboard Page - Dashboard v4
+ * Dashboard Page - Dashboard v5
  *
- * State-driven dashboard per dashboard-product-spec.md:
- * 1. State Banner: Contextual message based on user state
- * 2. Watchlist Preview: Subset of watchlist items (hidden for BRAND_NEW)
- * 3. Best Prices: Non-personalized deals (always shown)
+ * Status-oriented monitoring surface per ADR-020 and dashboard-product-spec-v5.md:
  *
- * States:
- * - BRAND_NEW: 0 items → Hero search module
- * - NEW: 1-4 items → Expansion prompt + caliber chips
- * - NEEDS_ALERTS: ≥5 items, missing alerts → Configure alerts prompt
- * - HEALTHY: ≥5 items, all alerts active → Reassurance
- * - RETURNING: Healthy + alerts delivered → Value reinforcement
- * - POWER_USER: ≥7 items + alerts → Compact status + inline actions
+ * Sections (in order):
+ * 1. Spotlight (optional, single item) - Synthesized signal
+ * 2. Your Watchlist (always shown if not cold-start, max 10)
+ * 3. Recent Price Movement (conditional, max 5)
+ * 4. Back in Stock (conditional, max 5)
+ * 5. Matches Your Gun Locker (conditional, max 5)
  *
- * @see dashboard-product-spec.md
- * @see ADR-012 Dashboard v3 (predecessor)
+ * Cold-start: If no watchlist and no gun locker, show onboarding module only.
+ *
+ * @see ADR-020 Dashboard v5
+ * @see dashboard-product-spec-v5.md
  */
 export default function DashboardPage() {
-  const { state, watchlistPreview, bestPrices, loading, error } = useDashboardState()
+  const { data, loading, error } = useDashboardV5()
 
   if (loading) {
     return (
@@ -45,7 +40,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (error || !state) {
+  if (error || !data) {
     return (
       <div className="p-4 lg:p-8 max-w-4xl mx-auto">
         <Card>
@@ -59,52 +54,5 @@ export default function DashboardPage() {
     )
   }
 
-  // Determine max preview items based on state
-  const maxPreviewItems = state.state === 'POWER_USER' ? 7 : 3
-
-  // Footer text varies by state
-  const getBestPricesFooter = () => {
-    if (state.state === 'BRAND_NEW') {
-      return 'Add items to your watchlist to catch price drops like these.'
-    }
-    return 'Deals like these are caught when items are in your watchlist.'
-  }
-
-  return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
-      {/* State Banner (contextual per user state) */}
-      <section>
-        <StateBanner state={state.state} context={state} />
-      </section>
-
-      {/* Watchlist Preview (hidden for BRAND_NEW state) */}
-      {state.state !== 'BRAND_NEW' && watchlistPreview.length > 0 && (
-        <section>
-          <WatchlistPreviewV4
-            items={watchlistPreview}
-            totalCount={state.watchlistCount}
-            maxItems={maxPreviewItems}
-            state={state.state}
-          />
-        </section>
-      )}
-
-      {/* Market Deals - per dashboard_market_deals_v1_spec.md */}
-      <section>
-        <MarketDeals />
-      </section>
-
-      {/* Best Prices (always shown) */}
-      <section>
-        <BestPrices items={bestPrices} footerText={getBestPricesFooter()} />
-      </section>
-
-      {/* Additional footer for BRAND_NEW */}
-      {state.state === 'BRAND_NEW' && (
-        <p className="text-xs text-center text-muted-foreground/70">
-          Prices verified across major retailers. Updated continuously.
-        </p>
-      )}
-    </div>
-  )
+  return <DashboardV5 data={data} />
 }

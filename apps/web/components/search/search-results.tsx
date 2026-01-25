@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { aiSearch, AISearchResponse, ExplicitFilters } from '@/lib/api'
-import { SearchResultsGrid } from '@/components/results'
+import { SearchResultsGridV2 } from '@/components/results'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Search, Bell, TrendingDown } from 'lucide-react'
 import { SearchHeader } from './search-header'
@@ -163,8 +163,8 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             </div>
           )}
 
-          {/* Results Grid - using new ResultCard component */}
-          <SearchResultsGrid products={products} />
+          {/* Results Grid - v2 with multi-retailer comparison */}
+          <SearchResultsGridV2 products={products} />
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (

@@ -79,7 +79,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
 
             <div className="flex items-center gap-2 mb-4">
               <Badge>{product.category}</Badge>
-              {lowestPrice.retailer.tier === 'PREMIUM' && (
+              {lowestPrice.retailer?.tier === 'PREMIUM' && (
                 <Badge className="bg-yellow-500 text-yellow-900">
                   <Crown className="h-3 w-3 mr-1" />
                   Premium Retailer
@@ -102,7 +102,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
                     ${lowestPrice.price.toFixed(2)}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    at {lowestPrice.retailer.name}
+                    at {lowestPrice.retailer?.name || 'Unknown retailer'}
                   </div>
                 </div>
 
@@ -202,8 +202,8 @@ export function ProductDetails({ product }: ProductDetailsProps) {
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{price.retailer.name}</span>
-                      {price.retailer.tier === 'PREMIUM' && (
+                      <span className="font-medium">{price.retailer?.name || 'Unknown'}</span>
+                      {price.retailer?.tier === 'PREMIUM' && (
                         <Crown className="h-4 w-4 text-yellow-500" />
                       )}
                     </div>

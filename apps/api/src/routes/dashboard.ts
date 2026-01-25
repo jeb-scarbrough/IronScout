@@ -21,10 +21,38 @@ import {
 } from '../services/dashboard-state'
 import { getMarketDeals, getMarketDealsWithGunLocker } from '../services/market-deals'
 import { getUserCalibers, type CaliberValue } from '../services/gun-locker'
+import { getDashboardV5Data } from '../services/dashboard-v5'
 
 const log = loggers.dashboard
 
 const router: any = Router()
+
+// ============================================================================
+// DASHBOARD V5 ENDPOINT
+// Per ADR-020 and dashboard-product-spec-v5.md
+// Status-oriented monitoring surface with sections:
+// - Spotlight (single signal)
+// - Watchlist (max 10)
+// - Price Movement (max 5)
+// - Back in Stock (max 5)
+// - Gun Locker Matches (max 5, conditional)
+// ============================================================================
+
+router.get('/v5', async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req)
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const data = await getDashboardV5Data(userId)
+
+    res.json(data)
+  } catch (error) {
+    log.error('Dashboard v5 error', { error }, error as Error)
+    res.status(500).json({ error: 'Failed to load dashboard' })
+  }
+})
 
 // ============================================================================
 // DASHBOARD STATE ENDPOINT (v4)
@@ -106,7 +134,7 @@ router.get('/market-deals', async (req: Request, res: Response) => {
         return res.json({
           hero,
           sections: [
-            { title: 'For Your Guns', deals: forYourGuns },
+            { title: 'Fits Your Gun Locker', deals: forYourGuns },
             { title: 'Other Notable Deals', deals: otherDeals },
           ],
           lastCheckedAt,

@@ -1608,6 +1608,28 @@ export interface UpcLookupResult {
   product: UpcLookupProduct | null
 }
 
+// ============================================
+// Dashboard v5 API
+// ============================================
+
+import type { DashboardV5Data } from '@/components/dashboard/v5/types'
+
+/**
+ * Get Dashboard v5 data for authenticated user
+ * Per ADR-020 and dashboard-product-spec-v5.md
+ */
+export async function getDashboardV5(token: string): Promise<DashboardV5Data> {
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/v5`, {
+    headers: buildAuthHeaders(token),
+  })
+  await handleAuthResponse(response, 'Failed to fetch dashboard data')
+  return response.json()
+}
+
+// ============================================
+// UPC Lookup API
+// ============================================
+
 /**
  * Look up a product by UPC code (for barcode scanning)
  */

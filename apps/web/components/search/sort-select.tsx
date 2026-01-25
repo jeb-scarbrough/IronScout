@@ -76,7 +76,7 @@ export function EnhancedSortSelect({ isPremium: _isPremium = false }: EnhancedSo
       </label>
 
       <Select value={currentSort} onValueChange={handleSortChange}>
-        <SelectTrigger className="w-[180px] h-9">
+        <SelectTrigger id="sort" className="w-[180px] h-9">
           <SelectValue>
             <div className="flex items-center gap-2">
               {currentOption && (
