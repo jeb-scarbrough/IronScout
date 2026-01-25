@@ -205,6 +205,7 @@ export interface Gun {
   id: string
   caliber: CaliberValue
   nickname: string | null
+  imageUrl: string | null
   createdAt: Date
 }
 
@@ -236,6 +237,7 @@ export async function getGuns(userId: string): Promise<Gun[]> {
         id: g.id,
         caliber,
         nickname: g.nickname,
+        imageUrl: g.imageUrl,
         createdAt: g.createdAt,
       }
     })
@@ -271,6 +273,7 @@ export async function addGun(
     id: gun.id,
     caliber: gun.caliber as CaliberValue,
     nickname: gun.nickname,
+    imageUrl: gun.imageUrl,
     createdAt: gun.createdAt,
   }
 }
@@ -307,6 +310,48 @@ export async function countGuns(userId: string): Promise<number> {
 }
 
 /**
+ * Update a gun in user's Gun Locker
+ * @throws Error if gun not found or doesn't belong to user
+ */
+export async function updateGun(
+  userId: string,
+  gunId: string,
+  updates: { nickname?: string | null }
+): Promise<Gun> {
+  const gun = await prisma.user_guns.findUnique({
+    where: { id: gunId },
+  })
+
+  if (!gun) {
+    throw new Error('Gun not found')
+  }
+
+  if (gun.userId !== userId) {
+    throw new Error('Gun not found') // Don't leak that it exists for another user
+  }
+
+  const updated = await prisma.user_guns.update({
+    where: { id: gunId },
+    data: {
+      nickname: updates.nickname !== undefined ? updates.nickname : gun.nickname,
+    },
+  })
+
+  const caliber = normalizeCaliber(updated.caliber)
+  if (!caliber) {
+    throw new Error('Gun has invalid caliber')
+  }
+
+  return {
+    id: updated.id,
+    caliber,
+    nickname: updated.nickname,
+    imageUrl: updated.imageUrl,
+    createdAt: updated.createdAt,
+  }
+}
+
+/**
  * Get user's calibers (unique list) for deal personalization
  * Per spec: Output MUST use canonical caliber enum values
  * Per spec: Unmapped calibers are EXCLUDED from output
@@ -325,4 +370,118 @@ export async function getUserCalibers(userId: string): Promise<CaliberValue[]> {
     .filter((c): c is CaliberValue => c !== null)
     .filter((c, i, arr) => arr.indexOf(c) === i) // Dedupe after normalization
   return calibers
+}
+
+// ============================================================================
+// Gun Image Functions
+// ============================================================================
+
+/** Max image size in bytes (500KB) */
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024
+
+/** Allowed image MIME types */
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+/**
+ * Validate image data URL format and size
+ * @throws Error if invalid
+ */
+function validateImageDataUrl(dataUrl: string): void {
+  // Check format: data:image/xxx;base64,xxxxx
+  const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
+  if (!match) {
+    throw new Error('Invalid image format. Must be a base64 data URL.')
+  }
+
+  const [, mimeType, base64Data] = match
+
+  // Check MIME type
+  if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+    throw new Error(`Invalid image type: ${mimeType}. Allowed: ${ALLOWED_IMAGE_TYPES.join(', ')}`)
+  }
+
+  // Check size (base64 is ~33% larger than binary)
+  const estimatedBytes = (base64Data.length * 3) / 4
+  if (estimatedBytes > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error(`Image too large. Max size: ${MAX_IMAGE_SIZE_BYTES / 1024}KB`)
+  }
+}
+
+/**
+ * Set (upload/overwrite) image for a gun
+ * @throws Error if gun not found, not owned by user, or image invalid
+ */
+export async function setGunImage(
+  userId: string,
+  gunId: string,
+  imageDataUrl: string
+): Promise<Gun> {
+  const gun = await prisma.user_guns.findUnique({
+    where: { id: gunId },
+  })
+
+  if (!gun) {
+    throw new Error('Gun not found')
+  }
+
+  if (gun.userId !== userId) {
+    throw new Error('Gun not found') // Don't leak that it exists for another user
+  }
+
+  // Validate image
+  validateImageDataUrl(imageDataUrl)
+
+  const updated = await prisma.user_guns.update({
+    where: { id: gunId },
+    data: { imageUrl: imageDataUrl },
+  })
+
+  const caliber = normalizeCaliber(updated.caliber)
+  if (!caliber) {
+    throw new Error('Gun has invalid caliber')
+  }
+
+  return {
+    id: updated.id,
+    caliber,
+    nickname: updated.nickname,
+    imageUrl: updated.imageUrl,
+    createdAt: updated.createdAt,
+  }
+}
+
+/**
+ * Delete image for a gun
+ * @throws Error if gun not found or not owned by user
+ */
+export async function deleteGunImage(userId: string, gunId: string): Promise<Gun> {
+  const gun = await prisma.user_guns.findUnique({
+    where: { id: gunId },
+  })
+
+  if (!gun) {
+    throw new Error('Gun not found')
+  }
+
+  if (gun.userId !== userId) {
+    throw new Error('Gun not found') // Don't leak that it exists for another user
+  }
+
+  const updated = await prisma.user_guns.update({
+    where: { id: gunId },
+    data: { imageUrl: null },
+  })
+
+  const caliber = normalizeCaliber(updated.caliber)
+  if (!caliber) {
+    throw new Error('Gun has invalid caliber')
+  }
+
+  return {
+    id: updated.id,
+    caliber,
+    nickname: updated.nickname,
+    imageUrl: updated.imageUrl,
+    createdAt: updated.createdAt,
+  }
 }
