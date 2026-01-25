@@ -798,7 +798,22 @@ model products {
   /// Additive-only product specifications (grain, packCount, etc.)
   specs        Json?
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Ammo SKU Supersession (per firearm_preferred_ammo_mapping_spec_v3)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Whether this SKU is currently active in the catalog
+  isActiveSku     Boolean   @default(true)
+  /// Reference to the SKU that supersedes this one (for alias resolution)
+  supersededById  String?
+  /// When this SKU was superseded
+  supersededAt    DateTime?
+
   // Relations
+  /// Self-relation: this product is superseded by another product
+  supersededBy    products? @relation("ProductSupersession", fields: [supersededById], references: [id])
+  /// Self-relation: products that this product supersedes
+  supersedes      products[] @relation("ProductSupersession")
   alerts                   alerts[]
   prices                   prices[]
   product_reports          product_reports[]
@@ -808,6 +823,7 @@ model products {
   aliasesFrom              product_aliases[]          @relation("AliasFrom")
   aliasesTo                product_aliases[]          @relation("AliasTo")
   product_resolve_requests product_resolve_requests[]
+  firearm_ammo_preferences firearm_ammo_preferences[]
 
   @@index([bulletType])
   @@index([caliber])
@@ -1243,9 +1259,10 @@ model users {
   data_subscriptions    data_subscriptions[]
   product_reports       product_reports[]
   subscriptions         subscriptions[]
-  user_guns             user_guns[]
-  watchlist_collections watchlist_collections[]
-  watchlist_items       watchlist_items[]
+  user_guns                user_guns[]
+  watchlist_collections    watchlist_collections[]
+  watchlist_items          watchlist_items[]
+  firearm_ammo_preferences firearm_ammo_preferences[]
 }
 
 /// Gun Locker - stores guns a user owns for deal personalization
@@ -1254,10 +1271,45 @@ model user_guns {
   userId    String
   caliber   String   // Canonical caliber value from CaliberEnum
   nickname  String?
+  imageUrl  String?  @db.Text // base64 data URL (Postgres-first), R2 URL later
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
   users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Ammo preferences for this firearm
+  firearm_ammo_preferences firearm_ammo_preferences[]
+
   @@index([userId])
+}
+
+/// Firearm → Preferred Ammo Mapping (per firearm_preferred_ammo_mapping_spec_v3)
+/// User-declared ammo usage context for a firearm. Not a recommendation system.
+/// Supports recall and re-purchase workflows, not discovery or advice.
+model firearm_ammo_preferences {
+  id         String                       @id @default(cuid())
+  userId     String
+  firearmId  String
+  ammoSkuId  String                        // References products.id (ammo SKU)
+  useCase    AmmoUseCase
+  createdAt  DateTime                      @default(now())
+  updatedAt  DateTime                      @updatedAt
+  deletedAt  DateTime?
+  deleteReason AmmoPreferenceDeleteReason?
+
+  // Relations
+  users      users      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user_guns  user_guns  @relation(fields: [firearmId], references: [id], onDelete: Cascade)
+  products   products   @relation(fields: [ammoSkuId], references: [id], onDelete: Cascade)
+
+  // Partial unique: only one active mapping per user+firearm+sku+useCase
+  // Per spec: UNIQUE (user_id, firearm_id, ammo_sku_id, use_case) WHERE deleted_at IS NULL
+  // Prisma doesn't support partial indexes, so this is managed via raw SQL migration.
+  // See migration: 20260125_firearm_ammo_preferences
+
+  // Recommended indexes per spec
+  @@index([userId, firearmId, deletedAt])
+  @@index([userId, ammoSkuId, deletedAt])
+  @@index([userId, useCase, deletedAt])
 }
 
 model watchlist_collections {
@@ -1747,6 +1799,32 @@ enum UserStatus {
 enum UserTier {
   FREE
   PREMIUM
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Firearm Ammo Preference Enums (per firearm_preferred_ammo_mapping_spec_v3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Use case for firearm ammo preference. Descriptive only, no hierarchy.
+/// Per spec: "Use cases are descriptive only and imply no hierarchy."
+enum AmmoUseCase {
+  TRAINING
+  CARRY
+  COMPETITION
+  GENERAL
+}
+
+/// Reason for soft-deleting a firearm ammo preference.
+/// Per spec lifecycle semantics.
+enum AmmoPreferenceDeleteReason {
+  /// User explicitly removed the mapping
+  USER_REMOVED
+  /// Parent firearm was deleted (cascade)
+  FIREARM_DELETED
+  /// Ammo SKU was superseded by another SKU
+  SKU_SUPERSEDED
+  /// Administrative cleanup
+  ADMIN_CLEANUP
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1349,6 +1349,7 @@ export interface Gun {
   id: string
   caliber: CaliberValue
   nickname: string | null
+  imageUrl: string | null
   createdAt: string
 }
 
@@ -1405,6 +1406,7 @@ export async function addGun(
       id: `e2e-gun-${Date.now()}`,
       caliber,
       nickname: nickname || null,
+      imageUrl: null,
       createdAt: new Date().toISOString(),
     }
     e2eGuns = [...e2eGuns, newGun]
@@ -1446,6 +1448,341 @@ export async function removeGun(token: string, gunId: string): Promise<void> {
     const error = await response.json().catch(() => ({}))
     throw new Error(error.error || 'Failed to remove gun')
   }
+}
+
+/**
+ * Update a gun in the user's Gun Locker
+ */
+export async function updateGun(
+  token: string,
+  gunId: string,
+  updates: { nickname?: string | null }
+): Promise<{ gun: Gun }> {
+  if (E2E_TEST_MODE) {
+    const gun = e2eGuns.find((g) => g.id === gunId)
+    if (!gun) throw new Error('Gun not found')
+    if (updates.nickname !== undefined) gun.nickname = updates.nickname
+    return { gun }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${gunId}`, {
+    method: 'PATCH',
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify(updates),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to update gun')
+  }
+
+  return response.json()
+}
+
+/**
+ * Upload or overwrite a gun image
+ */
+export async function uploadGunImage(
+  token: string,
+  gunId: string,
+  imageDataUrl: string
+): Promise<{ gun: Gun; message: string }> {
+  if (E2E_TEST_MODE) {
+    const gun = e2eGuns.find((g) => g.id === gunId)
+    if (!gun) throw new Error('Gun not found')
+    gun.imageUrl = imageDataUrl
+    return { gun, message: 'Image uploaded' }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${gunId}/image`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify({ imageDataUrl }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to upload image')
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete a gun image
+ */
+export async function deleteGunImage(
+  token: string,
+  gunId: string
+): Promise<{ gun: Gun; message: string }> {
+  if (E2E_TEST_MODE) {
+    const gun = e2eGuns.find((g) => g.id === gunId)
+    if (!gun) throw new Error('Gun not found')
+    gun.imageUrl = null
+    return { gun, message: 'Image deleted' }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${gunId}/image`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to delete image')
+  }
+
+  return response.json()
+}
+
+// ============================================
+// Firearm Ammo Preferences API
+// Per firearm_preferred_ammo_mapping_spec_v3.md
+// ============================================
+
+/**
+ * Use case for firearm ammo preference
+ * Per spec: descriptive only, no hierarchy
+ */
+export type AmmoUseCase = 'TRAINING' | 'CARRY' | 'COMPETITION' | 'GENERAL'
+
+/**
+ * Display order for use cases per spec: CARRY, TRAINING, COMPETITION, GENERAL
+ */
+export const AMMO_USE_CASE_ORDER: AmmoUseCase[] = ['CARRY', 'TRAINING', 'COMPETITION', 'GENERAL']
+
+/**
+ * Human-readable labels for use cases
+ */
+export const AMMO_USE_CASE_LABELS: Record<AmmoUseCase, string> = {
+  CARRY: 'Carry',
+  TRAINING: 'Training',
+  COMPETITION: 'Competition',
+  GENERAL: 'General',
+}
+
+/**
+ * Ammo SKU info resolved from product
+ */
+export interface AmmoSku {
+  id: string
+  name: string
+  brand: string | null
+  caliber: string | null
+  grainWeight: number | null
+  roundCount: number | null
+  isActive: boolean
+}
+
+/**
+ * Ammo preference for a firearm
+ */
+export interface AmmoPreference {
+  id: string
+  firearmId: string
+  ammoSkuId: string
+  useCase: AmmoUseCase
+  createdAt: string
+  updatedAt: string
+  ammoSku: AmmoSku
+}
+
+/**
+ * Grouped preferences by use case
+ */
+export interface AmmoPreferenceGroup {
+  useCase: AmmoUseCase
+  preferences: AmmoPreference[]
+}
+
+export interface FirearmAmmoPreferencesResponse {
+  groups: AmmoPreferenceGroup[]
+  _meta: {
+    firearmId: string
+    totalPreferences: number
+  }
+}
+
+export interface UserAmmoPreferencesResponse {
+  preferences: AmmoPreference[]
+  _meta: {
+    count: number
+  }
+}
+
+/**
+ * Get ammo preferences for a specific firearm, grouped by use case
+ */
+export async function getFirearmAmmoPreferences(
+  token: string,
+  firearmId: string
+): Promise<FirearmAmmoPreferencesResponse> {
+  if (E2E_TEST_MODE) {
+    return {
+      groups: [],
+      _meta: { firearmId, totalPreferences: 0 },
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${firearmId}/ammo-preferences`, {
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to fetch ammo preferences')
+  }
+
+  return response.json()
+}
+
+/**
+ * Get all ammo preferences for the user (for My Loadout)
+ */
+export async function getUserAmmoPreferences(
+  token: string
+): Promise<UserAmmoPreferencesResponse> {
+  if (E2E_TEST_MODE) {
+    return {
+      preferences: [],
+      _meta: { count: 0 },
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/ammo-preferences`, {
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to fetch ammo preferences')
+  }
+
+  return response.json()
+}
+
+/**
+ * Add an ammo preference for a firearm
+ */
+export async function addAmmoPreference(
+  token: string,
+  firearmId: string,
+  ammoSkuId: string,
+  useCase: AmmoUseCase
+): Promise<{ preference: AmmoPreference }> {
+  if (E2E_TEST_MODE) {
+    const preference: AmmoPreference = {
+      id: `e2e-pref-${Date.now()}`,
+      firearmId,
+      ammoSkuId,
+      useCase,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ammoSku: {
+        id: ammoSkuId,
+        name: 'E2E Ammo',
+        brand: 'E2E',
+        caliber: '9mm',
+        grainWeight: 115,
+        roundCount: 50,
+        isActive: true,
+      },
+    }
+    return { preference }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${firearmId}/ammo-preferences`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token),
+    body: JSON.stringify({ ammoSkuId, useCase }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to add ammo preference')
+  }
+
+  return response.json()
+}
+
+/**
+ * Update ammo preference use case
+ */
+export async function updateAmmoPreferenceUseCase(
+  token: string,
+  firearmId: string,
+  preferenceId: string,
+  newUseCase: AmmoUseCase
+): Promise<{ preference: AmmoPreference }> {
+  if (E2E_TEST_MODE) {
+    throw new Error('Not implemented in E2E mode')
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/gun-locker/${firearmId}/ammo-preferences/${preferenceId}`,
+    {
+      method: 'PATCH',
+      headers: buildAuthHeaders(token),
+      body: JSON.stringify({ useCase: newUseCase }),
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to update ammo preference')
+  }
+
+  return response.json()
+}
+
+/**
+ * Remove an ammo preference
+ */
+export async function removeAmmoPreference(
+  token: string,
+  firearmId: string,
+  preferenceId: string
+): Promise<void> {
+  if (E2E_TEST_MODE) {
+    return
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/gun-locker/${firearmId}/ammo-preferences/${preferenceId}`,
+    {
+      method: 'DELETE',
+      headers: buildAuthHeaders(token),
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to remove ammo preference')
+  }
+}
+
+/**
+ * Get firearm caliber for scoped search
+ */
+export async function getFirearmCaliber(
+  token: string,
+  firearmId: string
+): Promise<{ caliber: string | null }> {
+  if (E2E_TEST_MODE) {
+    const gun = e2eGuns.find((g) => g.id === firearmId)
+    return { caliber: gun?.caliber || null }
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/gun-locker/${firearmId}/caliber`, {
+    headers: buildAuthHeaders(token),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Failed to get firearm caliber')
+  }
+
+  return response.json()
 }
 
 // ============================================
