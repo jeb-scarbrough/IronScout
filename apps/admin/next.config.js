@@ -2,8 +2,8 @@
 const nextConfig = {
   // Allow dev requests from local HTTPS domains (via Caddy)
   allowedDevOrigins: [
-    'https://admin.local.ironscout.ai',
-    'https://api.local.ironscout.ai',
+    'admin.local.ironscout.ai',
+    'api.local.ironscout.ai',
   ],
   reactStrictMode: true,
   transpilePackages: ['@ironscout/db'],

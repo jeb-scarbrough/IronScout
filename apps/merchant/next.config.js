@@ -2,8 +2,8 @@
 const nextConfig = {
   // Allow dev requests from local HTTPS domains (via Caddy)
   allowedDevOrigins: [
-    'https://merchant.local.ironscout.ai',
-    'https://api.local.ironscout.ai',
+    'merchant.local.ironscout.ai',
+    'api.local.ironscout.ai',
   ],
   // Externalize native Node.js modules that can't be bundled by Turbopack
   serverExternalPackages: ['ssh2', 'cpu-features'],
