@@ -121,8 +121,12 @@ router.post('/:firearmId/ammo-preferences', async (req: Request, res: Response) 
       return res.status(409).json({ error: err.message })
     }
 
-    // A6: Caliber mismatch validation
-    if (err.message.startsWith('Caliber mismatch:')) {
+    // A6: Caliber compatibility validation (fail-closed per spec)
+    // Covers: unknown calibers and caliber mismatch
+    if (
+      err.message.startsWith('Caliber mismatch:') ||
+      err.message.startsWith('Cannot add ammo:')
+    ) {
       return res.status(400).json({ error: err.message })
     }
 

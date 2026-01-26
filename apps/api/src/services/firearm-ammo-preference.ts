@@ -15,6 +15,9 @@
 
 import { prisma } from '@ironscout/db'
 import { AmmoUseCase, AmmoPreferenceDeleteReason } from '@ironscout/db/generated/prisma'
+import { loggers } from '../config/logger'
+
+const log = loggers.watchlist // User data operations
 
 // ============================================================================
 // Types
@@ -84,8 +87,16 @@ async function resolveSupersededSku(productId: string): Promise<string> {
   return currentId
 }
 
+// Internal type for tracking supersession during dedupe
+interface MappedPreference extends AmmoPreference {
+  _originalId: string // Original preference ID (for soft-delete tracking)
+  _originalSkuId: string // Original SKU ID before supersession resolution
+  _wasSuperseded: boolean // True if SKU was resolved via supersession
+}
+
 /**
  * Map database record to AmmoPreference with resolved SKU data
+ * Tracks original IDs for supersession soft-delete
  */
 async function mapToAmmoPreference(
   record: {
@@ -106,8 +117,9 @@ async function mapToAmmoPreference(
       supersededById: string | null
     }
   }
-): Promise<AmmoPreference> {
+): Promise<MappedPreference> {
   let ammoSku = record.products
+  let wasSuperseded = false
 
   // Resolve supersession if needed
   if (!ammoSku.isActiveSku && ammoSku.supersededById) {
@@ -128,6 +140,7 @@ async function mapToAmmoPreference(
       })
       if (canonical) {
         ammoSku = canonical
+        wasSuperseded = true
       }
     }
   }
@@ -148,7 +161,62 @@ async function mapToAmmoPreference(
       roundCount: ammoSku.roundCount,
       isActive: ammoSku.isActiveSku,
     },
+    _originalId: record.id,
+    _originalSkuId: record.ammoSkuId,
+    _wasSuperseded: wasSuperseded,
   }
+}
+
+/**
+ * Dedupe preferences after supersession resolution
+ * Per spec: "If both deprecated and canonical SKUs are mapped, render canonical only.
+ *           Soft-delete deprecated mapping with delete_reason = SKU_SUPERSEDED."
+ */
+async function dedupeAndSoftDeleteSuperseded(
+  mapped: MappedPreference[]
+): Promise<AmmoPreference[]> {
+  const deduped: AmmoPreference[] = []
+  const seenKeys = new Map<string, MappedPreference>() // key -> first preference seen
+  const toSoftDelete: string[] = [] // preference IDs to soft-delete
+
+  for (const pref of mapped) {
+    const key = `${pref.firearmId}:${pref.ammoSkuId}:${pref.useCase}`
+
+    if (!seenKeys.has(key)) {
+      seenKeys.set(key, pref)
+      // Strip internal tracking fields for return
+      const { _originalId, _originalSkuId, _wasSuperseded, ...cleanPref } = pref
+      deduped.push(cleanPref)
+    } else {
+      // Duplicate found - this is a superseded mapping pointing to same canonical
+      // Per spec: soft-delete the deprecated mapping
+      if (pref._wasSuperseded) {
+        toSoftDelete.push(pref._originalId)
+        log.info('Supersession dedupe: soft-deleting deprecated mapping', {
+          deprecatedPrefId: pref._originalId,
+          deprecatedSkuId: pref._originalSkuId,
+          canonicalSkuId: pref.ammoSkuId,
+        })
+      }
+    }
+  }
+
+  // Soft-delete deprecated mappings in background (don't block read)
+  if (toSoftDelete.length > 0) {
+    prisma.firearm_ammo_preferences
+      .updateMany({
+        where: { id: { in: toSoftDelete } },
+        data: {
+          deletedAt: new Date(),
+          deleteReason: 'SKU_SUPERSEDED',
+        },
+      })
+      .catch((err) => {
+        log.error('Failed to soft-delete superseded mappings', { error: err.message, ids: toSoftDelete })
+      })
+  }
+
+  return deduped
 }
 
 // ============================================================================
@@ -199,21 +267,9 @@ export async function getPreferencesForFirearm(
     ],
   })
 
-  // Map and resolve supersession
+  // Map, resolve supersession, and dedupe (soft-deletes deprecated mappings per spec)
   const mapped = await Promise.all(preferences.map(mapToAmmoPreference))
-
-  // A4: Dedupe after supersession resolution - multiple deprecated SKUs may resolve to same canonical
-  // Per spec: "If both deprecated and canonical SKUs are mapped, render canonical only"
-  const deduped: AmmoPreference[] = []
-  const seenKeys = new Set<string>()
-  for (const pref of mapped) {
-    const key = `${pref.firearmId}:${pref.ammoSkuId}:${pref.useCase}`
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key)
-      deduped.push(pref)
-    }
-    // Skip duplicates - first one wins (most recently updated due to orderBy)
-  }
+  const deduped = await dedupeAndSoftDeleteSuperseded(mapped)
 
   // Group by use case in fixed order
   const groups: AmmoPreferenceGroup[] = []
@@ -259,7 +315,9 @@ export async function getPreferencesForUser(
     ],
   })
 
-  return Promise.all(preferences.map(mapToAmmoPreference))
+  // Map, resolve supersession, and dedupe (soft-deletes deprecated mappings per spec)
+  const mapped = await Promise.all(preferences.map(mapToAmmoPreference))
+  return dedupeAndSoftDeleteSuperseded(mapped)
 }
 
 /**
@@ -300,17 +358,42 @@ export async function addPreference(
     throw new Error('Ammo SKU not found')
   }
 
-  // A6: Caliber compatibility validation (fail-closed per ADR-009)
-  // Per spec: "Firearm-Scoped Search: Apply caliber compatibility filter"
-  if (firearm.caliber && ammoSku.caliber && firearm.caliber !== ammoSku.caliber) {
-    console.warn('[AmmoPreference] Caliber mismatch blocked', {
+  // A6: Caliber compatibility validation (fail-closed per ADR-009 and spec)
+  // Per spec: "Fail-closed on ambiguous caliber mapping"
+  // Ambiguity triggers: Unknown firearm caliber, unknown ammo caliber, or mismatch
+  const firearmCaliberKnown = !!firearm.caliber
+  const ammoCaliberKnown = !!ammoSku.caliber
+  const calibersMatch = firearm.caliber === ammoSku.caliber
+
+  let blockReason: string | null = null
+  if (!firearmCaliberKnown) {
+    blockReason = 'unknown_firearm_caliber'
+  } else if (!ammoCaliberKnown) {
+    blockReason = 'unknown_ammo_caliber'
+  } else if (!calibersMatch) {
+    blockReason = 'caliber_mismatch'
+  }
+
+  if (blockReason) {
+    // Emit firearm_ammo_preference.blocked event per spec
+    log.warn('firearm_ammo_preference.blocked', {
+      event: 'firearm_ammo_preference.blocked',
+      reason: blockReason,
       userId,
       firearmId,
-      firearmCaliber: firearm.caliber,
-      ammoCaliber: ammoSku.caliber,
       ammoSkuId,
+      firearmCaliber: firearm.caliber ?? 'unknown',
+      ammoCaliber: ammoSku.caliber ?? 'unknown',
     })
-    throw new Error(`Caliber mismatch: firearm is ${firearm.caliber}, ammo is ${ammoSku.caliber}`)
+
+    const errorMessage =
+      blockReason === 'unknown_firearm_caliber'
+        ? 'Cannot add ammo: firearm caliber is unknown'
+        : blockReason === 'unknown_ammo_caliber'
+          ? 'Cannot add ammo: ammo caliber is unknown'
+          : `Caliber mismatch: firearm is ${firearm.caliber}, ammo is ${ammoSku.caliber}`
+
+    throw new Error(errorMessage)
   }
 
   // Resolve to canonical if superseded
@@ -465,6 +548,37 @@ export async function cascadeFirearmDeletion(
       deletedAt: new Date(),
       deleteReason: 'FIREARM_DELETED',
     },
+  })
+
+  log.info('Cascade firearm deletion: soft-deleted ammo preferences', {
+    userId,
+    firearmId,
+    count: result.count,
+  })
+
+  return result.count
+}
+
+/**
+ * Handle user deletion - cascade soft-delete all preferences
+ * Per spec: "User deletion: Cascade soft-delete all mappings"
+ * Called before hard-deleting user to preserve audit trail for future GDPR purge workflow
+ */
+export async function cascadeUserDeletion(userId: string): Promise<number> {
+  const result = await prisma.firearm_ammo_preferences.updateMany({
+    where: {
+      userId,
+      deletedAt: null,
+    },
+    data: {
+      deletedAt: new Date(),
+      deleteReason: 'USER_REMOVED', // Closest reason; spec doesn't define USER_DELETED
+    },
+  })
+
+  log.info('Cascade user deletion: soft-deleted ammo preferences', {
+    userId,
+    count: result.count,
   })
 
   return result.count

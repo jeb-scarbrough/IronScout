@@ -34,14 +34,12 @@ CREATE TABLE IF NOT EXISTS "firearm_ammo_preferences" (
 );
 
 -- Add foreign key constraints
--- Per spec: Soft-delete semantics for firearm/user deletion
--- userId: CASCADE is acceptable (account deletion removes all data)
--- firearmId: NO ACTION - application handles soft-delete cascade via cascadeFirearmDeletion()
---            Orphaned refs in soft-deleted records are acceptable for audit trail
--- ammoSkuId: CASCADE is safe (products should never be hard-deleted per spec)
+-- Per spec: Soft-delete semantics for all deletions (preserves audit trail)
+-- All FKs use NO ACTION - application handles soft-delete cascade with delete_reason
+-- Future GDPR purge workflow: soft-delete with reasons first, then hard-delete user
 ALTER TABLE "firearm_ammo_preferences"
 ADD CONSTRAINT "firearm_ammo_preferences_userId_fkey"
-FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 ALTER TABLE "firearm_ammo_preferences"
 ADD CONSTRAINT "firearm_ammo_preferences_firearmId_fkey"
@@ -49,7 +47,7 @@ FOREIGN KEY ("firearmId") REFERENCES "user_guns"("id") ON DELETE NO ACTION ON UP
 
 ALTER TABLE "firearm_ammo_preferences"
 ADD CONSTRAINT "firearm_ammo_preferences_ammoSkuId_fkey"
-FOREIGN KEY ("ammoSkuId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+FOREIGN KEY ("ammoSkuId") REFERENCES "products"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- Add partial unique index for active-only constraint (spec requirement)
 -- Per spec: UNIQUE (user_id, firearm_id, ammo_sku_id, use_case) WHERE deleted_at IS NULL
