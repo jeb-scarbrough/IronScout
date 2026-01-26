@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { aiSearch, getSearchSuggestions, parseSearchIntent, backfillProductEmbeddings, updateProductEmbedding, ParseOptions } from '../services/ai-search'
 import { enqueueEmbeddingBatch, getEmbeddingQueueStats } from '../services/ai-search/embedding-queue'
 import { prisma, isAiSearchEnabled, isVectorSearchEnabled } from '@ironscout/db'
-import { requireAdmin, rateLimit } from '../middleware/auth'
+import { requireAdmin, rateLimit, redisRateLimit } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { InvalidLensError, VALID_LENS_IDS, isLensEnabled } from '../services/lens'
 
@@ -71,7 +71,13 @@ const semanticSearchSchema = z.object({
   }).optional(),
 })
 
-router.post('/semantic', async (req: Request, res: Response) => {
+// Rate limit AI search: 30 requests/minute per IP (protects AI/embedding costs)
+router.post('/semantic', redisRateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyPrefix: 'rl:ai-search:semantic:',
+  endpoint: 'ai-search-semantic',
+}), async (req: Request, res: Response) => {
   try {
 
     // Check if AI search is enabled
@@ -135,7 +141,13 @@ const parseSchema = z.object({
   query: z.string().min(1).max(500),
 })
 
-router.post('/parse', async (req: Request, res: Response) => {
+// Rate limit parse preview: 60 requests/minute per IP
+router.post('/parse', redisRateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyPrefix: 'rl:ai-search:parse:',
+  endpoint: 'ai-search-parse',
+}), async (req: Request, res: Response) => {
   try {
     // Check if AI search is enabled
     const aiEnabled = await isAiSearchEnabled()
@@ -209,7 +221,13 @@ router.get('/suggestions', async (req: Request, res: Response) => {
  *
  * V1: All users get full filter capabilities
  */
-router.post('/nl-to-filters', async (req: Request, res: Response) => {
+// Rate limit NL-to-filters: 60 requests/minute per IP
+router.post('/nl-to-filters', redisRateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyPrefix: 'rl:ai-search:nl-filters:',
+  endpoint: 'ai-search-nl-filters',
+}), async (req: Request, res: Response) => {
   try {
     // Check if AI search is enabled
     const aiEnabled = await isAiSearchEnabled()
