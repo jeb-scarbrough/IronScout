@@ -19,11 +19,22 @@ vi.mock('@ironscout/db', () => ({
   },
 }))
 
-vi.mock('../config/redis', () => ({
+vi.mock('../../config/redis', () => ({
   getRedisClient: () => ({
     get: vi.fn().mockResolvedValue(null),
     setex: vi.fn().mockResolvedValue('OK'),
   }),
+}))
+
+vi.mock('../../config/logger', () => ({
+  loggers: {
+    dashboard: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+  },
 }))
 
 vi.mock('../ai-search/price-resolver', () => ({
