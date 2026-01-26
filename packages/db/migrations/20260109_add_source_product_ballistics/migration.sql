@@ -1,4 +1,0 @@
-ALTER TABLE "source_products"
-  ADD COLUMN IF NOT EXISTS "caliber" TEXT,
-  ADD COLUMN IF NOT EXISTS "grainWeight" INTEGER,
-  ADD COLUMN IF NOT EXISTS "roundCount" INTEGER;
