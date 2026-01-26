@@ -23,10 +23,6 @@ import Link from 'next/link'
 // Popular calibers for quick start
 const POPULAR_CALIBERS = ['9mm', '5.56 NATO', '.223 Rem', '.45 ACP', '.308 Win']
 
-interface TopMatchProps {
-  isPremium?: boolean
-}
-
 /**
  * TopMatch - Hero section showing top personalized match (ADR-006 compliant)
  *
@@ -35,7 +31,7 @@ interface TopMatchProps {
  *
  * Uses price context (descriptive) instead of verdicts (prescriptive).
  */
-export function TopMatch({ isPremium: _isPremium = false }: TopMatchProps) {
+export function TopMatch() {
   const { data: itemsData, loading: itemsLoading } = useDealsForYou()
   const { data: pulseData, loading: pulseLoading } = useMarketPulse()
 

@@ -3,15 +3,14 @@
 import { Sparkles, Info, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
-import type { SearchIntent, PremiumSearchIntent } from '@/lib/api'
+import type { SearchIntent } from '@/lib/api'
 
 interface AIExplanationBannerProps {
   intent: SearchIntent
-  isPremium: boolean
   processingTimeMs?: number
 }
 
-export function AIExplanationBanner({ intent, isPremium: _isPremium, processingTimeMs }: AIExplanationBannerProps) {
+export function AIExplanationBanner({ intent, processingTimeMs }: AIExplanationBannerProps) {
   const [dismissed, setDismissed] = useState(false)
   
   if (dismissed) return null

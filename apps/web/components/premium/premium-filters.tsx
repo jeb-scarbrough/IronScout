@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Zap, VolumeX, Eye, Gauge, Target, Crosshair, RotateCcw } from 'lucide-react'
+import { VolumeX, Eye, Gauge, Target, Crosshair, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
@@ -21,7 +20,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { BulletType, PressureRating, BULLET_TYPE_LABELS, PRESSURE_RATING_LABELS } from '@/lib/api'
 
 // Bullet type options grouped by category
 const BULLET_TYPE_OPTIONS = [
@@ -57,15 +55,14 @@ const PRESSURE_OPTIONS = [
 ]
 
 interface PremiumFiltersProps {
-  isPremium: boolean
   className?: string
 }
 
-export function PremiumFilters({ isPremium: _isPremium, className }: PremiumFiltersProps) {
+export function PremiumFilters({ className }: PremiumFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Get current Premium filter values from URL
+  // Get current performance filter values from URL
   const getFiltersFromUrl = () => ({
     bulletType: searchParams.get('bulletType') || '',
     pressureRating: searchParams.get('pressureRating') || '',
@@ -81,7 +78,7 @@ export function PremiumFilters({ isPremium: _isPremium, className }: PremiumFilt
 
   const [filters, setFilters] = useState(getFiltersFromUrl())
 
-  // Count active Premium filters
+  // Count active performance filters
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
     if (typeof value === 'boolean') return value === true
     return value !== ''
@@ -106,17 +103,17 @@ export function PremiumFilters({ isPremium: _isPremium, className }: PremiumFilt
     router.push(`/search?${params.toString()}`)
   }
 
-  // Clear all Premium filters
-  const clearPremiumFilters = () => {
+  // Clear all performance filters
+  const clearPerformanceFilters = () => {
     const params = new URLSearchParams(searchParams.toString())
     
-    // Remove all Premium filter params
-    const premiumParams = [
+    // Remove all performance filter params
+    const performanceParams = [
       'bulletType', 'pressureRating', 'isSubsonic',
       'shortBarrelOptimized', 'suppressorSafe', 'lowFlash',
       'lowRecoil', 'matchGrade', 'minVelocity', 'maxVelocity'
     ]
-    premiumParams.forEach(p => params.delete(p))
+    performanceParams.forEach(p => params.delete(p))
     params.delete('page')
     
     router.push(`/search?${params.toString()}`)
@@ -151,7 +148,7 @@ export function PremiumFilters({ isPremium: _isPremium, className }: PremiumFilt
           <Button
             variant="ghost"
             size="sm"
-            onClick={clearPremiumFilters}
+            onClick={clearPerformanceFilters}
             className="h-7 text-xs"
           >
             <RotateCcw className="h-3 w-3 mr-1" />

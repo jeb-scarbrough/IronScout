@@ -6,7 +6,7 @@ import { ProductImage } from './product-image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Bookmark, ExternalLink, Crown, TrendingDown, Store, Package } from 'lucide-react'
+import { Bookmark, ExternalLink, TrendingDown, Store, Package } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 import { PriceHistoryChart } from './price-history-chart'
@@ -79,12 +79,6 @@ export function ProductDetails({ product }: ProductDetailsProps) {
 
             <div className="flex items-center gap-2 mb-4">
               <Badge>{product.category}</Badge>
-              {lowestPrice.retailer?.tier === 'PREMIUM' && (
-                <Badge className="bg-yellow-500 text-yellow-900">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Premium Retailer
-                </Badge>
-              )}
             </div>
 
             {product.description && (
@@ -203,9 +197,6 @@ export function ProductDetails({ product }: ProductDetailsProps) {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{price.retailer?.name || 'Unknown'}</span>
-                      {price.retailer?.tier === 'PREMIUM' && (
-                        <Crown className="h-4 w-4 text-yellow-500" />
-                      )}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {price.inStock ? (
@@ -248,7 +239,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
       </Card>
 
       {/* Price History Chart */}
-      <PriceHistoryChart productId={product.id} isPremium />
+      <PriceHistoryChart productId={product.id} />
 
       <CreateAlertDialog
         product={product}

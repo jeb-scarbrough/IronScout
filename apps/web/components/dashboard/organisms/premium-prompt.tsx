@@ -1,15 +1,11 @@
 'use client'
 
 /**
- * V1: Premium prompts are disabled.
+ * V1: Upgrade prompts are disabled.
  * This component returns null and renders nothing.
  */
 
-interface PremiumPromptProps {
-  isPremium?: boolean
-}
-
-export function PremiumPrompt(_props: PremiumPromptProps) {
+export function PremiumPrompt() {
   // V1: No premium prompts
   return null
 }

@@ -17,19 +17,17 @@ const exampleQueries = [
   "subsonic 300 blackout",
 ]
 
-const premiumExampleQueries = [
+const advancedExampleQueries = [
   "9mm for compact carry, low flash",
   "subsonic .300 blackout for suppressor",
   "short barrel optimized defense ammo",
 ]
 
 interface DashboardHeroSearchProps {
-  isPremium: boolean
   userCalibersFromAlerts?: string[]
 }
 
 export function DashboardHeroSearch({
-  isPremium: _isPremium,
   userCalibersFromAlerts = []
 }: DashboardHeroSearchProps) {
   const router = useRouter()
@@ -195,7 +193,7 @@ export function DashboardHeroSearch({
               <p className="text-sm text-muted-foreground">Advanced examples:</p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
-              {premiumExampleQueries.map((example, i) => (
+              {advancedExampleQueries.map((example, i) => (
                 <button
                   key={i}
                   onClick={() => {

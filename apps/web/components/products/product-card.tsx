@@ -6,7 +6,7 @@ import { ProductImage } from './product-image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatPrice } from '@/lib/utils'
-import { ExternalLink, Bookmark, Crown, Package, Sparkles } from 'lucide-react'
+import { ExternalLink, Bookmark, Package, Sparkles } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 import {
@@ -25,7 +25,6 @@ import {
 interface ProductCardProps {
   product: Product
   showRelevance?: boolean
-  showPremiumFeatures?: boolean
 }
 
 // Helper to get purpose badge variant and color
@@ -45,7 +44,7 @@ const getPurposeBadge = (purpose?: string) => {
   return { label: purpose, className: 'bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300' }
 }
 
-export function ProductCard({ product, showRelevance = false, showPremiumFeatures = true }: ProductCardProps) {
+export function ProductCard({ product, showRelevance = false }: ProductCardProps) {
   const [showSaveDialog, setShowSaveDialog] = useState(false)
 
   // Guard against empty prices array to prevent crashes
@@ -58,8 +57,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
     product.prices[0]
   )
 
-  const isPremiumRetailer = lowestPrice.retailer.tier === 'PREMIUM'
-  const hasPremiumData = product.premium && showPremiumFeatures
+  const hasPremiumData = !!product.premium
 
   // Calculate price per round if roundCount is available
   const pricePerRound = product.roundCount && product.roundCount > 0
@@ -68,7 +66,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
 
   const purposeBadge = getPurposeBadge(product.purpose)
 
-  // Premium data shortcuts
+  // Performance data shortcuts
   const premium = product.premium
   const badges = premium?.premiumRanking?.badges || []
   const explanation = premium?.premiumRanking?.explanation
@@ -90,18 +88,10 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
 
         {/* Top-left badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          {/* Premium Retailer Badge */}
-          {isPremiumRetailer && (
-            <Badge className="bg-yellow-500 text-yellow-900 flex items-center gap-1">
-              <Crown className="h-3 w-3" />
-              Premium
-            </Badge>
-          )}
-          
           {/* Note: BestValueBadge removed per ADR-006 - no value judgments */}
         </div>
 
-        {/* Bottom-left: Relevance or Premium Score */}
+        {/* Bottom-left: Relevance or Match Score */}
         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
           {showRelevance && product.relevanceScore !== undefined && product.relevanceScore > 0 && !hasPremiumData && (
             <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs">
@@ -109,7 +99,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             </Badge>
           )}
           
-          {/* Premium Score with explanation */}
+          {/* Match score with explanation */}
           {hasPremiumData && finalScore !== undefined && (
             <TooltipProvider>
               <Tooltip>
@@ -168,7 +158,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
 
       <CardContent className="p-4">
         <div className="space-y-2">
-          {/* Performance Badges (Premium) */}
+          {/* Performance badges */}
           {hasPremiumData && badges.length > 0 && (
             <PerformanceBadges 
               badges={badges} 
@@ -186,12 +176,12 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
               </Badge>
             )}
             
-            {/* Premium: Bullet Type Badge */}
+            {/* Bullet Type Badge */}
             {hasPremiumData && premium?.bulletType && (
               <BulletTypeBadge bulletType={premium.bulletType} size="sm" />
             )}
             
-            {/* Premium: Pressure Rating Badge */}
+            {/* Pressure Rating Badge */}
             {hasPremiumData && premium?.pressureRating && (
               <PressureRatingBadge pressureRating={premium.pressureRating} size="sm" />
             )}
@@ -202,7 +192,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
               </Badge>
             )}
             
-            {/* Only show case material if no Premium badges */}
+            {/* Only show case material if no performance badges */}
             {!hasPremiumData && product.caseMaterial && (
               <Badge variant="outline" className="text-xs">
                 {product.caseMaterial}
@@ -224,7 +214,7 @@ export function ProductCard({ product, showRelevance = false, showPremiumFeature
             <p className="text-xs text-muted-foreground">{product.brand}</p>
           )}
 
-          {/* Premium: Velocity info */}
+          {/* Velocity info */}
           {hasPremiumData && premium?.muzzleVelocityFps && (
             <p className="text-xs text-muted-foreground">
               {premium.muzzleVelocityFps} fps
