@@ -17,22 +17,14 @@ const WATCHLIST_VALUE_PROPS = [
   { icon: Sparkles, text: 'Personalized matches' },
 ]
 
-interface SavedItemsPreviewProps {
-  isPremium?: boolean
-  /** Max items to show in preview */
-  maxItems?: number
-}
-
 /**
  * SavedItemsPreview - Saved items teaser section
  *
  * Shows 3-5 saved items with price change indicators.
  * Links to full saved items page.
  *
- * Free: Current price only
- * Premium: "Lowest in X days" + inline sparkline
  */
-export function SavedItemsPreview({ isPremium: _isPremium = false, maxItems = 5 }: SavedItemsPreviewProps) {
+export function SavedItemsPreview({ maxItems = 5 }: { maxItems?: number }) {
   const { data, loading, error } = useWatchlist()
 
   // Limit to maxItems
@@ -117,7 +109,7 @@ export function SavedItemsPreview({ isPremium: _isPremium = false, maxItems = 5 
             ) : (
               <div className="space-y-1">
                 {previewItems.map((item) => (
-                  <WatchlistRow key={item.id} item={item} isPremium />
+                  <WatchlistRow key={item.id} item={item} />
                 ))}
               </div>
             )}
@@ -134,10 +126,9 @@ export function SavedItemsPreview({ isPremium: _isPremium = false, maxItems = 5 
 
 interface WatchlistRowProps {
   item: WatchlistItem
-  isPremium?: boolean
 }
 
-function WatchlistRow({ item, isPremium: _isPremium = false }: WatchlistRowProps) {
+function WatchlistRow({ item }: WatchlistRowProps) {
   const { product, targetPrice, lowestPriceSeen, isLowestSeen, savingsVsTarget } = item
 
   // Calculate price delta if we have target price
@@ -146,7 +137,7 @@ function WatchlistRow({ item, isPremium: _isPremium = false }: WatchlistRowProps
       ? ((product.currentPrice - targetPrice) / targetPrice) * 100
       : null
 
-  // Generate sparkline data (Premium feature)
+  // Generate sparkline data
   // In production, this would come from price history API
   const sparklineData = generateSparklineFromTrend(deltaPercent && deltaPercent < 0 ? 'DOWN' : 'STABLE')
 

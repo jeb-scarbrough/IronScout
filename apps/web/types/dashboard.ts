@@ -353,8 +353,6 @@ export interface SparklineProps {
 /** Props for ProductCard component (ADR-006 compliant) */
 export interface ProductCardProps {
   item: ProductFeedItem
-  /** Show premium features like explanation */
-  isPremium?: boolean
   /** Callback when View clicked */
   onViewClick?: () => void
   /** Callback when Save clicked (ADR-011: unified saved items) */
@@ -364,8 +362,6 @@ export interface ProductCardProps {
 /** Props for PulseRow component */
 export interface PulseRowProps {
   pulse: MarketPulseItem
-  /** Show full chart on click (Premium) */
-  isPremium?: boolean
   /** Callback when row clicked */
   onClick?: () => void
 }
@@ -373,8 +369,6 @@ export interface PulseRowProps {
 /** Props for SavingsCard component */
 export interface SavingsCardProps {
   savings: SavingsData
-  /** Show verified vs potential */
-  isPremium?: boolean
 }
 
 // ============================================================================

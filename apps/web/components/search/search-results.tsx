@@ -1,8 +1,8 @@
 import { auth } from '@/lib/auth'
 import { aiSearch, AISearchResponse, ExplicitFilters } from '@/lib/api'
-import { SearchResultsGrid } from '@/components/results'
+import { SearchResultsGridV2 } from '@/components/results'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Search, Bell, TrendingDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { SearchHeader } from './search-header'
 import { createLogger } from '@/lib/logger'
 
@@ -24,7 +24,7 @@ interface SearchResultsProps {
     purpose?: string
     sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance' | 'best_value'
     page?: string
-    // Premium filters
+    // Performance filters
     bulletType?: string
     pressureRating?: string
     isSubsonic?: string
@@ -46,7 +46,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   // Get session for user tier and token
   const session = await auth()
   const accessToken = (session as any)?.accessToken
-  const isPremium = true
   
   // Build explicit filters from URL params
   const explicitFilters: ExplicitFilters = {}
@@ -76,11 +75,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   // Check if any explicit filters are active
   const hasFilters = Object.keys(explicitFilters).length > 0
   
-  // Count Premium filters
-  const premiumFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized', 
-                             'suppressorSafe', 'lowFlash', 'lowRecoil', 'matchGrade', 'minVelocity', 'maxVelocity']
-  const premiumFiltersActive = premiumFilterKeys.filter(k => searchParams[k as keyof typeof searchParams]).length
-  
   // No query = search bar handles the empty state, just return null
   if (!query) {
     return null
@@ -108,7 +102,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             processingTimeMs={searchMetadata.processingTimeMs}
             vectorSearchUsed={searchMetadata.vectorSearchUsed}
             hasFilters={hasFilters}
-            isPremium={isPremium}
           />
           <div className="text-center py-12 mt-6">
             <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -148,8 +141,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           vectorSearchUsed={searchMetadata.vectorSearchUsed}
           hasFilters={hasFilters}
           explicitFilters={explicitFilters}
-          isPremium={isPremium}
-          premiumFiltersActive={premiumFiltersActive}
         />
 
         {/* Results Zone */}
@@ -163,8 +154,8 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
             </div>
           )}
 
-          {/* Results Grid - using new ResultCard component */}
-          <SearchResultsGrid products={products} />
+          {/* Results Grid - v2 with multi-retailer comparison */}
+          <SearchResultsGridV2 products={products} />
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
@@ -245,7 +236,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     return (
       <>
-        <SearchHeader query={query} isPremium={isPremium} />
+        <SearchHeader query={query} />
         <div className="text-center py-12 mt-6 space-y-2">
           <p className="text-muted-foreground font-semibold">Failed to load search results</p>
           <p className="text-sm text-muted-foreground">Reason: {message}</p>

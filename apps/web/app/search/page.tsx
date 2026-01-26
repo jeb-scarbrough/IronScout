@@ -2,7 +2,6 @@ import { Suspense } from 'react'
 import { SearchResults } from '@/components/search/search-results'
 import { UnifiedSearch } from '@/components/search/unified-search'
 import { SearchLoadingOverlay } from '@/components/search/search-loading-overlay'
-import { auth } from '@/lib/auth'
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -20,7 +19,7 @@ interface SearchPageProps {
     purpose?: string
     sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance' | 'best_value'
     page?: string
-    // Premium filters
+    // Performance filters
     bulletType?: string
     pressureRating?: string
     isSubsonic?: string
@@ -37,10 +36,6 @@ interface SearchPageProps {
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams
   const query = params.q || ''
-  
-  // Get session for access token
-  const session = await auth()
-  const isPremium = true
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -49,7 +44,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <Suspense fallback={
           <div className="h-16 animate-pulse bg-muted rounded-2xl" />
         }>
-          <UnifiedSearch initialQuery={query} isPremium={isPremium} />
+          <UnifiedSearch initialQuery={query} />
         </Suspense>
       </div>
 

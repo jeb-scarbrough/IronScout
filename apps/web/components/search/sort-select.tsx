@@ -11,10 +11,6 @@ import {
 } from '@/components/ui/select'
 import { useSearchLoading } from './search-loading-context'
 
-interface EnhancedSortSelectProps {
-  isPremium?: boolean
-}
-
 // ADR-006: No deal scores or value judgments - removed "Best Value" sort option
 const SORT_OPTIONS = [
   {
@@ -49,7 +45,7 @@ const SORT_OPTIONS = [
   },
 ]
 
-export function EnhancedSortSelect({ isPremium: _isPremium = false }: EnhancedSortSelectProps) {
+export function EnhancedSortSelect() {
   const searchParams = useSearchParams()
   const { navigateWithLoading } = useSearchLoading()
 
@@ -76,7 +72,7 @@ export function EnhancedSortSelect({ isPremium: _isPremium = false }: EnhancedSo
       </label>
 
       <Select value={currentSort} onValueChange={handleSortChange}>
-        <SelectTrigger className="w-[180px] h-9">
+        <SelectTrigger id="sort" className="w-[180px] h-9">
           <SelectValue>
             <div className="flex items-center gap-2">
               {currentOption && (

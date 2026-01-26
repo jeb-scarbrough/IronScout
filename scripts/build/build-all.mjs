@@ -382,29 +382,41 @@ async function main() {
     info(`Building only: ${only.join(', ')}`)
   }
 
-  // Step 1: Validate database schema
+  // Step 1: Validate database schema (uses new db package scripts)
   if (!skipSchemaValidation) {
     header('Validating Database Schema')
-    const validateScript = resolve(PROJECT_ROOT, 'scripts/validate-db-schema.mjs')
-    if (existsSync(validateScript)) {
-      const result = run(`node ${validateScript}`, { cwd: PROJECT_ROOT })
-      if (!result.success) {
-        error('Database schema validation failed')
-        console.log('')
-        warn('Fix schema issues before building. Run:')
-        console.log('  node scripts/validate-db-schema.mjs --verbose')
-        console.log('')
-        process.exit(1)
-      }
-      success('Database schema validated')
-    } else {
-      info('validate-db-schema.mjs not found, skipping validation')
+
+    // Check 1: Schema drift (schema.prisma vs migrations) - non-destructive using migrate diff
+    info('Checking schema drift...')
+    const driftResult = run('pnpm --filter @ironscout/db run check:drift', { cwd: PROJECT_ROOT })
+    if (!driftResult.success) {
+      error('Schema drift detected: schema.prisma differs from migrations')
+      console.log('')
+      warn('Fix schema drift before building. Run:')
+      console.log('  pnpm db:migrate:dev    # Create migration for schema changes')
+      console.log('  pnpm db:generate       # Regenerate Prisma client')
+      console.log('')
+      process.exit(1)
     }
+    success('Schema matches migrations')
+
+    // Check 2: Prisma client freshness (fast timestamp check)
+    info('Checking Prisma client freshness...')
+    const clientResult = run('pnpm --filter @ironscout/db run check:client', { cwd: PROJECT_ROOT })
+    if (!clientResult.success) {
+      error('Prisma client is stale')
+      console.log('')
+      warn('Regenerate Prisma client before building. Run:')
+      console.log('  pnpm db:generate')
+      console.log('')
+      process.exit(1)
+    }
+    success('Prisma client is current')
   } else {
     info('Skipping database schema validation')
   }
 
-  // Step 1: Install dependencies
+  // Step 2: Install dependencies
   if (!skipInstall) {
     header('Installing Dependencies')
     const result = run('pnpm install --frozen-lockfile', { cwd: PROJECT_ROOT })
@@ -418,7 +430,7 @@ async function main() {
     info('Skipping dependency installation')
   }
 
-  // Step 2: Generate Prisma client
+  // Step 3: Generate Prisma client
   if (!skipPrisma) {
     header('Generating Prisma Client')
 
@@ -446,7 +458,7 @@ async function main() {
     info('Skipping Prisma generation')
   }
 
-  // Step 3: Build each app
+  // Step 4: Build each app
   header('Building Apps')
 
   for (const app of apps) {
@@ -468,7 +480,7 @@ async function main() {
     }
   }
 
-  // Step 4: Run tests
+  // Step 5: Run tests
   if (!skipTests && testSuites.length > 0) {
     header('Running Tests')
 

@@ -75,21 +75,14 @@ const SAMPLE_TEASERS = [
   },
 ]
 
-interface PersonalizedFeedProps {
-  isPremium?: boolean
-  onAddToWatchlist?: (productId: string) => void
-}
-
 /**
  * PersonalizedFeed - Personalized product feed (ADR-006 compliant)
  *
  * Trading terminal-style feed showing products matching
  * user's tracked calibers.
  *
- * Free: 5 items max, basic info
- * Premium: 20 items, context explanations
  */
-export function PersonalizedFeed({ isPremium: _isPremium = false, onAddToWatchlist }: PersonalizedFeedProps) {
+export function PersonalizedFeed({ onAddToWatchlist }: { onAddToWatchlist?: (productId: string) => void }) {
   const { data, loading, error } = useDealsForYou()
 
   return (

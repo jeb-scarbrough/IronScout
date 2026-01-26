@@ -36,20 +36,13 @@ interface SearchHeaderProps {
   vectorSearchUsed?: boolean
   hasFilters?: boolean
   explicitFilters?: ExplicitFilters
-  isPremium?: boolean
-  premiumFiltersActive?: number
 }
 
 export function SearchHeader({
   query,
   resultCount,
   intent,
-  processingTimeMs,
-  vectorSearchUsed,
-  hasFilters,
   explicitFilters,
-  isPremium = false,
-  premiumFiltersActive = 0
 }: SearchHeaderProps) {
   const hasPremiumIntent = !!intent?.premiumIntent
   
@@ -61,7 +54,7 @@ export function SearchHeader({
   )
 
   // Build list of active explicit filters for display
-  const activeFilters: Array<{ label: string; value: string; color: string; isPremium?: boolean }> = []
+  const activeFilters: Array<{ label: string; value: string; color: string }> = []
   if (explicitFilters) {
     // Basic filters
     if (explicitFilters.caliber) {
@@ -186,7 +179,7 @@ export function SearchHeader({
         </div>
 
         {/* Right: View Toggle + Sort */}
-        <SearchControls isPremium={isPremium} />
+        <SearchControls />
       </div>
 
       {/* Active Explicit Filters */}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, TrendingUp, Bell, Bookmark } from 'lucide-react'
+import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
 import { PremiumFilters } from '@/components/premium'
@@ -36,7 +36,7 @@ const GRAIN_RANGES = [
 
 // Rotating placeholder examples - outcome-driven
 const ROTATING_PLACEHOLDERS = [
-  "Find the best 9mm deals for range practice",
+  "Find 9mm ammo for range practice",
   "Cheap .223 for target shooting",
   "Home defense 9mm hollow points",
   "Bulk 5.56 NATO for training",
@@ -59,7 +59,7 @@ const TRENDING_SEARCHES = [
   '5.56 green tip',
 ]
 
-const premiumExampleQueries = [
+const advancedExampleQueries = [
   "9mm for compact carry, low flash",
   "subsonic .300 blackout for suppressor",
   "short barrel optimized defense ammo",
@@ -67,10 +67,9 @@ const premiumExampleQueries = [
 
 interface UnifiedSearchProps {
   initialQuery?: string
-  isPremium?: boolean
 }
 
-export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false }: UnifiedSearchProps) {
+export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
   const searchParams = useSearchParams()
   const { isSearching, navigateWithLoading } = useSearchLoading()
 
@@ -84,7 +83,7 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
   // Filter state - collapsed by default
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [premiumFiltersOpen, setPremiumFiltersOpen] = useState(false)
+  const [performanceFiltersOpen, setPerformanceFiltersOpen] = useState(false)
 
   // Rotate placeholder text
   useEffect(() => {
@@ -121,18 +120,18 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
     return value !== ''
   }).length
 
-  // Count Premium filters
-  const premiumFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized', 
+  // Count performance filters
+  const performanceFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized',
                              'suppressorSafe', 'lowFlash', 'lowRecoil', 'matchGrade']
-  const premiumFiltersActive = premiumFilterKeys.filter(k => searchParams.get(k)).length
+  const performanceFiltersActive = performanceFilterKeys.filter(k => searchParams.get(k)).length
 
   // Auto-open filters if any are active
   useEffect(() => {
     if (activeFilterCount > 0 && !filtersOpen) {
       setFiltersOpen(true)
     }
-    if (premiumFiltersActive > 0 && !premiumFiltersOpen) {
-      setPremiumFiltersOpen(true)
+    if (performanceFiltersActive > 0 && !performanceFiltersOpen) {
+      setPerformanceFiltersOpen(true)
     }
   }, [])
 
@@ -284,6 +283,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
             <input
               ref={inputRef}
+              id="search-query"
+              name="q"
               type="text"
               value={query}
               onChange={(e) => {
@@ -407,7 +408,7 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
                 <p className="text-xs text-muted-foreground font-medium">Advanced searches:</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                {premiumExampleQueries.map((example, i) => (
+                {advancedExampleQueries.map((example, i) => (
                   <button
                     key={i}
                     onClick={() => {
@@ -488,6 +489,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
                 <div className="relative flex-1">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <input
+                    id="min-price"
+                    name="minPrice"
                     type="number"
                     value={filters.minPrice}
                     onChange={(e) => handlePriceChange('minPrice', e.target.value)}
@@ -501,6 +504,8 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
                 <div className="relative flex-1">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                   <input
+                    id="max-price"
+                    name="maxPrice"
                     type="number"
                     value={filters.maxPrice}
                     onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
@@ -515,8 +520,10 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
             {/* In Stock Toggle */}
             <div className="flex items-end">
-              <label className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
+              <label htmlFor="in-stock" className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
                 <input
+                  id="in-stock"
+                  name="inStock"
                   type="checkbox"
                   checked={filters.inStock}
                   onChange={(e) => handleCheckboxChange(e.target.checked)}
@@ -582,15 +589,15 @@ export function UnifiedSearch({ initialQuery = '', isPremium: _isPremium = false
 
               <div className="pt-2">
                 <button
-                  onClick={() => setPremiumFiltersOpen(!premiumFiltersOpen)}
+                  onClick={() => setPerformanceFiltersOpen(!performanceFiltersOpen)}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <span>Performance filters</span>
-                  <ChevronDown className={`h-3 w-3 transition-transform ${premiumFiltersOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-3 w-3 transition-transform ${performanceFiltersOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {premiumFiltersOpen && (
+                {performanceFiltersOpen && (
                   <div className="mt-2">
-                    <PremiumFilters isPremium />
+                    <PremiumFilters />
                   </div>
                 )}
               </div>

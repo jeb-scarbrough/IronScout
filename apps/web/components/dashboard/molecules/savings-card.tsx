@@ -12,9 +12,9 @@ import type { SavingsCardProps } from '@/types/dashboard'
  * of actual savings.
  *
  * Note: "Verified savings" feature removed per ADR-006/ADR-007
- * (no outcome guarantees, premium = information density only)
+ * (no outcome guarantees, information density only)
  */
-export function SavingsCard({ savings, isPremium: _isPremium = false }: SavingsCardProps) {
+export function SavingsCard({ savings }: SavingsCardProps) {
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-5">

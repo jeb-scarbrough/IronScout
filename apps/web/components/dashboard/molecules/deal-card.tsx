@@ -17,11 +17,10 @@ import type { ProductCardProps } from '@/types/dashboard'
  * - Price context indicator (descriptive, not prescriptive)
  * - Stock status
  * - View at Retailer CTA
- * - Premium: Context explanation expandable
+ * - Context explanation expandable
  */
 export function ProductCard({
   item,
-  isPremium: _isPremium = false,
   onViewClick,
   onWatchlistClick,
 }: ProductCardProps) {

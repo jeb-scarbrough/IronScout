@@ -6,7 +6,7 @@ import { ProductImage } from './product-image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Bookmark, ExternalLink, Crown, TrendingDown, Store, Package } from 'lucide-react'
+import { Bookmark, ExternalLink, TrendingDown, Store, Package } from 'lucide-react'
 import type { Product } from '@/lib/api'
 import { CreateAlertDialog } from './create-alert-dialog'
 import { PriceHistoryChart } from './price-history-chart'
@@ -79,12 +79,6 @@ export function ProductDetails({ product }: ProductDetailsProps) {
 
             <div className="flex items-center gap-2 mb-4">
               <Badge>{product.category}</Badge>
-              {lowestPrice.retailer.tier === 'PREMIUM' && (
-                <Badge className="bg-yellow-500 text-yellow-900">
-                  <Crown className="h-3 w-3 mr-1" />
-                  Premium Retailer
-                </Badge>
-              )}
             </div>
 
             {product.description && (
@@ -97,12 +91,12 @@ export function ProductDetails({ product }: ProductDetailsProps) {
             <CardContent className="pt-6">
               <div className="space-y-4">
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Best Price</div>
+                  <div className="text-sm text-muted-foreground mb-1">Lowest Price</div>
                   <div className="text-4xl font-bold text-primary">
                     ${lowestPrice.price.toFixed(2)}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    at {lowestPrice.retailer.name}
+                    at {lowestPrice.retailer?.name || 'Unknown retailer'}
                   </div>
                 </div>
 
@@ -134,7 +128,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
                 className="flex items-center justify-center gap-2"
               >
                 <ExternalLink className="h-4 w-4" />
-                Buy at Best Price
+                Compare prices
               </a>
             </Button>
             <Button
@@ -197,15 +191,12 @@ export function ProductDetails({ product }: ProductDetailsProps) {
               >
                 <div className="flex items-center gap-4 flex-1">
                   {index === 0 && (
-                    <Badge variant="default">Best Price</Badge>
+                    <Badge variant="default">Lowest Price</Badge>
                   )}
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{price.retailer.name}</span>
-                      {price.retailer.tier === 'PREMIUM' && (
-                        <Crown className="h-4 w-4 text-yellow-500" />
-                      )}
+                      <span className="font-medium">{price.retailer?.name || 'Unknown'}</span>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {price.inStock ? (
@@ -248,7 +239,7 @@ export function ProductDetails({ product }: ProductDetailsProps) {
       </Card>
 
       {/* Price History Chart */}
-      <PriceHistoryChart productId={product.id} isPremium />
+      <PriceHistoryChart productId={product.id} />
 
       <CreateAlertDialog
         product={product}

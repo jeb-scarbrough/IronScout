@@ -19,7 +19,6 @@ const logger = createLogger('price-history-chart')
 
 interface PriceHistoryProps {
   productId: string
-  isPremium: boolean
 }
 
 interface HistoryPoint {
@@ -47,7 +46,7 @@ interface PriceHistoryData {
 
 const CHART_COLOR = '#3b82f6'
 
-export function PriceHistoryChart({ productId, isPremium: _isPremium }: PriceHistoryProps) {
+export function PriceHistoryChart({ productId }: PriceHistoryProps) {
   const [data, setData] = useState<PriceHistoryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

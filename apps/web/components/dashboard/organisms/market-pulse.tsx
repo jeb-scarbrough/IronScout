@@ -17,7 +17,6 @@ import { useMarketPulse } from '@/hooks/use-market-pulse'
 import Link from 'next/link'
 
 interface MarketPulseProps {
-  isPremium?: boolean
   onCaliberClick?: (caliber: string) => void
 }
 
@@ -27,10 +26,8 @@ interface MarketPulseProps {
  * Trading terminal-style panel showing Buy/Wait indicators
  * for user's tracked calibers.
  *
- * Free: 2 calibers max, no click interaction
- * Premium: Unlimited calibers, click for full chart
  */
-export function MarketPulse({ isPremium: _isPremium = false, onCaliberClick }: MarketPulseProps) {
+export function MarketPulse({ onCaliberClick }: MarketPulseProps) {
   const { data, loading, error } = useMarketPulse()
 
   return (
@@ -71,7 +68,6 @@ export function MarketPulse({ isPremium: _isPremium = false, onCaliberClick }: M
                 <PulseRow
                   key={item.caliber}
                   pulse={item}
-                  isPremium
                   onClick={onCaliberClick ? () => onCaliberClick(item.caliber) : undefined}
                 />
               ))}

@@ -66,7 +66,6 @@ const VERDICT_CONFIG: Record<ContextBand, {
 
 interface PriceVerdictProps {
   priceContext?: PriceContext
-  isPremium?: boolean
   size?: 'sm' | 'md' | 'lg'
   showWhy?: boolean
   className?: string
@@ -75,16 +74,10 @@ interface PriceVerdictProps {
 /**
  * Price Verdict Component
  *
- * The Rule: Everyone gets the conclusion. Premium gets the reasoning.
- *
- * Free users see: Verdict label + short qualitative insight
- * Premium users see: Quantification, history, confidence, trends
- *
- * Same surface. Different resolution.
+ * Everyone gets the same reasoning detail when data is available.
  */
 export function PriceVerdict({
   priceContext,
-  isPremium: _isPremium = false,
   size = 'sm',
   showWhy = true,
   className
@@ -171,7 +164,7 @@ export function PriceVerdict({
 }
 
 /**
- * Premium depth panel - shows quantification and data
+ * Detail panel - shows quantification and data
  */
 function PremiumDepth({ priceContext }: { priceContext: PriceContext }) {
   const { relativePricePct, positionInRange, meta, contextBand } = priceContext

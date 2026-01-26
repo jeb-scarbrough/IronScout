@@ -19,7 +19,7 @@ export interface AffiliateClickEvent {
   id: string
   retailer: string
   pricePerRound: number
-  placement: 'search' | 'for_you' | 'product_detail'
+  placement: 'search' | 'for_you' | 'product_detail' | 'card' | 'panel'
 }
 
 export interface TrackToggleEvent {

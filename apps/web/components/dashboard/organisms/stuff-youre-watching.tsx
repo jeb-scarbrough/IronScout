@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Eye, ChevronRight, TrendingDown, TrendingUp, Minus, ExternalLink, Search } from 'lucide-react'
+import { Eye, ChevronRight, TrendingDown, TrendingUp, Minus, Search } from 'lucide-react'
 import { useWatchlist } from '@/hooks/use-watchlist'
 import type { WatchlistItem, Trend } from '@/types/dashboard'
 import Link from 'next/link'
@@ -42,12 +42,6 @@ function getDirectionalText(trend: Trend): string {
   }
 }
 
-interface StuffYoureWatchingProps {
-  isPremium?: boolean
-  /** Max items to display (default 5) */
-  maxItems?: number
-}
-
 /**
  * StuffYoureWatching - Dashboard v3 Saved Items Section (ADR-012)
  *
@@ -59,7 +53,7 @@ interface StuffYoureWatchingProps {
  * - "About the same"
  * - "Price is going up"
  */
-export function StuffYoureWatching({ isPremium = false, maxItems = 5 }: StuffYoureWatchingProps) {
+export function StuffYoureWatching({ maxItems = 5 }: { maxItems?: number }) {
   const { data, loading, error } = useWatchlist()
 
   const items = data?.items?.slice(0, maxItems) ?? []

@@ -2,7 +2,6 @@ import { Suspense } from 'react'
 import { SearchResults } from '@/components/search/search-results'
 import { UnifiedSearch } from '@/components/search/unified-search'
 import { EnhancedSortSelect } from '@/components/search/sort-select'
-import { auth } from '@/lib/auth'
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -20,7 +19,7 @@ interface SearchPageProps {
     purpose?: string
     sortBy?: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'relevance' | 'best_value'
     page?: string
-    // Premium filters
+    // Performance filters
     bulletType?: string
     pressureRating?: string
     isSubsonic?: string
@@ -38,17 +37,13 @@ export default async function DashboardSearchPage({ searchParams }: SearchPagePr
   const params = await searchParams
   const query = params.q || ''
 
-  // Get session for access token
-  const session = await auth()
-  const isPremium = true
-
   return (
     <div className="p-6 lg:p-8">
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-bold">Search</h1>
         <p className="text-muted-foreground mt-1">
-          Search built for ammo to find the right deals
+          Search built for ammo to find the right listings
         </p>
       </div>
 
@@ -57,7 +52,7 @@ export default async function DashboardSearchPage({ searchParams }: SearchPagePr
         <Suspense fallback={
           <div className="h-16 animate-pulse bg-muted rounded-2xl" />
         }>
-          <UnifiedSearch initialQuery={query} isPremium={isPremium} />
+          <UnifiedSearch initialQuery={query} />
         </Suspense>
       </div>
 
@@ -66,7 +61,7 @@ export default async function DashboardSearchPage({ searchParams }: SearchPagePr
         {query && (
           <div className="flex justify-end mb-4">
             <Suspense fallback={<div className="h-10 w-40 animate-pulse bg-muted rounded" />}>
-              <EnhancedSortSelect isPremium={isPremium} />
+              <EnhancedSortSelect />
             </Suspense>
           </div>
         )}

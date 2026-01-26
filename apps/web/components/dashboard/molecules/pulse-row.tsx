@@ -14,9 +14,8 @@ import type { PulseRowProps } from '@/types/dashboard'
  * - Current avg price
  * - Sparkline trend chart
  * - Price context chip (descriptive, not prescriptive)
- * - Premium: Click for full chart
  */
-export function PulseRow({ pulse, isPremium: _isPremium = false, onClick }: PulseRowProps) {
+export function PulseRow({ pulse, onClick }: PulseRowProps) {
   const sparklineData = generateSparklineFromTrend(pulse.trend, 7)
   const canClick = !!onClick
 
