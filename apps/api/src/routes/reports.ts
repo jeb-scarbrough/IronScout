@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@ironscout/db'
 import { z } from 'zod'
 import { logger } from '../config/logger'
+import { requireAdmin } from '../middleware/auth'
 
 const log = logger.child('reports')
 
@@ -114,7 +115,7 @@ router.post('/', async (req, res) => {
         users: {
           select: {
             id: true,
-            email: true,
+            // SECURITY: Do not expose user email in public API responses
             name: true,
           }
         }
@@ -135,7 +136,7 @@ router.post('/', async (req, res) => {
 // LIST REPORTS (Admin)
 // =====================================================
 
-router.get('/', async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const params = listReportsSchema.parse(req.query)
 
@@ -180,7 +181,7 @@ router.get('/', async (req, res) => {
           users: {
             select: {
               id: true,
-              email: true,
+              // SECURITY: Do not expose user email in API responses
               name: true,
             }
           }
@@ -208,12 +209,12 @@ router.get('/', async (req, res) => {
 })
 
 // =====================================================
-// GET SINGLE REPORT
+// GET SINGLE REPORT (Admin)
 // =====================================================
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAdmin, async (req, res) => {
   try {
-    const { id } = req.params
+    const id = req.params.id as string
 
     const report = await prisma.product_reports.findUnique({
       where: { id },
@@ -242,7 +243,7 @@ router.get('/:id', async (req, res) => {
         users: {
           select: {
             id: true,
-            email: true,
+            // SECURITY: Do not expose user email in API responses
             name: true,
           }
         }
@@ -261,12 +262,12 @@ router.get('/:id', async (req, res) => {
 })
 
 // =====================================================
-// GET REPORTS FOR A PRODUCT
+// GET REPORTS FOR A PRODUCT (Admin)
 // =====================================================
 
-router.get('/product/:productId', async (req, res) => {
+router.get('/product/:productId', requireAdmin, async (req, res) => {
   try {
-    const { productId } = req.params
+    const productId = req.params.productId as string
     const { status } = req.query
 
     const where: any = { productId }
@@ -304,9 +305,9 @@ router.get('/product/:productId', async (req, res) => {
 // UPDATE REPORT (Admin)
 // =====================================================
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAdmin, async (req, res) => {
   try {
-    const { id } = req.params
+    const id = req.params.id as string
     const data = updateReportSchema.parse(req.body)
 
     // Check if report exists
@@ -368,9 +369,9 @@ router.patch('/:id', async (req, res) => {
 // DELETE REPORT (Admin)
 // =====================================================
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
-    const { id } = req.params
+    const id = req.params.id as string
 
     await prisma.product_reports.delete({
       where: { id }
@@ -390,7 +391,7 @@ router.delete('/:id', async (req, res) => {
 // GET REPORT STATISTICS (Admin Dashboard)
 // =====================================================
 
-router.get('/stats/summary', async (req, res) => {
+router.get('/stats/summary', requireAdmin, async (req, res) => {
   try {
     const [
       totalReports,
