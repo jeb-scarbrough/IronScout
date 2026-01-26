@@ -22,6 +22,7 @@ import {
 import { getMarketDeals, getMarketDealsWithGunLocker } from '../services/market-deals'
 import { getUserCalibers, type CaliberValue } from '../services/gun-locker'
 import { getDashboardV5Data } from '../services/dashboard-v5'
+import { getLoadoutData } from '../services/loadout'
 
 const log = loggers.dashboard
 
@@ -51,6 +52,31 @@ router.get('/v5', async (req: Request, res: Response) => {
   } catch (error) {
     log.error('Dashboard v5 error', { error }, error as Error)
     res.status(500).json({ error: 'Failed to load dashboard' })
+  }
+})
+
+// ============================================================================
+// MY LOADOUT ENDPOINT
+// Returns unified data for My Loadout dashboard:
+// - Gun Locker firearms with ammo preferences and current prices
+// - Watching items with prices and status
+// - Market activity stats
+// Per ADR-006: Assistive only, no recommendations or verdicts
+// ============================================================================
+
+router.get('/loadout', async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req)
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const data = await getLoadoutData(userId)
+
+    res.json(data)
+  } catch (error) {
+    log.error('Loadout error', { error }, error as Error)
+    res.status(500).json({ error: 'Failed to load My Loadout' })
   }
 })
 

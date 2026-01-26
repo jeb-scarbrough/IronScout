@@ -1,56 +1,147 @@
 'use client'
 
-import { useMemo } from 'react'
-import { useDashboardV5 } from '@/hooks/use-dashboard-v5'
-import {
-  DashboardV5Vital,
-  DashboardV5VitalSkeleton,
-  type DashboardV5VitalData,
-  type CaliberTrend,
-  type WatchlistTableItem,
-  type PriceChange,
-  generateCoverageObservation,
-} from '@/components/dashboard/v5'
+import { useState, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
+import { GunLockerCard, WatchingCard, MarketActivityCard } from '@/components/dashboard/loadout'
+import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { RetailerPrice, ShippingInfo } from '@/components/results/types'
 
 /**
- * Dashboard Page - Dashboard v5 with Ambient Vitality
+ * Dashboard Page - My Loadout
  *
- * Per ADR-020, dashboard-product-spec-v5.md, and ambient-vitality spec:
+ * Per My Loadout mockup:
+ * 1. Gun Locker card (full-width, top) - Firearms with ammo preferences and prices
+ * 2. Two-column grid below:
+ *    - Watching card (~66% left) - Tracked items with prices and status
+ *    - Market Activity card (~34% right) - Stats and caliber chips
  *
- * Structure:
- * 1. Active Monitoring Header (always) - "● Actively monitoring"
- * 2. Spotlight Notice (ephemeral) - Single-line, dismissible
- * 3. Market Pulse Strip (always) - Caliber-level trends
- * 4. Watchlist Table (primary surface) - Dense, status-first
- * 5. Activity Log (collapsed) - Price changes accordion
- * 6. Coverage Context (always) - Rotating observations
- *
- * Key principles:
- * - Page feels "alive" even on quiet days
- * - No urgency, no rankings, no recommendations
- * - Monitoring feels active, not passive
+ * Key interactions:
+ * - "Compare prices" opens slide-out RetailerPanel
+ * - "Find similar" navigates to search with caliber filter
  */
 export default function DashboardPage() {
-  const { data, loading, error } = useDashboardV5()
+  const { data, isLoading, error, mutate } = useLoadout()
+  const router = useRouter()
 
-  // Transform legacy data format to vital format
-  const vitalData = useMemo(() => {
-    if (!data) return null
-    return transformToVitalData(data)
-  }, [data])
+  // Panel state
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<{
+    id: string
+    name: string
+    caliber: string
+    bulletType?: string
+    grainWeight?: number
+    roundCount?: number
+  } | null>(null)
+  const [retailers, setRetailers] = useState<RetailerPrice[]>([])
+  const [isWatched, setIsWatched] = useState(false)
+  const [loadingPrices, setLoadingPrices] = useState(false)
 
-  if (loading) {
-    return <DashboardV5VitalSkeleton />
+  // Handle "Compare prices" click - fetch retailer data and open panel
+  const handleCompareClick = useCallback(
+    async (item: AmmoItemWithPrice | WatchingItemWithPrice) => {
+      const productId = 'ammoSkuId' in item ? item.ammoSkuId : item.productId
+
+      setSelectedProduct({
+        id: productId,
+        name: item.name,
+        caliber: item.caliber || '',
+        bulletType: 'bulletType' in item ? item.bulletType || undefined : undefined,
+        grainWeight: item.grainWeight || undefined,
+        roundCount: item.roundCount || undefined,
+      })
+
+      // Check if item is watched
+      const watchedItem = 'productId' in item
+      setIsWatched(watchedItem)
+
+      setLoadingPrices(true)
+      setPanelOpen(true)
+
+      try {
+        const res = await fetch(`/api/products/${productId}/prices`, {
+          credentials: 'include',
+        })
+
+        if (!res.ok) {
+          throw new Error('Failed to fetch prices')
+        }
+
+        const data = await res.json()
+
+        // Transform API response to RetailerPrice format
+        const retailerPrices: RetailerPrice[] = data.prices.map((p: any) => ({
+          retailerId: p.retailerId,
+          retailerName: p.retailers,
+          pricePerRound: p.price / (item.roundCount || 1),
+          totalPrice: p.price,
+          inStock: p.inStock,
+          shippingInfo: { type: 'unknown' } as ShippingInfo,
+          url: p.url,
+          lastUpdated: p.lastUpdated,
+        }))
+
+        setRetailers(retailerPrices)
+      } catch (err) {
+        console.error('Failed to fetch retailer prices:', err)
+        setRetailers([])
+      } finally {
+        setLoadingPrices(false)
+      }
+    },
+    []
+  )
+
+  // Handle "Find similar" click - navigate to search with caliber filter
+  const handleFindSimilarClick = useCallback(
+    (item: AmmoItemWithPrice | WatchingItemWithPrice) => {
+      const caliber = item.caliber
+      if (caliber) {
+        router.push(`/search?caliber=${encodeURIComponent(caliber)}`)
+      } else {
+        router.push('/search')
+      }
+    },
+    [router]
+  )
+
+  // Handle caliber chip click - navigate to search
+  const handleCaliberClick = useCallback(
+    (caliber: string) => {
+      router.push(`/search?caliber=${encodeURIComponent(caliber)}`)
+    },
+    [router]
+  )
+
+  // Handle watch toggle (placeholder - would need proper API integration)
+  const handleWatchToggle = useCallback((productId: string) => {
+    setIsWatched((prev) => !prev)
+    // TODO: Integrate with watchlist API
+  }, [])
+
+  // Handle panel close
+  const handlePanelClose = useCallback(() => {
+    setPanelOpen(false)
+    setSelectedProduct(null)
+    setRetailers([])
+  }, [])
+
+  // Loading state
+  if (isLoading) {
+    return <DashboardSkeleton />
   }
 
-  if (error || !vitalData) {
+  // Error state
+  if (error || !data) {
     return (
-      <div className="p-4 lg:p-8 max-w-4xl mx-auto">
+      <div className="p-4 lg:p-8 max-w-6xl mx-auto">
         <Card>
           <CardContent className="py-12">
             <p className="text-center text-destructive">
-              {error || 'Failed to load dashboard'}
+              {error?.message || 'Failed to load dashboard'}
             </p>
           </CardContent>
         </Card>
@@ -58,183 +149,105 @@ export default function DashboardPage() {
     )
   }
 
-  return <DashboardV5Vital data={vitalData} />
+  return (
+    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {/* Gun Locker - Full width */}
+      <GunLockerCard
+        firearms={data.gunLocker.firearms}
+        totalAmmoItems={data.gunLocker.totalAmmoItems}
+        onCompareClick={handleCompareClick}
+        onFindSimilarClick={handleFindSimilarClick}
+      />
+
+      {/* Two-column grid: Watching (~66%) + Market Activity (~34%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <WatchingCard
+            items={data.watching.items}
+            totalCount={data.watching.totalCount}
+            onCompareClick={handleCompareClick}
+            onFindSimilarClick={handleFindSimilarClick}
+          />
+        </div>
+        <div className="lg:col-span-1">
+          <MarketActivityCard
+            stats={data.marketActivity}
+            onCaliberClick={handleCaliberClick}
+          />
+        </div>
+      </div>
+
+      {/* Retailer Panel (slide-out) */}
+      <RetailerPanel
+        isOpen={panelOpen}
+        onClose={handlePanelClose}
+        product={selectedProduct}
+        retailers={loadingPrices ? [] : retailers}
+        isWatched={isWatched}
+        onWatchToggle={handleWatchToggle}
+      />
+    </div>
+  )
 }
 
 /**
- * Transform legacy DashboardV5Data to DashboardV5VitalData
+ * Loading skeleton for dashboard
  */
-function transformToVitalData(data: any): DashboardV5VitalData {
-  // Extract unique calibers from watchlist for market pulse
-  const caliberTrends = extractCaliberTrends(data.watchlist?.items || [])
+function DashboardSkeleton() {
+  return (
+    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {/* Gun Locker skeleton */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Skeleton className="h-4 w-4" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </CardContent>
+      </Card>
 
-  // Transform watchlist items to table format
-  const watchlistItems = transformWatchlistItems(data.watchlist?.items || [])
-
-  // Transform price movement to accordion format
-  const priceChanges = transformPriceChanges(data.priceMovement || [])
-
-  // Generate coverage observation
-  const coverageObservation = generateCoverageObservation({
-    retailerCount: 47, // TODO: Get from API
-    productCount: data.watchlist?.totalCount || 0,
-    caliberCount: caliberTrends.length,
-  })
-
-  // Count in-stock items
-  const inStockCount = watchlistItems.filter(
-    (item) => item.status === 'back_in_stock' || item.change24h !== 'none'
-  ).length
-
-  return {
-    monitoring: {
-      isActive: true,
-      lastScanAt: data.lastUpdatedAt || new Date().toISOString(),
-      scansToday: 12, // TODO: Get from API
-      retailersChecked: 47, // TODO: Get from API
-    },
-    caliberTrends,
-    spotlight: data.spotlight
-      ? {
-          productId: data.spotlight.productId,
-          productName: data.spotlight.productName,
-          reason: mapSpotlightReason(data.spotlight.signalType),
-          percentChange: data.spotlight.changePercent,
-        }
-      : null,
-    watchlist: {
-      items: watchlistItems,
-      totalCount: data.watchlist?.totalCount || 0,
-    },
-    priceChanges,
-    coverage: {
-      observation: coverageObservation,
-      stockSummary: {
-        inStock: inStockCount || watchlistItems.length,
-        total: watchlistItems.length,
-      },
-    },
-  }
-}
-
-/**
- * Extract caliber trends from watchlist items
- */
-function extractCaliberTrends(items: any[]): CaliberTrend[] {
-  // Group by caliber
-  const caliberMap = new Map<string, number[]>()
-
-  for (const item of items) {
-    const caliber = item.attributes?.split(',')[0]?.trim() || 'Unknown'
-    if (!caliberMap.has(caliber)) {
-      caliberMap.set(caliber, [])
-    }
-    if (item.pricePerRound) {
-      caliberMap.get(caliber)!.push(item.pricePerRound)
-    }
-  }
-
-  // Generate trends (simplified - would come from price history API)
-  const trends: CaliberTrend[] = []
-  for (const [caliber, prices] of caliberMap) {
-    if (prices.length === 0) continue
-
-    // Generate fake sparkline data for now
-    const sparkline = generateSparklineData()
-    const percentChange = (Math.random() - 0.5) * 10 // -5% to +5%
-
-    let trend: 'stable' | 'up' | 'down' = 'stable'
-    if (percentChange > 2) trend = 'up'
-    if (percentChange < -2) trend = 'down'
-
-    trends.push({
-      caliber,
-      sparkline,
-      trend,
-      percentChange: Math.round(percentChange),
-    })
-  }
-
-  return trends.slice(0, 4) // Max 4 calibers
-}
-
-/**
- * Generate sparkline data (would come from price history API)
- */
-function generateSparklineData(): number[] {
-  const points = 14
-  const data: number[] = []
-  let value = 0.5
-
-  for (let i = 0; i < points; i++) {
-    value += (Math.random() - 0.5) * 0.2
-    value = Math.max(0, Math.min(1, value))
-    data.push(value)
-  }
-
-  return data
-}
-
-/**
- * Transform watchlist items to table format
- */
-function transformWatchlistItems(items: any[]): WatchlistTableItem[] {
-  return items.map((item) => {
-    // Determine status
-    let status: '90d_low' | 'back_in_stock' | null = null
-    if (item.status === 'lowest-90-days') {
-      status = '90d_low'
-    } else if (item.status === 'back-in-stock') {
-      status = 'back_in_stock'
-    }
-
-    // Determine 24h change (simplified)
-    let change24h: 'up' | 'down' | 'none' = 'none'
-    if (item.status === 'price-moved') {
-      change24h = Math.random() > 0.5 ? 'down' : 'up'
-    }
-
-    return {
-      id: item.id || item.productId,
-      productId: item.productId,
-      productName: item.productName,
-      pricePerRound: item.pricePerRound,
-      sparklineData: generateSparklineData(),
-      change24h,
-      status,
-      isWatched: true,
-    }
-  })
-}
-
-/**
- * Transform price movement items to accordion format
- */
-function transformPriceChanges(items: any[]): PriceChange[] {
-  return items.slice(0, 5).map((item) => ({
-    id: item.id,
-    productId: item.productId,
-    productName: item.productName,
-    direction: (item.changePercent || 0) < 0 ? 'down' : 'up',
-    pricePerRound: item.pricePerRound || 0,
-    source: item.source === 'gun-locker' ? 'gun_locker' : 'watchlist',
-    caliber: item.caliber,
-  }))
-}
-
-/**
- * Map legacy spotlight signal type to new reason
- */
-function mapSpotlightReason(
-  signalType: string
-): '90d_low' | 'back_in_stock' | 'significant_drop' {
-  switch (signalType) {
-    case 'lowest-90-days':
-      return '90d_low'
-    case 'back-in-stock-watched':
-      return 'back_in_stock'
-    case 'largest-price-movement':
-    default:
-      return 'significant_drop'
-  }
+      {/* Two-column grid skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Skeleton className="h-4 w-4" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="lg:col-span-1">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Skeleton className="h-4 w-4" />
+                <Skeleton className="h-5 w-28" />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+              <Skeleton className="h-4 w-32 mb-3" />
+              <div className="flex flex-wrap gap-2">
+                <Skeleton className="h-6 w-16" />
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-6 w-14" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
 }
