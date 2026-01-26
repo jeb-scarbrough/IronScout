@@ -171,32 +171,59 @@ async function mapToAmmoPreference(
  * Dedupe preferences after supersession resolution
  * Per spec: "If both deprecated and canonical SKUs are mapped, render canonical only.
  *           Soft-delete deprecated mapping with delete_reason = SKU_SUPERSEDED."
+ *
+ * IMPORTANT: Always prefer canonical (non-superseded) over deprecated, regardless of updatedAt.
+ * This ensures "render canonical only" even if deprecated was updated more recently.
  */
 async function dedupeAndSoftDeleteSuperseded(
   mapped: MappedPreference[]
 ): Promise<AmmoPreference[]> {
-  const deduped: AmmoPreference[] = []
-  const seenKeys = new Map<string, MappedPreference>() // key -> first preference seen
+  const seenKeys = new Map<string, { pref: MappedPreference; index: number }>()
   const toSoftDelete: string[] = [] // preference IDs to soft-delete
+  const result: MappedPreference[] = []
 
   for (const pref of mapped) {
     const key = `${pref.firearmId}:${pref.ammoSkuId}:${pref.useCase}`
 
     if (!seenKeys.has(key)) {
-      seenKeys.set(key, pref)
-      // Strip internal tracking fields for return
-      const { _originalId, _originalSkuId, _wasSuperseded, ...cleanPref } = pref
-      deduped.push(cleanPref)
+      // First occurrence - tentatively add it
+      seenKeys.set(key, { pref, index: result.length })
+      result.push(pref)
     } else {
-      // Duplicate found - this is a superseded mapping pointing to same canonical
-      // Per spec: soft-delete the deprecated mapping
-      if (pref._wasSuperseded) {
-        toSoftDelete.push(pref._originalId)
-        log.info('Supersession dedupe: soft-deleting deprecated mapping', {
-          deprecatedPrefId: pref._originalId,
-          deprecatedSkuId: pref._originalSkuId,
+      // Duplicate found - decide which to keep based on supersession status
+      const existing = seenKeys.get(key)!
+
+      if (existing.pref._wasSuperseded && !pref._wasSuperseded) {
+        // Existing is deprecated, new is canonical → replace with canonical
+        // Soft-delete the deprecated one
+        toSoftDelete.push(existing.pref._originalId)
+        log.info('Supersession dedupe: replacing deprecated with canonical', {
+          deprecatedPrefId: existing.pref._originalId,
+          deprecatedSkuId: existing.pref._originalSkuId,
+          canonicalPrefId: pref._originalId,
           canonicalSkuId: pref.ammoSkuId,
         })
+        result[existing.index] = pref
+        seenKeys.set(key, { pref, index: existing.index })
+      } else if (!existing.pref._wasSuperseded && pref._wasSuperseded) {
+        // Existing is canonical, new is deprecated → keep existing, soft-delete new
+        toSoftDelete.push(pref._originalId)
+        log.info('Supersession dedupe: keeping canonical, soft-deleting deprecated', {
+          canonicalPrefId: existing.pref._originalId,
+          deprecatedPrefId: pref._originalId,
+          deprecatedSkuId: pref._originalSkuId,
+        })
+      } else {
+        // Both same status (both canonical or both deprecated) → keep first (most recent due to orderBy)
+        // Soft-delete the duplicate if it was superseded
+        if (pref._wasSuperseded) {
+          toSoftDelete.push(pref._originalId)
+          log.info('Supersession dedupe: soft-deleting duplicate deprecated mapping', {
+            keptPrefId: existing.pref._originalId,
+            deprecatedPrefId: pref._originalId,
+            deprecatedSkuId: pref._originalSkuId,
+          })
+        }
       }
     }
   }
@@ -216,7 +243,8 @@ async function dedupeAndSoftDeleteSuperseded(
       })
   }
 
-  return deduped
+  // Strip internal tracking fields for return
+  return result.map(({ _originalId, _originalSkuId, _wasSuperseded, ...cleanPref }) => cleanPref)
 }
 
 // ============================================================================

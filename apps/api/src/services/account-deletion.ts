@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@ironscout/db'
 import { sendAccountDeletionEmail } from './email'
 import { logger } from '../config/logger'
+import { cascadeUserDeletion } from './firearm-ammo-preference'
 
 const log = logger.child('account-deletion')
 
@@ -281,6 +282,10 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
 
   const originalEmail = user.email
 
+  // Soft-delete ammo preferences before transaction (preserves audit trail per spec)
+  const ammoPrefsDeleted = await cascadeUserDeletion(userId)
+  log.info('Soft-deleted ammo preferences', { userId, count: ammoPrefsDeleted })
+
   await prisma.$transaction(async (tx) => {
     // 1. Delete all watchlist items (cascade deletes alerts)
     await tx.watchlist_items.deleteMany({ where: { userId } })
@@ -290,6 +295,10 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
 
     // 3. Delete data subscriptions (API keys)
     await tx.data_subscriptions.deleteMany({ where: { userId } })
+
+    // 3a. Delete Gun Locker entries (user_guns)
+    // Note: firearm_ammo_preferences already soft-deleted above with delete_reason
+    await tx.user_guns.deleteMany({ where: { userId } })
 
     // 4. Anonymize product reports (keep for data integrity)
     await tx.product_reports.updateMany({
