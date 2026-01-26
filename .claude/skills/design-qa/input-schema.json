@@ -1,0 +1,15 @@
+{
+  "review_id": "string",
+  "screens": [
+    {
+      "name": "string",
+      "url": "string",
+      "device": "desktop|tablet|mobile",
+      "viewport": "string",
+      "state": "default|loading|empty|error|stale|disabled|signed-out|other",
+      "screenshots": ["string"],
+      "dom_text": "string",
+      "notes": "string"
+    }
+  ]
+}
