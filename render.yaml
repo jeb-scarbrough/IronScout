@@ -219,13 +219,15 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    buildCommand: pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
+    buildCommand: corepack enable && pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
     staticPublishPath: apps/www/out
     envVarGroups:
       - ironscout-build
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
     headers:
       - path: /*
         name: X-Frame-Options
