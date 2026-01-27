@@ -183,7 +183,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
-        value: 22
+        value: 25.5.0
       - key: SKIP_INSTALL_DEPS
         value: true
     headers:
