@@ -8,14 +8,17 @@ import { Footer } from '@/components/layout/footer'
 import { Toaster } from 'sonner'
 
 // Outfit: Modern geometric sans with personality - sharp but approachable
+// Only load weights actually used in the app to avoid preload warnings
 const outfit = Outfit({
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '900'],
   variable: '--font-display',
 })
 
 // JetBrains Mono: Technical precision for data/numbers
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
+  weight: ['400', '500'],
   variable: '--font-mono',
 })
 
