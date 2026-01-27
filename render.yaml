@@ -180,9 +180,8 @@ services:
     name: ironscout-www
     runtime: static
     region: ohio
-    rootDir: apps/www
-    buildCommand: pnpm install && pnpm build
-    staticPublishPath: out
+    buildCommand: pnpm install && pnpm --filter @ironscout/www build
+    staticPublishPath: apps/www/out
     envVars:
       - key: NODE_VERSION
         value: 20
@@ -196,6 +195,9 @@ services:
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
     routes:
       - type: rewrite
         source: /*
