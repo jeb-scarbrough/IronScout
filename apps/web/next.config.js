@@ -21,8 +21,8 @@ const nextConfig = {
   },
   env: {
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    // Support both JWT_SECRET (preferred) and NEXTAUTH_SECRET (legacy)
-    NEXTAUTH_SECRET: process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET,
+    // Pass JWT_SECRET to NextAuth as NEXTAUTH_SECRET
+    NEXTAUTH_SECRET: process.env.JWT_SECRET,
   },
   async headers() {
     return [

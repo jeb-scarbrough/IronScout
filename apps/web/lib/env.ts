@@ -4,6 +4,9 @@
  * This module validates required environment variables at startup.
  * If required variables are missing, the app will fail fast with clear error messages.
  *
+ * Server-only variables are only validated on the server.
+ * Client-side only has access to NEXT_PUBLIC_* variables.
+ *
  * Usage:
  *   import { env } from '@/lib/env'
  *   const apiUrl = env.NEXT_PUBLIC_API_URL
@@ -13,26 +16,33 @@ import { createLogger } from './logger'
 
 const logger = createLogger('env')
 
+// Check if we're running on the server
+const isServer = typeof window === 'undefined'
+
 // ============================================================================
 // Types
 // ============================================================================
 
 interface EnvConfig {
-  /** Required environment variables - app will fail if missing */
-  required: string[]
+  /** Required on both client and server (must be NEXT_PUBLIC_*) */
+  requiredPublic: string[]
+  /** Required only on server (secrets, API keys) */
+  requiredServer: string[]
   /** Optional environment variables with default values */
   optional: Record<string, string>
 }
 
 interface ValidatedEnv {
+  // Public (available client + server)
   NEXT_PUBLIC_API_URL: string
+  NEXT_PUBLIC_E2E_TEST_MODE: string
+  // Server-only (only available on server)
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
   JWT_SECRET: string
   NEXTAUTH_URL: string
   // Optional with defaults
   NODE_ENV: string
-  NEXT_PUBLIC_E2E_TEST_MODE: string
   ADMIN_EMAILS: string
   COOKIE_DOMAIN: string
 }
@@ -42,8 +52,10 @@ interface ValidatedEnv {
 // ============================================================================
 
 const envConfig: EnvConfig = {
-  required: [
+  requiredPublic: [
     'NEXT_PUBLIC_API_URL',
+  ],
+  requiredServer: [
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
     'JWT_SECRET',
@@ -65,13 +77,31 @@ function validateEnv(): ValidatedEnv {
   const missing: string[] = []
   const validated: Record<string, string> = {}
 
-  // Check required variables
-  for (const key of envConfig.required) {
+  // Check required public variables (must be available on both client and server)
+  for (const key of envConfig.requiredPublic) {
     const value = process.env[key]
     if (!value || value.trim() === '') {
       missing.push(key)
     } else {
       validated[key] = value
+    }
+  }
+
+  // Check server-only required variables (only on server)
+  if (isServer) {
+    for (const key of envConfig.requiredServer) {
+      const value = process.env[key]
+      if (!value || value.trim() === '') {
+        missing.push(key)
+      } else {
+        validated[key] = value
+      }
+    }
+  } else {
+    // On client, provide empty strings for server-only vars
+    // (they should never be accessed client-side anyway)
+    for (const key of envConfig.requiredServer) {
+      validated[key] = ''
     }
   }
 
@@ -83,13 +113,14 @@ function validateEnv(): ValidatedEnv {
 
   // If any required variables are missing, fail fast
   if (missing.length > 0) {
-    const errorMessage = `Missing required environment variables:\n${missing.map(k => `  - ${k}`).join('\n')}`
+    const context = isServer ? 'server' : 'client'
+    const errorMessage = `Missing required environment variables (${context}):\n${missing.map(k => `  - ${k}`).join('\n')}`
 
     // Log the error
-    logger.error(errorMessage, { missing })
+    logger.error(errorMessage, { missing, context })
 
-    // In production, this should also alert to Slack
-    if (process.env.NODE_ENV === 'production') {
+    // In production on server, this should also alert to Slack
+    if (isServer && process.env.NODE_ENV === 'production') {
       alertMissingEnvVars(missing).catch(console.error)
     }
 
