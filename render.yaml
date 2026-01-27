@@ -179,7 +179,6 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    region: ohio
     buildCommand: pnpm install && pnpm --filter @ironscout/www build
     staticPublishPath: apps/www/out
     envVars:
