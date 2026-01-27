@@ -69,6 +69,20 @@ const envConfig: EnvConfig = {
   },
 }
 
+// NOTE: Keep these maps in sync with envConfig keys.
+// Next.js only inlines static NEXT_PUBLIC_* access in client bundles.
+const publicEnv = {
+  NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  NEXT_PUBLIC_E2E_TEST_MODE: process.env.NEXT_PUBLIC_E2E_TEST_MODE,
+}
+
+const optionalEnv = {
+  NODE_ENV: process.env.NODE_ENV,
+  NEXT_PUBLIC_E2E_TEST_MODE: publicEnv.NEXT_PUBLIC_E2E_TEST_MODE,
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS,
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
+}
+
 // ============================================================================
 // Validation
 // ============================================================================
@@ -79,7 +93,7 @@ function validateEnv(): ValidatedEnv {
 
   // Check required public variables (must be available on both client and server)
   for (const key of envConfig.requiredPublic) {
-    const value = process.env[key]
+    const value = publicEnv[key as keyof typeof publicEnv]
     if (!value || value.trim() === '') {
       missing.push(key)
     } else {
@@ -107,7 +121,7 @@ function validateEnv(): ValidatedEnv {
 
   // Apply optional variables with defaults
   for (const [key, defaultValue] of Object.entries(envConfig.optional)) {
-    const value = process.env[key]
+    const value = optionalEnv[key as keyof typeof optionalEnv]
     validated[key] = value && value.trim() !== '' ? value : defaultValue
   }
 

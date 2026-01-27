@@ -115,5 +115,7 @@ packages/db/generated/
 # apps/web/ios/
 # apps/web/android/
 /test-results
+# Playwright auth state
+e2e/.storage/
 # Local project state
 .ironscout/
