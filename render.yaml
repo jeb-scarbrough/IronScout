@@ -183,7 +183,7 @@ services:
     staticPublishPath: apps/www/out
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 25
     headers:
       - path: /*
         name: X-Frame-Options
