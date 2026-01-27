@@ -6,3 +6,5 @@ All consumer capabilities are available to every user.
 
 Any future pricing or tiering will be defined in a new scope document
 and must not assume the v1 implementation.
+
+Stripe integration and productized billing flows are deferred to v1.1+.

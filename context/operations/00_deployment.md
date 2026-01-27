@@ -9,6 +9,11 @@ If deployment behavior contradicts trust, scope, or release criteria, this docum
 
 ---
 
+## v1 Scope Guardrails
+
+- Stripe integration and productized billing flows are deferred to v1.1+.
+- Do not enable billing-related flags or UI in v1 releases.
+
 ## Deployment Goals (v1)
 
 Deployment must:

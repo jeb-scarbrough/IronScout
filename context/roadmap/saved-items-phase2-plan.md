@@ -149,15 +149,15 @@ interface SavedItemDTO {
 | # | Task | Priority | Status |
 |---|------|----------|--------|
 | 1 | Prisma schema: add prefs to WatchlistItem, simplify Alert | P0 | ✅ Done |
-| 2 | Save Service (`saved-items.ts`) with transaction + idempotency | P0 | Pending |
-| 3 | Endpoint `/api/saved-items` (GET/POST/DELETE/PATCH) | P0 | Pending |
-| 4 | API client: `saveItem()`, `getSavedItems()`, `updateSavedItem()` | P0 | Pending |
-| 5 | Hooks: `useSavedItems()` replaces watchlist + alerts hooks | P0 | Pending |
-| 6 | Saved Items Manager UI for `/dashboard/saved` | P0 | Pending |
-| 7 | Save dialog rename + wire to save endpoint | P0 | Pending |
-| 8 | Notification Drawer with controls | P1 | Pending |
-| 9 | Alert engine: enforce thresholds + cooldowns | P1 | Pending |
-| 10 | Deprecate old routes through new service | P1 | Pending |
+| 2 | Save Service (`saved-items.ts`) with transaction + idempotency | P0 | Deferred to v1.1+ |
+| 3 | Endpoint `/api/saved-items` (GET/POST/DELETE/PATCH) | P0 | Deferred to v1.1+ |
+| 4 | API client: `saveItem()`, `getSavedItems()`, `updateSavedItem()` | P0 | Deferred to v1.1+ |
+| 5 | Hooks: `useSavedItems()` replaces watchlist + alerts hooks | P0 | Deferred to v1.1+ |
+| 6 | Saved Items Manager UI for `/dashboard/saved` | P0 | Deferred to v1.1+ |
+| 7 | Save dialog rename + wire to save endpoint | P0 | Deferred to v1.1+ |
+| 8 | Notification Drawer with controls | P1 | Deferred to v1.1+ |
+| 9 | Alert engine: enforce thresholds + cooldowns | P1 | Deferred to v1.1+ |
+| 10 | Deprecate old routes through new service | P1 | Deferred to v1.1+ |
 
 ---
 

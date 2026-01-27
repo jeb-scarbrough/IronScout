@@ -121,6 +121,7 @@ These may exist in docs, code, or experiments but must remain disabled or intern
 - Merchant portal (all features)
 - Retailer/merchant feed ingestion (CSV/XML/JSON)
 - Merchant subscription and billing workflows
+- Stripe integration and productized billing flows (v1.1+)
 - Merchant benchmarks and pricing_snapshots
 - Merchant analytics and insights
 - Usage-based Merchant billing
