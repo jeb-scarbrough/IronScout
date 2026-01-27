@@ -177,7 +177,7 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install --filter @ironscout/www && pnpm --filter @ironscout/www build
+    buildCommand: rm -f pnpm-lock.yaml package-lock.json && cd apps/www && npm install && npm run build
     staticPublishPath: apps/www/out
     envVars:
       - key: NODE_ENV
@@ -185,7 +185,7 @@ services:
       - key: NODE_VERSION
         value: 22
       - key: SKIP_INSTALL_DEPS
-        value: "true"
+        value: true
     headers:
       - path: /*
         name: X-Frame-Options
