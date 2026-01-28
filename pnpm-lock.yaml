@@ -589,9 +589,6 @@ importers:
 
   apps/www:
     dependencies:
-      '@ironscout/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       next:
         specifier: ^16.1.5
         version: 16.1.5(@babel/core@7.28.6)(@playwright/test@1.58.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
