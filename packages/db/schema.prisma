@@ -781,7 +781,6 @@ model current_visible_prices {
   @@index([observedAt])
   @@index([inStock])
   @@index([recomputedAt])
-
   @@map("current_visible_prices")
 }
 
@@ -858,17 +857,17 @@ model products {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Whether this SKU is currently active in the catalog
-  isActiveSku     Boolean   @default(true)
+  isActiveSku    Boolean   @default(true)
   /// Reference to the SKU that supersedes this one (for alias resolution)
-  supersededById  String?
+  supersededById String?
   /// When this SKU was superseded
-  supersededAt    DateTime?
+  supersededAt   DateTime?
 
   // Relations
   /// Self-relation: this product is superseded by another product
-  supersededBy    products? @relation("ProductSupersession", fields: [supersededById], references: [id])
+  supersededBy             products?                  @relation("ProductSupersession", fields: [supersededById], references: [id])
   /// Self-relation: products that this product supersedes
-  supersedes      products[] @relation("ProductSupersession")
+  supersedes               products[]                 @relation("ProductSupersession")
   alerts                   alerts[]
   prices                   prices[]
   product_reports          product_reports[]
@@ -940,6 +939,7 @@ model retailers {
   retailer_feeds     retailer_feeds[]
   retailer_skus      retailer_skus[]
   click_events       click_events[]
+  scrape_runs        scrape_runs[]
 
   @@index([visibilityStatus])
 }
@@ -1020,7 +1020,10 @@ model source_products {
   product_links              product_links?
   product_resolve_requests   product_resolve_requests[]
   click_events               click_events[]
+  scrape_targets             scrape_targets[]
 
+  // Per scraper spec §9.2: Unique constraint for idempotent upserts
+  @@unique([sourceId, identityKey], map: "source_products_source_identity_key_unique")
   @@index([productId])
   @@index([sourceId])
   @@index([normalizedHash])
@@ -1239,18 +1242,18 @@ model source_trust_config {
 }
 
 model sources {
-  id                        String                     @id @default(cuid())
+  id                        String            @id @default(cuid())
   name                      String
   url                       String
-  type                      SourceType                 @default(HTML)
-  enabled                   Boolean                    @default(true)
-  interval                  Int                        @default(3600)
+  type                      SourceType        @default(HTML)
+  enabled                   Boolean           @default(true)
+  interval                  Int               @default(3600)
   lastRunAt                 DateTime?
   paginationConfig          Json?
   affiliateNetwork          AffiliateNetwork?
   feedHash                  String?
-  createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime                   @updatedAt
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
   retailerId                String
   affiliateAccountId        String?
   affiliateAccountName      String?
@@ -1258,18 +1261,191 @@ model sources {
   affiliateCampaignId       String?
   affiliateProgramId        String?
   affiliateTrackingTemplate String?
-  isDisplayPrimary          Boolean                    @default(false)
-  sourceKind                SourceKind                 @default(DIRECT)
-  affiliate_feeds           affiliate_feeds[]
-  executions                executions[]
-  source_products           source_products[]
-  prices                    prices[]
-  retailers                 retailers                  @relation(fields: [retailerId], references: [id])
-  source_trust_config       source_trust_config?
-  product_resolve_requests  product_resolve_requests[]
-  click_events              click_events[]
+  isDisplayPrimary          Boolean           @default(false)
+  sourceKind                SourceKind        @default(DIRECT)
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Scraper Framework fields (scraper-framework-01 spec v0.5 §9.5)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Adapter ID for scraping (e.g., 'sgammo'). Must match scrape_targets.adapter_id.
+  adapterId String?
+
+  /// Per-source scrape configuration (rateLimit, fetcherType, customHeaders)
+  scrapeConfig Json?
+
+  /// HARD ALLOWLIST GATE: Must be TRUE for any scraping to occur.
+  /// Default FALSE = no scraping until explicitly approved.
+  scrapeEnabled Boolean @default(false)
+
+  /// Domain-level ToS review timestamp
+  tosReviewedAt DateTime?
+  /// Admin who approved ToS
+  tosApprovedBy String?
+
+  /// ROBOTS COMPLIANCE GATE: Must be TRUE for scraping to proceed.
+  /// Default TRUE = assume compliant until robots.txt check fails.
+  /// Auto-set to FALSE when robots.txt blocks us or legal review prohibits scraping.
+  robotsCompliant Boolean @default(true)
+
+  // Relations
+  affiliate_feeds          affiliate_feeds[]
+  executions               executions[]
+  source_products          source_products[]
+  prices                   prices[]
+  retailers                retailers                  @relation(fields: [retailerId], references: [id])
+  source_trust_config      source_trust_config?
+  product_resolve_requests product_resolve_requests[]
+  click_events             click_events[]
+  scrape_targets           scrape_targets[]
+  scrape_runs              scrape_runs[]
+
+  // Composite unique for FK validation from scrape_targets
+  @@unique([id, adapterId], map: "sources_id_adapter_id_unique")
   @@index([retailerId], map: "sources_retailer_id_idx")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Scraper Framework Tables (scraper-framework-01 spec v0.5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// URLs to be scraped by the surgical scraping framework.
+/// Per spec §9.1: Stores specific URLs from database, not discovered via crawling.
+model scrape_targets {
+  id String @id @default(cuid())
+
+  /// Target URL (original, with tracking params)
+  url          String
+  /// Canonicalized URL for dedup (see Appendix A in spec)
+  canonicalUrl String
+
+  /// Source ID - enables trust config, visibility gating
+  sourceId  String
+  /// Adapter ID - must match sources.adapterId
+  adapterId String
+
+  /// Optional link to existing source_product (for price refresh)
+  sourceProductId String?
+
+  // Scheduling
+  /// Cron expression in UTC (e.g., '0 */4 * * *' = every 4 hours UTC)
+  schedule String?
+  /// Priority: higher = process first
+  priority Int     @default(0)
+
+  // Status and Enabled (see spec §9.1 for precedence rules)
+  /// Target status: ACTIVE, PAUSED, BROKEN, STALE
+  status  ScrapeTargetStatus @default(ACTIVE)
+  /// Admin toggle - FALSE = never scraped
+  enabled Boolean            @default(true)
+
+  /// URL-level robots.txt override (can only BLOCK, never loosen)
+  /// FALSE = inherit from domain policy (default)
+  /// TRUE = block this specific URL (admin manually flagged)
+  robotsPathBlocked Boolean @default(false)
+
+  // Tracking
+  lastScrapedAt       DateTime?
+  lastStatus          String?
+  consecutiveFailures Int       @default(0)
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  notes     String?
+
+  // Relations
+  sources         sources          @relation(fields: [sourceId], references: [id])
+  source_products source_products? @relation(fields: [sourceProductId], references: [id])
+
+  // Unique on canonical URL per source (prevents duplicates via tracking params)
+  @@unique([sourceId, canonicalUrl], map: "scrape_targets_source_canonical_unique")
+  @@index([sourceId])
+  @@index([adapterId])
+  @@index([status])
+  @@index([schedule])
+  @@index([enabled, status])
+}
+
+/// Audit trail for scrape executions.
+/// Per spec §9.3: Tracks metrics, status, and provenance for each scrape batch.
+model scrape_runs {
+  id String @id @default(cuid())
+
+  // Run context
+  adapterId      String
+  adapterVersion String
+  sourceId       String
+  retailerId     String
+  trigger        ScrapeRunTrigger
+
+  // Status
+  status ScrapeRunStatus @default(RUNNING)
+
+  // Timing
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+
+  // Counts
+  urlsAttempted     Int @default(0)
+  urlsSucceeded     Int @default(0)
+  urlsFailed        Int @default(0)
+  offersExtracted   Int @default(0)
+  offersValid       Int @default(0)
+  offersDropped     Int @default(0)
+  offersQuarantined Int @default(0)
+  /// Track separately, don't count as failures (per spec §7.2)
+  oosNoPriceCount   Int @default(0)
+
+  // Derived metrics (computed at run completion)
+  failureRate Decimal? @db.Decimal(5, 4)
+  yieldRate   Decimal? @db.Decimal(5, 4)
+  dropRate    Decimal? @db.Decimal(5, 4)
+
+  // Error tracking
+  errorCode    String?
+  errorMessage String?
+
+  // Metadata
+  createdAt DateTime @default(now())
+
+  // Relations
+  sources   sources   @relation(fields: [sourceId], references: [id])
+  retailers retailers @relation(fields: [retailerId], references: [id])
+
+  @@index([adapterId])
+  @@index([sourceId])
+  @@index([retailerId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+/// Per-adapter health and drift tracking.
+/// Per spec §9.4: Stores enabled state, baseline metrics, consecutive failure tracking.
+model scrape_adapter_status {
+  adapterId String @id
+
+  // Status
+  enabled        Boolean                     @default(true)
+  disabledAt     DateTime?
+  disabledReason ScrapeAdapterDisableReason?
+  disabledBy     String?
+
+  // Baseline metrics (7-day rolling, per spec §7.3)
+  baselineFailureRate Decimal?  @db.Decimal(5, 4)
+  baselineYieldRate   Decimal?  @db.Decimal(5, 4)
+  baselineSampleSize  Int       @default(0)
+  baselineUpdatedAt   DateTime?
+
+  // Consecutive failure tracking (per spec §7.2)
+  consecutiveFailedBatches Int      @default(0)
+  lastBatchFailureRate     Decimal? @db.Decimal(5, 4)
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model subscriptions {
@@ -1296,24 +1472,24 @@ model system_settings {
 }
 
 model users {
-  id                    String                  @id @default(cuid())
-  email                 String                  @unique
-  name                  String?
-  image                 String?
-  password              String?
-  emailVerified         DateTime?
-  tier                  UserTier                @default(FREE)
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  deletionRequestedAt   DateTime?
-  deletionScheduledFor  DateTime?
-  status                UserStatus              @default(ACTIVE)
-  Account               Account[]
-  Session               Session[]
-  alerts                alerts[]
-  data_subscriptions    data_subscriptions[]
-  product_reports       product_reports[]
-  subscriptions         subscriptions[]
+  id                       String                     @id @default(cuid())
+  email                    String                     @unique
+  name                     String?
+  image                    String?
+  password                 String?
+  emailVerified            DateTime?
+  tier                     UserTier                   @default(FREE)
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  deletionRequestedAt      DateTime?
+  deletionScheduledFor     DateTime?
+  status                   UserStatus                 @default(ACTIVE)
+  Account                  Account[]
+  Session                  Session[]
+  alerts                   alerts[]
+  data_subscriptions       data_subscriptions[]
+  product_reports          product_reports[]
+  subscriptions            subscriptions[]
   user_guns                user_guns[]
   watchlist_collections    watchlist_collections[]
   watchlist_items          watchlist_items[]
@@ -1324,7 +1500,7 @@ model users {
 model user_guns {
   id        String   @id @default(cuid())
   userId    String
-  caliber   String   // Canonical caliber value from CaliberEnum
+  caliber   String // Canonical caliber value from CaliberEnum
   nickname  String?
   imageUrl  String?  @db.Text // base64 data URL (Postgres-first), R2 URL later
   createdAt DateTime @default(now())
@@ -1341,14 +1517,14 @@ model user_guns {
 /// User-declared ammo usage context for a firearm. Not a recommendation system.
 /// Supports recall and re-purchase workflows, not discovery or advice.
 model firearm_ammo_preferences {
-  id         String                       @id @default(cuid())
-  userId     String
-  firearmId  String
-  ammoSkuId  String                        // References products.id (ammo SKU)
-  useCase    AmmoUseCase
-  createdAt  DateTime                      @default(now())
-  updatedAt  DateTime                      @updatedAt
-  deletedAt  DateTime?
+  id           String                      @id @default(cuid())
+  userId       String
+  firearmId    String
+  ammoSkuId    String // References products.id (ammo SKU)
+  useCase      AmmoUseCase
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+  deletedAt    DateTime?
   deleteReason AmmoPreferenceDeleteReason?
 
   // Relations
@@ -1357,9 +1533,9 @@ model firearm_ammo_preferences {
   // firearmId NO ACTION: App handles via cascadeFirearmDeletion() for audit trail
   // ammoSkuId NO ACTION: Products should never be hard-deleted per spec
   // Future GDPR purge: soft-delete with reasons first, then hard-delete user
-  users      users      @relation(fields: [userId], references: [id], onDelete: NoAction)
-  user_guns  user_guns  @relation(fields: [firearmId], references: [id], onDelete: NoAction)
-  products   products   @relation(fields: [ammoSkuId], references: [id], onDelete: NoAction)
+  users     users     @relation(fields: [userId], references: [id], onDelete: NoAction)
+  user_guns user_guns @relation(fields: [firearmId], references: [id], onDelete: NoAction)
+  products  products  @relation(fields: [ammoSkuId], references: [id], onDelete: NoAction)
 
   // Partial unique: only one active mapping per user+firearm+sku+useCase
   // Per spec: UNIQUE (user_id, firearm_id, ammo_sku_id, use_case) WHERE deleted_at IS NULL
@@ -1956,4 +2132,54 @@ enum ProductResolveRequestStatus {
   COMPLETED
   /// Failed to process (see errorMessage)
   FAILED
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Scraper Framework Enums (scraper-framework-01 spec v0.5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Status of a scrape target URL
+enum ScrapeTargetStatus {
+  /// Target is active and will be scraped on schedule
+  ACTIVE
+  /// Target is paused (e.g., maintenance window)
+  PAUSED
+  /// Target is broken (auto-set after consecutive failures)
+  BROKEN
+  /// Target is stale (not processed within max age)
+  STALE
+}
+
+/// Trigger type for scrape runs
+enum ScrapeRunTrigger {
+  /// Scheduled by cron
+  SCHEDULED
+  /// Manually triggered by admin
+  MANUAL
+  /// Retry after failure
+  RETRY
+  /// Weekly recheck of broken URLs
+  RECHECK
+}
+
+/// Status of a scrape run
+enum ScrapeRunStatus {
+  /// Run is currently executing
+  RUNNING
+  /// Run completed successfully
+  SUCCESS
+  /// Run completed with failures
+  FAILED
+  /// Run quarantined due to drift detection
+  QUARANTINED
+}
+
+/// Reason for disabling a scrape adapter
+enum ScrapeAdapterDisableReason {
+  /// Manually disabled by admin
+  MANUAL
+  /// Auto-disabled due to drift detection
+  DRIFT_DETECTED
+  /// Disabled due to ToS violation or legal concern
+  TOS_VIOLATION
 }
