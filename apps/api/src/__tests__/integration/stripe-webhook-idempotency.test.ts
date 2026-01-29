@@ -102,7 +102,7 @@ function createStripeEvent(type: string, data: object, overrides: Partial<Stripe
   return {
     id: TEST_EVENT_ID,
     object: 'event',
-    api_version: '2025-12-15.clover',
+    api_version: '2026-01-28.clover',
     created: Math.floor(Date.now() / 1000),
     type,
     data: { object: data },

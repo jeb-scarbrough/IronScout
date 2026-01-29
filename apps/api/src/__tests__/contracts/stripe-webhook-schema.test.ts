@@ -232,7 +232,7 @@ describe('Stripe Event Wrapper Contract', () => {
   const createEvent = <T>(type: string, data: T, overrides: object = {}): Stripe.Event => ({
     id: `evt_${Date.now()}`,
     object: 'event',
-    api_version: '2025-12-15.clover',
+    api_version: '2026-01-28.clover',
     created: Math.floor(Date.now() / 1000),
     type,
     data: { object: data },
