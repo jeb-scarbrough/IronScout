@@ -8,9 +8,8 @@
  */
 
 import { createHash } from 'crypto'
-import type { Fetcher, FetchOptions, FetchResult, RetryPolicy } from '../types.js'
+import type { Fetcher, FetchOptions, FetchResult, RetryPolicy, RobotsPolicy } from '../types.js'
 import { DEFAULT_FETCH_HEADERS, DEFAULT_FETCH_OPTIONS, DEFAULT_RETRY_POLICY } from '../types.js'
-import type { RobotsPolicy } from './robots.js'
 
 export interface HttpFetcherOptions {
   /** Retry policy for transient failures */

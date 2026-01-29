@@ -25,7 +25,7 @@ function parsePriceToCents(text: string): { cents: number | null; ambiguous: boo
     return { cents: null, ambiguous: true }
   }
 
-  const [dollarsRaw, centsRaw] = matches[0].split('.')
+  const [dollarsRaw, centsRaw] = matches[0]!.split('.')
   const dollars = Number.parseInt(dollarsRaw, 10)
   const cents = Number.parseInt((centsRaw ?? '00').padEnd(2, '0').slice(0, 2), 10)
 
@@ -79,19 +79,9 @@ export const templateAdapter: ScrapeAdapter = {
     const priceParse = parsePriceToCents(priceText)
     if (priceParse.ambiguous) {
       return {
-        ok: true,
-        offer: {
-          sourceId: ctx.sourceId,
-          retailerId: ctx.retailerId,
-          url: canonicalizeUrl(url),
-          title,
-          priceCents: 0, // Will be quarantined in normalize() for AMBIGUOUS_PRICE
-          currency: 'USD',
-          availability: 'UNKNOWN',
-          observedAt: ctx.now,
-          identityKey: 'URL:pending',
-          adapterVersion: ADAPTER_VERSION,
-        },
+        ok: false,
+        reason: 'PAGE_STRUCTURE_CHANGED',
+        details: 'Multiple price candidates found; implement adapter-specific disambiguation',
       }
     }
 

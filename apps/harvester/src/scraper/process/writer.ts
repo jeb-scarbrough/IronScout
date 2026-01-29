@@ -14,11 +14,10 @@
  * - Prices are in cents internally, converted to Decimal on write
  */
 
-import { Decimal } from '@ironscout/db/generated/prisma'
 import { prisma } from '@ironscout/db'
 import type { ScrapedOffer } from '../types.js'
 import { mapAvailabilityToInStock } from '../types.js'
-import type { Logger } from '@ironscout/logger'
+import type { ILogger } from '@ironscout/logger'
 
 /**
  * Target information for a scrape write.
@@ -40,10 +39,11 @@ export interface WriteResult {
 }
 
 /**
- * Convert cents (integer) to Decimal for database write.
+ * Convert cents (integer) to dollars for database write.
+ * Prisma accepts regular numbers for Decimal fields.
  */
-function centsToDecimal(cents: number): Decimal {
-  return new Decimal(cents).div(100)
+function centsToDollars(cents: number): number {
+  return cents / 100
 }
 
 /**
@@ -62,7 +62,7 @@ function centsToDecimal(cents: number): Decimal {
 async function resolveSourceProduct(
   offer: ScrapedOffer,
   target: ScrapeTarget,
-  logger: Logger
+  logger: ILogger
 ): Promise<string> {
   // Case 1: Explicit source_product_id (price refresh scenario)
   if (target.sourceProductId) {
@@ -101,10 +101,10 @@ async function resolveSourceProduct(
 /**
  * Upsert source_product by (sourceId, identityKey).
  */
-async function upsertByIdentityKey(offer: ScrapedOffer, _logger: Logger): Promise<string> {
+async function upsertByIdentityKey(offer: ScrapedOffer, _logger: ILogger): Promise<string> {
   const result = await prisma.source_products.upsert({
     where: {
-      source_products_source_identity_key_unique: {
+      sourceId_identityKey: {
         sourceId: offer.sourceId,
         identityKey: offer.identityKey,
       },
@@ -214,12 +214,12 @@ async function writePrice(
       retailerId: offer.retailerId,
       sourceId: offer.sourceId,
       sourceProductId,
-      price: centsToDecimal(offer.priceCents),
+      price: centsToDollars(offer.priceCents),
       currency: offer.currency,
       url: offer.url,
       inStock: mapAvailabilityToInStock(offer.availability),
       observedAt: offer.observedAt,
-      shippingCost: offer.shippingCents != null ? centsToDecimal(offer.shippingCents) : null,
+      shippingCost: offer.shippingCents != null ? centsToDollars(offer.shippingCents) : null,
       // ADR-015 Provenance
       ingestionRunType: 'SCRAPE',
       ingestionRunId: runId,
@@ -246,7 +246,7 @@ export async function writeScrapeOffer(
   offer: ScrapedOffer,
   target: ScrapeTarget,
   runId: string,
-  logger: Logger
+  logger: ILogger
 ): Promise<WriteResult> {
   try {
     // 1. Resolve or upsert source_product
@@ -367,9 +367,10 @@ export async function finalizeRun(
       completedAt,
       durationMs: completedAt.getTime() - Date.now(), // Will be recalculated
       ...metrics,
-      failureRate: failureRate != null ? new Decimal(failureRate) : null,
-      yieldRate: yieldRate != null ? new Decimal(yieldRate) : null,
-      dropRate: dropRate != null ? new Decimal(dropRate) : null,
+      // Prisma accepts numbers for Decimal fields
+      failureRate,
+      yieldRate,
+      dropRate,
     },
   })
 }

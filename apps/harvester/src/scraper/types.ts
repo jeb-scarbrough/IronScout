@@ -6,7 +6,7 @@
  * All types for surgical URL scraping: ScrapedOffer, ExtractResult, Adapter interfaces.
  */
 
-import type { Logger } from '@ironscout/logger'
+import type { ILogger } from '@ironscout/logger'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Currency and Availability Types (§5.1)
@@ -350,7 +350,7 @@ export interface ScrapeAdapterContext {
   runId: string
   targetId: string // scrape_targets.id
   now: Date
-  logger: Logger
+  logger: ILogger
 }
 
 /**

@@ -63,6 +63,16 @@ import {
   stopCurrentPriceScheduler,
 } from './currentprice'
 
+// Scrape URL Worker (scraper-framework-01 spec v0.5)
+import {
+  startScrapeWorker,
+  stopScrapeWorker,
+} from './scraper/worker'
+import {
+  startScrapeScheduler,
+  stopScrapeScheduler,
+} from './scraper/scheduler'
+
 import type { Worker } from 'bullmq'
 
 // Create affiliate workers (lazy initialization)
@@ -80,6 +90,9 @@ let quarantineReprocessWorker: Worker | null = null
 
 // Current price recompute worker (ADR-015, lazy initialization)
 let currentPriceRecomputeWorker: Worker | null = null
+
+// Scrape URL worker (scraper-framework-01, lazy initialization)
+let scrapeWorker: Worker | null = null
 
 /**
  * Scheduler enabled flags (set during startup from database/env)
@@ -196,6 +209,7 @@ log.info('Starting IronScout.ai Harvester Workers', {
     'embedding',
     'quarantine-reprocess',
     'current-price-recompute',
+    'scrape-url',
   ],
   retailerWorkers: [
     'feed-ingest',
@@ -261,6 +275,11 @@ async function startup() {
   log.info('Starting current price recompute worker')
   currentPriceRecomputeWorker = await startCurrentPriceRecomputeWorker({ concurrency: 5 })
 
+  // Start scrape URL worker (scraper-framework-01 - always on)
+  // Worker processes jobs regardless of scheduler state (supports manual triggers)
+  log.info('Starting scrape URL worker')
+  scrapeWorker = await startScrapeWorker({ concurrency: 3 })
+
   // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
   log.info('Starting product resolver sweeper')
   startProcessingSweeper()
@@ -274,6 +293,11 @@ async function startup() {
     // Per ADR-001: Only one scheduler instance should run
     log.info('Starting current price recompute scheduler')
     startCurrentPriceScheduler()
+
+    // Start scrape URL scheduler (scraper-framework-01)
+    // Per ADR-001: Only one scheduler instance should run
+    log.info('Starting scrape URL scheduler')
+    startScrapeScheduler()
   }
 
   // Start affiliate feed scheduler only if enabled
@@ -313,6 +337,9 @@ const shutdown = async (signal: string) => {
 
       log.info('Stopping current price recompute scheduler')
       stopCurrentPriceScheduler()
+
+      log.info('Stopping scrape URL scheduler')
+      stopScrapeScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)
@@ -336,6 +363,8 @@ const shutdown = async (signal: string) => {
       stopQuarantineReprocessWorker(),
       // Current price recompute worker (ADR-015)
       stopCurrentPriceRecomputeWorker(),
+      // Scrape URL worker (scraper-framework-01)
+      stopScrapeWorker(),
     ])
     log.info('All workers closed')
 

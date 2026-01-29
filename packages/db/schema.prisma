@@ -1328,7 +1328,7 @@ model scrape_targets {
   sourceProductId String?
 
   // Scheduling
-  /// Cron expression in UTC (e.g., '0 */4 * * *' = every 4 hours UTC)
+  /// Cron expression in UTC (e.g., '0 0,4,8,12,16,20 * * *' = every 4 hours UTC)
   schedule String?
   /// Priority: higher = process first
   priority Int     @default(0)
