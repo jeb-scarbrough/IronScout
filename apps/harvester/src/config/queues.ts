@@ -20,6 +20,8 @@ export const QUEUE_NAMES = {
   QUARANTINE_REPROCESS: 'quarantine-reprocess',
   // ADR-015: Current Price Recompute queue
   CURRENT_PRICE_RECOMPUTE: 'current-price-recompute',
+  // Scraper Framework queue (scraper-framework-01 spec v0.5)
+  SCRAPE_URL: 'scrape-url',
 } as const
 
 // Job data interfaces
@@ -85,6 +87,7 @@ export async function initQueueSettings(): Promise<void> {
         'embedding-generate': true,
         'quarantine-reprocess': true,
         'current-price-recompute': true,
+        'scrape-url': true,
       },
     }
   }
@@ -592,6 +595,77 @@ export async function enqueueCurrentPriceRecompute(
   }
 }
 
+// ============================================================================
+// SCRAPER FRAMEWORK QUEUE (scraper-framework-01 spec v0.5)
+// ============================================================================
+
+/**
+ * Scrape URL job data
+ * Per spec §10.1: Single queue for surgical scraping
+ */
+export interface ScrapeUrlJobData {
+  targetId: string // scrape_targets.id
+  url: string
+  sourceId: string // For trust config, visibility
+  retailerId: string // Derived from source, included for convenience
+  adapterId: string
+  runId: string
+  priority: number
+  trigger: 'SCHEDULED' | 'MANUAL' | 'RETRY' | 'RECHECK'
+}
+
+/**
+ * Scrape URL queue
+ * Per spec §10.1:
+ * - JobId format: SCRAPE_<targetId>_<runId>
+ * - Retry: 3 attempts with exponential backoff
+ * - Priority-based processing
+ */
+export const scrapeUrlQueue = new Queue<ScrapeUrlJobData>(QUEUE_NAMES.SCRAPE_URL, {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000, // 5s, 15s, 45s
+    },
+    ...getJobOptions('scrape-url'),
+  },
+})
+
+/**
+ * Enqueue a scrape URL job
+ *
+ * @param data - Job data
+ * @returns Job ID
+ */
+export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<string> {
+  const jobId = `SCRAPE_${data.targetId}_${data.runId}`
+
+  try {
+    await scrapeUrlQueue.add('SCRAPE_URL', data, {
+      jobId,
+      priority: data.priority,
+    })
+    return jobId
+  } catch (err: any) {
+    // Job already exists - this is expected deduplication
+    if (err?.message?.includes('Job already exists')) {
+      rootLogger.debug('[enqueueScrapeUrl] Job deduplicated', {
+        targetId: data.targetId,
+        runId: data.runId,
+      })
+      return jobId
+    }
+    rootLogger.error(
+      '[enqueueScrapeUrl] Failed to enqueue scrape job',
+      { targetId: data.targetId, runId: data.runId, url: data.url },
+      err
+    )
+    throw err
+  }
+}
+
 // Export all queues
 export const queues = {
   alert: alertQueue,
@@ -608,5 +682,7 @@ export const queues = {
   quarantineReprocess: quarantineReprocessQueue,
   // Current Price Recompute queue (ADR-015)
   currentPriceRecompute: currentPriceRecomputeQueue,
+  // Scraper Framework queue
+  scrapeUrl: scrapeUrlQueue,
 }
 
