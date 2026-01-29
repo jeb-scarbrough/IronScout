@@ -785,20 +785,20 @@ resolver_candidate_overflow_total (Counter) - overflow tracking
 
 resolver_evidence_truncated_total (Counter) - evidence truncation tracking
 
-B4) Writer price variance metrics
+B4) Price variance metrics (Future)
 
-Implementation: apps/harvester/src/writer/metrics.ts
+Price variance checking is handled by the ingestion pipeline, not the resolver.
+The resolver operates on identity matching; price safety is an ingestion concern.
 
-Price variance checking belongs in the writer, not the resolver.
-The resolver operates on identity matching; price safety is a writer concern.
+These metrics are defined but implementation moved to the unified ingestion pattern:
 
-writer_prices_written_total (Counter)
+prices_written_total (Counter)
 
 Total prices written to database.
 
-Labels: source_kind
+Labels: source_kind, pipeline (AFFILIATE, RETAILER)
 
-writer_price_variance_exceeded_total (Counter)
+price_variance_exceeded_total (Counter)
 
 Prices exceeding variance threshold (default: 30%).
 
@@ -808,7 +808,7 @@ variance_bucket: 0-10%, 10-25%, 25-50%, 50-100%, >100%
 
 action: ACCEPTED, QUARANTINED, CLAMPED
 
-writer_price_delta_pct (Histogram)
+price_delta_pct (Histogram)
 
 Price change percentage distribution.
 

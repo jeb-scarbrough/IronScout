@@ -253,7 +253,7 @@ describeIntegration('Processor Integration Tests', () => {
 
     it('should verify ADR-015 provenance fields are set on new prices', async () => {
       // ADR-015 requires all new price writes to have provenance fields set
-      // This test verifies the pattern used in all writers
+      // This test verifies the pattern used in all ingestion pipelines
       const source = await prisma.sources.findUnique({
         where: { id: testSourceId },
       })
@@ -261,7 +261,7 @@ describeIntegration('Processor Integration Tests', () => {
       const observedAt = new Date()
       const ingestionRunId = `test-run-${Date.now()}`
 
-      // Create a price with provenance (as all writers should)
+      // Create a price with provenance (as all ingestion pipelines should)
       await prisma.$executeRaw`
         INSERT INTO prices (
           "id",

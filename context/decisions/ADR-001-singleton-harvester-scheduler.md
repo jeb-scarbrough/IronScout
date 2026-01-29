@@ -57,19 +57,19 @@ This decision directly supports:
 - deterministic Retailer eligibility enforcement
 - trust preservation in consumer-facing data
 
-## Scope Clarification (Added 2026-01)
+## Scope Clarification (Updated 2026-01)
 
 This ADR applies to schedulers that create **execution records** (ingestion runs):
 
 | Scheduler | Mechanism | ADR-001 Applies |
 |-----------|-----------|-----------------|
-| Crawl scheduler (`apps/harvester/src/scheduler/`) | In-process timer, creates `execution_logs` | **Yes** - requires `HARVESTER_SCHEDULER_ENABLED=true` on exactly one instance |
 | Affiliate feed scheduler (`apps/harvester/src/affiliate/scheduler.ts`) | `FOR UPDATE SKIP LOCKED` claim | **Yes** - DB lock ensures singleton behavior |
 | Merchant scheduler (`apps/harvester/src/merchant/scheduler.ts`) | BullMQ repeatable jobs | **No** - BullMQ handles deduplication internally |
 
 **Key invariant**: No duplicate ingestion runs may be created. Different schedulers achieve this through different mechanisms:
-- Crawl scheduler: explicit singleton via env var
-- Affiliate scheduler: distributed lock (`FOR UPDATE SKIP LOCKED`)
+- Affiliate scheduler: distributed lock (`FOR UPDATE SKIP LOCKED`) + `HARVESTER_SCHEDULER_ENABLED` env var
 - Merchant scheduler: BullMQ jobId deduplication (inherently idempotent)
 
 **Workers** (job processors) are always safe to scale horizontally regardless of this ADR.
+
+**Historical note**: The legacy crawl scheduler (`apps/harvester/src/scheduler/`) was removed in favor of the unified ingestion pattern where all data sources (affiliate feeds, retailer feeds) follow the same path through `source_products` → resolver → `products`.

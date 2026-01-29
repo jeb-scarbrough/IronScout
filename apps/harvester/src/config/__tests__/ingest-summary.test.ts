@@ -110,38 +110,6 @@ describe('Ingest Run Summary', () => {
       expect(metrics.listingsCreatedByPipeline['RETAILER']).toBe(150)
     })
 
-    it('emits a summary event for CRAWL pipeline', () => {
-      const summary: IngestRunSummary = {
-        pipeline: 'CRAWL',
-        runId: 'exec-001',
-        sourceId: 'source-001',
-        retailerId: 'retailer-001',
-        status: 'SUCCESS',
-        durationMs: 3000,
-        input: {
-          totalRows: 50,
-        },
-        output: {
-          listingsCreated: 50,
-          listingsUpdated: 0,
-          pricesWritten: 50,
-          quarantined: 0,
-          rejected: 0,
-          matched: 0,
-          enqueuedForResolver: 50,
-        },
-        errors: {
-          count: 0,
-        },
-      }
-
-      emitIngestRunSummary(summary)
-
-      const metrics = getIngestSummaryMetrics()
-      expect(metrics.runsByPipelineAndStatus['CRAWL:SUCCESS']).toBe(1)
-      expect(metrics.pricesWrittenByPipeline['CRAWL']).toBe(50)
-    })
-
     it('tracks FAILED status correctly', () => {
       const summary: IngestRunSummary = {
         pipeline: 'RETAILER',

@@ -2,7 +2,7 @@
 
 /**
  * Harvester Worker
- * Starts all pipeline workers to process crawl jobs
+ * Starts all pipeline workers to process ingestion jobs
  *
  * TODO: Improve database resilience for maintenance windows
  * - Add infinite retry with longer backoff for scheduler during extended outages
@@ -25,11 +25,6 @@ import { setLogLevel, type LogLevel, flushLogs } from '@ironscout/logger'
 import { warmupRedis } from './config/redis'
 import { initQueueSettings } from './config/queues'
 import { logger } from './config/logger'
-import { schedulerWorker } from './scheduler'
-import { fetcherWorker } from './fetcher'
-import { extractorWorker } from './extractor'
-import { normalizerWorker } from './normalizer'
-import { writerWorker } from './writer'
 import { alerterWorker, delayedNotificationWorker } from './alerter'
 
 // Retailer Portal Workers
@@ -196,13 +191,11 @@ async function warmupDatabase(maxAttempts = 5): Promise<boolean> {
 
 log.info('Starting IronScout.ai Harvester Workers', {
   workers: [
-    'scheduler',
-    'fetcher',
-    'extractor',
-    'normalizer',
-    'writer',
     'alerter',
     'resolver',
+    'embedding',
+    'quarantine-reprocess',
+    'current-price-recompute',
   ],
   retailerWorkers: [
     'feed-ingest',
@@ -251,7 +244,7 @@ async function startup() {
   log.info('Starting affiliate feed worker')
   affiliateFeedWorker = createAffiliateFeedWorker()
 
-  // Start product resolver worker (always on - processes RESOLVE jobs from writer)
+  // Start product resolver worker (always on - processes RESOLVE jobs from ingestion pipelines)
   log.info('Starting product resolver worker')
   resolverWorker = await startProductResolverWorker({ concurrency: 5 })
 
@@ -325,11 +318,6 @@ const shutdown = async (signal: string) => {
     // 2. Close workers (waits for current jobs to complete)
     log.info('Waiting for workers to finish current jobs')
     await Promise.all([
-      schedulerWorker.close(),
-      fetcherWorker.close(),
-      extractorWorker.close(),
-      normalizerWorker.close(),
-      writerWorker.close(),
       alerterWorker.close(),
       delayedNotificationWorker.close(),
       // Retailer Portal workers

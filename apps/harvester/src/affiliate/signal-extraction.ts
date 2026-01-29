@@ -2,7 +2,7 @@ import {
   extractGrainWeight,
   extractRoundCount,
   normalizeCaliberString,
-} from '../normalizer/ammo-utils'
+} from '../utils/ammo-utils'
 
 export interface ParsedSignals {
   caliber?: string

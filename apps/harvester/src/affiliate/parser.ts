@@ -11,7 +11,7 @@ import { parse as parseCSV } from 'csv-parse/sync'
 import { createHash } from 'crypto'
 import { logger } from '../config/logger'
 import { parseAttributes, parseUrlSignals } from './signal-extraction'
-import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../normalizer/ammo-utils'
+import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../utils/ammo-utils'
 import type { ParsedFeedProduct, ParseResult, ParseError, ErrorCode } from './types'
 import { ERROR_CODES } from './types'
 

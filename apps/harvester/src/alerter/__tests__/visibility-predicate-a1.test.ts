@@ -5,8 +5,8 @@
  * implements A1 semantics by testing against a real database.
  *
  * A1 Semantics (per Merchant-and-Retailer-Reference):
- * - ELIGIBLE + no merchant_retailers → Visible (crawl-only)
- * - ELIGIBLE + all SUSPENDED relationships → Visible (crawl-only)
+ * - ELIGIBLE + no merchant_retailers → Visible (feed-only)
+ * - ELIGIBLE + all SUSPENDED relationships → Visible (feed-only)
  * - ELIGIBLE + ACTIVE + UNLISTED → Hidden (delinquency)
  * - ELIGIBLE + ACTIVE + LISTED → Visible (merchant-managed)
  *
@@ -223,7 +223,7 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     expect(mr?.status).toBe('SUSPENDED')
 
     // Assert: price IS visible (alert should fire)
-    // Per A1: "no ACTIVE relationships" means crawl-only visible
+    // Per A1: "no ACTIVE relationships" means feed-only visible
     const isVisible = await hasVisiblePrice(product.id)
     expect(isVisible).toBe(true)
   })

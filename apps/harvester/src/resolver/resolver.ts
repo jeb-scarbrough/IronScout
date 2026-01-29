@@ -34,7 +34,7 @@ import {
   extractShellLength,
   extractShotSize,
   extractSlugWeight,
-} from '../normalizer/ammo-utils'
+} from '../utils/ammo-utils'
 import { DEFAULT_SCORING_STRATEGY } from './scoring'
 import { normalizeBrandString } from './brand-normalization'
 import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
@@ -724,7 +724,7 @@ function normalizeInput(
       brand: sourceProduct.brand,
       brandNorm: normalizedBrand,
       caliber: resolvedCaliber ?? undefined,
-      caliberNorm: resolvedCaliber ?? undefined, // extractCaliber/normalizer returns normalized form
+      caliberNorm: resolvedCaliber ?? undefined, // ammo-utils returns normalized form
       upc: rawUpc,
       upcNorm: normalizedUpc,
       packCount: resolvedRoundCount ?? undefined,

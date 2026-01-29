@@ -5,7 +5,6 @@
  * This enables consistent monitoring, alerting, and correlation across:
  * - Affiliate pipeline (processor.ts)
  * - Retailer pipeline (feed-ingest.ts)
- * - Crawl pipeline (writer/index.ts)
  *
  * Per PR #3: Event boundary + observability for batch processing.
  */
@@ -19,7 +18,7 @@ const log = rootLogger.child('ingest-summary')
 // Types
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type IngestPipeline = 'AFFILIATE' | 'RETAILER' | 'CRAWL'
+export type IngestPipeline = 'AFFILIATE' | 'RETAILER'
 
 export type IngestRunStatus = 'SUCCESS' | 'WARNING' | 'FAILED'
 

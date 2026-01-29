@@ -6,15 +6,9 @@ import { rootLogger } from './logger'
 
 // Queue names
 export const QUEUE_NAMES = {
-  CRAWL: 'crawl',
-  FETCH: 'fetch',
-  EXTRACT: 'extract',
-  NORMALIZE: 'normalize',
-  WRITE: 'write',
   ALERT: 'alert',
   // Retailer Portal queues
   RETAILER_FEED_INGEST: 'retailer-feed-ingest',
-  // Note: sku-match, benchmark, insight queues removed for v1 (benchmark subsystem removed)
   // Affiliate Feed queues
   AFFILIATE_FEED: 'affiliate-feed',
   AFFILIATE_FEED_SCHEDULER: 'affiliate-feed-scheduler',
@@ -29,70 +23,12 @@ export const QUEUE_NAMES = {
 } as const
 
 // Job data interfaces
-export interface CrawlJobData {
-  sourceId: string
-  executionId: string
-}
-
-export interface FetchJobData {
-  sourceId: string
-  executionId: string
-  url: string
-  type: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED' | 'FEED_CSV' | 'FEED_XML' | 'FEED_JSON'
-}
-
-export interface ExtractJobData {
-  executionId: string
-  sourceId: string
-  content: string
-  sourceType: 'RSS' | 'HTML' | 'JSON' | 'JS_RENDERED' | 'FEED_CSV' | 'FEED_XML' | 'FEED_JSON'
-  contentHash?: string // Hash of fetched content for caching
-}
-
-export interface NormalizeJobData {
-  executionId: string
-  sourceId: string
-  rawItems: any[]
-  contentHash?: string // Hash to be stored after successful write
-  chunkInfo?: { index: number; total: number; isLast: boolean } // For chunked processing
-}
-
-export interface WriteJobData {
-  executionId: string
-  sourceId: string
-  normalizedItems: NormalizedProduct[]
-  contentHash?: string // Hash to be stored after successful write
-}
-
 export interface AlertJobData {
   executionId: string
   productId: string
   oldPrice?: number
   newPrice?: number
   inStock?: boolean
-}
-
-export interface NormalizedProduct {
-  name: string
-  description?: string
-  category: string
-  brand?: string
-  imageUrl?: string
-  price: number
-  currency: string
-  url: string
-  inStock: boolean
-  retailerName: string
-  retailerWebsite: string
-
-  // Ammo-specific normalized fields
-  productId: string      // Canonical product ID (UPC or hash-based)
-  upc?: string          // Universal Product Code
-  caliber?: string      // e.g., "9mm", ".223 Remington"
-  grainWeight?: number  // Bullet weight in grains
-  caseMaterial?: string // "Brass", "Steel", etc.
-  purpose?: string      // "Target", "Defense", "Hunting", etc.
-  roundCount?: number   // Rounds per box/case
 }
 
 // =============================================================================
@@ -141,16 +77,13 @@ export async function initQueueSettings(): Promise<void> {
     queueHistorySettings = {
       retentionCount: 100,
       queues: {
-        crawl: true,
-        fetch: true,
-        extract: true,
-        normalize: true,
-        write: true,
         alert: true,
         'retailer-feed-ingest': true,
         'affiliate-feed': true,
         'affiliate-feed-scheduler': true,
+        'product-resolve': true,
         'embedding-generate': true,
+        'quarantine-reprocess': true,
         'current-price-recompute': true,
       },
     }
@@ -160,31 +93,6 @@ export async function initQueueSettings(): Promise<void> {
 // =============================================================================
 // Create queues (with dynamic job options based on settings)
 // =============================================================================
-
-export const crawlQueue = new Queue<CrawlJobData>(QUEUE_NAMES.CRAWL, {
-  connection: redisConnection,
-  defaultJobOptions: getJobOptions('crawl'),
-})
-
-export const fetchQueue = new Queue<FetchJobData>(QUEUE_NAMES.FETCH, {
-  connection: redisConnection,
-  defaultJobOptions: getJobOptions('fetch'),
-})
-
-export const extractQueue = new Queue<ExtractJobData>(QUEUE_NAMES.EXTRACT, {
-  connection: redisConnection,
-  defaultJobOptions: getJobOptions('extract'),
-})
-
-export const normalizeQueue = new Queue<NormalizeJobData>(QUEUE_NAMES.NORMALIZE, {
-  connection: redisConnection,
-  defaultJobOptions: getJobOptions('normalize'),
-})
-
-export const writeQueue = new Queue<WriteJobData>(QUEUE_NAMES.WRITE, {
-  connection: redisConnection,
-  defaultJobOptions: getJobOptions('write'),
-})
 
 export const alertQueue = new Queue<AlertJobData>(QUEUE_NAMES.ALERT, {
   connection: redisConnection,
@@ -686,15 +594,9 @@ export async function enqueueCurrentPriceRecompute(
 
 // Export all queues
 export const queues = {
-  crawl: crawlQueue,
-  fetch: fetchQueue,
-  extract: extractQueue,
-  normalize: normalizeQueue,
-  write: writeQueue,
   alert: alertQueue,
   // Retailer queues
   retailerFeedIngest: retailerFeedIngestQueue,
-  // Note: retailerSkuMatch, retailerBenchmark, retailerInsight removed for v1
   // Affiliate queues
   affiliateFeed: affiliateFeedQueue,
   affiliateFeedScheduler: affiliateFeedSchedulerQueue,
