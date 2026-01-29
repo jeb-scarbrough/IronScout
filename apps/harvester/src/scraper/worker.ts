@@ -19,6 +19,7 @@ import { loggers } from '../config/logger.js'
 import { redisConnection } from '../config/redis.js'
 import { QUEUE_NAMES, ScrapeUrlJobData } from '../config/queues.js'
 import { getAdapterRegistry } from './registry.js'
+import { registerAllAdapters } from './adapters/index.js'
 import { HttpFetcher } from './fetch/http-fetcher.js'
 import { RobotsPolicyImpl } from './fetch/robots.js'
 import { RedisRateLimiter } from './fetch/rate-limiter.js'
@@ -33,11 +34,19 @@ const log = loggers.scraper
 let fetcher: HttpFetcher | null = null
 let rateLimiter: RedisRateLimiter | null = null
 let robotsPolicy: RobotsPolicyImpl | null = null
+let adaptersRegistered = false
 
 /**
  * Initialize shared infrastructure.
  */
 function initInfrastructure(): void {
+  // Register all adapters (idempotent)
+  if (!adaptersRegistered) {
+    registerAllAdapters()
+    adaptersRegistered = true
+    log.info('Registered scrape adapters', { count: getAdapterRegistry().size() })
+  }
+
   if (!robotsPolicy) {
     robotsPolicy = new RobotsPolicyImpl()
   }

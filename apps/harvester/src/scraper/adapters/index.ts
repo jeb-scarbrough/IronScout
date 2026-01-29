@@ -1,0 +1,33 @@
+/**
+ * Adapter Registration
+ *
+ * Per scraper-framework-01 spec v0.5 §5.4
+ *
+ * Registers all production adapters with the global registry.
+ * Import this module at worker startup to enable adapters.
+ *
+ * Adapters are explicitly registered here - no auto-discovery.
+ */
+
+import { getAdapterRegistry } from '../registry.js'
+
+// Import all adapters
+import { sgammoAdapter } from './sgammo/index.js'
+
+/**
+ * Register all production adapters.
+ * Call this once at worker startup.
+ */
+export function registerAllAdapters(): void {
+  const registry = getAdapterRegistry()
+
+  // Register SGAmmo adapter
+  registry.register(sgammoAdapter)
+
+  // Future adapters register here:
+  // registry.register(ammoseekAdapter)
+  // registry.register(luckygunnerAdapter)
+}
+
+// Re-export adapters for direct access (e.g., in tests)
+export { sgammoAdapter } from './sgammo/index.js'
