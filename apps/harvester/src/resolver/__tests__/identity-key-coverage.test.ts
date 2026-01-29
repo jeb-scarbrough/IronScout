@@ -14,7 +14,7 @@ import {
   extractRoundCount,
   extractShellLength,
   deriveShotgunLoadType,
-} from '../../normalizer/ammo-utils'
+} from '../../utils/ammo-utils'
 import fixtures from './fixtures/extraction-fixtures.json'
 
 interface ExpectedExtraction {

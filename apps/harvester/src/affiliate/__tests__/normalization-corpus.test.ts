@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { normalizeAmmoProduct, extractCaliber, extractGrainWeight, extractRoundCount } from '../../normalizer/ammo-utils'
+import { normalizeAmmoProduct, extractCaliber, extractGrainWeight, extractRoundCount } from '../../utils/ammo-utils'
 import { parseUrlSignals } from '../signal-extraction'
 
 interface FixtureInput {

@@ -32,16 +32,14 @@ import { ExpressAdapter } from '@bull-board/express'
 import { rootLogger } from '../config/logger'
 import { flushLogs } from '@ironscout/logger'
 import {
-  crawlQueue,
-  fetchQueue,
-  extractQueue,
-  normalizeQueue,
-  writeQueue,
   alertQueue,
   retailerFeedIngestQueue,
   affiliateFeedQueue,
   affiliateFeedSchedulerQueue,
   productResolveQueue,
+  embeddingGenerateQueue,
+  quarantineReprocessQueue,
+  currentPriceRecomputeQueue,
 } from '../config/queues'
 
 const log = rootLogger.child('bullboard')
@@ -103,12 +101,7 @@ serverAdapter.setBasePath(config.basePath)
 // Register all queues with Bull Board
 createBullBoard({
   queues: [
-    // Core pipeline queues
-    new BullMQAdapter(crawlQueue),
-    new BullMQAdapter(fetchQueue),
-    new BullMQAdapter(extractQueue),
-    new BullMQAdapter(normalizeQueue),
-    new BullMQAdapter(writeQueue),
+    // Alert queue
     new BullMQAdapter(alertQueue),
     // Retailer portal queues
     new BullMQAdapter(retailerFeedIngestQueue),
@@ -117,6 +110,12 @@ createBullBoard({
     new BullMQAdapter(affiliateFeedSchedulerQueue),
     // Product Resolver queue
     new BullMQAdapter(productResolveQueue),
+    // Embedding Generation queue
+    new BullMQAdapter(embeddingGenerateQueue),
+    // Quarantine Reprocess queue
+    new BullMQAdapter(quarantineReprocessQueue),
+    // Current Price Recompute queue (ADR-015)
+    new BullMQAdapter(currentPriceRecomputeQueue),
   ],
   serverAdapter,
 })
@@ -161,10 +160,13 @@ const server = app.listen(config.port, () => {
     basePath: config.basePath,
     url: `http://localhost:${config.port}${config.basePath}`,
     queues: [
-      'crawl', 'fetch', 'extract', 'normalize', 'write', 'alert',
+      'alert',
       'retailer-feed-ingest',
       'affiliate-feed', 'affiliate-feed-scheduler',
       'product-resolve',
+      'embedding-generate',
+      'quarantine-reprocess',
+      'current-price-recompute',
     ],
     warning: 'DO NOT EXPOSE TO PUBLIC INTERNET',
   })

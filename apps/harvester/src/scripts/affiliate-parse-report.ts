@@ -2,7 +2,7 @@ import { parse as parseCSV } from 'csv-parse/sync'
 import * as fs from 'fs'
 import * as path from 'path'
 import { parseAttributes, parseUrlSignals } from '../affiliate/signal-extraction'
-import { extractGrainWeight, extractRoundCount, normalizeCaliberString } from '../normalizer/ammo-utils'
+import { extractGrainWeight, extractRoundCount, normalizeCaliberString } from '../utils/ammo-utils'
 
 type SignalSource = 'ATTRIBUTES' | 'URL' | 'TITLE' | 'COLUMN' | 'MISSING'
 

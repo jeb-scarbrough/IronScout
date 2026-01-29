@@ -7,7 +7,7 @@
  *
  * A1 semantics:
  * - ACTIVE relationships control visibility
- * - No ACTIVE relationships means crawl-only fallback (alerts SHOULD fire)
+ * - No ACTIVE relationships means feed-only fallback (alerts SHOULD fire)
  * - Visibility requires ELIGIBLE + (no ACTIVE OR at least one ACTIVE+LISTED)
  */
 
@@ -50,7 +50,7 @@ describe('Alerter Visibility Guardrails', () => {
    * - `{ none: {} }` = "no relationships at all" → all-SUSPENDED retailers are HIDDEN
    * - `{ none: { status: 'ACTIVE' } }` = "no ACTIVE relationships" → all-SUSPENDED retailers are VISIBLE
    *
-   * Per A1 policy: all-SUSPENDED should be crawl-only visible, so alerts SHOULD fire.
+   * Per A1 policy: all-SUSPENDED should be feed-only visible, so alerts SHOULD fire.
    */
   it('alerts_fire_when_no_active_merchant_relationships', () => {
     // This test name IS the invariant. If you need to change this, update the ADR first.

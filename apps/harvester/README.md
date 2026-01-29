@@ -1,19 +1,35 @@
 # IronScout.ai Harvester Service
 
-Automated product price crawler and harvester service for IronScout.ai.
+Background ingestion service for IronScout.ai price data.
 
 ## Overview
 
-The harvester service continuously discovers, extracts, and normalizes product pricing data from configured online sources. It uses a multi-stage pipeline architecture with BullMQ for job processing.
+The harvester service processes product pricing data from configured sources using a unified ingestion pattern. All data sources (affiliate feeds, retailer feeds, future scrapers) follow the same flow:
 
-## Pipeline Stages
+1. **Source-specific fetcher/parser** → Raw data
+2. **Processor** → `source_products` + `source_product_identifiers`
+3. **Product Resolver** → Links to canonical `products` via `product_links`
+4. **Alerter** → Evaluates and triggers price alerts
 
-1. **Scheduler** - Creates crawl jobs for enabled sources
-2. **Fetcher** - Retrieves content from URLs (RSS, HTML, JSON, JS-rendered)
-3. **Extractor** - Parses content using site-specific adapters
-4. **Normalizer** - Standardizes data into common format
-5. **Writer** - Upserts products, retailers, and prices to database
-6. **Alerter** - Evaluates and triggers price alerts
+## Ingestion Pipelines
+
+### Affiliate Pipeline
+Processes affiliate network feeds (Impact, AvantLink, etc.):
+- Scheduled or manually triggered via BullMQ
+- Parses CSV feeds, extracts identity signals
+- Writes to `source_products` and enqueues resolver jobs
+
+### Retailer Pipeline
+Processes retailer-provided feeds:
+- Supports URL, FTP, SFTP access methods
+- Various formats: GENERIC, AMMOSEEK_V1, GUNENGINE_V2, IMPACT
+- Admin can trigger manually or schedule recurring ingestion
+
+### Product Resolver
+Links source products to canonical products:
+- UPC matching (for trusted sources)
+- Fingerprint matching (brand + caliber + grain + packCount)
+- Routes ambiguous items to NEEDS_REVIEW queue
 
 ## Prerequisites
 
@@ -44,113 +60,98 @@ pnpm db:migrate
 ## Usage
 
 ### Start Worker Processes
-This starts all pipeline workers to process jobs:
+Starts all pipeline workers to process jobs:
 ```bash
 pnpm worker
 ```
 
 Keep this running in a separate terminal.
 
-### Trigger Manual Crawl
-Run an immediate crawl of all enabled sources:
+### Bull Board (Queue Monitoring)
+Start the queue monitoring dashboard:
 ```bash
-pnpm dev run
+pnpm bullboard:dev
 ```
 
-### Schedule Recurring Crawls
-Set up hourly automatic crawls:
-```bash
-pnpm dev schedule
-```
-
-### Check Queue Status
-View current queue statistics:
-```bash
-pnpm dev status
-```
-
-## Managing Sources
-
-Sources are managed in the database via the `Source` model. Use the admin console or Prisma Studio to add/edit sources:
-
-```bash
-# From packages/db directory
-pnpm db:studio
-```
-
-Example source:
-- **Name**: "Example Electronics Store"
-- **URL**: "https://example.com/products/rss"
-- **Type**: RSS, HTML, JSON, or JS_RENDERED
-- **Enabled**: true
-- **Interval**: 3600 (seconds between crawls)
+Access at `http://localhost:3939/admin/queues` (requires BULLBOARD_USERNAME/PASSWORD).
 
 ## Architecture
 
 ```
-┌─────────────┐
-│  Scheduler  │ Creates crawl jobs
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Fetcher   │ Downloads content
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  Extractor  │ Parses HTML/RSS/JSON
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Normalizer  │ Standardizes data
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Writer    │ Updates database
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   Alerter   │ Triggers notifications
-└─────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    DATA SOURCES                              │
+├──────────────┬──────────────┬───────────────────────────────┤
+│  Affiliate   │  Retailer    │   Future Scrapers             │
+│  Feeds       │  Feeds       │   (see scraper-roadmap.md)    │
+└──────┬───────┴──────┬───────┴───────────────────────────────┘
+       │              │
+       ▼              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              UNIFIED INGESTION PATTERN                       │
+│                                                              │
+│   1. Write source_products                                   │
+│   2. Write source_product_identifiers (UPC, SKU, etc.)       │
+│   3. Enqueue resolver job                                    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              PRODUCT RESOLVER (ADR-019)                      │
+│                                                              │
+│   UPC Lookup → Fingerprint Match → NEEDS_REVIEW             │
+│   Creates product_links to canonical products               │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ALERTER                                         │
+│                                                              │
+│   Evaluates price changes and triggers notifications        │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+## BullMQ Queues
+
+| Queue | Purpose |
+|-------|---------|
+| `alert` | Price/stock change notifications |
+| `retailer-feed-ingest` | Retailer feed processing |
+| `affiliate-feed` | Affiliate feed processing |
+| `affiliate-feed-scheduler` | Scheduled affiliate feed triggers |
+| `product-resolve` | Product resolver jobs |
+| `embedding-generate` | Vector embedding generation |
+| `quarantine-reprocess` | Admin-triggered reprocessing |
+| `current-price-recompute` | ADR-015 derived table rebuild |
 
 ## Monitoring
 
 Check execution logs in the database:
 
 ```sql
--- Recent executions
-SELECT * FROM executions ORDER BY started_at DESC LIMIT 10;
+-- Recent affiliate feed runs
+SELECT * FROM affiliate_feed_runs ORDER BY started_at DESC LIMIT 10;
 
--- Execution logs for a specific run
-SELECT * FROM execution_logs
-WHERE execution_id = 'xxx'
-ORDER BY timestamp;
+-- Recent retailer feed runs
+SELECT * FROM retailer_feed_runs ORDER BY created_at DESC LIMIT 10;
 
--- Failed executions
-SELECT * FROM executions
-WHERE status = 'FAILED'
-ORDER BY started_at DESC;
+-- Resolver request status
+SELECT status, COUNT(*) FROM product_resolve_requests GROUP BY status;
 ```
 
 ## Extending
 
-### Adding a New Source Adapter
+### Adding a New Affiliate Network
 
-1. Create adapter in `src/extractor/adapters/`
-2. Register adapter in `src/extractor/index.ts`
-3. Add source to database with appropriate type
+1. Add network-specific parser in `src/affiliate/`
+2. Register in processor to handle new format
+3. Add source to database with appropriate configuration
 
 ### Adding Notification Channels
 
-Edit `src/alerter/index.ts` and implement notification delivery in the `sendNotification()` function.
+Edit `src/alerter/index.ts` and implement notification delivery.
 
 Options:
-- Email (SendGrid, AWS SES)
+- Email (Resend)
 - Webhooks
 - Push notifications
 - SMS
@@ -162,12 +163,12 @@ Options:
 - Verify DATABASE_URL is correct
 - Check worker logs for errors
 
-**No items extracted:**
-- Review execution logs in database
-- Test extractor on sample HTML
-- Verify source URL is accessible
+**Products not resolving:**
+- Check `product_resolve_requests` for FAILED status
+- Review resolver logs for matching failures
+- Verify source has `source_product_identifiers` records
 
 **Price alerts not triggering:**
-- Check alert records are active: `SELECT * FROM alerts WHERE is_active = true`
+- Check alert records are active
 - Verify price changes in database
 - Review alerter worker logs

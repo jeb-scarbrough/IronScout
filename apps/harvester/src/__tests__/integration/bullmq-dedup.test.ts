@@ -180,16 +180,14 @@ describe('BullMQ Job Deduplication', () => {
 
   describe('JobId-based deduplication', () => {
     it('should avoid BullMQ-invalid characters in jobId formats', () => {
+      // Current queue job ID formats (unified ingestion pattern)
       const jobIds = [
         `RESOLVE_SOURCE_PRODUCT_sp-abc123`,
-        `fetch_exec-001`,
-        `extract_exec-001`,
-        `write_exec-001`,
-        `normalize--exec-001`,
-        `normalize--exec-001--chunk-01`,
-        `crawl-source-123-2024-01-01T00-00-00-000Z`,
         `feed-feed-123-2024-01-01T00-00-00-000Z`,
         `delayed-item-123-PRICE_DROP-2024-01-01T00-00-00-000Z`,
+        `affiliate-source-123-2024-01-01T00-00-00-000Z`,
+        `RECOMPUTE_FULL_recompute-1706000000000-abc123`,
+        `RECOMPUTE_PRODUCT_product-123`,
       ]
 
       for (const jobId of jobIds) {

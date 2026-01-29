@@ -117,7 +117,7 @@ async function main() {
         type: 'JSON',
         retailerId: retailer.id,
         sourceKind: 'DIRECT',
-        enabled: false, // Don't actually crawl
+        enabled: false, // Test data only
         updatedAt: new Date(),
       }
     })

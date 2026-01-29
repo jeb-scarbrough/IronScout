@@ -12,7 +12,7 @@
  * - Skips failed feeds until manually re-enabled
  *
  * ADR-001 Scope Clarification:
- * ADR-001 (Singleton Harvester Scheduler) applies to the CRAWL scheduler
+ * ADR-001 (Singleton Harvester Scheduler) applies to the affiliate scheduler
  * which creates execution_logs and requires explicit singleton enforcement
  * via HARVESTER_SCHEDULER_ENABLED.
  *
@@ -32,7 +32,7 @@ import {
 } from '../config/queues'
 import { logger } from '../config/logger'
 
-const log = logger.scheduler
+const log = logger.merchant
 
 // ============================================================================
 // SCHEDULING QUEUE (for repeatable scheduler jobs)
@@ -51,7 +51,7 @@ function getSchedulingWindow(): string {
 }
 
 /**
- * Get the current hourly window (for crawl scheduling)
+ * Get the current hourly window (for feed scheduling)
  */
 function getHourlyWindow(): string {
   const now = new Date()
