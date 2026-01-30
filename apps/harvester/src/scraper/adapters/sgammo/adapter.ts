@@ -227,13 +227,9 @@ export const sgammoAdapter: ScrapeAdapter = {
       return { ok: false, reason: 'PRICE_NOT_FOUND' }
     }
 
-    if (availability === 'UNKNOWN') {
-      return {
-        ok: false,
-        reason: 'SELECTOR_NOT_FOUND',
-        details: 'Could not determine availability from page',
-      }
-    }
+    // Per spec §7.2: Let UNKNOWN availability pass through to normalizer
+    // The validator will drop with UNKNOWN_AVAILABILITY reason for proper drift counting
+    // (Don't return extract failure - that would bypass drift tracking)
 
     // Build the offer
     const canonicalUrl = canonicalizeUrl(url)

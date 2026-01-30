@@ -29,31 +29,83 @@ let lastMaintenanceRun: Date | null = null
 
 /**
  * Per-adapter backoff tracking.
- * Maps adapterId to timestamp when backoff expires.
- * Per spec §8.3: Scheduler backs off based on retryAfterMs from rejections.
+ * Maps adapterId to { backoffUntil, consecutiveRejections }.
+ * Per spec §8.3: Scheduler backs off with exponential increase on consecutive rejections.
  */
-const adapterBackoffUntil = new Map<string, number>()
+const adapterBackoffState = new Map<string, { backoffUntil: number; consecutiveRejections: number }>()
+
+/** Global scheduler pause state */
+let globalPauseUntil: number | null = null
+const GLOBAL_PAUSE_DURATION_MS = 60000 // 1 minute pause on global backpressure
 
 /**
- * Check if an adapter is in backoff period.
+ * Check if scheduler is globally paused.
  */
-function isAdapterInBackoff(adapterId: string): boolean {
-  const backoffUntil = adapterBackoffUntil.get(adapterId)
-  if (!backoffUntil) return false
-  if (Date.now() >= backoffUntil) {
-    adapterBackoffUntil.delete(adapterId)
+function isGloballyPaused(): boolean {
+  if (!globalPauseUntil) return false
+  if (Date.now() >= globalPauseUntil) {
+    globalPauseUntil = null
+    log.info('Global scheduler pause ended')
     return false
   }
   return true
 }
 
 /**
- * Set adapter backoff based on rejection.
+ * Trigger global pause when backpressure is severe.
  */
-function setAdapterBackoff(adapterId: string, retryAfterMs: number): void {
-  const backoffUntil = Date.now() + retryAfterMs
-  adapterBackoffUntil.set(adapterId, backoffUntil)
-  log.debug('Adapter in backoff', { adapterId, retryAfterMs, backoffUntil: new Date(backoffUntil) })
+function triggerGlobalPause(): void {
+  globalPauseUntil = Date.now() + GLOBAL_PAUSE_DURATION_MS
+  log.warn('Triggering global scheduler pause due to high rejection rate', {
+    pauseUntil: new Date(globalPauseUntil),
+    durationMs: GLOBAL_PAUSE_DURATION_MS,
+  })
+}
+
+/**
+ * Check if an adapter is in backoff period.
+ */
+function isAdapterInBackoff(adapterId: string): boolean {
+  const state = adapterBackoffState.get(adapterId)
+  if (!state) return false
+  if (Date.now() >= state.backoffUntil) {
+    adapterBackoffState.delete(adapterId)
+    return false
+  }
+  return true
+}
+
+/**
+ * Set adapter backoff with exponential increase.
+ * Per spec §8.3: Consecutive rejections increase backoff exponentially.
+ */
+function setAdapterBackoff(adapterId: string, baseRetryAfterMs: number): void {
+  const existingState = adapterBackoffState.get(adapterId)
+  const consecutiveRejections = (existingState?.consecutiveRejections ?? 0) + 1
+
+  // Exponential backoff: base * 2^(consecutive-1), capped at 5 minutes
+  const multiplier = Math.pow(2, Math.min(consecutiveRejections - 1, 4))
+  const backoffMs = Math.min(baseRetryAfterMs * multiplier, 5 * 60 * 1000)
+  const backoffUntil = Date.now() + backoffMs
+
+  adapterBackoffState.set(adapterId, { backoffUntil, consecutiveRejections })
+  log.debug('Adapter in exponential backoff', {
+    adapterId,
+    baseRetryAfterMs,
+    consecutiveRejections,
+    actualBackoffMs: backoffMs,
+    backoffUntil: new Date(backoffUntil),
+  })
+}
+
+/**
+ * Clear adapter backoff on successful enqueue.
+ */
+function clearAdapterBackoff(adapterId: string): void {
+  if (adapterBackoffState.has(adapterId)) {
+    adapterBackoffState.delete(adapterId)
+    log.debug('Cleared adapter backoff', { adapterId })
+  }
 }
 
 /**
@@ -413,11 +465,15 @@ async function finalizeStaleRuns(): Promise<void> {
         })
       } else {
         // Update lastRunHadZeroPrice for next run's check
-        const currentRunHasZeroPrice = run.zeroPriceCount > 0
-        await prisma.scrape_adapter_status.update({
-          where: { adapterId: run.adapterId },
-          data: { lastRunHadZeroPrice: currentRunHasZeroPrice },
-        })
+        // Per spec §7.2: Only count runs with >= 20 URLs toward zero-price auto-disable
+        // Small manual tests shouldn't set this flag
+        if (run.urlsAttempted >= 20) {
+          const currentRunHasZeroPrice = run.zeroPriceCount > 0
+          await prisma.scrape_adapter_status.update({
+            where: { adapterId: run.adapterId },
+            data: { lastRunHadZeroPrice: currentRunHasZeroPrice },
+          })
+        }
       }
 
       // Update baseline for successful runs (per spec §7.3)
@@ -522,6 +578,48 @@ async function createScrapeRun(
   return run.id
 }
 
+/** Max age for queue entries before cleanup (1 hour) */
+const QUEUE_ENTRY_MAX_AGE_MS = 60 * 60 * 1000
+
+/**
+ * Clean up stale queue entries that have been waiting too long.
+ * Per spec §8.3: Prevents queue from accumulating old jobs.
+ */
+async function cleanupStaleQueueEntries(): Promise<number> {
+  try {
+    const cutoffTime = Date.now() - QUEUE_ENTRY_MAX_AGE_MS
+    const waitingJobs = await scrapeUrlQueue.getJobs(['waiting', 'delayed'])
+    let removedCount = 0
+
+    for (const job of waitingJobs) {
+      // Check job age (timestamp is job creation time in ms)
+      if (job.timestamp && job.timestamp < cutoffTime) {
+        try {
+          await job.remove()
+          removedCount++
+          log.debug('Removed stale queue entry', {
+            jobId: job.id,
+            targetId: job.data?.targetId,
+            ageMs: Date.now() - job.timestamp,
+          })
+        } catch (removeErr) {
+          // Job may have been processed or removed already
+          log.debug('Could not remove stale job', { jobId: job.id })
+        }
+      }
+    }
+
+    if (removedCount > 0) {
+      log.info('Cleaned up stale queue entries', { removedCount, maxAgeMs: QUEUE_ENTRY_MAX_AGE_MS })
+    }
+
+    return removedCount
+  } catch (error) {
+    log.error('Failed to cleanup stale queue entries', { error: (error as Error).message })
+    return 0
+  }
+}
+
 /**
  * Run hourly maintenance tasks if due.
  * Per spec: stale URL cleanup runs hourly.
@@ -545,6 +643,9 @@ async function runDailyMaintenance(): Promise<void> {
     // Recheck broken URLs weekly
     const recheckResult = await recheckBrokenUrls()
 
+    // Clean up stale queue entries (per spec §8.3)
+    const staleQueueRemoved = await cleanupStaleQueueEntries()
+
     // Per spec: Alert based on TOTAL stale targets, not just newly marked
     const totalStale = await prisma.scrape_targets.count({
       where: { status: 'STALE' },
@@ -557,6 +658,7 @@ async function runDailyMaintenance(): Promise<void> {
       deletedBroken: cleanupResult.deletedBroken,
       brokenRechecked: recheckResult.rechecked,
       brokenReactivated: recheckResult.reactivated,
+      staleQueueRemoved,
     })
   } catch (error) {
     log.error('Hourly maintenance failed', { error: (error as Error).message })
@@ -733,6 +835,12 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
     return
   }
 
+  // Per spec §8.3: Check global pause before starting tick
+  if (isGloballyPaused()) {
+    log.debug('Scheduler tick skipped - global pause active')
+    return
+  }
+
   isSchedulerRunning = true
   const tickStart = Date.now()
 
@@ -865,6 +973,8 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         if (result.status === 'accepted') {
           enqueuedCount++
           acceptedInRun++
+          // Per spec §8.3: Clear backoff on successful enqueue
+          clearAdapterBackoff(target.adapterId)
         } else if (result.status === 'rejected') {
           rejectedCount++
           rejectedInRun++
@@ -901,6 +1011,17 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         where: { id: runId },
         data: { urlsAttempted: acceptedInRun },
       })
+    }
+
+    // Per spec §8.3: Trigger global pause if >50% of tick was rejected
+    const totalAttempted = enqueuedCount + rejectedCount
+    if (totalAttempted > 0 && rejectedCount > enqueuedCount) {
+      log.warn('High rejection rate in tick - triggering global pause', {
+        enqueuedCount,
+        rejectedCount,
+        rejectionRate: (rejectedCount / totalAttempted * 100).toFixed(1) + '%',
+      })
+      triggerGlobalPause()
     }
 
     log.info('Scheduler tick completed', {

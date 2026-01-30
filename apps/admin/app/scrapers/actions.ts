@@ -664,6 +664,23 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
       return { success: false, error: 'Adapter is disabled' }
     }
 
+    // Per spec §8.2: Check for backpressure before accepting manual triggers
+    // Count pending manual requests for this adapter
+    const pendingManualCount = await prisma.scrape_targets.count({
+      where: {
+        adapterId: target.adapterId,
+        lastStatus: 'PENDING_MANUAL',
+      },
+    })
+
+    const MAX_PENDING_MANUAL_PER_ADAPTER = 10
+    if (pendingManualCount >= MAX_PENDING_MANUAL_PER_ADAPTER) {
+      return {
+        success: false,
+        error: `Too many pending manual requests for this adapter (${pendingManualCount}). Please wait and try again.`,
+      }
+    }
+
     // Mark target as pending manual scrape
     // The harvester scheduler will create the run record with correct adapter version
     // per scraper-framework-01 spec: admin doesn't have access to adapter registry

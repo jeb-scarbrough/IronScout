@@ -451,6 +451,101 @@ export interface ScrapeUrlJobData {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Source Scrape Config (§9.5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Per-source scrape configuration stored in sources.scrapeConfig JSON field.
+ * Allows customizing fetcher behavior per source.
+ */
+export interface ScrapeConfig {
+  /** Fetcher type - only 'http' supported in v1 */
+  fetcherType?: 'http'
+
+  /** Custom rate limit for this source */
+  rateLimit?: {
+    /** Requests per second (default from DEFAULT_RATE_LIMIT) */
+    requestsPerSecond?: number
+    /** Minimum delay between requests in ms */
+    minDelayMs?: number
+    /** Maximum concurrent requests */
+    maxConcurrent?: number
+  }
+
+  /** Custom headers to merge with defaults */
+  customHeaders?: Record<string, string>
+}
+
+/**
+ * Parse and validate scrapeConfig from database JSON.
+ * Returns undefined if invalid or not present.
+ */
+export function parseScrapeConfig(raw: unknown): ScrapeConfig | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined
+  }
+
+  const config = raw as Record<string, unknown>
+  const result: ScrapeConfig = {}
+
+  // Parse fetcherType
+  if (config.fetcherType !== undefined) {
+    if (config.fetcherType !== 'http') {
+      // Only 'http' supported in v1
+      return undefined
+    }
+    result.fetcherType = 'http'
+  }
+
+  // Parse rateLimit
+  if (config.rateLimit !== undefined) {
+    if (typeof config.rateLimit !== 'object' || config.rateLimit === null) {
+      return undefined
+    }
+    const rl = config.rateLimit as Record<string, unknown>
+    result.rateLimit = {}
+
+    if (rl.requestsPerSecond !== undefined) {
+      if (typeof rl.requestsPerSecond !== 'number' || rl.requestsPerSecond <= 0) {
+        return undefined
+      }
+      result.rateLimit.requestsPerSecond = rl.requestsPerSecond
+    }
+
+    if (rl.minDelayMs !== undefined) {
+      if (typeof rl.minDelayMs !== 'number' || rl.minDelayMs < 0) {
+        return undefined
+      }
+      result.rateLimit.minDelayMs = rl.minDelayMs
+    }
+
+    if (rl.maxConcurrent !== undefined) {
+      if (typeof rl.maxConcurrent !== 'number' || rl.maxConcurrent <= 0) {
+        return undefined
+      }
+      result.rateLimit.maxConcurrent = rl.maxConcurrent
+    }
+  }
+
+  // Parse customHeaders
+  if (config.customHeaders !== undefined) {
+    if (typeof config.customHeaders !== 'object' || config.customHeaders === null) {
+      return undefined
+    }
+    const headers = config.customHeaders as Record<string, unknown>
+    result.customHeaders = {}
+    for (const [key, value] of Object.entries(headers)) {
+      if (typeof value !== 'string') {
+        return undefined
+      }
+      result.customHeaders[key] = value
+    }
+  }
+
+  return result
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Queue Config (§8.1)
 // ═══════════════════════════════════════════════════════════════════════════════
 

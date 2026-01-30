@@ -29,7 +29,8 @@ import { writeScrapeOffer, updateTargetTracking, markTargetBroken, finalizeRun }
 import { shouldMarkUrlBroken, checkAutoDisable } from './process/drift-detector.js'
 import { recordZeroPriceQuarantine } from './metrics.js'
 import { checkAndAddIdentityKey, closeDedupeClient } from './process/run-dedupe.js'
-import type { ScrapeRunMetrics, ScrapeAdapterContext } from './types.js'
+import type { ScrapeRunMetrics, ScrapeAdapterContext, RateLimitConfig } from './types.js'
+import { parseScrapeConfig, DEFAULT_RATE_LIMIT } from './types.js'
 
 const log = loggers.scraper
 
@@ -104,9 +105,10 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
   }
 
   // Check URL-level robots block
+  // Per spec: admin-blocked URLs should be skipped without counting as failure
   if (target.robotsPathBlocked) {
-    jobLogger.info('URL blocked by admin override', { targetId })
-    await updateTargetTracking(targetId, false)
+    jobLogger.info('URL blocked by admin override, skipping without failure', { targetId })
+    // Don't call updateTargetTracking - this is intentional, not a failure
     return
   }
 
@@ -117,6 +119,7 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     select: {
       scrapeEnabled: true,
       robotsCompliant: true,
+      scrapeConfig: true, // Per spec §9.5: Per-source scrape config
     },
   })
 
@@ -135,13 +138,33 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     return
   }
 
+  // Per spec §9.5: Parse and apply per-source scrape config
+  const scrapeConfig = parseScrapeConfig(source.scrapeConfig)
+
+  // Apply per-source rate limit if configured
+  if (scrapeConfig?.rateLimit) {
+    const customRateLimit: RateLimitConfig = {
+      requestsPerSecond: scrapeConfig.rateLimit.requestsPerSecond ?? DEFAULT_RATE_LIMIT.requestsPerSecond,
+      minDelayMs: scrapeConfig.rateLimit.minDelayMs ?? DEFAULT_RATE_LIMIT.minDelayMs,
+      maxConcurrent: scrapeConfig.rateLimit.maxConcurrent ?? DEFAULT_RATE_LIMIT.maxConcurrent,
+    }
+    rateLimiter!.setConfig(adapter.domain, customRateLimit)
+    jobLogger.debug('Applied per-source rate limit', {
+      domain: adapter.domain,
+      requestsPerSecond: customRateLimit.requestsPerSecond,
+    })
+  }
+
   // Acquire rate limit
   jobLogger.debug('Acquiring rate limit', { domain: adapter.domain })
   await rateLimiter!.acquire(adapter.domain)
 
-  // Fetch HTML
+  // Fetch HTML with optional custom headers
   jobLogger.debug('Fetching URL')
-  const fetchResult = await fetcher!.fetch(url)
+  const fetchOptions = scrapeConfig?.customHeaders
+    ? { headers: scrapeConfig.customHeaders }
+    : undefined
+  const fetchResult = await fetcher!.fetch(url, fetchOptions)
 
   if (fetchResult.status !== 'ok') {
     jobLogger.warn('Fetch failed', {
@@ -191,10 +214,11 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
       details: extractResult.details,
     })
 
-    // Track as OOS_NO_PRICE if that's the reason (expected, not failure)
+    // Track as OOS_NO_PRICE if that's the reason (neutral - neither success nor failure)
+    // Per spec: OOS_NO_PRICE doesn't affect failureRate or yieldRate
     if (extractResult.reason === 'OOS_NO_PRICE') {
       await incrementRunMetric(runId, 'oosNoPriceCount')
-      await incrementRunMetric(runId, 'urlsSucceeded') // Technically succeeded
+      // No urlsSucceeded++ or urlsFailed++ - it's a neutral outcome
     } else {
       await incrementRunMetric(runId, 'urlsFailed')
     }

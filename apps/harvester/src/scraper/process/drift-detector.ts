@@ -34,14 +34,14 @@ const MIN_RUNS_FOR_BASELINE = 3
 
 /**
  * Compute derived metrics from raw run metrics.
+ * Per spec: OOS_NO_PRICE is neither success nor failure, already excluded from urlsFailed.
  */
 export function computeDerivedMetrics(metrics: ScrapeRunMetrics): DerivedMetrics {
-  // Adjust failure count to exclude OOS_NO_PRICE (expected behavior)
-  const adjustedFailed = metrics.urlsFailed - metrics.oosNoPriceCount
-
+  // failureRate = urlsFailed / urlsAttempted
+  // OOS_NO_PRICE is already excluded from urlsFailed (neutral outcome)
   const failureRate =
     metrics.urlsAttempted > 0
-      ? Math.max(0, adjustedFailed) / metrics.urlsAttempted
+      ? metrics.urlsFailed / metrics.urlsAttempted
       : 0
 
   const dropRate =

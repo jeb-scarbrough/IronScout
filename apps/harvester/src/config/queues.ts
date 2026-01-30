@@ -742,8 +742,10 @@ export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<ScrapeEn
       }
     }
 
-    // Check total queue capacity
-    const pendingCount = await scrapeUrlQueue.count()
+    // Check total queue capacity (pending = waiting + active only)
+    // Per spec: capacity defined in terms of pending URLs, not including completed/failed
+    const jobCounts = await scrapeUrlQueue.getJobCounts('waiting', 'active', 'delayed')
+    const pendingCount = jobCounts.waiting + jobCounts.active + jobCounts.delayed
     if (pendingCount >= MAX_SCRAPE_QUEUE_SIZE) {
       rootLogger.warn('[enqueueScrapeUrl] Queue at capacity, rejecting job', {
         targetId: data.targetId,
