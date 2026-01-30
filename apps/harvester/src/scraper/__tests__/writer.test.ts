@@ -210,6 +210,8 @@ describe('finalizeRun', () => {
       'SUCCESS'
     )
 
+    // failureRate = urlsFailed / urlsAttempted = 2/10 = 0.2
+    // (oosNoPriceCount is already excluded from urlsFailed, no subtraction needed)
     expect(mocks.mockScrapeRuns.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'run-1' },
@@ -219,7 +221,7 @@ describe('finalizeRun', () => {
           urlsSucceeded: 8,
           urlsFailed: 2,
           offersValid: 7,
-          failureRate: 0.1,
+          failureRate: 0.2,
           yieldRate: 0.7,
         }),
       })

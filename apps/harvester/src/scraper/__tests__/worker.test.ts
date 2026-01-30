@@ -263,7 +263,8 @@ describe('Scrape URL Worker', () => {
     await mocks.state.processor!(job)
 
     expect(mocks.fetchImpl).not.toHaveBeenCalled()
-    expect(mocks.mockUpdateTargetTracking).toHaveBeenCalledWith('target-1', false)
+    // Per spec: admin-blocked URLs skip without counting as failure
+    expect(mocks.mockUpdateTargetTracking).not.toHaveBeenCalled()
   })
 
   it('writes offer on success path', async () => {
