@@ -664,19 +664,26 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
       return { success: false, error: 'Adapter is disabled' }
     }
 
-    // Per spec §8.2: Check for backpressure before accepting manual triggers
-    // Count pending manual requests for this adapter (proxy for queue capacity)
-    const pendingManualCount = await prisma.scrape_targets.count({
-      where: {
-        adapterId: target.adapterId,
-        lastStatus: 'PENDING_MANUAL',
-      },
-    })
+    // Per spec §8.2: Check queue capacity before accepting manual triggers
+    // Check both pending manual AND enqueued targets as proxy for actual queue capacity
+    const [pendingManualCount, enqueuedCount] = await Promise.all([
+      prisma.scrape_targets.count({
+        where: {
+          adapterId: target.adapterId,
+          lastStatus: 'PENDING_MANUAL',
+        },
+      }),
+      prisma.scrape_targets.count({
+        where: {
+          adapterId: target.adapterId,
+          lastStatus: 'ENQUEUED',
+        },
+      }),
+    ])
 
+    // Per spec §8.2: Cap manual requests per adapter
     const MAX_PENDING_MANUAL_PER_ADAPTER = 10
     if (pendingManualCount >= MAX_PENDING_MANUAL_PER_ADAPTER) {
-      // Per spec §8.2: Surface Retry-After in backpressure response
-      // Estimate 30s per pending request as a reasonable retry hint
       const retryAfterMs = Math.min(pendingManualCount * 30000, 300000) // Cap at 5 min
       return {
         success: false,
@@ -685,19 +692,32 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
       }
     }
 
+    // Per spec §8.2: Check actual queue capacity (enqueued jobs)
+    // Per spec §8.1: MAX_PENDING_PER_ADAPTER default is 1000
+    const MAX_ENQUEUED_PER_ADAPTER = 1000
+    if (enqueuedCount >= MAX_ENQUEUED_PER_ADAPTER) {
+      const retryAfterMs = 120000 // 2 minutes - queue is at capacity
+      return {
+        success: false,
+        error: `Queue is at capacity for this adapter (${enqueuedCount} jobs). Please wait ${Math.ceil(retryAfterMs / 1000)} seconds and try again.`,
+        retryAfterMs,
+      }
+    }
+
     // Also check total pending across all adapters for global backpressure
-    const totalPendingManual = await prisma.scrape_targets.count({
+    const totalPending = await prisma.scrape_targets.count({
       where: {
-        lastStatus: 'PENDING_MANUAL',
+        lastStatus: { in: ['PENDING_MANUAL', 'ENQUEUED'] },
       },
     })
 
-    const MAX_TOTAL_PENDING_MANUAL = 50
-    if (totalPendingManual >= MAX_TOTAL_PENDING_MANUAL) {
-      const retryAfterMs = 60000 // 1 minute
+    // Per spec §8.1: MAX_PENDING_TOTAL default is 10000
+    const MAX_TOTAL_PENDING = 10000
+    if (totalPending >= MAX_TOTAL_PENDING) {
+      const retryAfterMs = 120000 // 2 minutes
       return {
         success: false,
-        error: `System is processing many requests. Please wait ${Math.ceil(retryAfterMs / 1000)} seconds and try again.`,
+        error: `System queue is at capacity (${totalPending} jobs). Please wait ${Math.ceil(retryAfterMs / 1000)} seconds and try again.`,
         retryAfterMs,
       }
     }

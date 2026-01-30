@@ -38,7 +38,8 @@ const adapterBackoffState = new Map<string, { backoffUntil: number; consecutiveR
 let globalPauseUntil: number | null = null
 let globalConsecutiveRejections = 0
 const GLOBAL_PAUSE_BASE_MS = 60000 // 1 minute base pause
-const GLOBAL_PAUSE_MAX_MS = 5 * 60 * 1000 // 5 minute max pause
+const GLOBAL_PAUSE_MAX_MS = 60 * 60 * 1000 // 1 hour max pause per spec §8.3
+const GLOBAL_PAUSE_ALERT_THRESHOLD_MS = 30 * 60 * 1000 // Alert if backoff > 30 min per spec §8.3
 
 /**
  * Check if scheduler is globally paused.
@@ -56,21 +57,34 @@ function isGloballyPaused(): boolean {
 /**
  * Trigger global pause when backpressure is severe.
  * Per spec §8.3: Uses exponential backoff across consecutive rejection cycles.
+ * Max backoff is 1 hour. Alert if backoff exceeds 30 minutes.
  */
 function triggerGlobalPause(retryAfterMs?: number): void {
   globalConsecutiveRejections++
 
-  // Exponential backoff: base * 2^(consecutive-1), capped at max
+  // Exponential backoff: base * 2^(consecutive-1), capped at 1 hour
+  // With 1min base: 1, 2, 4, 8, 16, 32, 60 (capped) minutes
   const baseMs = retryAfterMs ?? GLOBAL_PAUSE_BASE_MS
-  const multiplier = Math.pow(2, Math.min(globalConsecutiveRejections - 1, 4))
+  const multiplier = Math.pow(2, globalConsecutiveRejections - 1)
   const pauseDurationMs = Math.min(baseMs * multiplier, GLOBAL_PAUSE_MAX_MS)
 
   globalPauseUntil = Date.now() + pauseDurationMs
-  log.warn('Triggering global scheduler pause due to high rejection rate', {
-    pauseUntil: new Date(globalPauseUntil),
-    durationMs: pauseDurationMs,
-    consecutiveRejections: globalConsecutiveRejections,
-  })
+
+  // Per spec §8.3: Alert if backoff exceeds 30 minutes (persistent capacity issue)
+  if (pauseDurationMs >= GLOBAL_PAUSE_ALERT_THRESHOLD_MS) {
+    log.error('ALERT: Scheduler backoff exceeds 30 minutes - persistent capacity issue', {
+      pauseUntil: new Date(globalPauseUntil),
+      durationMs: pauseDurationMs,
+      durationMinutes: Math.round(pauseDurationMs / 60000),
+      consecutiveRejections: globalConsecutiveRejections,
+    })
+  } else {
+    log.warn('Triggering global scheduler pause due to high rejection rate', {
+      pauseUntil: new Date(globalPauseUntil),
+      durationMs: pauseDurationMs,
+      consecutiveRejections: globalConsecutiveRejections,
+    })
+  }
 }
 
 /**
