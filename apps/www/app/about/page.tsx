@@ -39,13 +39,13 @@ export default function About() {
                 For Retailers
               </a>
               <a
-                href={`${APP_URL}/login`}
+                href={`${APP_URL}/auth/signin`}
                 className="text-iron-300 hover:text-white text-sm font-medium transition-colors"
               >
                 Sign In
               </a>
               <a
-                href={`${APP_URL}/register`}
+                href={`${APP_URL}/auth/signup`}
                 className="btn-primary text-sm py-2"
               >
                 Get Started

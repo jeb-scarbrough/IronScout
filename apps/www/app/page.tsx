@@ -97,13 +97,13 @@ export default function Home() {
                 For Retailers
               </a>
               <a
-                href={`${APP_URL}/login`}
+                href={`${APP_URL}/auth/signin`}
                 className="text-iron-300 hover:text-white text-sm font-medium transition-colors"
               >
                 Sign In
               </a>
               <a
-                href={`${APP_URL}/register`}
+                href={`${APP_URL}/auth/signup`}
                 className="btn-primary text-sm py-2"
               >
                 Get Started
@@ -187,7 +187,7 @@ export default function Home() {
                 Tell us what you shoot. We'll alert you to price drops and back-in-stock items.
               </p>
               <a
-                href={`${APP_URL}/register`}
+                href={`${APP_URL}/auth/signup`}
                 className="btn-primary inline-flex items-center"
               >
                 Create Free Account Today
@@ -362,7 +362,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </a>
-            <a href={`${APP_URL}/register`} className="btn-secondary text-lg px-8 py-4">
+            <a href={`${APP_URL}/auth/signup`} className="btn-secondary text-lg px-8 py-4">
               Create Free Account
             </a>
           </div>
