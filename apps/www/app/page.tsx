@@ -73,13 +73,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
                 <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
               <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
+                Iron<span className="text-primary">Scout</span>
               </span>
             </div>
 
@@ -117,7 +117,7 @@ export default function Home() {
       <section className="relative min-h-screen flex items-center pt-16">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-brass-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
           <div className="absolute bottom-1/4 -left-64 w-[500px] h-[500px] bg-gunmetal-500/10 rounded-full blur-3xl" />
         </div>
 
@@ -146,12 +146,12 @@ export default function Home() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by caliber, use case, or intent..."
                   className="w-full pl-12 pr-32 py-4 text-lg bg-iron-900 border-2 border-iron-700 rounded-2xl
-                           focus:border-brass-500 focus:ring-4 focus:ring-brass-500/20
+                           focus:border-primary focus:ring-4 focus:ring-primary/20
                            transition-all text-iron-100 placeholder:text-iron-500"
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 px-6 py-2.5 bg-brass-500 hover:bg-brass-400
+                  className="absolute right-2 px-6 py-2.5 bg-primary hover:bg-primary/80
                            text-iron-950 font-semibold rounded-xl transition-all
                            flex items-center gap-2"
                 >
@@ -172,8 +172,8 @@ export default function Home() {
                     key={i}
                     onClick={() => handleExampleClick(example)}
                     className="text-sm px-3 py-1.5 rounded-full border border-iron-700
-                             hover:border-brass-500 hover:bg-brass-500/10
-                             transition-colors text-iron-400 hover:text-brass-400"
+                             hover:border-primary hover:bg-primary/10
+                             transition-colors text-iron-400 hover:text-primary"
                   >
                     {example}
                   </button>
@@ -245,7 +245,7 @@ export default function Home() {
               },
             ].map((feature, i) => (
               <div key={i} className="card group hover:border-iron-600 transition-colors">
-                <div className="w-12 h-12 bg-brass-500/10 rounded-lg flex items-center justify-center text-brass-400 mb-4 group-hover:bg-brass-500/20 transition-colors">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:bg-primary/20 transition-colors">
                   {feature.icon}
                 </div>
                 <h3 className="font-display text-xl font-semibold mb-2">{feature.title}</h3>
@@ -374,13 +374,13 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
                 <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
               <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
+                Iron<span className="text-primary">Scout</span>
               </span>
             </div>
 

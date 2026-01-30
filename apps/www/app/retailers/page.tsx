@@ -15,13 +15,13 @@ export default function Retailers() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <a href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
                 <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
               <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
+                Iron<span className="text-primary">Scout</span>
               </span>
             </a>
 
@@ -276,7 +276,7 @@ export default function Retailers() {
             <p className="leading-relaxed">
               If you have questions about how your products appear, data accuracy, or
               available data interfaces, you can reach us at{' '}
-              <a href="mailto:retailers@ironscout.ai" className="text-brass-400 hover:text-brass-300">
+              <a href="mailto:retailers@ironscout.ai" className="text-primary hover:text-primary/80">
                 retailers@ironscout.ai
               </a>
             </p>

@@ -266,8 +266,8 @@ button, a {
 
 .btn-primary {
   @apply inline-flex items-center justify-center px-6 py-3
-         bg-brass-500 hover:bg-brass-400
-         text-iron-950 font-semibold
+         bg-primary hover:bg-primary/80
+         text-primary-foreground font-semibold
          rounded transition-all duration-200
          hover:shadow-lg
          active:scale-[0.98];
@@ -285,7 +285,7 @@ button, a {
   @apply w-full px-4 py-3
          bg-iron-900/50 border border-iron-700
          rounded text-iron-100 placeholder:text-iron-500
-         focus:outline-none focus:border-brass-500 focus:ring-1 focus:ring-brass-500/50
+         focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50
          transition-all duration-200;
 }
 
@@ -300,7 +300,7 @@ button, a {
 }
 
 .text-gradient {
-  @apply bg-linear-to-r from-brass-400 to-brass-600 bg-clip-text text-transparent;
+  @apply bg-linear-to-r from-primary to-primary/60 bg-clip-text text-transparent;
 }
 
 /* ===========================================

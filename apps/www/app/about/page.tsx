@@ -15,13 +15,13 @@ export default function About() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <a href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
                 <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
               <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
+                Iron<span className="text-primary">Scout</span>
               </span>
             </a>
 
@@ -58,14 +58,14 @@ export default function About() {
       {/* Hero Section */}
       <section className="relative pt-32 pb-16">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 -right-64 w-[600px] h-[600px] bg-brass-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-0 -right-64 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
         </div>
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">
             About IronScout
           </h1>
-          <p className="text-xl sm:text-2xl text-brass-400 font-medium mb-8">
+          <p className="text-xl sm:text-2xl text-primary font-medium mb-8">
             Built for How Shooters Actually Buy
           </p>
           <p className="text-lg text-iron-300 leading-relaxed max-w-3xl">
@@ -97,7 +97,7 @@ export default function About() {
             <div className="bg-iron-900/50 border border-iron-800 rounded-lg p-6 mt-8">
               <p className="text-iron-200 leading-relaxed">
                 Different situations call for different priorities.<br />
-                <span className="text-brass-400">Range ammo, carry ammo, and match ammo</span> should
+                <span className="text-primary">Range ammo, carry ammo, and match ammo</span> should
                 not be surfaced or ordered the same way.
               </p>
               <p className="text-iron-100 font-medium mt-4">
@@ -147,13 +147,13 @@ export default function About() {
             <p className="leading-relaxed">
               When you save an item, IronScout monitors it in the background and alerts you
               when something meaningful changes—such as a price drop or a restock.
-              This turns searching into <span className="text-brass-400">readiness</span>.
+              This turns searching into <span className="text-primary">readiness</span>.
             </p>
             <p className="leading-relaxed">
               Instead of repeatedly checking listings, you get notified when conditions are
               favorable and can buy with real context, not guesswork.
             </p>
-            <div className="border-l-2 border-brass-500 pl-6 mt-8">
+            <div className="border-l-2 border-primary pl-6 mt-8">
               <p className="text-iron-200 italic">
                 IronScout does not push urgency or tell you what to buy.<br />
                 It exists to make informed action easier.
@@ -179,19 +179,19 @@ export default function About() {
             </p>
             <ul className="space-y-3 ml-4">
               <li className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-brass-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span>Improve search relevance</span>
               </li>
               <li className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-brass-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span>Focus alerts on ammo you actually care about</span>
               </li>
               <li className="flex items-start gap-3">
-                <svg className="w-5 h-5 text-brass-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span>Personalize dashboards and market views</span>
@@ -270,9 +270,9 @@ export default function About() {
           </h2>
           <div className="space-y-6 text-iron-300">
             <p className="text-lg leading-relaxed">
-              IronScout is built for shooters who value <span className="text-brass-400">clarity over noise</span>,
-              <span className="text-brass-400"> understanding over impulse</span>, and
-              <span className="text-brass-400"> confidence over constant searching</span>.
+              IronScout is built for shooters who value <span className="text-primary">clarity over noise</span>,
+              <span className="text-primary"> understanding over impulse</span>, and
+              <span className="text-primary"> confidence over constant searching</span>.
             </p>
             <div className="border-l-2 border-iron-700 pl-6">
               <p className="text-iron-400">
@@ -303,7 +303,7 @@ export default function About() {
           </div>
           <p className="text-iron-500 text-sm mt-8">
             Questions or feedback?{' '}
-            <a href="mailto:hello@ironscout.ai" className="text-brass-400 hover:text-brass-300">
+            <a href="mailto:hello@ironscout.ai" className="text-primary hover:text-primary/80">
               hello@ironscout.ai
             </a>
           </p>
