@@ -286,11 +286,11 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
       hasIdToken: !!req.body?.idToken,
     })
 
-    // Check JWT_SECRET before proceeding
+    // Check NEXTAUTH_SECRET before proceeding
     if (!JWT_SECRET) {
-      log.error('JWT_SECRET not configured - cannot generate tokens')
+      log.error('NEXTAUTH_SECRET not configured - cannot generate tokens')
       return res.status(500).json({
-        error: 'Server configuration error: JWT_SECRET not set',
+        error: 'Server configuration error: NEXTAUTH_SECRET not set',
       })
     }
 
@@ -503,11 +503,11 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
 
 router.post('/oauth/link', authRateLimits.oauth, async (req: Request, res: Response) => {
   try {
-    // Check JWT_SECRET before proceeding
+    // Check NEXTAUTH_SECRET before proceeding
     if (!JWT_SECRET) {
-      log.error('JWT_SECRET not configured - cannot link OAuth account')
+      log.error('NEXTAUTH_SECRET not configured - cannot link OAuth account')
       return res.status(500).json({
-        error: 'Server configuration error: JWT_SECRET not set',
+        error: 'Server configuration error: NEXTAUTH_SECRET not set',
       })
     }
 

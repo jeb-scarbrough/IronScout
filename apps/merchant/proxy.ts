@@ -4,12 +4,10 @@ import { jwtVerify } from 'jose';
 
 // All apps use NEXTAUTH_SECRET as the single JWT secret
 const jwtSecretString = process.env.NEXTAUTH_SECRET;
-if (!jwtSecretString && process.env.NODE_ENV === 'production') {
-  console.warn('[merchant-proxy] WARNING: NEXTAUTH_SECRET not configured. Auth will fail.');
+if (!jwtSecretString) {
+  throw new Error('NEXTAUTH_SECRET not configured');
 }
-const JWT_SECRET = new TextEncoder().encode(
-  jwtSecretString || 'dev-only-secret-not-for-production'
-);
+const JWT_SECRET = new TextEncoder().encode(jwtSecretString);
 
 // Admin impersonation uses the same secret
 const ADMIN_IMPERSONATION_SECRET = JWT_SECRET;

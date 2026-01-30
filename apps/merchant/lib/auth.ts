@@ -23,10 +23,10 @@ import { logger } from './logger';
 // All apps use NEXTAUTH_SECRET as the single JWT secret
 function getJwtSecret(): Uint8Array {
   const jwtSecretString = process.env.NEXTAUTH_SECRET;
-  if (!jwtSecretString && process.env.NODE_ENV === 'production') {
-    console.warn('[merchant-auth] WARNING: NEXTAUTH_SECRET not configured. Auth will fail.');
+  if (!jwtSecretString) {
+    throw new Error('NEXTAUTH_SECRET not configured');
   }
-  return new TextEncoder().encode(jwtSecretString || 'dev-only-secret-not-for-production');
+  return new TextEncoder().encode(jwtSecretString);
 }
 
 // Lazy-loaded to avoid build-time errors
@@ -323,9 +323,9 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       return null;
     }
 
-    const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+    const secret = process.env.NEXTAUTH_SECRET;
     if (!secret) {
-      logger.warn('Admin session unavailable - missing NEXTAUTH_SECRET/AUTH_SECRET');
+      logger.warn('Admin session unavailable - missing NEXTAUTH_SECRET');
       return null;
     }
 

@@ -8,8 +8,7 @@ const configPath = path.resolve(__dirname, '../../../next.config.js')
 const configText = readFileSync(configPath, 'utf8')
 
 describe('next.config.js secret exposure', () => {
-  it('does not inline NEXTAUTH_SECRET or JWT_SECRET', () => {
+  it('does not inline NEXTAUTH_SECRET', () => {
     expect(configText).not.toMatch(/NEXTAUTH_SECRET/)
-    expect(configText).not.toMatch(/JWT_SECRET/)
   })
 })
