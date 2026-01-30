@@ -116,14 +116,16 @@ export default function RootLayout({
         {/* Microsoft Tiles */}
         <meta name="msapplication-TileColor" content="#121418" />
         <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
-        
-        {/* Third-party Scripts */}
-        <Script
-          src="https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=83b35735960abca5c62924f3fbe01e4e919343a3"
-          strategy="afterInteractive"
-        />
       </head>
       <body className="font-display antialiased">
+        {/* Third-party Scripts - AvantLink affiliate confirmation */}
+        <Script
+          {...{
+            id: 'avantlink-confirm',
+            src: 'https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=83b35735960abca5c62924f3fbe01e4e919343a3',
+            strategy: 'afterInteractive',
+          } as React.ComponentProps<typeof Script>}
+        />
         <Providers>
           <div className="min-h-screen flex flex-col safe-area-inset">
             <Header />
