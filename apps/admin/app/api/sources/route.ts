@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sources })
   } catch (error) {
     console.error('Error fetching sources:', error)
-    return NextResponse.json({ error: 'Failed to fetch sources' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: 'Failed to fetch sources', details: message }, { status: 500 })
   }
 }
