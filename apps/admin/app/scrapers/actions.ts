@@ -12,6 +12,7 @@ import { prisma, Prisma } from '@ironscout/db'
 import { revalidatePath } from 'next/cache'
 import { getAdminSession, logAdminAction } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
+import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
 
 const log = loggers.admin
 
@@ -788,12 +789,6 @@ export async function toggleSourceScrapeEnabled(sourceId: string, enabled: boole
 // =============================================================================
 // Source Scrape Configuration
 // =============================================================================
-
-/** Known adapters - must match harvester registry */
-export const KNOWN_ADAPTERS = [
-  { id: 'sgammo', name: 'SGAmmo', domain: 'sgammo.com' },
-  // Add new adapters here as they're implemented
-] as const
 
 export async function updateSourceScrapeConfig(
   sourceId: string,

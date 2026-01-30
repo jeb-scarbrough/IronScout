@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
-import { updateSourceScrapeConfig, KNOWN_ADAPTERS } from '@/app/scrapers/actions';
+import { updateSourceScrapeConfig } from '@/app/scrapers/actions';
+import { KNOWN_ADAPTERS } from '@/lib/scraper-constants';
 
 interface Source {
   id: string;
