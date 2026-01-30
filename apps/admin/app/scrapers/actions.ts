@@ -16,6 +16,88 @@ import { loggers } from '@/lib/logger'
 const log = loggers.admin
 
 // =============================================================================
+// URL Canonicalization (per scraper-framework-01 Appendix A)
+// =============================================================================
+
+/**
+ * Tracking parameters to remove from URLs.
+ * Per Appendix A: Remove marketing/analytics parameters.
+ */
+const TRACKING_PARAMS = new Set([
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'fbclid',
+  'gclid',
+  'ref',
+  'source',
+  'campaign',
+])
+
+/**
+ * Canonicalize a URL for deduplication.
+ * Per scraper-framework-01 Appendix A:
+ * 1. Enforce https
+ * 2. Remove tracking parameters
+ * 3. Remove fragment identifiers
+ * 4. Lowercase hostname
+ * 5. Remove trailing slash (except root)
+ * 6. Remove empty query parameters
+ * 7. Sort query parameters alphabetically
+ */
+function canonicalizeUrl(url: string): string {
+  const parsed = new URL(url)
+
+  // 1. Enforce https
+  parsed.protocol = 'https:'
+
+  // 2. Lowercase hostname
+  parsed.hostname = parsed.hostname.toLowerCase()
+
+  // 3. Remove tracking params
+  for (const param of TRACKING_PARAMS) {
+    parsed.searchParams.delete(param)
+  }
+
+  // Also remove any utm_* params not in our explicit list
+  const keysToDelete: string[] = []
+  for (const key of parsed.searchParams.keys()) {
+    if (key.startsWith('utm_')) {
+      keysToDelete.push(key)
+    }
+  }
+  for (const key of keysToDelete) {
+    parsed.searchParams.delete(key)
+  }
+
+  // 4. Remove empty query parameters
+  const emptyKeys: string[] = []
+  for (const [key, value] of parsed.searchParams.entries()) {
+    if (value === '') {
+      emptyKeys.push(key)
+    }
+  }
+  for (const key of emptyKeys) {
+    parsed.searchParams.delete(key)
+  }
+
+  // 5. Sort remaining params alphabetically
+  parsed.searchParams.sort()
+
+  // 6. Remove fragment
+  parsed.hash = ''
+
+  // 7. Remove trailing slash (except root)
+  if (parsed.pathname !== '/' && parsed.pathname.endsWith('/')) {
+    parsed.pathname = parsed.pathname.slice(0, -1)
+  }
+
+  return parsed.toString()
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -224,9 +306,8 @@ export async function createScrapeTarget(data: CreateTargetInput): Promise<{ suc
   if (validationError) return { success: false, error: validationError }
 
   try {
-    // Canonicalize URL
-    const url = new URL(data.url.trim())
-    const canonicalUrl = `${url.origin}${url.pathname}`.toLowerCase()
+    // Canonicalize URL per scraper-framework-01 Appendix A
+    const canonicalUrl = canonicalizeUrl(data.url.trim())
 
     // Check for duplicate
     const existing = await prisma.scrape_targets.findFirst({
@@ -583,21 +664,9 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
       return { success: false, error: 'Adapter is disabled' }
     }
 
-    // Create a manual run record - harvester will pick this up
-    const run = await prisma.scrape_runs.create({
-      data: {
-        adapterId: target.adapterId,
-        adapterVersion: '1.0.0', // Will be updated by worker
-        sourceId: target.sourceId,
-        retailerId: target.sources.retailerId,
-        trigger: 'MANUAL',
-        status: 'RUNNING',
-        startedAt: new Date(),
-        urlsAttempted: 1,
-      },
-    })
-
-    // Update target to indicate manual scrape is pending
+    // Mark target as pending manual scrape
+    // The harvester scheduler will create the run record with correct adapter version
+    // per scraper-framework-01 spec: admin doesn't have access to adapter registry
     await prisma.scrape_targets.update({
       where: { id: targetId },
       data: {
@@ -609,12 +678,11 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
     await logAdminAction(session.userId, 'TRIGGER_MANUAL_SCRAPE', {
       resource: 'ScrapeTarget',
       resourceId: targetId,
-      newValue: { runId: run.id },
     })
 
     revalidatePath('/scrapers')
     revalidatePath(`/scrapers/targets/${targetId}`)
-    return { success: true, runId: run.id }
+    return { success: true }
   } catch (error) {
     log.error('Failed to trigger manual scrape', { targetId }, error instanceof Error ? error : new Error(String(error)))
     return { success: false, error: 'Failed to trigger scrape' }

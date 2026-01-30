@@ -615,6 +615,26 @@ export interface ScrapeUrlJobData {
 }
 
 /**
+ * Result of attempting to enqueue a scrape job.
+ * Per spec §8.1-8.3: Backpressure and queue capacity handling.
+ */
+export interface ScrapeEnqueueResult {
+  status: 'accepted' | 'rejected' | 'deduplicated'
+  jobId: string
+  reason?: 'queue_full' | 'adapter_disabled' | 'rate_limited'
+  retryAfterMs?: number
+}
+
+/**
+ * Maximum pending jobs in the scrape queue.
+ * Per spec §8.1: Queue rejects when at capacity.
+ */
+export const MAX_SCRAPE_QUEUE_SIZE = parseInt(
+  process.env.MAX_SCRAPE_QUEUE_SIZE || '10000',
+  10
+)
+
+/**
  * Scrape URL queue
  * Per spec §10.1:
  * - JobId format: SCRAPE_<targetId>_<runId>
@@ -634,20 +654,42 @@ export const scrapeUrlQueue = new Queue<ScrapeUrlJobData>(QUEUE_NAMES.SCRAPE_URL
 })
 
 /**
- * Enqueue a scrape URL job
+ * Enqueue a scrape URL job with backpressure support.
+ *
+ * Per spec §8.1-8.3:
+ * - Check queue capacity before accepting
+ * - Return structured result with rejection reason
+ * - Scheduler backs off when jobs rejected
  *
  * @param data - Job data
- * @returns Job ID
+ * @returns Enqueue result with status and optional rejection reason
  */
-export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<string> {
+export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<ScrapeEnqueueResult> {
   const jobId = `SCRAPE_${data.targetId}_${data.runId}`
 
   try {
+    // Check queue capacity before accepting
+    const pendingCount = await scrapeUrlQueue.count()
+    if (pendingCount >= MAX_SCRAPE_QUEUE_SIZE) {
+      rootLogger.warn('[enqueueScrapeUrl] Queue at capacity, rejecting job', {
+        targetId: data.targetId,
+        runId: data.runId,
+        pendingCount,
+        maxSize: MAX_SCRAPE_QUEUE_SIZE,
+      })
+      return {
+        status: 'rejected',
+        jobId,
+        reason: 'queue_full',
+        retryAfterMs: 60000, // Suggest retry after 1 minute
+      }
+    }
+
     await scrapeUrlQueue.add('SCRAPE_URL', data, {
       jobId,
       priority: data.priority,
     })
-    return jobId
+    return { status: 'accepted', jobId }
   } catch (err: any) {
     // Job already exists - this is expected deduplication
     if (err?.message?.includes('Job already exists')) {
@@ -655,7 +697,7 @@ export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<string> 
         targetId: data.targetId,
         runId: data.runId,
       })
-      return jobId
+      return { status: 'deduplicated', jobId }
     }
     rootLogger.error(
       '[enqueueScrapeUrl] Failed to enqueue scrape job',
@@ -663,6 +705,36 @@ export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<string> 
       err
     )
     throw err
+  }
+}
+
+/**
+ * Get current scrape queue statistics.
+ * Useful for monitoring and backpressure decisions.
+ */
+export async function getScrapeQueueStats(): Promise<{
+  waiting: number
+  active: number
+  delayed: number
+  total: number
+  capacity: number
+  utilizationPercent: number
+}> {
+  const [waiting, active, delayed] = await Promise.all([
+    scrapeUrlQueue.getWaitingCount(),
+    scrapeUrlQueue.getActiveCount(),
+    scrapeUrlQueue.getDelayedCount(),
+  ])
+  const total = waiting + active + delayed
+  const utilizationPercent = Math.round((total / MAX_SCRAPE_QUEUE_SIZE) * 100)
+
+  return {
+    waiting,
+    active,
+    delayed,
+    total,
+    capacity: MAX_SCRAPE_QUEUE_SIZE,
+    utilizationPercent,
   }
 }
 

@@ -118,6 +118,7 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
   if (fetchResult.status !== 'ok') {
     jobLogger.warn('Fetch failed', {
       status: fetchResult.status,
+      statusCode: fetchResult.statusCode,
       error: fetchResult.error,
       durationMs: fetchResult.durationMs,
     })
@@ -128,6 +129,12 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     if (shouldMarkUrlBroken(target.consecutiveFailures + 1)) {
       jobLogger.warn('Marking URL as BROKEN after consecutive failures')
       await markTargetBroken(targetId)
+    }
+
+    // Handle persistent robot blocks - auto-update robotsCompliant
+    // Per scraper-framework-01 spec: persistent 403/429 blocks should disable scraping
+    if (fetchResult.status === 'blocked' || fetchResult.statusCode === 429) {
+      await handlePersistentBlock(sourceId, jobLogger)
     }
 
     // Track failure in run metrics
@@ -298,6 +305,78 @@ async function incrementRunMetric(
     })
   } catch (error) {
     log.error('Failed to increment run metric', { runId, field, error })
+  }
+}
+
+/** Threshold for auto-disabling source due to persistent blocks */
+const PERSISTENT_BLOCK_THRESHOLD = 3
+
+/** In-memory tracking of recent blocks per source (cleared on worker restart) */
+const sourceBlockCounts = new Map<string, { count: number; firstBlockAt: number }>()
+
+/** Time window for counting blocks (5 minutes) */
+const BLOCK_WINDOW_MS = 5 * 60 * 1000
+
+/**
+ * Handle persistent robot blocks for a source.
+ *
+ * Per scraper-framework-01 spec: If a source persistently returns 403/429 blocks,
+ * automatically mark sources.robotsCompliant = false to prevent further scraping
+ * until an admin reviews and re-enables.
+ */
+async function handlePersistentBlock(
+  sourceId: string,
+  jobLogger: typeof log
+): Promise<void> {
+  const now = Date.now()
+
+  // Get or initialize block tracking for this source
+  let tracking = sourceBlockCounts.get(sourceId)
+  if (!tracking || now - tracking.firstBlockAt > BLOCK_WINDOW_MS) {
+    // Start fresh window
+    tracking = { count: 1, firstBlockAt: now }
+  } else {
+    tracking.count++
+  }
+  sourceBlockCounts.set(sourceId, tracking)
+
+  jobLogger.debug('Robot block detected', {
+    sourceId,
+    blockCount: tracking.count,
+    threshold: PERSISTENT_BLOCK_THRESHOLD,
+  })
+
+  // Check if threshold reached
+  if (tracking.count >= PERSISTENT_BLOCK_THRESHOLD) {
+    // Mark source as non-robots-compliant
+    try {
+      const source = await prisma.sources.findUnique({
+        where: { id: sourceId },
+        select: { name: true, robotsCompliant: true },
+      })
+
+      if (source && source.robotsCompliant) {
+        await prisma.sources.update({
+          where: { id: sourceId },
+          data: { robotsCompliant: false },
+        })
+
+        jobLogger.warn('Auto-disabled source scraping due to persistent blocks', {
+          sourceId,
+          sourceName: source.name,
+          blockCount: tracking.count,
+          reason: 'persistent_robot_block',
+        })
+
+        // Clear tracking after disabling
+        sourceBlockCounts.delete(sourceId)
+      }
+    } catch (error) {
+      jobLogger.error('Failed to auto-disable source', {
+        sourceId,
+        error: (error as Error).message,
+      })
+    }
   }
 }
 

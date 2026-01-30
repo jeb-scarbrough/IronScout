@@ -13,7 +13,7 @@
 import CronParser from 'cron-parser'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
-import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue } from '../config/queues.js'
+import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats } from '../config/queues.js'
 import { getAdapterRegistry } from './registry.js'
 import { checkAutoDisable } from './process/drift-detector.js'
 import type { ScrapeRunTrigger, ScrapeRunStatus, ScrapeAdapterDisableReason } from '@ironscout/db/generated/prisma'
@@ -24,6 +24,7 @@ const log = loggers.scraper
 /** Scheduler state */
 let schedulerInterval: NodeJS.Timeout | null = null
 let isSchedulerRunning = false
+let lastMaintenanceRun: Date | null = null
 
 /**
  * Scheduler configuration.
@@ -362,6 +363,40 @@ async function createScrapeRun(
 }
 
 /**
+ * Run daily maintenance tasks if due.
+ * Executes once per day (24 hours since last run).
+ */
+async function runDailyMaintenance(): Promise<void> {
+  const now = new Date()
+  const MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+  // Check if maintenance is due
+  if (lastMaintenanceRun && now.getTime() - lastMaintenanceRun.getTime() < MAINTENANCE_INTERVAL_MS) {
+    return
+  }
+
+  log.info('Running daily maintenance')
+  lastMaintenanceRun = now
+
+  try {
+    // Clean up stale and broken URLs
+    const cleanupResult = await cleanupStaleUrls()
+
+    // Recheck broken URLs weekly
+    const recheckResult = await recheckBrokenUrls()
+
+    log.info('Daily maintenance completed', {
+      markedStale: cleanupResult.markedStale,
+      deletedBroken: cleanupResult.deletedBroken,
+      brokenRechecked: recheckResult.rechecked,
+      brokenReactivated: recheckResult.reactivated,
+    })
+  } catch (error) {
+    log.error('Daily maintenance failed', { error: (error as Error).message })
+  }
+}
+
+/**
  * Process pending manual scrape requests.
  *
  * Per spec §8.2: Manual triggers are picked up by the scheduler and processed
@@ -514,14 +549,33 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
   try {
     log.debug('Scheduler tick starting')
 
+    // Check queue capacity before doing work (backpressure)
+    const queueStats = await getScrapeQueueStats()
+    if (queueStats.utilizationPercent >= 90) {
+      log.warn('Scheduler tick skipped - queue at high utilization', {
+        utilization: queueStats.utilizationPercent,
+        total: queueStats.total,
+        capacity: queueStats.capacity,
+      })
+      return
+    }
+
     // Finalize any stale runs before starting new ones
     await finalizeStaleRuns()
+
+    // Run daily maintenance (cleanup stale URLs, broken URL recheck)
+    await runDailyMaintenance()
 
     // Process any pending manual runs first (high priority)
     await processManualRuns()
 
+    // Reduce batch size if queue is getting full
+    const adjustedLimit = queueStats.utilizationPercent >= 50
+      ? Math.floor(config.maxUrlsPerTick / 2)
+      : config.maxUrlsPerTick
+
     // Get due targets for scheduled runs
-    const targets = await getDueTargets(config.maxUrlsPerTick)
+    const targets = await getDueTargets(adjustedLimit)
 
     if (targets.length === 0) {
       log.debug('No targets due for scraping')
@@ -532,8 +586,9 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
 
     const registry = getAdapterRegistry()
 
-    // Group targets by adapter to create runs efficiently
-    const targetsByAdapter = new Map<string, DueTarget[]>()
+    // Group targets by adapter+source to create runs per source
+    // Key format: "adapterId|sourceId"
+    const targetsByAdapterSource = new Map<string, DueTarget[]>()
     for (const target of targets) {
       // Check adapter exists and is enabled
       if (config.checkAdapterEnabled) {
@@ -561,24 +616,27 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         }
       }
 
-      const existing = targetsByAdapter.get(target.adapterId) ?? []
+      // Group by adapter+source combination (runs track metrics per source)
+      const key = `${target.adapterId}|${target.sourceId}`
+      const existing = targetsByAdapterSource.get(key) ?? []
       existing.push(target)
-      targetsByAdapter.set(target.adapterId, existing)
+      targetsByAdapterSource.set(key, existing)
     }
 
-    // Process each adapter group
+    // Process each adapter+source group
     let enqueuedCount = 0
-    for (const [adapterId, adapterTargets] of targetsByAdapter) {
+    let rejectedCount = 0
+    for (const [key, sourceTargets] of targetsByAdapterSource) {
+      const [adapterId, sourceId] = key.split('|')
       const adapter = registry.get(adapterId)
       if (!adapter) continue
 
-      // Create a run for this batch
-      // Use the first target's source/retailer for the run record
-      const firstTarget = adapterTargets[0]
+      // Create a run for this source batch
+      const firstTarget = sourceTargets[0]
       const runId = await createScrapeRun(
         adapterId,
         adapter.version,
-        firstTarget.sourceId,
+        sourceId,
         firstTarget.retailerId,
         'SCHEDULED'
       )
@@ -586,11 +644,15 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
       log.info('Created scrape run', {
         runId,
         adapterId,
-        targetCount: adapterTargets.length,
+        sourceId,
+        targetCount: sourceTargets.length,
       })
 
-      // Enqueue jobs for each target
-      for (const target of adapterTargets) {
+      // Enqueue jobs for each target with backpressure tracking
+      let acceptedInRun = 0
+      let rejectedInRun = 0
+
+      for (const target of sourceTargets) {
         const jobData: ScrapeUrlJobData = {
           targetId: target.id,
           url: target.url,
@@ -602,19 +664,38 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
           trigger: 'SCHEDULED',
         }
 
-        await enqueueScrapeUrl(jobData)
-        enqueuedCount++
+        const result = await enqueueScrapeUrl(jobData)
+
+        if (result.status === 'accepted') {
+          enqueuedCount++
+          acceptedInRun++
+        } else if (result.status === 'rejected') {
+          rejectedCount++
+          rejectedInRun++
+          // If >50% rejections in this run, stop enqueueing
+          if (rejectedInRun > acceptedInRun && acceptedInRun > 0) {
+            log.warn('Stopping enqueue for run - high rejection rate', {
+              runId,
+              accepted: acceptedInRun,
+              rejected: rejectedInRun,
+              reason: result.reason,
+            })
+            break
+          }
+        }
+        // deduplicated doesn't count as either
       }
 
-      // Update run with URL count
+      // Update run with actual enqueued count
       await prisma.scrape_runs.update({
         where: { id: runId },
-        data: { urlsAttempted: adapterTargets.length },
+        data: { urlsAttempted: acceptedInRun },
       })
     }
 
     log.info('Scheduler tick completed', {
       enqueuedCount,
+      rejectedCount,
       durationMs: Date.now() - tickStart,
     })
   } catch (error) {
@@ -675,6 +756,150 @@ export function stopScrapeScheduler(): void {
  */
 export function isScrapeSchedulerRunning(): boolean {
   return schedulerInterval !== null
+}
+
+// =============================================================================
+// Maintenance Jobs
+// =============================================================================
+
+/** Days after which a target without scrape success is marked STALE */
+const STALE_AFTER_DAYS = 30
+
+/** Days after which a BROKEN target is deleted */
+const DELETE_BROKEN_AFTER_DAYS = 90
+
+/**
+ * Clean up stale and broken URLs.
+ *
+ * Per scraper-framework-01 spec:
+ * - Mark targets as STALE if not scraped in > 30 days
+ * - Delete targets that have been BROKEN for > 90 days
+ *
+ * This runs daily as part of scheduler maintenance.
+ */
+export async function cleanupStaleUrls(): Promise<{
+  markedStale: number
+  deletedBroken: number
+}> {
+  const now = new Date()
+  const staleThreshold = new Date(now.getTime() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000)
+  const deleteThreshold = new Date(now.getTime() - DELETE_BROKEN_AFTER_DAYS * 24 * 60 * 60 * 1000)
+
+  let markedStale = 0
+  let deletedBroken = 0
+
+  try {
+    // Mark ACTIVE targets as STALE if not scraped in > STALE_AFTER_DAYS
+    const staleResult = await prisma.scrape_targets.updateMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { lastScrapedAt: { lt: staleThreshold } },
+          { lastScrapedAt: null, createdAt: { lt: staleThreshold } },
+        ],
+      },
+      data: {
+        status: 'STALE',
+        updatedAt: now,
+      },
+    })
+    markedStale = staleResult.count
+
+    if (markedStale > 0) {
+      log.info('Marked stale targets', { count: markedStale, thresholdDays: STALE_AFTER_DAYS })
+    }
+
+    // Delete BROKEN targets older than DELETE_BROKEN_AFTER_DAYS
+    const deletedResult = await prisma.scrape_targets.deleteMany({
+      where: {
+        status: 'BROKEN',
+        updatedAt: { lt: deleteThreshold },
+      },
+    })
+    deletedBroken = deletedResult.count
+
+    if (deletedBroken > 0) {
+      log.info('Deleted old broken targets', { count: deletedBroken, thresholdDays: DELETE_BROKEN_AFTER_DAYS })
+    }
+  } catch (error) {
+    log.error('Failed to cleanup stale URLs', { error: (error as Error).message })
+  }
+
+  return { markedStale, deletedBroken }
+}
+
+/** Days between broken URL rechecks */
+const RECHECK_BROKEN_AFTER_DAYS = 7
+
+/** Maximum broken URLs to recheck per day */
+const MAX_BROKEN_RECHECK_PER_DAY = 50
+
+/**
+ * Recheck BROKEN URLs weekly to see if they've recovered.
+ *
+ * Per scraper-framework-01 spec:
+ * - BROKEN URLs should be rechecked weekly in case the issue was temporary
+ * - If a recheck succeeds, mark the target as ACTIVE again
+ * - Recheck is low priority and limited to avoid overloading
+ */
+export async function recheckBrokenUrls(): Promise<{
+  rechecked: number
+  reactivated: number
+}> {
+  const now = new Date()
+  const recheckThreshold = new Date(now.getTime() - RECHECK_BROKEN_AFTER_DAYS * 24 * 60 * 60 * 1000)
+
+  let rechecked = 0
+  let reactivated = 0
+
+  try {
+    // Find BROKEN targets that haven't been checked in a week
+    const brokenTargets = await prisma.scrape_targets.findMany({
+      where: {
+        status: 'BROKEN',
+        updatedAt: { lt: recheckThreshold },
+        sources: {
+          scrapeEnabled: true,
+          robotsCompliant: true,
+        },
+      },
+      select: {
+        id: true,
+        consecutiveFailures: true,
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: MAX_BROKEN_RECHECK_PER_DAY,
+    })
+
+    if (brokenTargets.length === 0) {
+      return { rechecked: 0, reactivated: 0 }
+    }
+
+    log.info('Rechecking broken targets', { count: brokenTargets.length })
+
+    // Reset BROKEN targets to ACTIVE with reset failure count
+    // They'll be picked up by the scheduler and re-tested
+    // If they fail again, they'll be marked BROKEN again
+    for (const target of brokenTargets) {
+      await prisma.scrape_targets.update({
+        where: { id: target.id },
+        data: {
+          status: 'ACTIVE',
+          consecutiveFailures: Math.floor(target.consecutiveFailures / 2), // Give partial credit
+          lastStatus: 'RECHECK_PENDING',
+          updatedAt: now,
+        },
+      })
+      rechecked++
+    }
+
+    reactivated = rechecked // All rechecked targets are set to ACTIVE
+    log.info('Reactivated broken targets for recheck', { count: reactivated })
+  } catch (error) {
+    log.error('Failed to recheck broken URLs', { error: (error as Error).message })
+  }
+
+  return { rechecked, reactivated }
 }
 
 /**
