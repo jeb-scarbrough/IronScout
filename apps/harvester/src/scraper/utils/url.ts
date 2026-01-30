@@ -14,6 +14,7 @@
  */
 
 import { createHash } from 'crypto'
+import psl from 'psl'
 
 /**
  * Tracking parameters to remove from URLs.
@@ -108,8 +109,8 @@ export function isValidUrl(url: string): boolean {
  * Extract the registrable domain (eTLD+1) from a URL.
  * For rate limiting, we scope by registrable domain.
  *
- * Note: This is a simplified implementation. For production, consider using
- * a proper public suffix list library like 'psl'.
+ * Uses the Public Suffix List (psl) library for proper eTLD+1 handling,
+ * correctly handling multi-part TLDs like .co.uk, .com.au, etc.
  *
  * @param url - The URL to extract domain from
  * @returns The registrable domain (e.g., "sgammo.com" from "www.sgammo.com")
@@ -118,17 +119,17 @@ export function getRegistrableDomain(url: string): string {
   const parsed = new URL(url)
   const hostname = parsed.hostname.toLowerCase()
 
-  // Split by dots and get the last two parts as a simple heuristic
-  // This works for most common TLDs like .com, .net, .org
-  // For proper eTLD+1 handling, use the 'psl' library
-  const parts = hostname.split('.')
+  // Use psl library for proper eTLD+1 parsing
+  const parsedDomain = psl.parse(hostname)
 
-  if (parts.length <= 2) {
+  if (parsedDomain.error) {
+    // On parsing error, fall back to hostname
     return hostname
   }
 
-  // Return last two parts (simplified eTLD+1)
-  return parts.slice(-2).join('.')
+  // parsedDomain.domain is the registrable domain (eTLD+1)
+  // e.g., "example.co.uk" for "www.example.co.uk"
+  return parsedDomain.domain || hostname
 }
 
 /**

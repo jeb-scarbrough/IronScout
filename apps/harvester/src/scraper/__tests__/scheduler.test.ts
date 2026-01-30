@@ -16,6 +16,14 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
+const metricsMocks = vi.hoisted(() => ({
+  recordRunCompleted: vi.fn(),
+  recordQueueRejection: vi.fn(),
+  recordAdapterDisabled: vi.fn(),
+  recordStaleTargetsAlert: vi.fn(),
+  recordZeroPriceQuarantine: vi.fn(),
+}))
+
 vi.mock('@ironscout/db', () => ({
   prisma: {
     scrape_targets: {
@@ -45,6 +53,8 @@ vi.mock('@ironscout/db', () => ({
 vi.mock('../registry.js', () => ({
   getAdapterRegistry: () => mocks.registry,
 }))
+
+vi.mock('../metrics.js', () => metricsMocks)
 
 vi.mock('../../config/queues.js', () => ({
   enqueueScrapeUrl: mocks.mockEnqueueScrapeUrl,
@@ -174,6 +184,77 @@ describe('Scrape Scheduler', () => {
 
     expect(mocks.mockRunCreate).not.toHaveBeenCalled()
     expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+  })
+
+  it('records run completion metrics for finalized runs', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: true })
+
+    mocks.mockRunFindMany.mockResolvedValueOnce([
+      {
+        id: 'run-1',
+        adapterId: 'adapter-1',
+        sourceId: 'source-1',
+        startedAt: new Date('2025-01-01T00:00:00Z'),
+        urlsAttempted: 10,
+        urlsSucceeded: 8,
+        urlsFailed: 2,
+        offersExtracted: 8,
+        offersValid: 8,
+        offersDropped: 0,
+        offersQuarantined: 0,
+        oosNoPriceCount: 0,
+      },
+    ])
+    mocks.mockQueueGetJobs.mockResolvedValue([])
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 0 })
+
+    expect(metricsMocks.recordRunCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        adapterId: 'adapter-1',
+        sourceId: 'source-1',
+        urlsAttempted: 10,
+        urlsSucceeded: 8,
+        urlsFailed: 2,
+      })
+    )
+  })
+
+  it('records queue rejections during scheduling', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: true })
+
+    // Reset findMany call order for deterministic manual-run path:
+    // 1) recheckBrokenUrls -> []
+    // 2) processManualRuns -> [target]
+    // 3) getDueTargets -> []
+    mocks.mockFindMany.mockReset()
+    mocks.mockFindMany.mockResolvedValueOnce([]) // recheckBrokenUrls
+    mocks.mockFindMany.mockResolvedValueOnce([createTarget({ id: 'target-1' })]) // processManualRuns
+    mocks.mockFindMany.mockResolvedValueOnce([]) // getDueTargets
+    mocks.mockRunCreate.mockResolvedValue({ id: 'run-1' })
+    mocks.mockEnqueueScrapeUrl.mockResolvedValue({
+      status: 'rejected',
+      jobId: 'job-1',
+      reason: 'queue_full',
+      retryAfterMs: 60000,
+    })
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(metricsMocks.recordQueueRejection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetId: 'target-1',
+        runId: 'run-1',
+        adapterId: 'adapter-1',
+        sourceId: 'source-1',
+        reason: 'queue_full',
+      })
+    )
   })
 })
 

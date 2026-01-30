@@ -14,15 +14,17 @@ async function main() {
 
   if (!retailer) {
     console.log('Creating SGAmmo retailer...')
+    // Per spec §12.3: New sources start with PENDING visibility until admin review
     retailer = await prisma.retailers.create({
       data: {
         name: 'SGAmmo',
         website: 'https://www.sgammo.com',
         tier: 'STANDARD',
-        visibilityStatus: 'ELIGIBLE',
+        visibilityStatus: 'PENDING', // Safe default - requires admin approval
       }
     })
     console.log('Created retailer:', retailer.id, retailer.name)
+    console.log('⚠️  Retailer visibility is PENDING - admin must approve before data is visible')
   } else {
     console.log('Found retailer:', retailer.id, retailer.name)
   }
@@ -39,6 +41,7 @@ async function main() {
 
   if (!source) {
     console.log('Creating SGAmmo source...')
+    // Per spec §12.3: scrapeEnabled=false by default until admin review
     source = await prisma.sources.create({
       data: {
         name: 'SGAmmo Scraper',
@@ -47,18 +50,30 @@ async function main() {
         enabled: true,
         retailerId: retailer.id,
         adapterId: 'sgammo',
-        scrapeEnabled: true,
+        scrapeEnabled: false, // Safe default - requires admin approval
         robotsCompliant: true,
       }
     })
     console.log('Created source:', source.id, source.name)
+
+    // Create source_trust_config with safe defaults
+    await prisma.source_trust_config.create({
+      data: {
+        sourceId: source.id,
+        upcTrusted: false, // Per spec §12.3: UPC not trusted until verified
+        brandMappingRequired: true,
+        priceMultiplierDefault: 1.0,
+      }
+    })
+    console.log('Created source_trust_config with upcTrusted=false')
+    console.log('⚠️  Source scraping is DISABLED - admin must enable after review')
   } else {
-    // Update existing source with adapter
+    // Update existing source with adapter (don't auto-enable)
     source = await prisma.sources.update({
       where: { id: source.id },
       data: {
         adapterId: 'sgammo',
-        scrapeEnabled: true,
+        // Don't auto-enable scraping on existing source
       }
     })
     console.log('Updated source:', source.id, source.name)

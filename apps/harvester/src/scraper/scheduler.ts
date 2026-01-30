@@ -15,7 +15,8 @@ import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
 import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats } from '../config/queues.js'
 import { getAdapterRegistry } from './registry.js'
-import { checkAutoDisable } from './process/drift-detector.js'
+import { checkAutoDisable, updateBaseline, computeDerivedMetrics } from './process/drift-detector.js'
+import { recordAdapterDisabled, recordQueueRejection, recordRunCompleted, recordStaleTargetsAlert } from './metrics.js'
 import type { ScrapeRunTrigger, ScrapeRunStatus, ScrapeAdapterDisableReason } from '@ironscout/db/generated/prisma'
 import type { ScrapeRunMetrics } from './types.js'
 
@@ -189,6 +190,7 @@ async function finalizeStaleRuns(): Promise<void> {
     select: {
       id: true,
       adapterId: true,
+      sourceId: true,
       startedAt: true,
       urlsAttempted: true,
       urlsSucceeded: true,
@@ -216,8 +218,9 @@ async function finalizeStaleRuns(): Promise<void> {
       }
 
       // Calculate final status based on metrics
+      // Clamp to 0 since oosNoPriceCount can exceed urlsFailed in edge cases
       const failureRate = run.urlsAttempted > 0
-        ? (run.urlsFailed - run.oosNoPriceCount) / run.urlsAttempted
+        ? Math.max(0, (run.urlsFailed - run.oosNoPriceCount) / run.urlsAttempted)
         : 0
       const yieldRate = run.urlsAttempted > 0
         ? run.offersValid / run.urlsAttempted
@@ -247,6 +250,25 @@ async function finalizeStaleRuns(): Promise<void> {
           yieldRate,
           dropRate,
         },
+      })
+
+      recordRunCompleted({
+        runId: run.id,
+        adapterId: run.adapterId,
+        sourceId: run.sourceId,
+        status,
+        urlsAttempted: run.urlsAttempted,
+        urlsSucceeded: run.urlsSucceeded,
+        urlsFailed: run.urlsFailed,
+        offersExtracted: run.offersExtracted,
+        offersValid: run.offersValid,
+        offersDropped: run.offersDropped,
+        offersQuarantined: run.offersQuarantined,
+        oosNoPriceCount: run.oosNoPriceCount,
+        failureRate,
+        yieldRate,
+        dropRate,
+        durationMs,
       })
 
       log.info('Finalized stale run', {
@@ -308,6 +330,12 @@ async function finalizeStaleRuns(): Promise<void> {
           updateData.disabledAt = new Date()
           updateData.disabledReason = (disableDecision.reason ?? 'DRIFT_DETECTED') as ScrapeAdapterDisableReason
 
+          recordAdapterDisabled({
+            adapterId: run.adapterId,
+            reason: disableDecision.reason ?? 'DRIFT_DETECTED',
+            consecutiveFailedBatches: disableDecision.consecutiveFailedBatches,
+          })
+
           log.warn('Auto-disabling adapter due to drift', {
             adapterId: run.adapterId,
             reason: disableDecision.reason,
@@ -326,6 +354,72 @@ async function finalizeStaleRuns(): Promise<void> {
           where: { adapterId: run.adapterId },
           data: updateData,
         })
+      }
+
+      // Update baseline for successful runs (per spec §7.3)
+      if (status === 'SUCCESS') {
+        try {
+          // Query recent successful runs for rolling baseline calculation
+          const recentRuns = await prisma.scrape_runs.findMany({
+            where: {
+              adapterId: run.adapterId,
+              status: 'SUCCESS',
+              completedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // 7 days
+            },
+            orderBy: { completedAt: 'desc' },
+            take: 20,
+            select: {
+              urlsAttempted: true,
+              urlsSucceeded: true,
+              urlsFailed: true,
+              offersExtracted: true,
+              offersValid: true,
+              offersDropped: true,
+              offersQuarantined: true,
+              oosNoPriceCount: true,
+            },
+          })
+
+          // Convert to derived metrics for baseline calculation
+          const recentDerivedMetrics = recentRuns.map((r) =>
+            computeDerivedMetrics({
+              urlsAttempted: r.urlsAttempted,
+              urlsSucceeded: r.urlsSucceeded,
+              urlsFailed: r.urlsFailed,
+              offersExtracted: r.offersExtracted,
+              offersValid: r.offersValid,
+              offersDropped: r.offersDropped,
+              offersQuarantined: r.offersQuarantined,
+              oosNoPriceCount: r.oosNoPriceCount,
+              zeroPriceCount: 0, // Not tracked at run level - schema change needed
+            })
+          )
+
+          // Calculate new baseline
+          const newBaseline = updateBaseline(null, metrics, recentDerivedMetrics)
+
+          // Update adapter status with new baseline
+          await prisma.scrape_adapter_status.update({
+            where: { adapterId: run.adapterId },
+            data: {
+              baselineFailureRate: newBaseline.medianFailureRate,
+              baselineYieldRate: newBaseline.medianYieldRate,
+              baselineSampleSize: newBaseline.sampleSize,
+              baselineUpdatedAt: new Date(),
+            },
+          })
+
+          log.debug('Updated adapter baseline', {
+            adapterId: run.adapterId,
+            sampleSize: newBaseline.sampleSize,
+            isEstablished: newBaseline.isEstablished,
+          })
+        } catch (baselineError) {
+          log.error('Failed to update baseline', {
+            adapterId: run.adapterId,
+            error: (baselineError as Error).message,
+          })
+        }
       }
     } catch (error) {
       log.error('Failed to finalize stale run', {
@@ -363,19 +457,19 @@ async function createScrapeRun(
 }
 
 /**
- * Run daily maintenance tasks if due.
- * Executes once per day (24 hours since last run).
+ * Run hourly maintenance tasks if due.
+ * Per spec: stale URL cleanup runs hourly.
  */
 async function runDailyMaintenance(): Promise<void> {
   const now = new Date()
-  const MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
+  const MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour (per spec)
 
   // Check if maintenance is due
   if (lastMaintenanceRun && now.getTime() - lastMaintenanceRun.getTime() < MAINTENANCE_INTERVAL_MS) {
     return
   }
 
-  log.info('Running daily maintenance')
+  log.info('Running hourly maintenance')
   lastMaintenanceRun = now
 
   try {
@@ -385,14 +479,16 @@ async function runDailyMaintenance(): Promise<void> {
     // Recheck broken URLs weekly
     const recheckResult = await recheckBrokenUrls()
 
-    log.info('Daily maintenance completed', {
+    recordStaleTargetsAlert({ markedStale: cleanupResult.markedStale })
+
+    log.info('Hourly maintenance completed', {
       markedStale: cleanupResult.markedStale,
       deletedBroken: cleanupResult.deletedBroken,
       brokenRechecked: recheckResult.rechecked,
       brokenReactivated: recheckResult.reactivated,
     })
   } catch (error) {
-    log.error('Daily maintenance failed', { error: (error as Error).message })
+    log.error('Hourly maintenance failed', { error: (error as Error).message })
   }
 }
 
@@ -424,7 +520,7 @@ async function processManualRuns(): Promise<void> {
       },
     },
     orderBy: { updatedAt: 'asc' },
-    take: 50, // Process up to 50 manual requests per tick
+    take: 10, // Per spec: cap manual runs at 10 per tick
   })
 
   if (pendingTargets.length === 0) {
@@ -508,18 +604,41 @@ async function processManualRuns(): Promise<void> {
         trigger: 'MANUAL',
       }
 
-      await enqueueScrapeUrl(jobData)
+      const enqueueResult = await enqueueScrapeUrl(jobData)
 
-      // Clear the pending status
-      await prisma.scrape_targets.update({
-        where: { id: target.id },
-        data: { lastStatus: 'ENQUEUED' },
-      })
-
-      log.info('Enqueued manual scrape', {
-        targetId: target.id,
-        runId: run.id,
-      })
+      // Update status based on enqueue result (respect backpressure)
+      if (enqueueResult.status === 'accepted') {
+        await prisma.scrape_targets.update({
+          where: { id: target.id },
+          data: { lastStatus: 'ENQUEUED' },
+        })
+        log.info('Enqueued manual scrape', {
+          targetId: target.id,
+          runId: run.id,
+        })
+      } else if (enqueueResult.status === 'rejected') {
+        // Queue full or other rejection - leave as PENDING_MANUAL to retry next tick
+        recordQueueRejection({
+          reason: enqueueResult.reason ?? 'queue_full',
+          targetId: target.id,
+          runId: run.id,
+          adapterId: target.adapterId,
+          sourceId: target.sourceId,
+          retryAfterMs: enqueueResult.retryAfterMs,
+        })
+        log.warn('Manual enqueue rejected - backpressure', {
+          targetId: target.id,
+          reason: enqueueResult.reason,
+          retryAfterMs: enqueueResult.retryAfterMs,
+        })
+      } else {
+        // Deduplicated - job already exists
+        await prisma.scrape_targets.update({
+          where: { id: target.id },
+          data: { lastStatus: 'ENQUEUED' },
+        })
+        log.debug('Manual scrape deduplicated', { targetId: target.id })
+      }
     } catch (error) {
       log.error('Failed to process manual run', {
         targetId: target.id,
@@ -672,6 +791,14 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         } else if (result.status === 'rejected') {
           rejectedCount++
           rejectedInRun++
+          recordQueueRejection({
+            reason: result.reason ?? 'queue_full',
+            targetId: target.id,
+            runId,
+            adapterId: target.adapterId,
+            sourceId: target.sourceId,
+            retryAfterMs: result.retryAfterMs,
+          })
           // If >50% rejections in this run, stop enqueueing
           if (rejectedInRun > acceptedInRun && acceptedInRun > 0) {
             log.warn('Stopping enqueue for run - high rejection rate', {
@@ -762,8 +889,8 @@ export function isScrapeSchedulerRunning(): boolean {
 // Maintenance Jobs
 // =============================================================================
 
-/** Days after which a target without scrape success is marked STALE */
-const STALE_AFTER_DAYS = 30
+/** Hours after which a PENDING target is marked STALE (per spec: 24h) */
+const STALE_PENDING_HOURS = 24
 
 /** Days after which a BROKEN target is deleted */
 const DELETE_BROKEN_AFTER_DAYS = 90
@@ -772,41 +899,41 @@ const DELETE_BROKEN_AFTER_DAYS = 90
  * Clean up stale and broken URLs.
  *
  * Per scraper-framework-01 spec:
- * - Mark targets as STALE if not scraped in > 30 days
+ * - Mark targets with PENDING status for >24h as STALE
  * - Delete targets that have been BROKEN for > 90 days
  *
- * This runs daily as part of scheduler maintenance.
+ * This runs hourly as part of scheduler maintenance.
  */
 export async function cleanupStaleUrls(): Promise<{
   markedStale: number
   deletedBroken: number
 }> {
   const now = new Date()
-  const staleThreshold = new Date(now.getTime() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000)
+  const pendingStaleThreshold = new Date(now.getTime() - STALE_PENDING_HOURS * 60 * 60 * 1000)
   const deleteThreshold = new Date(now.getTime() - DELETE_BROKEN_AFTER_DAYS * 24 * 60 * 60 * 1000)
 
   let markedStale = 0
   let deletedBroken = 0
 
   try {
-    // Mark ACTIVE targets as STALE if not scraped in > STALE_AFTER_DAYS
+    // Per spec: Mark targets stuck in PENDING status for >24h as STALE
+    // This catches targets that were enqueued but never completed
     const staleResult = await prisma.scrape_targets.updateMany({
       where: {
         status: 'ACTIVE',
-        OR: [
-          { lastScrapedAt: { lt: staleThreshold } },
-          { lastScrapedAt: null, createdAt: { lt: staleThreshold } },
-        ],
+        lastStatus: { startsWith: 'PENDING' }, // PENDING_MANUAL, PENDING, etc.
+        updatedAt: { lt: pendingStaleThreshold },
       },
       data: {
         status: 'STALE',
+        lastStatus: 'STALE_TIMEOUT',
         updatedAt: now,
       },
     })
     markedStale = staleResult.count
 
     if (markedStale > 0) {
-      log.info('Marked stale targets', { count: markedStale, thresholdDays: STALE_AFTER_DAYS })
+      log.info('Marked stale pending targets', { count: markedStale, thresholdHours: STALE_PENDING_HOURS })
     }
 
     // Delete BROKEN targets older than DELETE_BROKEN_AFTER_DAYS

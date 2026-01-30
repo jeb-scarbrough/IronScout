@@ -280,6 +280,8 @@ async function buildDerivedTable(
     INNER JOIN retailer_visibility rv ON rv."retailerId" = pr."retailerId"
     WHERE pr."observedAt" >= $1
       ${scopeFilter}
+      -- ADR-015 §12: Exclude SCRAPE data from consumer-facing derived table
+      AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
       -- Exclude ignored runs
       AND (pr."affiliateFeedRunId" IS NULL OR pr."affiliateFeedRunId" NOT IN (SELECT id FROM ignored_runs))
       AND (pr."ingestionRunId" IS NULL OR pr."ingestionRunId" NOT IN (SELECT id FROM ignored_runs))

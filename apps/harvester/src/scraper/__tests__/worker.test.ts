@@ -60,6 +60,10 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+const metricsMocks = vi.hoisted(() => ({
+  recordZeroPriceQuarantine: vi.fn(),
+}))
+
 vi.mock('bullmq', () => ({
   Worker: mocks.WorkerMock,
   Job: vi.fn(),
@@ -106,10 +110,17 @@ vi.mock('../process/validator.js', () => ({
   shouldCountTowardDrift: vi.fn().mockReturnValue(false),
 }))
 
+vi.mock('../process/run-dedupe.js', () => ({
+  checkAndAddIdentityKey: vi.fn().mockResolvedValue(false),
+  closeDedupeClient: vi.fn(),
+}))
+
 vi.mock('../process/drift-detector.js', () => ({
   shouldMarkUrlBroken: vi.fn((failures) => failures >= 5),
   checkAutoDisable: vi.fn(),
 }))
+
+vi.mock('../metrics.js', () => metricsMocks)
 
 vi.mock('../../config/queues.js', () => ({
   QUEUE_NAMES: { SCRAPE_URL: 'scrape-url' },
@@ -290,6 +301,49 @@ describe('Scrape URL Worker', () => {
       expect.objectContaining({
         where: { id: 'run-1' },
         data: { urlsSucceeded: { increment: 1 } },
+      })
+    )
+  })
+
+  it('records zero-price quarantine alert', async () => {
+    const adapter = createAdapter()
+    mocks.registry.get.mockReturnValue(adapter)
+
+    mocks.mockScrapeTargetsFindUnique.mockResolvedValue({
+      id: 'target-1',
+      sourceProductId: null,
+      consecutiveFailures: 0,
+      robotsPathBlocked: false,
+    })
+
+    const offer = {
+      sourceId: 'source-1',
+      retailerId: 'retailer-1',
+      url: 'https://example.com/product',
+      title: 'Test',
+      priceCents: 0,
+      currency: 'USD',
+      availability: 'IN_STOCK',
+      observedAt: new Date('2025-01-01T00:00:00Z'),
+      identityKey: 'SKU:ABC',
+      adapterVersion: '1.0.0',
+    }
+
+    adapter.extract.mockReturnValue({ ok: true, offer })
+    adapter.normalize.mockReturnValue({ status: 'quarantine', reason: 'ZERO_PRICE_EXTRACTED', offer })
+
+    mocks.fetchImpl.mockResolvedValue({ status: 'ok', html: '<html></html>', durationMs: 5 })
+
+    const job = createJob()
+    await mocks.state.processor!(job)
+
+    expect(metricsMocks.recordZeroPriceQuarantine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterId: 'adapter-1',
+        sourceId: 'source-1',
+        runId: 'run-1',
+        targetId: 'target-1',
+        url: 'https://example.com/product',
       })
     )
   })

@@ -280,6 +280,9 @@ importers:
       openai:
         specifier: ^6.17.0
         version: 6.17.0(ws@8.19.0)(zod@4.3.6)
+      psl:
+        specifier: ^1.15.0
+        version: 1.15.0
       resend:
         specifier: ^6.9.1
         version: 6.9.1(@react-email/render@1.1.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4))
@@ -296,6 +299,9 @@ importers:
       '@types/node':
         specifier: ^25.1.0
         version: 25.1.0
+      '@types/psl':
+        specifier: ^1.1.5
+        version: 1.11.0
       '@types/ssh2':
         specifier: ^1.15.5
         version: 1.15.5
@@ -2380,6 +2386,10 @@ packages:
 
   '@types/pg@8.16.0':
     resolution: {integrity: sha512-RmhMd/wD+CF8Dfo+cVIy3RR5cl8CyfXQ0tGgW6XBL8L4LM/UTEbNXYRbLwU6w+CgrKBNbrQWt4FUtTfaU5jSYQ==}
+
+  '@types/psl@1.11.0':
+    resolution: {integrity: sha512-OeASqmnreaSJyxwljqCZjRIf7jpbwswaqbSPahE99PZrizNAOXEl9HRWhXvCt3fkAc/WuF8wcZ6zkDHXaE7X4g==}
+    deprecated: This is a stub types definition. psl provides its own type definitions, so you do not need this installed.
 
   '@types/qs@6.14.0':
     resolution: {integrity: sha512-eOunJqu0K1923aExK6y8p6fsihYEn/BYuQ4g0CxAAgFc4b/ZLN4CrsRZ55srTdqoiLzU2B2evC+apEIxprEzkQ==}
@@ -5023,6 +5033,9 @@ packages:
   proxy-from-env@1.1.0:
     resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
 
+  psl@1.15.0:
+    resolution: {integrity: sha512-JZd3gMVBAVQkSs6HdNZo9Sdo0LNcQeMNP3CozBJb3JYC/QUYZTnKxP+f8oWRX4rHP5EurWxqAHTSwUCjlNKa1w==}
+
   pump@3.0.3:
     resolution: {integrity: sha512-todwxLMY7/heScKmntwQG8CXVkWUOdYxIvY2s0VWAAMh/nd8SoYiRaKjlr7+iCs984f2P8zvrfWcDDYVb73NfA==}
 
@@ -7487,6 +7500,10 @@ snapshots:
       '@types/node': 25.1.0
       pg-protocol: 1.11.0
       pg-types: 2.2.0
+
+  '@types/psl@1.11.0':
+    dependencies:
+      psl: 1.15.0
 
   '@types/qs@6.14.0': {}
 
@@ -10573,6 +10590,10 @@ snapshots:
       - supports-color
 
   proxy-from-env@1.1.0: {}
+
+  psl@1.15.0:
+    dependencies:
+      punycode: 2.3.1
 
   pump@3.0.3:
     dependencies:

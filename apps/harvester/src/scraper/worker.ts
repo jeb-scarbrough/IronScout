@@ -27,6 +27,8 @@ import { RedisRateLimiter } from './fetch/rate-limiter.js'
 import { validateOffer, createDropFromExtractFailure, shouldCountTowardDrift } from './process/validator.js'
 import { writeScrapeOffer, updateTargetTracking, markTargetBroken, finalizeRun } from './process/writer.js'
 import { shouldMarkUrlBroken, checkAutoDisable } from './process/drift-detector.js'
+import { recordZeroPriceQuarantine } from './metrics.js'
+import { checkAndAddIdentityKey, closeDedupeClient } from './process/run-dedupe.js'
 import type { ScrapeRunMetrics, ScrapeAdapterContext } from './types.js'
 
 const log = loggers.scraper
@@ -132,8 +134,9 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     }
 
     // Handle persistent robot blocks - auto-update robotsCompliant
-    // Per scraper-framework-01 spec: persistent 403/429 blocks should disable scraping
-    if (fetchResult.status === 'blocked' || fetchResult.statusCode === 429) {
+    // Per scraper-framework-01 spec: 3 consecutive blocks → robotsCompliant=false
+    // Includes: 403/429/503 blocks, captcha detection, AND robots.txt disallow
+    if (fetchResult.status === 'blocked' || fetchResult.status === 'robots_blocked' || fetchResult.statusCode === 429) {
       await handlePersistentBlock(sourceId, jobLogger)
     }
 
@@ -198,6 +201,16 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     await incrementRunMetric(runId, 'offersQuarantined')
     await updateTargetTracking(targetId, false)
 
+    if (normalizeResult.reason === 'ZERO_PRICE_EXTRACTED') {
+      recordZeroPriceQuarantine({
+        adapterId,
+        sourceId,
+        runId,
+        targetId,
+        url,
+      })
+    }
+
     // Write to quarantine table for admin review
     // Per scraper-framework-01 spec: quarantined offers must be persisted
     try {
@@ -235,6 +248,18 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
         error: (quarantineError as Error).message,
       })
     }
+    return
+  }
+
+  // Per spec §5.1: Run-level deduplication using Redis
+  // Check if identityKey already seen in this run (across all workers)
+  const isDuplicate = await checkAndAddIdentityKey(runId, normalizeResult.offer.identityKey)
+  if (isDuplicate) {
+    jobLogger.info('Offer dropped - duplicate within run', {
+      identityKey: normalizeResult.offer.identityKey,
+    })
+    await incrementRunMetric(runId, 'offersDropped')
+    await updateTargetTracking(targetId, true) // Not a failure, just dedupe
     return
   }
 
@@ -435,6 +460,9 @@ export async function stopScrapeWorker(): Promise<void> {
     await rateLimiter.close()
     rateLimiter = null
   }
+
+  // Close dedupe Redis client
+  await closeDedupeClient()
 
   robotsPolicy = null
   fetcher = null
