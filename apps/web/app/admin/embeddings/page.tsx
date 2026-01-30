@@ -49,15 +49,11 @@ export default function EmbeddingsAdminPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/search/admin/embedding-stats`, {
-        headers: {
-          'X-Admin-Key': getAdminKey(),
-        },
-      })
+      const response = await fetch('/api/search/admin/embedding-stats')
       
       if (!response.ok) {
         if (response.status === 401) {
-          throw new Error('Unauthorized - Check your admin API key')
+          throw new Error('Unauthorized - Admin access required')
         }
         throw new Error('Failed to fetch stats')
       }
@@ -72,11 +68,7 @@ export default function EmbeddingsAdminPage() {
 
   const fetchProgress = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/search/admin/backfill-progress`, {
-        headers: {
-          'X-Admin-Key': getAdminKey(),
-        },
-      })
+      const response = await fetch('/api/search/admin/backfill-progress')
       
       if (response.ok) {
         const data = await response.json()
@@ -94,11 +86,8 @@ export default function EmbeddingsAdminPage() {
     setError(null)
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/search/admin/backfill-embeddings`, {
+      const response = await fetch('/api/search/admin/backfill-embeddings', {
         method: 'POST',
-        headers: {
-          'X-Admin-Key': getAdminKey(),
-        },
       })
       
       if (!response.ok) {
@@ -485,20 +474,3 @@ export default function EmbeddingsAdminPage() {
   )
 }
 
-/**
- * Get admin API key from localStorage or prompt user
- */
-function getAdminKey(): string {
-  if (typeof window === 'undefined') return ''
-  
-  let key = localStorage.getItem('ironscout_admin_key')
-  
-  if (!key) {
-    key = prompt('Enter Admin API Key:')
-    if (key) {
-      localStorage.setItem('ironscout_admin_key', key)
-    }
-  }
-  
-  return key || ''
-}
