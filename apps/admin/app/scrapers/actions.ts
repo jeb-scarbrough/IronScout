@@ -624,7 +624,7 @@ export async function toggleAdapterEnabled(adapterId: string, enabled: boolean):
  * The harvester scheduler picks up targets that need manual runs on its next cycle.
  * Direct queue access is not available from the admin app.
  */
-export async function triggerManualScrape(targetId: string): Promise<{ success: boolean; error?: string; runId?: string }> {
+export async function triggerManualScrape(targetId: string): Promise<{ success: boolean; error?: string; runId?: string; retryAfterMs?: number }> {
   const session = await getAdminSession()
   if (!session) return { success: false, error: 'Unauthorized' }
 
@@ -665,7 +665,7 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
     }
 
     // Per spec §8.2: Check for backpressure before accepting manual triggers
-    // Count pending manual requests for this adapter
+    // Count pending manual requests for this adapter (proxy for queue capacity)
     const pendingManualCount = await prisma.scrape_targets.count({
       where: {
         adapterId: target.adapterId,
@@ -675,9 +675,30 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
 
     const MAX_PENDING_MANUAL_PER_ADAPTER = 10
     if (pendingManualCount >= MAX_PENDING_MANUAL_PER_ADAPTER) {
+      // Per spec §8.2: Surface Retry-After in backpressure response
+      // Estimate 30s per pending request as a reasonable retry hint
+      const retryAfterMs = Math.min(pendingManualCount * 30000, 300000) // Cap at 5 min
       return {
         success: false,
-        error: `Too many pending manual requests for this adapter (${pendingManualCount}). Please wait and try again.`,
+        error: `Too many pending manual requests for this adapter (${pendingManualCount}). Please wait ${Math.ceil(retryAfterMs / 1000)} seconds and try again.`,
+        retryAfterMs,
+      }
+    }
+
+    // Also check total pending across all adapters for global backpressure
+    const totalPendingManual = await prisma.scrape_targets.count({
+      where: {
+        lastStatus: 'PENDING_MANUAL',
+      },
+    })
+
+    const MAX_TOTAL_PENDING_MANUAL = 50
+    if (totalPendingManual >= MAX_TOTAL_PENDING_MANUAL) {
+      const retryAfterMs = 60000 // 1 minute
+      return {
+        success: false,
+        error: `System is processing many requests. Please wait ${Math.ceil(retryAfterMs / 1000)} seconds and try again.`,
+        retryAfterMs,
       }
     }
 

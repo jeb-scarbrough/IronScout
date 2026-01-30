@@ -13,7 +13,7 @@
 import CronParser from 'cron-parser'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
-import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats } from '../config/queues.js'
+import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats, decrementAdapterPending } from '../config/queues.js'
 import { getAdapterRegistry } from './registry.js'
 import { checkAutoDisable, checkZeroPriceDisable, updateBaseline, computeDerivedMetrics } from './process/drift-detector.js'
 import { recordAdapterDisabled, recordQueueRejection, recordRunCompleted, recordStaleTargetsAlert } from './metrics.js'
@@ -36,7 +36,9 @@ const adapterBackoffState = new Map<string, { backoffUntil: number; consecutiveR
 
 /** Global scheduler pause state */
 let globalPauseUntil: number | null = null
-const GLOBAL_PAUSE_DURATION_MS = 60000 // 1 minute pause on global backpressure
+let globalConsecutiveRejections = 0
+const GLOBAL_PAUSE_BASE_MS = 60000 // 1 minute base pause
+const GLOBAL_PAUSE_MAX_MS = 5 * 60 * 1000 // 5 minute max pause
 
 /**
  * Check if scheduler is globally paused.
@@ -53,13 +55,32 @@ function isGloballyPaused(): boolean {
 
 /**
  * Trigger global pause when backpressure is severe.
+ * Per spec §8.3: Uses exponential backoff across consecutive rejection cycles.
  */
-function triggerGlobalPause(): void {
-  globalPauseUntil = Date.now() + GLOBAL_PAUSE_DURATION_MS
+function triggerGlobalPause(retryAfterMs?: number): void {
+  globalConsecutiveRejections++
+
+  // Exponential backoff: base * 2^(consecutive-1), capped at max
+  const baseMs = retryAfterMs ?? GLOBAL_PAUSE_BASE_MS
+  const multiplier = Math.pow(2, Math.min(globalConsecutiveRejections - 1, 4))
+  const pauseDurationMs = Math.min(baseMs * multiplier, GLOBAL_PAUSE_MAX_MS)
+
+  globalPauseUntil = Date.now() + pauseDurationMs
   log.warn('Triggering global scheduler pause due to high rejection rate', {
     pauseUntil: new Date(globalPauseUntil),
-    durationMs: GLOBAL_PAUSE_DURATION_MS,
+    durationMs: pauseDurationMs,
+    consecutiveRejections: globalConsecutiveRejections,
   })
+}
+
+/**
+ * Clear global pause state on successful tick.
+ */
+function clearGlobalBackoff(): void {
+  if (globalConsecutiveRejections > 0) {
+    log.debug('Cleared global backoff', { previousConsecutive: globalConsecutiveRejections })
+    globalConsecutiveRejections = 0
+  }
 }
 
 /**
@@ -300,9 +321,9 @@ async function finalizeStaleRuns(): Promise<void> {
       }
 
       // Calculate final status based on metrics
-      // Clamp to 0 since oosNoPriceCount can exceed urlsFailed in edge cases
+      // OOS_NO_PRICE is already excluded from urlsFailed (neutral outcome)
       const failureRate = run.urlsAttempted > 0
-        ? Math.max(0, (run.urlsFailed - run.oosNoPriceCount) / run.urlsAttempted)
+        ? run.urlsFailed / run.urlsAttempted
         : 0
       const yieldRate = run.urlsAttempted > 0
         ? run.offersValid / run.urlsAttempted
@@ -578,8 +599,8 @@ async function createScrapeRun(
   return run.id
 }
 
-/** Max age for queue entries before cleanup (1 hour) */
-const QUEUE_ENTRY_MAX_AGE_MS = 60 * 60 * 1000
+/** Max age for queue entries before cleanup (24 hours per spec §8.1) */
+const QUEUE_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
 /**
  * Clean up stale queue entries that have been waiting too long.
@@ -595,11 +616,24 @@ async function cleanupStaleQueueEntries(): Promise<number> {
       // Check job age (timestamp is job creation time in ms)
       if (job.timestamp && job.timestamp < cutoffTime) {
         try {
+          const adapterId = job.data?.adapterId
           await job.remove()
           removedCount++
+
+          // Decrement per-adapter pending count to avoid adapter_full stuck state
+          if (adapterId) {
+            await decrementAdapterPending(adapterId).catch((err) => {
+              log.warn('Failed to decrement adapter pending for stale job', {
+                adapterId,
+                error: err.message,
+              })
+            })
+          }
+
           log.debug('Removed stale queue entry', {
             jobId: job.id,
             targetId: job.data?.targetId,
+            adapterId,
             ageMs: Date.now() - job.timestamp,
           })
         } catch (removeErr) {
@@ -924,6 +958,7 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
     // Process each adapter+source group
     let enqueuedCount = 0
     let rejectedCount = 0
+    let maxRetryAfterMs = 0 // Track max retryAfterMs for global pause
     for (const [key, sourceTargets] of targetsByAdapterSource) {
       const [adapterId, sourceId] = key.split('|')
       const adapter = registry.get(adapterId)
@@ -987,6 +1022,11 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
             retryAfterMs: result.retryAfterMs,
           })
 
+          // Track max retryAfterMs for global pause calculation
+          if (result.retryAfterMs && result.retryAfterMs > maxRetryAfterMs) {
+            maxRetryAfterMs = result.retryAfterMs
+          }
+
           // Per spec §8.3: Set adapter backoff based on retryAfterMs
           if (result.retryAfterMs && (result.reason === 'adapter_full' || result.reason === 'rate_limited')) {
             setAdapterBackoff(target.adapterId, result.retryAfterMs)
@@ -1020,8 +1060,12 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         enqueuedCount,
         rejectedCount,
         rejectionRate: (rejectedCount / totalAttempted * 100).toFixed(1) + '%',
+        maxRetryAfterMs,
       })
-      triggerGlobalPause()
+      triggerGlobalPause(maxRetryAfterMs > 0 ? maxRetryAfterMs : undefined)
+    } else {
+      // Successful tick without high rejection - clear global backoff
+      clearGlobalBackoff()
     }
 
     log.info('Scheduler tick completed', {

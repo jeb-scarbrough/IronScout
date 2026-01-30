@@ -640,7 +640,7 @@ export const MAX_SCRAPE_QUEUE_SIZE = parseInt(
  * Per spec §8.1: Prevents one adapter from monopolizing the queue.
  */
 export const MAX_PENDING_PER_ADAPTER = parseInt(
-  process.env.MAX_PENDING_PER_ADAPTER || '500',
+  process.env.MAX_PENDING_PER_ADAPTER || '1000', // Per spec §8.1 default
   10
 )
 

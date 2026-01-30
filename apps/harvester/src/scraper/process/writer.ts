@@ -348,8 +348,9 @@ export async function finalizeRun(
   const completedAt = new Date()
 
   // Calculate derived metrics
+  // OOS_NO_PRICE is already excluded from urlsFailed (neutral outcome)
   const failureRate = metrics.urlsAttempted > 0
-    ? (metrics.urlsFailed - metrics.oosNoPriceCount) / metrics.urlsAttempted
+    ? metrics.urlsFailed / metrics.urlsAttempted
     : null
 
   const yieldRate = metrics.urlsAttempted > 0
