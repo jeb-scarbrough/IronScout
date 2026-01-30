@@ -241,6 +241,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // For OAuth providers, call API to create/link account
       if (account?.provider && account.provider !== 'credentials') {
         try {
+          if (account.provider === 'google' && !account.id_token) {
+            logger.auth.error('Google OAuth missing id_token')
+            return false
+          }
+
           const response = await fetch(`${API_URL}/api/auth/oauth/signin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -253,6 +258,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               accessToken: account.access_token,
               refreshToken: account.refresh_token,
               expiresAt: account.expires_at,
+              idToken: account.id_token,
             }),
           })
 
