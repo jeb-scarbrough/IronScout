@@ -23,6 +23,7 @@ import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { authRateLimits } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { verifyGoogleIdToken } from '../services/auth/google-token'
 
 const log = loggers.auth
 
@@ -70,13 +71,14 @@ const oauthLinkSchema = z.object({
 
 const oauthSigninSchema = z.object({
   provider: z.string(),
-  providerAccountId: z.string(),
-  email: z.string().email(),
+  providerAccountId: z.string().optional(),
+  email: z.string().email().optional(),
   name: z.string().optional(),
   image: z.string().optional(),
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
   expiresAt: z.number().optional(),
+  idToken: z.string().optional(),
 })
 
 // ============================================================================
@@ -280,8 +282,8 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
   try {
     log.debug('OAuth signin request', {
       provider: req.body?.provider,
-      email: req.body?.email,
       hasProviderAccountId: !!req.body?.providerAccountId,
+      hasIdToken: !!req.body?.idToken,
     })
 
     // Check JWT_SECRET before proceeding
@@ -301,9 +303,46 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
       })
     }
 
-    const { provider, providerAccountId, email, name, image, accessToken, refreshToken, expiresAt } =
-      parsed.data
-    const emailLower = email.toLowerCase()
+    const { provider, accessToken, refreshToken, expiresAt, idToken } = parsed.data
+
+    // V1: Only Google OAuth is supported (expand here when adding providers)
+    if (provider !== 'google') {
+      log.warn('OAuth provider not supported', { provider })
+      return res.status(400).json({
+        error: 'Unsupported OAuth provider',
+        code: 'OAUTH_PROVIDER_UNSUPPORTED',
+      })
+    }
+
+    if (!idToken) {
+      log.warn('OAuth signin missing idToken', { provider })
+      return res.status(400).json({
+        error: 'OAuth token missing',
+        code: 'OAUTH_TOKEN_MISSING',
+      })
+    }
+
+    const verified = await verifyGoogleIdToken(idToken)
+    if (!verified) {
+      log.warn('OAuth token verification failed', { provider })
+      return res.status(401).json({
+        error: 'Invalid OAuth token',
+        code: 'OAUTH_TOKEN_INVALID',
+      })
+    }
+
+    if (parsed.data.providerAccountId && parsed.data.providerAccountId !== verified.sub) {
+      log.warn('OAuth providerAccountId mismatch', { provider })
+    }
+
+    if (parsed.data.email && parsed.data.email.toLowerCase() !== verified.email) {
+      log.warn('OAuth email mismatch', { provider })
+    }
+
+    const providerAccountId = verified.sub
+    const emailLower = verified.email
+    const name = verified.name
+    const image = verified.picture
 
     // Check if OAuth account already linked
     const existingAccount = await prisma.account.findUnique({
