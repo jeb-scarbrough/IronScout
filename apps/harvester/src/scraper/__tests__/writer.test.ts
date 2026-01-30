@@ -48,10 +48,13 @@ const createOffer = (overrides: Partial<ScrapedOffer> = {}): ScrapedOffer => ({
   ...overrides,
 })
 
-const createLogger = () => ({
+const createLogger = (): any => ({
   debug: vi.fn(),
+  info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
+  fatal: vi.fn(),
+  child: vi.fn().mockReturnThis(),
 })
 
 describe('writeScrapeOffer', () => {
