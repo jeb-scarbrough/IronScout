@@ -561,9 +561,11 @@ export async function resendVerificationEmail(merchantId: string) {
 // =============================================================================
 
 // All apps use NEXTAUTH_SECRET as the single JWT secret
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'dev-only-secret-not-for-production'
-);
+const jwtSecretString = process.env.NEXTAUTH_SECRET;
+if (!jwtSecretString) {
+  throw new Error('NEXTAUTH_SECRET not configured');
+}
+const JWT_SECRET = new TextEncoder().encode(jwtSecretString);
 
 export async function impersonateMerchant(merchantId: string) {
   const session = await getAdminSession();

@@ -7,9 +7,13 @@ import { loggers } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 
 // All apps use NEXTAUTH_SECRET as the single JWT secret
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'dev-only-secret-not-for-production'
-);
+function getJwtSecret(): Uint8Array {
+  const jwtSecretString = process.env.NEXTAUTH_SECRET;
+  if (!jwtSecretString) {
+    throw new Error('NEXTAUTH_SECRET not configured');
+  }
+  return new TextEncoder().encode(jwtSecretString);
+}
 
 // Get the base URL for redirects
 function getBaseUrl(request: NextRequest): string {
@@ -69,7 +73,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Verify the impersonation token
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
 
     // Check if this is an impersonation token
     if (!payload.isImpersonating) {
@@ -108,7 +112,7 @@ export async function GET(request: NextRequest) {
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('4h')
-      .sign(JWT_SECRET);
+      .sign(getJwtSecret());
 
     loggers.auth.info('Impersonation success', {
       merchantEmail: merchantUser.email,

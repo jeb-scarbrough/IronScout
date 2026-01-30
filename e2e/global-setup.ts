@@ -121,10 +121,10 @@ async function createMerchantStorageState(config: FullConfig, credentials: { mer
 
 async function createAdminStorageState(config: FullConfig, admin: { adminUser: { id: string }; adminEmail: string }) {
   const baseUrl = getProjectBaseUrl(config, 'admin')
-  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET
+  const secret = process.env.NEXTAUTH_SECRET
 
   if (!secret) {
-    throw new Error('NEXTAUTH_SECRET (or AUTH_SECRET/JWT_SECRET) is required to mint admin session')
+    throw new Error('NEXTAUTH_SECRET is required to mint admin session')
   }
 
   const token = await encode({

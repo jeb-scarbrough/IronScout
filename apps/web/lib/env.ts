@@ -39,7 +39,7 @@ interface ValidatedEnv {
   // Server-only (only available on server)
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
-  JWT_SECRET: string
+  NEXTAUTH_SECRET: string
   NEXTAUTH_URL: string
   // Optional with defaults
   NODE_ENV: string
@@ -58,7 +58,7 @@ const envConfig: EnvConfig = {
   requiredServer: [
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
-    'JWT_SECRET',
+    'NEXTAUTH_SECRET',
     'NEXTAUTH_URL',
   ],
   optional: {

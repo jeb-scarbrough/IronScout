@@ -45,7 +45,7 @@ async function requireAuth(req: AuthenticatedRequest, res: Response, next: () =>
     const token = authHeader.substring(7)
 
     if (!JWT_SECRET) {
-      log.error('JWT_SECRET not configured')
+      log.error('NEXTAUTH_SECRET not configured')
       return res.status(500).json({ error: 'Server configuration error' })
     }
 

@@ -29,8 +29,7 @@ export async function GET() {
     environment: {
       NODE_ENV: process.env.NODE_ENV,
       hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
-      hasAuthSecret: !!process.env.AUTH_SECRET,
-      secretLength: (process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || '').length,
+      secretLength: (process.env.NEXTAUTH_SECRET || '').length,
       adminEmailsConfigured: ADMIN_EMAILS.length > 0,
       adminEmailsCount: ADMIN_EMAILS.length,
       adminEmails: ADMIN_EMAILS,
@@ -43,7 +42,7 @@ export async function GET() {
     },
     hints: [
       !sessionCookie && 'No session cookie found - user needs to log in at main site first',
-      !(process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET) && 'NEXTAUTH_SECRET not configured',
+      !process.env.NEXTAUTH_SECRET && 'NEXTAUTH_SECRET not configured',
       ADMIN_EMAILS.length === 0 && 'ADMIN_EMAILS not configured',
     ].filter(Boolean),
   });

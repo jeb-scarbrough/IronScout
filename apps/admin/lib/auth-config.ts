@@ -26,7 +26,10 @@ const COOKIE_DOMAIN = process.env.NODE_ENV === 'production'
   ? process.env.COOKIE_DOMAIN || '.ironscout.ai'
   : undefined
 
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   trustHost: true,
   providers: [

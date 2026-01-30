@@ -68,7 +68,7 @@ export default defineConfig({
         NEXT_PUBLIC_API_URL: 'http://localhost:8000',
         GOOGLE_CLIENT_ID: 'e2e-google-client-id',
         GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
-        JWT_SECRET: 'e2e-jwt-secret',
+        NEXTAUTH_SECRET: 'e2e-jwt-secret',
         NEXTAUTH_URL: 'http://localhost:3000',
         NEXT_PUBLIC_E2E_TEST_MODE: 'true',
       },
@@ -93,6 +93,7 @@ export default defineConfig({
       env: {
         NODE_ENV: 'development',
         E2E_TEST_MODE: 'true',
+        NEXTAUTH_SECRET: 'e2e-jwt-secret',
       },
     },
   ],

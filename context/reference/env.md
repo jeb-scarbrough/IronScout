@@ -67,12 +67,11 @@ Required:
 - `PORT` (default 8000)
 - `DATABASE_URL`
 - `REDIS_URL` (if API enqueues jobs or reads queue state)
-- `JWT_SECRET` - **Required for auth**. Must match `JWT_SECRET` used by web/dealer [legacy path]/admin apps.
+- `NEXTAUTH_SECRET` - **Required for auth**. Must match `NEXTAUTH_SECRET` used by web/dealer [legacy path]/admin apps.
 
 Auth:
-- API signs and verifies JWTs using `JWT_SECRET`
-- All apps sharing auth must use the same `JWT_SECRET` value
-- API also accepts `NEXTAUTH_SECRET` as fallback (for backwards compatibility)
+- API signs and verifies JWTs using `NEXTAUTH_SECRET`
+- All apps sharing auth must use the same `NEXTAUTH_SECRET` value
 
 Optional:
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
@@ -103,7 +102,7 @@ Required behavior:
 Required:
 - `NEXT_PUBLIC_API_URL` (points to apps/api)
 - `NEXTAUTH_URL` (canonical URL for NextAuth callbacks)
-- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
+- `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 
 Stripe (client):
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (if checkout is embedded)
@@ -115,7 +114,7 @@ Stripe (client):
 
 Required:
 - `NEXT_PUBLIC_API_URL` or Merchant-specific API URL (if separate)
-- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
+- `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 
 Optional:
 - Merchant onboarding keys if Retailer feeds are pulled from private endpoints
@@ -125,7 +124,7 @@ Optional:
 ## apps/admin
 
 Required:
-- `JWT_SECRET` - Must match API's `JWT_SECRET` for shared auth
+- `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 - `NEXT_PUBLIC_ADMIN_API_URL` (if admin calls API directly)
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
 
@@ -179,7 +178,7 @@ Bull Board (Queue Monitor):
 - `DATABASE_URL`
 - `REDIS_URL`
 - `OPENAI_API_KEY` (if AI search is enabled locally)
-- `JWT_SECRET` - Same value across all apps (api, web, dealer [legacy path], admin)
+- `NEXTAUTH_SECRET` - Same value across all apps (api, web, dealer [legacy path], admin)
 - `NEXT_PUBLIC_API_URL` (for web/dealer [legacy path]/admin)
 
 ---
