@@ -17,7 +17,7 @@ import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
 import { redisConnection } from '../config/redis.js'
-import { QUEUE_NAMES, ScrapeUrlJobData, enqueueProductResolve } from '../config/queues.js'
+import { QUEUE_NAMES, ScrapeUrlJobData, enqueueProductResolve, decrementAdapterPending } from '../config/queues.js'
 import { RESOLVER_VERSION } from '../resolver/index.js'
 import { getAdapterRegistry } from './registry.js'
 import { registerAllAdapters } from './adapters/index.js'
@@ -55,7 +55,8 @@ function initInfrastructure(): void {
   }
 
   if (!rateLimiter) {
-    rateLimiter = new RedisRateLimiter()
+    // Per spec §6.2: Pass robotsPolicy to enforce crawl-delay from robots.txt
+    rateLimiter = new RedisRateLimiter({ robotsPolicy: robotsPolicy! })
   }
 
   if (!fetcher) {
@@ -106,6 +107,31 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
   if (target.robotsPathBlocked) {
     jobLogger.info('URL blocked by admin override', { targetId })
     await updateTargetTracking(targetId, false)
+    return
+  }
+
+  // Per spec §10.2: Re-check source gate before processing
+  // Source may have been disabled after job was queued
+  const source = await prisma.sources.findUnique({
+    where: { id: sourceId },
+    select: {
+      scrapeEnabled: true,
+      robotsCompliant: true,
+    },
+  })
+
+  if (!source) {
+    jobLogger.error('Source not found', { sourceId })
+    throw new Error(`Source '${sourceId}' not found`)
+  }
+
+  if (!source.scrapeEnabled) {
+    jobLogger.info('Source scraping disabled since job queued, skipping', { sourceId })
+    return
+  }
+
+  if (!source.robotsCompliant) {
+    jobLogger.info('Source marked robots non-compliant since job queued, skipping', { sourceId })
     return
   }
 
@@ -187,7 +213,9 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     await incrementRunMetric(runId, 'offersDropped')
 
     // Track as failure if it counts toward drift
+    // Per spec §7: Drift-counting drops also affect adapter-level failureRate
     if (shouldCountTowardDrift(normalizeResult.reason)) {
+      await incrementRunMetric(runId, 'urlsFailed') // Affects adapter failureRate
       await updateTargetTracking(targetId, false)
     } else {
       await updateTargetTracking(targetId, true)
@@ -202,6 +230,8 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     await updateTargetTracking(targetId, false)
 
     if (normalizeResult.reason === 'ZERO_PRICE_EXTRACTED') {
+      // Per spec §7.2: Track zero-price count for auto-disable check
+      await incrementRunMetric(runId, 'zeroPriceCount')
       recordZeroPriceQuarantine({
         adapterId,
         sourceId,
@@ -322,6 +352,7 @@ async function incrementRunMetric(
     | 'offersDropped'
     | 'offersQuarantined'
     | 'oosNoPriceCount'
+    | 'zeroPriceCount'
 ): Promise<void> {
   try {
     await prisma.scrape_runs.update({
@@ -429,6 +460,10 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
 
   worker.on('completed', (job) => {
     log.debug('Job completed', { jobId: job.id, targetId: job.data.targetId })
+    // Decrement per-adapter pending count
+    decrementAdapterPending(job.data.adapterId).catch((err) => {
+      log.warn('Failed to decrement adapter pending', { error: err.message })
+    })
   })
 
   worker.on('failed', (job, error) => {
@@ -437,6 +472,12 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
       targetId: job?.data?.targetId,
       error: error.message,
     })
+    // Decrement per-adapter pending count even on failure
+    if (job?.data?.adapterId) {
+      decrementAdapterPending(job.data.adapterId).catch((err) => {
+        log.warn('Failed to decrement adapter pending', { error: err.message })
+      })
+    }
   })
 
   worker.on('error', (error) => {

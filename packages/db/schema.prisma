@@ -1356,8 +1356,9 @@ model scrape_targets {
   notes     String?
 
   // Relations
-  sources         sources          @relation(fields: [sourceId], references: [id])
-  source_products source_products? @relation(fields: [sourceProductId], references: [id])
+  sources              sources               @relation(fields: [sourceId], references: [id])
+  source_products      source_products?      @relation(fields: [sourceProductId], references: [id])
+  scrape_adapter_status scrape_adapter_status @relation(fields: [adapterId], references: [adapterId])
 
   // Unique on canonical URL per source (prevents duplicates via tracking params)
   @@unique([sourceId, canonicalUrl], map: "scrape_targets_source_canonical_unique")
@@ -1398,6 +1399,8 @@ model scrape_runs {
   offersQuarantined Int @default(0)
   /// Track separately, don't count as failures (per spec §7.2)
   oosNoPriceCount   Int @default(0)
+  /// Zero-price quarantines (per spec §7.2 - triggers auto-disable after 2 consecutive)
+  zeroPriceCount    Int @default(0)
 
   // Derived metrics (computed at run completion)
   failureRate Decimal? @db.Decimal(5, 4)
@@ -1412,8 +1415,9 @@ model scrape_runs {
   createdAt DateTime @default(now())
 
   // Relations
-  sources   sources   @relation(fields: [sourceId], references: [id])
-  retailers retailers @relation(fields: [retailerId], references: [id])
+  sources               sources               @relation(fields: [sourceId], references: [id])
+  retailers             retailers             @relation(fields: [retailerId], references: [id])
+  scrape_adapter_status scrape_adapter_status @relation(fields: [adapterId], references: [adapterId])
 
   @@index([adapterId])
   @@index([sourceId])
@@ -1442,10 +1446,16 @@ model scrape_adapter_status {
   // Consecutive failure tracking (per spec §7.2)
   consecutiveFailedBatches Int      @default(0)
   lastBatchFailureRate     Decimal? @db.Decimal(5, 4)
+  /// Per spec §7.2: Track if last run had zero-price quarantines for 2-consecutive check
+  lastRunHadZeroPrice      Boolean  @default(false)
 
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations (inverse - FK enforcement)
+  scrape_targets scrape_targets[]
+  scrape_runs    scrape_runs[]
 }
 
 model subscriptions {

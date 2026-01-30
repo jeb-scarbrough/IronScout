@@ -122,14 +122,19 @@ export function getRegistrableDomain(url: string): string {
   // Use psl library for proper eTLD+1 parsing
   const parsedDomain = psl.parse(hostname)
 
-  if (parsedDomain.error) {
+  // Type guard: ErrorResult has 'error' property, ParsedDomain has 'domain'
+  if ('error' in parsedDomain && parsedDomain.error) {
     // On parsing error, fall back to hostname
     return hostname
   }
 
   // parsedDomain.domain is the registrable domain (eTLD+1)
   // e.g., "example.co.uk" for "www.example.co.uk"
-  return parsedDomain.domain || hostname
+  if ('domain' in parsedDomain && parsedDomain.domain) {
+    return parsedDomain.domain
+  }
+
+  return hostname
 }
 
 /**

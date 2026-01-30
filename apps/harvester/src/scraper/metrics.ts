@@ -78,10 +78,12 @@ export function recordAdapterDisabled(payload: {
   })
 }
 
-export function recordStaleTargetsAlert(payload: { markedStale: number }): void {
-  if (payload.markedStale >= STALE_TARGETS_ALERT_THRESHOLD) {
+export function recordStaleTargetsAlert(payload: { totalStale: number; markedStale: number }): void {
+  // Per spec: Alert when TOTAL stale targets exceeds threshold, not just newly marked
+  if (payload.totalStale >= STALE_TARGETS_ALERT_THRESHOLD) {
     log.warn('SCRAPER_ALERT_STALE_TARGETS', {
       event_name: 'SCRAPER_ALERT_STALE_TARGETS',
+      totalStale: payload.totalStale,
       markedStale: payload.markedStale,
       threshold: STALE_TARGETS_ALERT_THRESHOLD,
     })

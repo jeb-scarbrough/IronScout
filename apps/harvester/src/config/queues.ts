@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq'
+import Redis from 'ioredis'
 import { redisConnection } from './redis'
 import { getQueueHistorySettings, prisma } from '@ironscout/db'
 import { createId } from '@paralleldrive/cuid2'
@@ -621,7 +622,7 @@ export interface ScrapeUrlJobData {
 export interface ScrapeEnqueueResult {
   status: 'accepted' | 'rejected' | 'deduplicated'
   jobId: string
-  reason?: 'queue_full' | 'adapter_disabled' | 'rate_limited'
+  reason?: 'queue_full' | 'adapter_full' | 'adapter_disabled' | 'rate_limited'
   retryAfterMs?: number
 }
 
@@ -633,6 +634,61 @@ export const MAX_SCRAPE_QUEUE_SIZE = parseInt(
   process.env.MAX_SCRAPE_QUEUE_SIZE || '10000',
   10
 )
+
+/**
+ * Maximum pending jobs per adapter.
+ * Per spec §8.1: Prevents one adapter from monopolizing the queue.
+ */
+export const MAX_PENDING_PER_ADAPTER = parseInt(
+  process.env.MAX_PENDING_PER_ADAPTER || '500',
+  10
+)
+
+/** Redis key prefix for per-adapter pending counts */
+const ADAPTER_PENDING_PREFIX = 'scrape:pending:adapter:'
+const ADAPTER_PENDING_TTL = 3600 // 1 hour
+
+/** Redis client for adapter tracking (lazy initialized) */
+let adapterTrackingRedis: Redis | null = null
+
+function getAdapterTrackingRedis(): Redis {
+  if (!adapterTrackingRedis) {
+    adapterTrackingRedis = new Redis(redisConnection)
+  }
+  return adapterTrackingRedis
+}
+
+/**
+ * Increment pending count for an adapter.
+ * Returns the new count.
+ */
+async function incrementAdapterPending(adapterId: string): Promise<number> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  const count = await redis.incr(key)
+  await redis.expire(key, ADAPTER_PENDING_TTL)
+  return count
+}
+
+/**
+ * Decrement pending count for an adapter.
+ * Called when job completes or fails.
+ */
+export async function decrementAdapterPending(adapterId: string): Promise<void> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  await redis.decr(key)
+}
+
+/**
+ * Get current pending count for an adapter.
+ */
+async function getAdapterPendingCount(adapterId: string): Promise<number> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  const count = await redis.get(key)
+  return count ? parseInt(count, 10) : 0
+}
 
 /**
  * Scrape URL queue
@@ -668,7 +724,25 @@ export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<ScrapeEn
   const jobId = `SCRAPE_${data.targetId}_${data.runId}`
 
   try {
-    // Check queue capacity before accepting
+    // Check per-adapter capacity first (per spec §8.1)
+    const adapterPending = await getAdapterPendingCount(data.adapterId)
+    if (adapterPending >= MAX_PENDING_PER_ADAPTER) {
+      rootLogger.warn('[enqueueScrapeUrl] Adapter at capacity, rejecting job', {
+        targetId: data.targetId,
+        runId: data.runId,
+        adapterId: data.adapterId,
+        adapterPending,
+        maxPerAdapter: MAX_PENDING_PER_ADAPTER,
+      })
+      return {
+        status: 'rejected',
+        jobId,
+        reason: 'adapter_full',
+        retryAfterMs: 30000, // Suggest retry after 30 seconds for adapter-specific backoff
+      }
+    }
+
+    // Check total queue capacity
     const pendingCount = await scrapeUrlQueue.count()
     if (pendingCount >= MAX_SCRAPE_QUEUE_SIZE) {
       rootLogger.warn('[enqueueScrapeUrl] Queue at capacity, rejecting job', {
@@ -689,6 +763,10 @@ export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<ScrapeEn
       jobId,
       priority: data.priority,
     })
+
+    // Track per-adapter pending count
+    await incrementAdapterPending(data.adapterId)
+
     return { status: 'accepted', jobId }
   } catch (err: any) {
     // Job already exists - this is expected deduplication

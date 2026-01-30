@@ -15,7 +15,7 @@ import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
 import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats } from '../config/queues.js'
 import { getAdapterRegistry } from './registry.js'
-import { checkAutoDisable, updateBaseline, computeDerivedMetrics } from './process/drift-detector.js'
+import { checkAutoDisable, checkZeroPriceDisable, updateBaseline, computeDerivedMetrics } from './process/drift-detector.js'
 import { recordAdapterDisabled, recordQueueRejection, recordRunCompleted, recordStaleTargetsAlert } from './metrics.js'
 import type { ScrapeRunTrigger, ScrapeRunStatus, ScrapeAdapterDisableReason } from '@ironscout/db/generated/prisma'
 import type { ScrapeRunMetrics } from './types.js'
@@ -26,6 +26,35 @@ const log = loggers.scraper
 let schedulerInterval: NodeJS.Timeout | null = null
 let isSchedulerRunning = false
 let lastMaintenanceRun: Date | null = null
+
+/**
+ * Per-adapter backoff tracking.
+ * Maps adapterId to timestamp when backoff expires.
+ * Per spec §8.3: Scheduler backs off based on retryAfterMs from rejections.
+ */
+const adapterBackoffUntil = new Map<string, number>()
+
+/**
+ * Check if an adapter is in backoff period.
+ */
+function isAdapterInBackoff(adapterId: string): boolean {
+  const backoffUntil = adapterBackoffUntil.get(adapterId)
+  if (!backoffUntil) return false
+  if (Date.now() >= backoffUntil) {
+    adapterBackoffUntil.delete(adapterId)
+    return false
+  }
+  return true
+}
+
+/**
+ * Set adapter backoff based on rejection.
+ */
+function setAdapterBackoff(adapterId: string, retryAfterMs: number): void {
+  const backoffUntil = Date.now() + retryAfterMs
+  adapterBackoffUntil.set(adapterId, backoffUntil)
+  log.debug('Adapter in backoff', { adapterId, retryAfterMs, backoffUntil: new Date(backoffUntil) })
+}
 
 /**
  * Scheduler configuration.
@@ -200,6 +229,7 @@ async function finalizeStaleRuns(): Promise<void> {
       offersDropped: true,
       offersQuarantined: true,
       oosNoPriceCount: true,
+      zeroPriceCount: true,
     },
   })
 
@@ -290,13 +320,13 @@ async function finalizeStaleRuns(): Promise<void> {
         offersDropped: run.offersDropped,
         offersQuarantined: run.offersQuarantined,
         oosNoPriceCount: run.oosNoPriceCount,
-        zeroPriceCount: 0, // Not tracked at run level currently
+        zeroPriceCount: run.zeroPriceCount,
       }
 
       // Get or create adapter status record
       let adapterStatus = await prisma.scrape_adapter_status.findUnique({
         where: { adapterId: run.adapterId },
-        select: { consecutiveFailedBatches: true, enabled: true },
+        select: { consecutiveFailedBatches: true, enabled: true, lastRunHadZeroPrice: true },
       })
 
       if (!adapterStatus) {
@@ -307,12 +337,15 @@ async function finalizeStaleRuns(): Promise<void> {
             enabled: true,
             consecutiveFailedBatches: 0,
           },
-          select: { consecutiveFailedBatches: true, enabled: true },
+          select: { consecutiveFailedBatches: true, enabled: true, lastRunHadZeroPrice: true },
         })
       }
 
       // Check auto-disable decision
       const disableDecision = checkAutoDisable(metrics, adapterStatus.consecutiveFailedBatches)
+
+      // Per spec §7.2: Check zero-price auto-disable (2 consecutive runs with zero prices)
+      const zeroPriceDecision = checkZeroPriceDisable(metrics, adapterStatus.lastRunHadZeroPrice)
 
       if (disableDecision) {
         // Update adapter status with new consecutive failed batches count
@@ -356,15 +389,48 @@ async function finalizeStaleRuns(): Promise<void> {
         })
       }
 
+      // Handle zero-price auto-disable (per spec §7.2)
+      if (zeroPriceDecision?.shouldDisable && adapterStatus.enabled) {
+        await prisma.scrape_adapter_status.update({
+          where: { adapterId: run.adapterId },
+          data: {
+            enabled: false,
+            disabledAt: new Date(),
+            disabledReason: 'DRIFT_DETECTED',
+            lastRunHadZeroPrice: true,
+          },
+        })
+
+        recordAdapterDisabled({
+          adapterId: run.adapterId,
+          reason: 'DRIFT_DETECTED',
+          consecutiveFailedBatches: 2, // Two consecutive zero-price runs
+        })
+
+        log.warn('Auto-disabling adapter due to consecutive zero-price runs', {
+          adapterId: run.adapterId,
+          message: zeroPriceDecision.message,
+        })
+      } else {
+        // Update lastRunHadZeroPrice for next run's check
+        const currentRunHasZeroPrice = run.zeroPriceCount > 0
+        await prisma.scrape_adapter_status.update({
+          where: { adapterId: run.adapterId },
+          data: { lastRunHadZeroPrice: currentRunHasZeroPrice },
+        })
+      }
+
       // Update baseline for successful runs (per spec §7.3)
       if (status === 'SUCCESS') {
         try {
           // Query recent successful runs for rolling baseline calculation
+          // Per spec §7.3: Exclude small runs (<20 URLs) from baseline
           const recentRuns = await prisma.scrape_runs.findMany({
             where: {
               adapterId: run.adapterId,
               status: 'SUCCESS',
               completedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }, // 7 days
+              urlsAttempted: { gte: 20 }, // Per spec: exclude small runs
             },
             orderBy: { completedAt: 'desc' },
             take: 20,
@@ -479,9 +545,14 @@ async function runDailyMaintenance(): Promise<void> {
     // Recheck broken URLs weekly
     const recheckResult = await recheckBrokenUrls()
 
-    recordStaleTargetsAlert({ markedStale: cleanupResult.markedStale })
+    // Per spec: Alert based on TOTAL stale targets, not just newly marked
+    const totalStale = await prisma.scrape_targets.count({
+      where: { status: 'STALE' },
+    })
+    recordStaleTargetsAlert({ totalStale, markedStale: cleanupResult.markedStale })
 
     log.info('Hourly maintenance completed', {
+      totalStale,
       markedStale: cleanupResult.markedStale,
       deletedBroken: cleanupResult.deletedBroken,
       brokenRechecked: recheckResult.rechecked,
@@ -750,6 +821,12 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
       const adapter = registry.get(adapterId)
       if (!adapter) continue
 
+      // Per spec §8.3: Check adapter backoff before scheduling
+      if (isAdapterInBackoff(adapterId)) {
+        log.debug('Skipping adapter - in backoff period', { adapterId })
+        continue
+      }
+
       // Create a run for this source batch
       const firstTarget = sourceTargets[0]
       const runId = await createScrapeRun(
@@ -799,6 +876,12 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
             sourceId: target.sourceId,
             retryAfterMs: result.retryAfterMs,
           })
+
+          // Per spec §8.3: Set adapter backoff based on retryAfterMs
+          if (result.retryAfterMs && (result.reason === 'adapter_full' || result.reason === 'rate_limited')) {
+            setAdapterBackoff(target.adapterId, result.retryAfterMs)
+          }
+
           // If >50% rejections in this run, stop enqueueing
           if (rejectedInRun > acceptedInRun && acceptedInRun > 0) {
             log.warn('Stopping enqueue for run - high rejection rate', {

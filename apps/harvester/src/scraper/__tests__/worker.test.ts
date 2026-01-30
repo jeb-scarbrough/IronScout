@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => {
     mockMarkTargetBroken: vi.fn(),
     mockFinalizeRun: vi.fn(),
     mockScrapeTargetsFindUnique: vi.fn(),
+    mockSourcesFindUnique: vi.fn(),
     mockScrapeRunsUpdate: vi.fn(),
     registry: {
       get: vi.fn(),
@@ -72,6 +73,7 @@ vi.mock('bullmq', () => ({
 vi.mock('@ironscout/db', () => ({
   prisma: {
     scrape_targets: { findUnique: mocks.mockScrapeTargetsFindUnique },
+    sources: { findUnique: mocks.mockSourcesFindUnique },
     scrape_runs: { update: mocks.mockScrapeRunsUpdate },
     quarantined_records: { upsert: vi.fn() },
   },
@@ -125,6 +127,7 @@ vi.mock('../metrics.js', () => metricsMocks)
 vi.mock('../../config/queues.js', () => ({
   QUEUE_NAMES: { SCRAPE_URL: 'scrape-url' },
   enqueueProductResolve: vi.fn(),
+  decrementAdapterPending: vi.fn(),
 }))
 
 vi.mock('../../resolver/index.js', () => ({
@@ -199,6 +202,11 @@ describe('Scrape URL Worker', () => {
     mocks.state.processor = null
     mocks.fetchImpl.mockResolvedValue(undefined)
     mocks.acquireImpl.mockResolvedValue(undefined)
+    // Default source mock: scraping enabled
+    mocks.mockSourcesFindUnique.mockResolvedValue({
+      scrapeEnabled: true,
+      robotsCompliant: true,
+    })
     await startScrapeWorker()
   })
 

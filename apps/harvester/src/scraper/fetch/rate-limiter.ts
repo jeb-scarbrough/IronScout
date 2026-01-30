@@ -12,7 +12,7 @@
 
 import Redis from 'ioredis'
 import { redisConnection } from '../../config/redis.js'
-import type { RateLimiter, RateLimitConfig } from '../types.js'
+import type { RateLimiter, RateLimitConfig, RobotsPolicy } from '../types.js'
 import { DEFAULT_RATE_LIMIT } from '../types.js'
 import { getRegistrableDomain } from '../utils/url.js'
 
@@ -28,6 +28,9 @@ export interface RedisRateLimiterOptions {
 
   /** Custom Redis client (for testing) */
   redisClient?: Redis
+
+  /** Robots policy for crawl-delay enforcement (per spec §6.2) */
+  robotsPolicy?: RobotsPolicy
 }
 
 /**
@@ -38,6 +41,7 @@ export class RedisRateLimiter implements RateLimiter {
   private redis: Redis
   private readonly domainOverrides: Map<string, RateLimitConfig>
   private readonly ownsRedisClient: boolean
+  private readonly robotsPolicy?: RobotsPolicy
 
   constructor(options: RedisRateLimiterOptions = {}) {
     if (options.redisClient) {
@@ -49,11 +53,13 @@ export class RedisRateLimiter implements RateLimiter {
     }
 
     this.domainOverrides = options.domainOverrides ?? new Map()
+    this.robotsPolicy = options.robotsPolicy
   }
 
   /**
    * Acquire permission to make a request to the given URL's domain.
    * Blocks until rate limit allows.
+   * Per spec §6.2: Honors robots.txt crawl-delay if robotsPolicy is configured.
    */
   async acquire(urlOrDomain: string): Promise<void> {
     // If URL is passed, extract domain
@@ -67,8 +73,20 @@ export class RedisRateLimiter implements RateLimiter {
     const config = this.getConfig(domain)
     const key = `${REDIS_KEY_PREFIX}${domain}`
 
-    // Minimum delay between requests
-    const minDelayMs = config.minDelayMs
+    // Per spec §6.2: Check robots.txt crawl-delay and use if greater than config
+    let minDelayMs = config.minDelayMs
+    if (this.robotsPolicy) {
+      try {
+        const crawlDelay = await this.robotsPolicy.getCrawlDelay(domain)
+        if (crawlDelay !== null) {
+          // crawlDelay is in seconds, convert to ms
+          const crawlDelayMs = crawlDelay * 1000
+          minDelayMs = Math.max(minDelayMs, crawlDelayMs)
+        }
+      } catch {
+        // Ignore errors fetching crawl-delay, use config default
+      }
+    }
 
     while (true) {
       const now = Date.now()
