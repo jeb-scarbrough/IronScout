@@ -2,10 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   mockFindMany: vi.fn(),
+  mockRunFindMany: vi.fn(),
   mockRunCreate: vi.fn(),
   mockRunUpdate: vi.fn(),
   mockAdapterStatusFind: vi.fn(),
+  mockAdapterStatusCreate: vi.fn(),
+  mockAdapterStatusUpdate: vi.fn(),
   mockEnqueueScrapeUrl: vi.fn(),
+  mockQueueGetJobs: vi.fn(),
   registry: {
     get: vi.fn(),
   },
@@ -13,9 +17,21 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@ironscout/db', () => ({
   prisma: {
-    scrape_targets: { findMany: mocks.mockFindMany },
-    scrape_runs: { create: mocks.mockRunCreate, update: mocks.mockRunUpdate },
-    scrape_adapter_status: { findUnique: mocks.mockAdapterStatusFind },
+    scrape_targets: {
+      findMany: mocks.mockFindMany,
+      update: vi.fn(),
+    },
+    scrape_runs: {
+      findMany: mocks.mockRunFindMany,
+      findFirst: vi.fn(),
+      create: mocks.mockRunCreate,
+      update: mocks.mockRunUpdate,
+    },
+    scrape_adapter_status: {
+      findUnique: mocks.mockAdapterStatusFind,
+      create: mocks.mockAdapterStatusCreate,
+      update: mocks.mockAdapterStatusUpdate,
+    },
   },
 }))
 
@@ -25,6 +41,9 @@ vi.mock('../registry.js', () => ({
 
 vi.mock('../../config/queues.js', () => ({
   enqueueScrapeUrl: mocks.mockEnqueueScrapeUrl,
+  scrapeUrlQueue: {
+    getJobs: mocks.mockQueueGetJobs,
+  },
 }))
 
 vi.mock('../../config/logger.js', () => ({
@@ -38,7 +57,7 @@ vi.mock('../../config/logger.js', () => ({
   },
 }))
 
-import { triggerScrapeSchedulerTick } from '../scheduler.js'
+import { triggerScrapeSchedulerTick, isTargetDue } from '../scheduler.js'
 
 const createTarget = (overrides: Partial<any> = {}) => ({
   id: 'target-1',
@@ -46,6 +65,8 @@ const createTarget = (overrides: Partial<any> = {}) => ({
   sourceId: 'source-1',
   adapterId: 'adapter-1',
   priority: 5,
+  schedule: null, // Use default cron schedule
+  lastScrapedAt: null, // Never scraped = always due
   sources: {
     id: 'source-1',
     retailerId: 'retailer-1',
@@ -57,6 +78,11 @@ const createTarget = (overrides: Partial<any> = {}) => ({
 describe('Scrape Scheduler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no stale runs to finalize
+    mocks.mockRunFindMany.mockResolvedValue([])
+    mocks.mockQueueGetJobs.mockResolvedValue([])
+    // Default: first call is manual runs (return empty), second is scheduled targets
+    mocks.mockFindMany.mockResolvedValueOnce([]) // manual runs query
   })
 
   it('creates runs and enqueues jobs per adapter', async () => {
@@ -64,7 +90,8 @@ describe('Scrape Scheduler', () => {
     mocks.registry.get.mockReturnValue(adapter)
     mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: true })
 
-    mocks.mockFindMany.mockResolvedValue([
+    // Second findMany call returns scheduled targets (first returns empty for manual runs - set in beforeEach)
+    mocks.mockFindMany.mockResolvedValueOnce([
       createTarget({ id: 'target-1' }),
       createTarget({ id: 'target-2', url: 'https://example.com/other' }),
     ])
@@ -104,7 +131,8 @@ describe('Scrape Scheduler', () => {
 
   it('skips targets when adapter is not registered', async () => {
     mocks.registry.get.mockReturnValue(undefined)
-    mocks.mockFindMany.mockResolvedValue([createTarget()])
+    // Second findMany call returns scheduled targets (first returns empty for manual runs)
+    mocks.mockFindMany.mockResolvedValueOnce([createTarget()])
 
     await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
 
@@ -116,11 +144,64 @@ describe('Scrape Scheduler', () => {
     const adapter = { id: 'adapter-1', version: '1.0.0', domain: 'example.com' }
     mocks.registry.get.mockReturnValue(adapter)
     mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: false })
-    mocks.mockFindMany.mockResolvedValue([createTarget()])
+    // Second findMany call returns scheduled targets (first returns empty for manual runs)
+    mocks.mockFindMany.mockResolvedValueOnce([createTarget()])
 
     await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
 
     expect(mocks.mockRunCreate).not.toHaveBeenCalled()
     expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+  })
+})
+
+describe('isTargetDue (cron scheduling)', () => {
+  it('returns true when never scraped', () => {
+    const now = new Date('2025-01-15T12:00:00Z')
+    expect(isTargetDue(null, null, now)).toBe(true)
+    expect(isTargetDue('0 * * * *', null, now)).toBe(true)
+  })
+
+  it('returns true when last scraped before previous scheduled time', () => {
+    // Cron: every hour at minute 0
+    const schedule = '0 * * * *'
+    const now = new Date('2025-01-15T12:30:00Z') // 12:30
+    const lastScrapedAt = new Date('2025-01-15T11:00:00Z') // 11:00 - before 12:00
+
+    expect(isTargetDue(schedule, lastScrapedAt, now)).toBe(true)
+  })
+
+  it('returns false when last scraped after previous scheduled time', () => {
+    // Cron: every hour at minute 0
+    const schedule = '0 * * * *'
+    const now = new Date('2025-01-15T12:30:00Z') // 12:30
+    const lastScrapedAt = new Date('2025-01-15T12:15:00Z') // 12:15 - after 12:00
+
+    expect(isTargetDue(schedule, lastScrapedAt, now)).toBe(false)
+  })
+
+  it('uses default 4-hour schedule when schedule is null', () => {
+    // Default: 0 0,4,8,12,16,20 * * *
+    const now = new Date('2025-01-15T14:00:00Z') // 14:00
+
+    // Last scraped at 12:30 - after 12:00 scheduled time
+    const recent = new Date('2025-01-15T12:30:00Z')
+    expect(isTargetDue(null, recent, now)).toBe(false)
+
+    // Last scraped at 11:30 - before 12:00 scheduled time
+    const old = new Date('2025-01-15T11:30:00Z')
+    expect(isTargetDue(null, old, now)).toBe(true)
+  })
+
+  it('handles invalid cron by using fallback 4-hour window', () => {
+    const now = new Date('2025-01-15T12:00:00Z')
+    const invalidCron = 'not-a-valid-cron'
+
+    // Last scraped 5 hours ago = due
+    const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000)
+    expect(isTargetDue(invalidCron, fiveHoursAgo, now)).toBe(true)
+
+    // Last scraped 1 hour ago = not due
+    const oneHourAgo = new Date(now.getTime() - 1 * 60 * 60 * 1000)
+    expect(isTargetDue(invalidCron, oneHourAgo, now)).toBe(false)
   })
 })

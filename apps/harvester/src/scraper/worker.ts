@@ -17,7 +17,8 @@ import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
 import { redisConnection } from '../config/redis.js'
-import { QUEUE_NAMES, ScrapeUrlJobData } from '../config/queues.js'
+import { QUEUE_NAMES, ScrapeUrlJobData, enqueueProductResolve } from '../config/queues.js'
+import { RESOLVER_VERSION } from '../resolver/index.js'
 import { getAdapterRegistry } from './registry.js'
 import { registerAllAdapters } from './adapters/index.js'
 import { HttpFetcher } from './fetch/http-fetcher.js'
@@ -190,7 +191,43 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
     await incrementRunMetric(runId, 'offersQuarantined')
     await updateTargetTracking(targetId, false)
 
-    // TODO: Write to quarantine table
+    // Write to quarantine table for admin review
+    // Per scraper-framework-01 spec: quarantined offers must be persisted
+    try {
+      await prisma.quarantined_records.upsert({
+        where: {
+          feedId_matchKey: {
+            feedId: sourceId,
+            matchKey: normalizeResult.offer.identityKey,
+          },
+        },
+        create: {
+          feedType: 'AFFILIATE', // Scrapers use same model as affiliate feeds
+          feedId: sourceId,
+          runId,
+          sourceId,
+          retailerId,
+          matchKey: normalizeResult.offer.identityKey,
+          rawData: normalizeResult.offer as any,
+          blockingErrors: [normalizeResult.reason] as any,
+          status: 'QUARANTINED',
+        },
+        update: {
+          runId,
+          rawData: normalizeResult.offer as any,
+          blockingErrors: [normalizeResult.reason] as any,
+          updatedAt: new Date(),
+        },
+      })
+      jobLogger.debug('Wrote quarantine record', {
+        identityKey: normalizeResult.offer.identityKey,
+        reason: normalizeResult.reason,
+      })
+    } catch (quarantineError) {
+      jobLogger.error('Failed to write quarantine record', {
+        error: (quarantineError as Error).message,
+      })
+    }
     return
   }
 
@@ -214,6 +251,23 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
   await incrementRunMetric(runId, 'urlsSucceeded')
   await incrementRunMetric(runId, 'offersValid')
   await updateTargetTracking(targetId, true)
+
+  // Enqueue resolver to link source_product to canonical product
+  // Per scraper-framework-01 spec §10.2: unified ingestion pattern
+  if (writeResult.sourceProductId) {
+    await enqueueProductResolve(
+      writeResult.sourceProductId,
+      'INGEST',
+      RESOLVER_VERSION,
+      {
+        sourceId,
+        identityKey: normalizeResult.offer.identityKey,
+      }
+    )
+    jobLogger.debug('Enqueued resolver job', {
+      sourceProductId: writeResult.sourceProductId,
+    })
+  }
 
   jobLogger.info('Scrape completed successfully', {
     sourceProductId: writeResult.sourceProductId,

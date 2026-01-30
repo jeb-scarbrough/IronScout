@@ -69,6 +69,7 @@ vi.mock('@ironscout/db', () => ({
   prisma: {
     scrape_targets: { findUnique: mocks.mockScrapeTargetsFindUnique },
     scrape_runs: { update: mocks.mockScrapeRunsUpdate },
+    quarantined_records: { upsert: vi.fn() },
   },
 }))
 
@@ -99,30 +100,60 @@ vi.mock('../process/writer.js', () => ({
   finalizeRun: mocks.mockFinalizeRun,
 }))
 
+vi.mock('../process/validator.js', () => ({
+  validateOffer: vi.fn(),
+  createDropFromExtractFailure: vi.fn(),
+  shouldCountTowardDrift: vi.fn().mockReturnValue(false),
+}))
+
+vi.mock('../process/drift-detector.js', () => ({
+  shouldMarkUrlBroken: vi.fn((failures) => failures >= 5),
+  checkAutoDisable: vi.fn(),
+}))
+
 vi.mock('../../config/queues.js', () => ({
   QUEUE_NAMES: { SCRAPE_URL: 'scrape-url' },
+  enqueueProductResolve: vi.fn(),
+}))
+
+vi.mock('../../resolver/index.js', () => ({
+  RESOLVER_VERSION: '1.0.0-test',
 }))
 
 vi.mock('../../config/redis.js', () => ({
   redisConnection: {},
 }))
 
-vi.mock('../../config/logger.js', () => ({
-  loggers: {
+vi.mock('../../config/logger.js', () => {
+  const mockLoggerChild = vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+
+  const mockLoggerInstance = {
     scraper: {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-      child: vi.fn(() => ({
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      })),
+      child: mockLoggerChild,
     },
-  },
-}))
+    resolver: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: mockLoggerChild,
+    },
+  }
+
+  return {
+    logger: mockLoggerInstance,
+    loggers: mockLoggerInstance,
+  }
+})
 
 import { startScrapeWorker, stopScrapeWorker } from '../worker.js'
 

@@ -173,6 +173,8 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         )
+        -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+        AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
     )
     SELECT * FROM ranked_prices WHERE rn = 1
     LIMIT 500 -- MAX_PRODUCTS_TO_EVALUATE: documented limit to prevent unbounded queries
@@ -241,6 +243,8 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         )
+        -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+        AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt")
     )
     SELECT
@@ -300,6 +304,8 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
             (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
           )
       )
+      -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+      AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
     GROUP BY p.id
   `
 
@@ -353,6 +359,8 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         )
+        -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+        AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
       GROUP BY pl."productId", DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     ),
     with_gaps AS (

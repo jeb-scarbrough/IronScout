@@ -289,7 +289,7 @@ export function nonIgnoredRunPriceWhere(): Prisma.pricesWhereInput {
 
 /**
  * Visibility filter for historical price reads.
- * Applies retailer eligibility + listing and ignored-run exclusion.
+ * Applies retailer eligibility + listing, ignored-run exclusion, and SCRAPE exclusion.
  * Does NOT apply current-price lookback.
  */
 export function visibleHistoricalPriceWhere(): Prisma.pricesWhereInput {
@@ -297,6 +297,7 @@ export function visibleHistoricalPriceWhere(): Prisma.pricesWhereInput {
     AND: [
       visibleRetailerPriceWhere(),
       nonIgnoredRunPriceWhere(),
+      nonScrapePriceWhere(),
     ],
   }
 }
@@ -332,9 +333,23 @@ export function priceLookbackWhere(): Prisma.pricesWhereInput {
 }
 
 /**
+ * Prisma where clause to exclude SCRAPE prices from consumer queries.
+ * Per scraper-framework-01 spec §12: Scraped prices MUST be excluded from
+ * consumer-facing queries until explicitly enabled.
+ */
+export function nonScrapePriceWhere(): Prisma.pricesWhereInput {
+  return {
+    OR: [
+      { ingestionRunType: null },
+      { ingestionRunType: { notIn: ['SCRAPE'] } },
+    ],
+  }
+}
+
+/**
  * Complete visibility filter for consumer-facing price queries.
- * Combines ADR-005 (retailer visibility), ADR-015 (run ignore), and
- * search-lens-v1.md (price lookback).
+ * Combines ADR-005 (retailer visibility), ADR-015 (run ignore),
+ * search-lens-v1.md (price lookback), and scraper-framework-01 §12 (SCRAPE exclusion).
  */
 export function visiblePriceWhere(): Prisma.pricesWhereInput {
   return {
@@ -342,6 +357,7 @@ export function visiblePriceWhere(): Prisma.pricesWhereInput {
       visibleRetailerPriceWhere(),
       nonIgnoredRunPriceWhere(),
       priceLookbackWhere(),
+      nonScrapePriceWhere(),
     ],
   }
 }
