@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut, DollarSign } from 'lucide-react'
@@ -13,6 +14,12 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const { data: session } = useSession()
+  const pathname = usePathname()
+
+  // Don't render main header on auth pages - they have their own header
+  if (pathname?.startsWith('/auth')) {
+    return null
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

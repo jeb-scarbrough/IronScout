@@ -1,10 +1,20 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { BRAND, BRAND_NAME } from '@/lib/brand'
 
 const WWW_URL = BRAND.website
 
 export function Footer() {
+  const pathname = usePathname()
+
+  // Don't render footer on auth pages
+  if (pathname?.startsWith('/auth')) {
+    return null
+  }
+
   return (
     <footer className="border-t bg-background">
       <div className="container mx-auto px-4 py-12">
