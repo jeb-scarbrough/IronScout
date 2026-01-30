@@ -220,6 +220,7 @@ export function isTargetDue(
  * - sources.robots_compliant = TRUE (robots/legal compliance)
  * - scrape_targets.enabled = TRUE (target-level toggle)
  * - scrape_targets.status = 'ACTIVE' (not broken/paused/stale)
+ * - scrape_targets.robotsPathBlocked != TRUE (not admin-blocked)
  * - Schedule is due based on cron and lastScrapedAt
  */
 async function getDueTargets(limit: number): Promise<DueTarget[]> {
@@ -233,6 +234,7 @@ async function getDueTargets(limit: number): Promise<DueTarget[]> {
     where: {
       enabled: true,
       status: 'ACTIVE',
+      robotsPathBlocked: { not: true }, // Exclude admin-blocked URLs from scheduling
       sources: {
         scrapeEnabled: true,
         robotsCompliant: true,
