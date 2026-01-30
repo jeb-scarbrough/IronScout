@@ -83,7 +83,13 @@ export default function Home() {
               </span>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 sm:gap-6">
+              <a
+                href={`${APP_URL}/price-check`}
+                className="text-iron-400 hover:text-white text-sm font-medium transition-colors"
+              >
+                Price Check
+              </a>
               <a
                 href="/about"
                 className="text-iron-400 hover:text-white text-sm font-medium transition-colors hidden sm:block"
@@ -98,7 +104,7 @@ export default function Home() {
               </a>
               <a
                 href={`${APP_URL}/auth/signin`}
-                className="text-iron-300 hover:text-white text-sm font-medium transition-colors"
+                className="text-iron-300 hover:text-white text-sm font-medium transition-colors hidden sm:block"
               >
                 Sign In
               </a>
