@@ -4,8 +4,10 @@
  * CI Preflight Checks
  *
  * Fast validation script that runs before tests to catch common issues early:
+ * - "use server" export violations (non-async exports)
  * - Lint errors (including ESLint config issues)
  * - TypeScript errors (including Next.js 16 breaking changes)
+ * - Prisma schema/database drift
  * - Build failures
  * - Package export issues
  *
@@ -14,6 +16,8 @@
  *   pnpm preflight:quick  # Skip build (faster, for local dev)
  *
  * These checks would have caught:
+ * - "use server" files exporting const/let (use-server-exports)
+ * - Prisma schema drift / missing migrations (schema-drift)
  * - Next.js 16 async searchParams (type-check)
  * - ESLint config issues (lint)
  * - ESM export resolution (build)
@@ -90,14 +94,20 @@ async function main() {
   const totalStart = performance.now()
 
   const checks = [
-    // 1. Lint - catches ESLint config issues, code quality
+    // 1. "use server" exports - catches non-async exports before build
+    { name: 'Use Server Exports', command: 'node', args: ['scripts/check-use-server-exports.mjs'] },
+
+    // 2. Lint - catches ESLint config issues, code quality
     { name: 'Lint', command: 'pnpm', args: ['lint'] },
 
-    // 2. Type Check - catches TS errors, Next.js 16 breaking changes
+    // 3. Type Check - catches TS errors, Next.js 16 breaking changes
     { name: 'Type Check', command: 'pnpm', args: ['type-check'] },
 
-    // 3. Prisma Generate - ensures schema is valid and client is fresh
+    // 4. Prisma Generate - ensures schema is valid and client is fresh
     { name: 'Prisma Generate', command: 'pnpm', args: ['db:generate'] },
+
+    // 5. Schema Drift - catches database/schema mismatches
+    { name: 'Schema Drift Check', command: 'pnpm', args: ['db:check:drift'] },
   ]
 
   // 4. Build (optional) - catches build-time errors, ESM issues
