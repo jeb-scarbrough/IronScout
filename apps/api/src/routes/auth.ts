@@ -61,12 +61,12 @@ const signinSchema = z.object({
 })
 
 const oauthLinkSchema = z.object({
-  userId: z.string(),
   provider: z.string(),
-  providerAccountId: z.string(),
+  providerAccountId: z.string().optional(),
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
   expiresAt: z.number().optional(),
+  idToken: z.string().optional(),
 })
 
 const oauthSigninSchema = z.object({
@@ -503,6 +503,26 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
 
 router.post('/oauth/link', authRateLimits.oauth, async (req: Request, res: Response) => {
   try {
+    // Check JWT_SECRET before proceeding
+    if (!JWT_SECRET) {
+      log.error('JWT_SECRET not configured - cannot link OAuth account')
+      return res.status(500).json({
+        error: 'Server configuration error: JWT_SECRET not set',
+      })
+    }
+
+    const authHeader = req.headers.authorization
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    const token = authHeader.substring(7)
+    const decoded = verifyToken(token)
+
+    if (!decoded || decoded.type !== 'access') {
+      return res.status(401).json({ error: 'Invalid or expired token' })
+    }
+
     const parsed = oauthLinkSchema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({
@@ -511,14 +531,68 @@ router.post('/oauth/link', authRateLimits.oauth, async (req: Request, res: Respo
       })
     }
 
-    const { userId, provider, providerAccountId, accessToken, refreshToken, expiresAt } = parsed.data
+    const { provider, providerAccountId, accessToken, refreshToken, expiresAt, idToken } = parsed.data
+
+    // V1: Only Google OAuth is supported (expand here when adding providers)
+    if (provider !== 'google') {
+      log.warn('OAuth provider not supported for link', { provider })
+      return res.status(400).json({
+        error: 'Unsupported OAuth provider',
+        code: 'OAUTH_PROVIDER_UNSUPPORTED',
+      })
+    }
+
+    if (!idToken) {
+      log.warn('OAuth link missing idToken', { provider })
+      return res.status(400).json({
+        error: 'OAuth token missing',
+        code: 'OAUTH_TOKEN_MISSING',
+      })
+    }
+
+    const verified = await verifyGoogleIdToken(idToken)
+    if (!verified) {
+      log.warn('OAuth token verification failed for link', { provider })
+      return res.status(401).json({
+        error: 'Invalid OAuth token',
+        code: 'OAUTH_TOKEN_INVALID',
+      })
+    }
+
+    if (providerAccountId && providerAccountId !== verified.sub) {
+      log.warn('OAuth link providerAccountId mismatch', { provider })
+      return res.status(403).json({
+        error: 'OAuth account mismatch',
+        code: 'OAUTH_ACCOUNT_MISMATCH',
+      })
+    }
+
+    const userId = decoded.sub
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, status: true },
+    })
+
+    if (!user || user.status === 'DELETED') {
+      return res.status(401).json({ error: 'User not found' })
+    }
+
+    if (user.email.toLowerCase() !== verified.email) {
+      log.warn('OAuth link email mismatch', { provider })
+      return res.status(403).json({
+        error: 'OAuth email mismatch',
+        code: 'OAUTH_EMAIL_MISMATCH',
+      })
+    }
+
+    const verifiedProviderAccountId = verified.sub
 
     // Check if account already linked
     const existingAccount = await prisma.account.findUnique({
       where: {
         provider_providerAccountId: {
           provider,
-          providerAccountId,
+          providerAccountId: verifiedProviderAccountId,
         },
       },
     })
@@ -539,7 +613,7 @@ router.post('/oauth/link', authRateLimits.oauth, async (req: Request, res: Respo
         userId,
         type: 'oauth',
         provider,
-        providerAccountId,
+        providerAccountId: verifiedProviderAccountId,
         access_token: accessToken,
         refresh_token: refreshToken,
         expires_at: expiresAt,
