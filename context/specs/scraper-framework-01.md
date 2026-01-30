@@ -1287,7 +1287,8 @@ Before enabling any scrape adapter for production:
 ### 12.3 Source Defaults
 
 New scrape sources MUST default to:
-- `visibilityStatus = 'INELIGIBLE'`
+- `visibilityStatus = 'PENDING'` for new retailers awaiting admin review
+- `visibilityStatus = 'INELIGIBLE'` only when explicitly disqualified
 - `upcTrusted = false` in `source_trust_config`
 
 ---
