@@ -30,11 +30,7 @@ export function EmbeddingsSettings() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/search/admin/embedding-stats', {
-        headers: {
-          'X-Admin-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || '',
-        },
-      });
+      const response = await fetch('/api/search/admin/embedding-stats');
       if (!response.ok) throw new Error('Failed to fetch stats');
       const data = await response.json();
       setStats(data);
@@ -68,9 +64,6 @@ export function EmbeddingsSettings() {
     try {
       const response = await fetch('/api/search/admin/backfill-embeddings', {
         method: 'POST',
-        headers: {
-          'X-Admin-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || '',
-        },
       });
 
       if (!response.ok) {
