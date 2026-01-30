@@ -1,14 +1,22 @@
 #!/usr/bin/env npx tsx
 /**
- * CI Gate: Verify schema.prisma is valid and migrations are applied
+ * CI Gate: Comprehensive schema and database validation
  *
  * This script validates:
- * 1. The schema.prisma file is syntactically valid
- * 2. All migrations have been applied to the database (if DATABASE_URL is set)
+ * 1. Schema.prisma is syntactically valid
+ * 2. Schema.prisma has no uncommitted changes (prevents accidental overwrites)
+ * 3. All migrations have been applied to the database
+ * 4. Database schema actually matches schema.prisma (via migrate diff)
+ * 5. Generated Prisma client is up-to-date
  *
  * Exit codes:
- *   0 = schema valid and migrations in sync
- *   1 = validation failed or pending migrations
+ *   0 = all checks pass
+ *   1 = validation failed
+ *
+ * This would have caught:
+ * - Accidental `prisma db pull --force` overwriting schema
+ * - Missing columns in database
+ * - Stale Prisma client after schema changes
  */
 
 import { spawnSync } from 'child_process'
@@ -24,12 +32,15 @@ config({ path: resolve(__dirname, '..', '.env') })
 config({ path: resolve(__dirname, '..', '..', '..', '.env') })
 
 const DB_PACKAGE_ROOT = resolve(__dirname, '..')
+const REPO_ROOT = resolve(__dirname, '..', '..', '..')
 const SCHEMA_PATH = resolve(DB_PACKAGE_ROOT, 'schema.prisma')
+const GENERATED_PATH = resolve(DB_PACKAGE_ROOT, 'generated', 'prisma')
 
 // Colors for terminal output
 const RED = '\x1b[31m'
 const GREEN = '\x1b[32m'
 const YELLOW = '\x1b[33m'
+const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 
 function log(color: string, prefix: string, msg: string) {
@@ -48,22 +59,31 @@ function success(msg: string) {
   log(GREEN, 'OK', msg)
 }
 
+function warn(msg: string) {
+  log(YELLOW, 'WARN', msg)
+}
+
+function info(msg: string) {
+  log(GREEN, 'INFO', msg)
+}
+
 async function main() {
+  const args = process.argv.slice(2)
+  const skipGitCheck = args.includes('--skip-git-check')
+
   // Verify schema exists
   if (!existsSync(SCHEMA_PATH)) {
     fatal(`schema.prisma not found at ${SCHEMA_PATH}`)
   }
 
   // Step 1: Validate schema syntax
-  log(GREEN, 'INFO', 'Validating schema syntax...')
+  info('Validating schema syntax...')
 
-  const validateResult = spawnSync('npx', [
-    'prisma', 'validate'
-  ], {
+  const validateResult = spawnSync('npx', ['prisma', 'validate'], {
     cwd: DB_PACKAGE_ROOT,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32',
   })
 
   if (validateResult.status !== 0) {
@@ -73,57 +93,138 @@ async function main() {
 
   success('Schema syntax is valid')
 
-  // Step 2: Check migration status (only if DATABASE_URL is set)
+  // Step 2: Check for uncommitted schema changes (prevents accidental db pull --force)
+  if (!skipGitCheck) {
+    info('Checking for uncommitted schema changes...')
+
+    const gitDiff = spawnSync(
+      'git',
+      ['diff', '--name-only', 'packages/db/schema.prisma'],
+      {
+        cwd: REPO_ROOT,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      }
+    )
+
+    if (gitDiff.stdout.trim().includes('schema.prisma')) {
+      fatal(
+        'schema.prisma has uncommitted changes',
+        'This could indicate accidental `prisma db pull --force`. ' +
+          'Review changes with `git diff packages/db/schema.prisma` and either commit or restore.'
+      )
+    }
+
+    success('Schema has no uncommitted changes')
+  } else {
+    warn('Skipping git check (--skip-git-check)')
+  }
+
+  // Step 3: Check migration status (only if DATABASE_URL is set)
   const databaseUrl = process.env.DATABASE_URL
 
   if (!databaseUrl) {
-    log(YELLOW, 'WARN', 'No DATABASE_URL set, skipping migration status check')
+    warn('No DATABASE_URL set, skipping database checks')
     process.exit(0)
   }
 
-  log(GREEN, 'INFO', 'Checking migration status...')
+  info('Checking migration status...')
 
-  const statusResult = spawnSync('npx', [
-    'prisma', 'migrate', 'status'
-  ], {
+  const statusResult = spawnSync('npx', ['prisma', 'migrate', 'status'], {
     cwd: DB_PACKAGE_ROOT,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
-    env: { ...process.env, DATABASE_URL: databaseUrl }
+    env: { ...process.env, DATABASE_URL: databaseUrl },
   })
 
-  const output = statusResult.stdout + statusResult.stderr
+  const statusOutput = statusResult.stdout + statusResult.stderr
 
-  // Check for pending migrations or drift
-  if (output.includes('Database schema is up to date')) {
-    success('Database schema is up to date')
-    process.exit(0)
-  }
-
-  if (output.includes('Following migration') || output.includes('not yet applied')) {
-    console.error(output)
+  if (
+    statusOutput.includes('Following migration') ||
+    statusOutput.includes('not yet applied')
+  ) {
+    console.error(statusOutput)
     fatal(
       'Pending migrations detected',
       'Run `pnpm db:migrate:deploy` to apply migrations'
     )
   }
 
-  if (output.includes('drift') || output.includes('out of sync')) {
-    console.error(output)
+  if (statusOutput.includes('Database schema is up to date')) {
+    success('All migrations applied')
+  } else if (statusResult.status !== 0) {
+    console.error(statusOutput)
+    fatal('Migration status check failed')
+  } else {
+    success('Migrations in sync')
+  }
+
+  // Step 4: Check actual schema-to-DB diff (catches real drift even if migrations say "up to date")
+  info('Checking schema-to-database diff...')
+
+  const diffResult = spawnSync(
+    'npx',
+    [
+      'prisma',
+      'migrate',
+      'diff',
+      '--from-config-datasource',
+      '--to-schema',
+      'schema.prisma',
+      '--exit-code',
+    ],
+    {
+      cwd: DB_PACKAGE_ROOT,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    }
+  )
+
+  // exit-code flag: 0 = empty (no diff), 2 = has diff, 1 = error
+  if (diffResult.status === 2) {
+    console.error('\n' + diffResult.stdout)
     fatal(
-      'Schema drift detected',
-      'Run `pnpm db:migrate:dev` to create a migration for your schema changes'
+      'Database schema does not match schema.prisma',
+      'Run `pnpm db:push` to sync database or `pnpm db:migrate:dev` to create a migration'
+    )
+  } else if (diffResult.status === 1) {
+    console.error(diffResult.stderr)
+    fatal('Schema diff check failed')
+  }
+
+  success('Database schema matches schema.prisma')
+
+  // Step 5: Check if Prisma client is up-to-date
+  info('Checking Prisma client freshness...')
+
+  const generatedIndexPath = resolve(GENERATED_PATH, 'index.js')
+  if (!existsSync(generatedIndexPath)) {
+    fatal(
+      'Generated Prisma client not found',
+      'Run `pnpm db:generate` to generate the client'
     )
   }
 
-  // If status command failed but didn't give clear output
-  if (statusResult.status !== 0) {
-    console.error(output)
-    fatal('Migration status check failed')
+  // Check if schema.prisma was modified after the generated client
+  // Note: Prisma reformats the schema during generation, so we can't compare content
+  const { statSync } = await import('fs')
+  const schemaMtime = statSync(SCHEMA_PATH).mtimeMs
+  const generatedMtime = statSync(generatedIndexPath).mtimeMs
+
+  if (schemaMtime > generatedMtime) {
+    fatal(
+      'Prisma client may be stale (schema.prisma modified after last generate)',
+      'Run `pnpm db:generate` to regenerate the client'
+    )
   }
 
-  success('Migrations are in sync')
+  success('Prisma client is up-to-date')
+
+  console.error(`\n${GREEN}✓${RESET} All schema checks passed`)
 }
 
 main().catch((err) => {

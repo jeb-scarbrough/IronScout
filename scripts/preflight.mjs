@@ -48,11 +48,15 @@ function runCommand(name, command, args = []) {
     const start = performance.now()
     log(`\n▶ ${name}...`, colors.blue)
 
+    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command
+
     if (VERBOSE) {
-      log(`  ${colors.dim}$ ${command} ${args.join(' ')}${colors.reset}`)
+      log(`  ${colors.dim}$ ${fullCommand}${colors.reset}`)
     }
 
-    const proc = spawn(command, args, {
+    // Use shell: true with the full command string to avoid DEP0190 deprecation warning
+    // (passing args separately with shell: true is deprecated in Node.js)
+    const proc = spawn(fullCommand, [], {
       stdio: VERBOSE ? 'inherit' : 'pipe',
       shell: true,
       cwd: process.cwd(),
