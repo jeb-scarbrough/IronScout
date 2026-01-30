@@ -19,11 +19,6 @@ const nextConfig = {
       },
     ],
   },
-  env: {
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-    // Pass JWT_SECRET to NextAuth as NEXTAUTH_SECRET
-    NEXTAUTH_SECRET: process.env.JWT_SECRET,
-  },
   async headers() {
     return [
       {

@@ -81,6 +81,7 @@ const COOKIE_DOMAIN = useSecureCookies && env.COOKIE_DOMAIN
 export const { handlers, signIn, signOut, auth } = NextAuth({
   // No adapter - pure JWT sessions
   trustHost: true,
+  secret: env.JWT_SECRET,
   providers: [
     // Email/Password Authentication via API
     CredentialsProvider({
