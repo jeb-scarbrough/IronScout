@@ -1203,9 +1203,36 @@ function mapAvailability(availability: Availability): boolean {
 
 ---
 
-## 11. Observability
+## 11. Observability (v1: Log-Only)
 
-### 11.1 Metrics
+Prometheus is **not** in use for v1. Observability is log-driven with
+structured events and basic admin summaries pulled from the database.
+
+### 11.1 Log Events (v1)
+
+Emitted as structured log events (JSON):
+
+- `SCRAPER_RUN_COMPLETED` (run metrics snapshot)
+- `SCRAPER_QUEUE_REJECTED` (backpressure rejection)
+- `SCRAPER_ADAPTER_DISABLED` (auto-disable)
+- `SCRAPER_ALERT_HIGH_FAILURE_RATE` (failureRate > 0.5)
+- `SCRAPER_ALERT_STALE_TARGETS` (stale target threshold exceeded)
+- `SCRAPER_ALERT_ZERO_PRICE` (zero price quarantined)
+
+### 11.2 Alerts (v1)
+
+Alerts are log events only (no paging integration in v1):
+
+| Alert | Condition | Severity | Action |
+|-------|-----------|----------|--------|
+| Adapter auto-disabled | `SCRAPER_ADAPTER_DISABLED` emitted | P1 | Log-only |
+| High failure rate | `SCRAPER_ALERT_HIGH_FAILURE_RATE` emitted | P2 | Log-only |
+| Queue rejection spike | `SCRAPER_QUEUE_REJECTED` spike | P2 | Log-only |
+| Stale URLs accumulating | `SCRAPER_ALERT_STALE_TARGETS` emitted | P3 | Log-only |
+
+### 11.3 Future (v1.1+): Prometheus Metrics
+
+When Prometheus is enabled, implement these metrics:
 
 ```typescript
 // Counters
@@ -1231,15 +1258,6 @@ scrape_fetch_duration_ms{adapter_id}
 scrape_extract_duration_ms{adapter_id}
 scrape_rate_limit_wait_ms{domain}
 ```
-
-### 11.2 Alerts
-
-| Alert | Condition | Severity | Action |
-|-------|-----------|----------|--------|
-| Adapter auto-disabled | `scrape_adapter_enabled == 0` | P1 | Page on-call |
-| High failure rate | `failure_rate > 0.5` for 1 batch | P2 | Slack alert |
-| Queue rejection spike | `scrape_queue_rejected_total` increase | P2 | Slack alert |
-| Stale URLs accumulating | `scrape_targets_stale > 100` | P3 | Slack alert |
 
 ---
 
@@ -1411,7 +1429,7 @@ apps/harvester/src/scraper/
 - [ ] Drift detector auto-disables adapter after 2 consecutive failed batches
 - [ ] OOS_NO_PRICE drops are tracked but excluded from drift calculations
 - [ ] SCRAPE runs excluded from all consumer queries (audited)
-- [ ] Metrics emitted for all key operations
+- [ ] Log events emitted for all key operations (v1 log-only observability)
 - [ ] Queue rejects new URLs when at capacity
 - [ ] Scheduler only queries sources with `scrape_enabled=TRUE AND robots_compliant=TRUE`
 - [ ] robots_compliant auto-updates based on robots.txt policy (3 consecutive blocks → FALSE)
@@ -1432,7 +1450,7 @@ apps/harvester/src/scraper/
 
 - [ ] Ops can add/remove/pause scrape_targets via admin portal
 - [ ] Ops can enable/disable adapters via admin portal
-- [ ] Drift alerts fire correctly in staging
+- [ ] Drift alert log events emitted correctly in staging
 - [ ] Auto-disable triggers and recovers correctly
 - [ ] Runbooks documented and reviewed
 
