@@ -728,6 +728,80 @@ export async function toggleSourceScrapeEnabled(sourceId: string, enabled: boole
 }
 
 // =============================================================================
+// Source Scrape Configuration
+// =============================================================================
+
+/** Known adapters - must match harvester registry */
+export const KNOWN_ADAPTERS = [
+  { id: 'sgammo', name: 'SGAmmo', domain: 'sgammo.com' },
+  // Add new adapters here as they're implemented
+] as const
+
+export async function updateSourceScrapeConfig(
+  sourceId: string,
+  data: {
+    scrapeEnabled?: boolean
+    adapterId?: string | null
+    robotsCompliant?: boolean
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const existing = await prisma.sources.findUnique({
+      where: { id: sourceId },
+      select: {
+        id: true,
+        name: true,
+        scrapeEnabled: true,
+        adapterId: true,
+        robotsCompliant: true,
+      },
+    })
+
+    if (!existing) {
+      return { success: false, error: 'Source not found' }
+    }
+
+    // Validate adapterId if provided
+    if (data.adapterId !== undefined && data.adapterId !== null) {
+      const validAdapter = KNOWN_ADAPTERS.find((a) => a.id === data.adapterId)
+      if (!validAdapter) {
+        return { success: false, error: `Invalid adapter: ${data.adapterId}` }
+      }
+    }
+
+    await prisma.sources.update({
+      where: { id: sourceId },
+      data: {
+        scrapeEnabled: data.scrapeEnabled ?? existing.scrapeEnabled,
+        adapterId: data.adapterId !== undefined ? data.adapterId : existing.adapterId,
+        robotsCompliant: data.robotsCompliant ?? existing.robotsCompliant,
+      },
+    })
+
+    await logAdminAction(session.userId, 'UPDATE_SOURCE_SCRAPE_CONFIG', {
+      resource: 'Source',
+      resourceId: sourceId,
+      oldValue: {
+        scrapeEnabled: existing.scrapeEnabled,
+        adapterId: existing.adapterId,
+        robotsCompliant: existing.robotsCompliant,
+      },
+      newValue: data,
+    })
+
+    revalidatePath('/retailers')
+    revalidatePath('/scrapers')
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to update source scrape config', { sourceId, data }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to update source scrape config' }
+  }
+}
+
+// =============================================================================
 // Stats
 // =============================================================================
 
