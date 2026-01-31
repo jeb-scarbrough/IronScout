@@ -28,11 +28,13 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
       // SECURITY: Sanitize upstream response - only forward safe fields
+      // Map API fields (error/code/details) to standardized response
       return NextResponse.json({
-        errorCode: data.errorCode || 'SIGNUP_FAILED',
-        message: data.message || 'Signup failed. Please try again.',
+        error: data.error || 'Signup failed. Please try again.',
+        errorCode: data.code || data.errorCode || 'SIGNUP_FAILED',
         requestId: data.requestId,
         // Include validation errors if present (safe field-level info)
+        ...(data.details && { validationErrors: data.details }),
         ...(data.validationErrors && { validationErrors: data.validationErrors }),
       }, { status: response.status })
     }
