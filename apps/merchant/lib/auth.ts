@@ -49,6 +49,15 @@ const SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
 const SESSION_COOKIE = 'merchant-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
+// CRITICAL: Fail-fast if E2E bypass is enabled in production
+// This prevents accidental deployment with auth bypass enabled
+if (process.env.NODE_ENV === 'production' && process.env.E2E_AUTH_BYPASS === 'true') {
+  throw new Error(
+    'FATAL: E2E_AUTH_BYPASS cannot be enabled in production. ' +
+    'This would bypass all authentication. Aborting startup.'
+  );
+}
+
 const E2E_AUTH_BYPASS = process.env.E2E_AUTH_BYPASS === 'true';
 const E2E_MERCHANT_ID = process.env.E2E_MERCHANT_ID || 'e2e-merchant';
 const E2E_MERCHANT_USER_ID = process.env.E2E_MERCHANT_USER_ID || 'e2e-merchant-user';

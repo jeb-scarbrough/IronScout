@@ -181,13 +181,21 @@ app.use('/api/users', usersRouter)
 // Error logger middleware - logs errors with classification
 app.use(errorLoggerMiddleware)
 
-// Final error handler - sends response to client
+// Final error handler - sends safe response to client (never expose internal details)
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  // Error is already logged by errorLoggerMiddleware
-  const statusCode = err.statusCode || err.status || 500
-  res.status(statusCode).json({
-    error: statusCode >= 500 ? 'Something went wrong!' : err.message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+  // Error is already logged by errorLoggerMiddleware with full details
+  // Import at runtime to avoid circular dependency
+  const { classifyError, getSafeMessage } = require('./lib/errors')
+  const { getRequestContext } = require('@ironscout/logger')
+
+  const classified = classifyError(err)
+  const requestId = getRequestContext()?.requestId || 'unknown'
+
+  // Return standardized safe response - NEVER include err.message or stack
+  res.status(classified.statusCode).json({
+    errorCode: classified.code,
+    message: getSafeMessage(classified),
+    requestId,
   })
 })
 

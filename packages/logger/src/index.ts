@@ -426,11 +426,21 @@ function formatError(error: unknown): LogEntry['error'] | undefined {
   if (!error) return undefined
 
   if (error instanceof Error) {
+    // Browser: only include error name (no message/stack to prevent sensitive data leaks)
+    if (isBrowser) {
+      return { name: error.name, message: '[redacted]' }
+    }
+    // Server: full error details for observability
     return {
       name: error.name,
       message: error.message,
       stack: error.stack,
     }
+  }
+
+  // Browser: minimal info for unknown errors
+  if (isBrowser) {
+    return { name: 'UnknownError', message: '[redacted]' }
   }
 
   return {
@@ -500,11 +510,12 @@ function formatPrettyBrowser(entry: LogEntry): { message: string; styles: string
     ? `${entry.service}:${entry.component}`
     : entry.service
 
-  // Extract known fields
+  // Extract known fields - meta suppressed in browser to prevent sensitive data leaks
   const { timestamp, level, service, component, message, error, ...meta } = entry
 
-  // Format metadata
-  const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : ''
+  // Browser: suppress meta to prevent sensitive data leaks (use server logs for debugging)
+  // Only show count of meta keys if any exist
+  const metaStr = Object.keys(meta).length > 0 ? ` [+${Object.keys(meta).length} fields]` : ''
 
   // Build message with %c placeholders for styling
   const formattedMessage = `%c${timestamp} %c${levelStr} %c[${componentPath}] %c${message}${metaStr}`
@@ -606,9 +617,9 @@ function output(entry: LogEntry): void {
         console.error(message, ...styles)
         break
     }
-    // Log error separately if present
+    // Log error name only in browser - details logged server-side via requestId correlation
     if (entry.error) {
-      console.error(entry.error.stack || entry.error.message)
+      console.error(`[${entry.error.name || 'Error'}] Error occurred. Check server logs for details.`)
     }
   } else {
     const formatted = formatPrettyNode(entry)

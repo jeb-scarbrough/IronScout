@@ -9,6 +9,15 @@ import { auth } from '@/lib/auth-config';
 import { prisma } from '@ironscout/db';
 import { logger } from './logger';
 
+// CRITICAL: Fail-fast if E2E bypass is enabled in production
+// This prevents accidental deployment with auth bypass enabled
+if (process.env.NODE_ENV === 'production' && process.env.E2E_AUTH_BYPASS === 'true') {
+  throw new Error(
+    'FATAL: E2E_AUTH_BYPASS cannot be enabled in production. ' +
+    'This would bypass all authentication. Aborting startup.'
+  );
+}
+
 // Admin emails list
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
