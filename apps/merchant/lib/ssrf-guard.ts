@@ -120,8 +120,31 @@ async function resolveHostname(hostname: string): Promise<{ ips: string[]; error
   try {
     // Use dynamic import for Node.js DNS module
     const dns = await import('dns').then(m => m.promises)
-    const addresses = await dns.resolve(hostname)
-    return { ips: addresses }
+
+    // Resolve both A (IPv4) and AAAA (IPv6) records to prevent bypass via IPv6
+    const allAddresses: string[] = []
+
+    // Try IPv4 (A records)
+    try {
+      const ipv4Addresses = await dns.resolve4(hostname)
+      allAddresses.push(...ipv4Addresses)
+    } catch {
+      // No A records - continue to check AAAA
+    }
+
+    // Try IPv6 (AAAA records)
+    try {
+      const ipv6Addresses = await dns.resolve6(hostname)
+      allAddresses.push(...ipv6Addresses)
+    } catch {
+      // No AAAA records - continue
+    }
+
+    if (allAddresses.length === 0) {
+      return { ips: [], error: 'No A or AAAA records found for hostname' }
+    }
+
+    return { ips: allAddresses }
   } catch (error) {
     // DNS resolution failed
     return { ips: [], error: `DNS resolution failed: ${error instanceof Error ? error.message : 'Unknown error'}` }

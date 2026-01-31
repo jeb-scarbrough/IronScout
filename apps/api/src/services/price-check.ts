@@ -161,6 +161,8 @@ export async function checkPrice(
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         ) <= 2
+        -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+        AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
         AND (${caliberConditions.sql})
         ${brandCondition}
         ${grainCondition}
