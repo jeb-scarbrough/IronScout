@@ -222,6 +222,16 @@ log.info('Starting IronScout.ai Harvester Workers', {
 
 // Warm up Redis and database connections before starting workers
 async function startup() {
+  // Log brand/URL configuration prominently for debugging
+  const wwwUrl = process.env.NEXT_PUBLIC_WWW_URL || '(not set - using production default)'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '(not set - using production default)'
+  console.log('\n' + '='.repeat(60))
+  console.log('  HARVESTER - BRAND CONFIG')
+  console.log('='.repeat(60))
+  console.log(`  APP_URL: ${appUrl}`)
+  console.log(`  WWW_URL: ${wwwUrl}`)
+  console.log('='.repeat(60) + '\n')
+
   // Redis must be available for BullMQ workers to function
   const redisConnected = await warmupRedis()
   if (!redisConnected) {

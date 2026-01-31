@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { Header } from './components/Header';
+import { BRAND } from '../lib/brand';
 
-const APP_URL = 'https://app.ironscout.ai';
+const APP_URL = BRAND.appUrl;
 
 const exampleQueries = [
   '9mm hollow point',

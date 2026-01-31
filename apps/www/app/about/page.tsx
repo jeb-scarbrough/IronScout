@@ -1,12 +1,13 @@
 import { Metadata } from 'next';
 import { Header } from '../components/Header';
+import { BRAND } from '../../lib/brand';
 
 export const metadata: Metadata = {
   title: 'About - IronScout',
   description: 'IronScout is an ammunition intelligence platform built around how shooters actually buy. Intent-aware search, personal caliber context, and continuous market monitoring.',
 };
 
-const APP_URL = 'https://app.ironscout.ai';
+const APP_URL = BRAND.appUrl;
 
 export default function About() {
   return (

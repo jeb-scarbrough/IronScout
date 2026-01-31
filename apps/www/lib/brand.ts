@@ -1,32 +1,23 @@
 /**
- * Centralized brand constants for IronScout
- *
- * Use BRAND.name for in-product display (sidebar, headers, titles)
- * Use BRAND.domain for external/marketing contexts only
+ * Brand configuration for the www (marketing) site.
+ * URLs are configurable via environment variables for local development.
  */
 
-/** WWW site URL - uses NEXT_PUBLIC_WWW_URL env var for local dev */
-const WWW_URL = process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
-
-/** APP site URL - uses NEXT_PUBLIC_APP_URL env var for local dev */
+// URL for the main web application (app.ironscout.ai in production)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.ironscout.ai'
 
+// URL for the marketing website (www.ironscout.ai in production)
+const WWW_URL = process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
+
 export const BRAND = {
-  /** Primary brand name for in-product usage */
   name: 'IronScout',
-  /** Full domain form - use only for external/marketing contexts */
   domain: 'IronScout.ai',
-  /** Product tagline */
   tagline: 'AI-Powered Ammo Search',
-  /** Official website URL (www) */
-  website: WWW_URL,
-  /** App URL (app) */
   appUrl: APP_URL,
-  /** Short description */
+  wwwUrl: WWW_URL,
   description: 'Intent-aware ammunition search and price comparison',
 } as const
 
-/** Convenience export for common usage */
 export const BRAND_NAME = BRAND.name
 
 // Log brand configuration on startup (client-side only, in development)

@@ -1,6 +1,8 @@
 'use client';
 
-const APP_URL = 'https://app.ironscout.ai';
+import { BRAND } from '../../lib/brand';
+
+const APP_URL = BRAND.appUrl;
 
 interface HeaderProps {
   currentPage?: 'home' | 'about' | 'retailers' | 'privacy' | 'terms';

@@ -21,6 +21,8 @@ envVarGroups:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://api.ironscout.ai
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://app.ironscout.ai
       - key: NEXT_PUBLIC_MERCHANT_URL
         value: https://merchant.ironscout.ai
       - key: NEXT_PUBLIC_WEB_URL
