@@ -149,8 +149,9 @@ export declare function generateTraceId(): string;
  */
 export declare function generateSpanId(): string;
 /**
- * Sanitize a URL for safe logging by removing credentials (userinfo).
- * URLs like "https://user:pass@host.com/path" become "https://host.com/path"
+ * Sanitize a URL for safe logging by removing credentials and sensitive query params.
+ * - Strips userinfo (user:pass@host)
+ * - Redacts sensitive query parameters (password, token, key, etc.)
  *
  * @param url - The URL to sanitize (can be string or URL object)
  * @returns Sanitized URL string safe for logging
