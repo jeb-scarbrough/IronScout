@@ -41,6 +41,8 @@ import { firearmAmmoPreferenceRouter, ammoPreferencesRouter } from './routes/fir
 import { priceCheckRouter } from './routes/price-check'
 import { adminRouter } from './routes/admin'
 import { usersRouter } from './routes/users'
+import { classifyError, getSafeMessage } from './lib/errors'
+import { getRequestContext } from '@ironscout/logger'
 
 // ============================================================================
 // Deploy-Time Validation
@@ -184,10 +186,6 @@ app.use(errorLoggerMiddleware)
 // Final error handler - sends safe response to client (never expose internal details)
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   // Error is already logged by errorLoggerMiddleware with full details
-  // Import at runtime to avoid circular dependency
-  const { classifyError, getSafeMessage } = require('./lib/errors')
-  const { getRequestContext } = require('@ironscout/logger')
-
   const classified = classifyError(err)
   const requestId = getRequestContext()?.requestId || 'unknown'
 
