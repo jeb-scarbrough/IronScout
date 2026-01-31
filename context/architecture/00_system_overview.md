@@ -30,7 +30,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Includes Merchant approval/suspension/reactivation routes and Merchant detail views.
 
 - **Harvester (`apps/harvester`)**
-  - Node worker process using BullMQ queues to ingest and normalize affiliate feed data for consumer prices (v1).
+  - Node worker process using BullMQ queues to ingest and normalize affiliate feed and approved SCRAPE data for consumer prices (v1).
   - Retailer crawl/feed ingestion and Merchant portal jobs exist in code.
 
 ### Shared Data Layer
@@ -67,9 +67,9 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
 
 ---
 
-### 2) Affiliate Ingestion (Harvester Pipeline, v1)
+### 2) Affiliate + SCRAPE Ingestion (Harvester Pipeline, v1)
 
-In v1, affiliate feeds are the only ingestion source. The rough sequence is:
+In v1, affiliate feeds and/or approved SCRAPE sources are the consumer-visible ingestion sources. The rough sequence is:
 
 1. **Schedule** enabled affiliate feeds -> create run record -> enqueue processing work
 2. **Fetch** feed files (FTP/SFTP)
@@ -180,7 +180,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
 
 ### 2) Affiliate Ingestion (Harvester Pipeline, v1)
 
-In v1, affiliate feeds are the only ingestion source. The rough sequence is:
+In v1, affiliate feeds and/or approved SCRAPE sources are the consumer-visible ingestion sources. The rough sequence is:
 
 1. **Schedule** enabled affiliate feeds -> create run record -> enqueue processing work
 2. **Fetch** feed files (FTP/SFTP)

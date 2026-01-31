@@ -78,5 +78,5 @@ Store fixtures in:
 ## 10) Launch Gate (Internal Only for v1)
 
 - [ ] `sources.scrape_enabled = true` only after internal validation
-- [ ] SCRAPE visibility exclusion confirmed in API and derived tables
+- [ ] SCRAPE visibility guardrails confirmed in API and derived tables (ADR-021)
 - [ ] Alerts verified for inStock transitions (staging only)

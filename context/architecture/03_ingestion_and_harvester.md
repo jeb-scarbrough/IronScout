@@ -44,8 +44,8 @@ This architecture favors simplicity over isolation in v1.
 
 ## Ingestion Pipelines
 
-This pipeline processes affiliate ingestion to produce Retailer-keyed consumer prices (`prices.retailerId`).
-All consumer price outputs are keyed by `retailerId` (affiliate feeds only in v1).
+This pipeline processes affiliate and/or approved SCRAPE ingestion to produce Retailer-keyed consumer prices (`prices.retailerId`).
+All consumer price outputs are keyed by `retailerId` (affiliate feeds and/or SCRAPE in v1).
 
 ### 1) Affiliate Ingestion (v1)
 

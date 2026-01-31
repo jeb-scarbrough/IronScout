@@ -126,6 +126,8 @@ export async function checkPrice(
       JOIN retailers r ON r.id = pr."retailerId"
       LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
       LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
+      LEFT JOIN sources s ON s.id = pr."sourceId"
+      LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
       WHERE pl.status IN ('MATCHED', 'CREATED')
         AND pr."observedAt" >= $1
         AND pr."inStock" = true
@@ -161,8 +163,19 @@ export async function checkPrice(
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         ) <= 2
-        -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
-        AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
+        -- ADR-021: Allow SCRAPE prices only when guardrails pass
+        AND (
+          pr."ingestionRunType" IS NULL
+          OR pr."ingestionRunType" != 'SCRAPE'
+          OR (
+            pr."ingestionRunType" = 'SCRAPE'
+            AND s."scrapeEnabled" = true
+            AND s."robotsCompliant" = true
+            AND s."tosReviewedAt" IS NOT NULL
+            AND s."tosApprovedBy" IS NOT NULL
+            AND sas."enabled" = true
+          )
+        )
         AND (${caliberConditions.sql})
         ${brandCondition}
         ${grainCondition}

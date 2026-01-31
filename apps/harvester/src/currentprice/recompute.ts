@@ -278,10 +278,23 @@ async function buildDerivedTable(
       ) as multiplier
     FROM prices pr
     INNER JOIN retailer_visibility rv ON rv."retailerId" = pr."retailerId"
+    LEFT JOIN sources s ON s.id = pr."sourceId"
+    LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
     WHERE pr."observedAt" >= $1
       ${scopeFilter}
-      -- ADR-015 §12: Exclude SCRAPE data from consumer-facing derived table
-      AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
+      -- ADR-021: Allow SCRAPE data only when guardrails pass
+      AND (
+        pr."ingestionRunType" IS NULL
+        OR pr."ingestionRunType" != 'SCRAPE'
+        OR (
+          pr."ingestionRunType" = 'SCRAPE'
+          AND s."scrapeEnabled" = true
+          AND s."robotsCompliant" = true
+          AND s."tosReviewedAt" IS NOT NULL
+          AND s."tosApprovedBy" IS NOT NULL
+          AND sas."enabled" = true
+        )
+      )
       -- Exclude ignored runs
       AND (pr."affiliateFeedRunId" IS NULL OR pr."affiliateFeedRunId" NOT IN (SELECT id FROM ignored_runs))
       AND (pr."ingestionRunId" IS NULL OR pr."ingestionRunId" NOT IN (SELECT id FROM ignored_runs))

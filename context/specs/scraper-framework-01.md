@@ -3,7 +3,7 @@
 **Status:** Draft (Decisions Resolved, All Feedback Incorporated)
 **Owner:** Engineering (Harvester)
 **Created:** 2026-01-29
-**Updated:** 2026-01-29
+**Updated:** 2026-01-31
 **Depends on:** ADR-015 (Price Corrections), ADR-019 (Product Resolver)
 **Blocks:** Scraper development
 
@@ -16,14 +16,14 @@ Build a surgical, URL-driven price monitoring framework that:
 - Enables rapid onboarding of new retailer targets via thin adapters
 - Follows the unified ingestion pattern (source_products → resolver → products)
 - Preserves all trust invariants (append-only, fail-closed, server-side enforcement)
-- Remains invisible to consumers until explicitly enabled per ADR scope rules
+ - Remains consumer-visible only when ADR-021 guardrails are met (otherwise excluded)
 
 ---
 
 ## 2. Non-Goals (v1)
 
 - No site-wide crawling or product discovery
-- No consumer visibility for scraped prices
+- No consumer visibility for scraped prices without ADR-021 guardrails
 - No real-time guarantees or SLAs
 - No proxy rotation or anti-bot evasion (defer to later phases)
 - No distributed crawling across multiple nodes
@@ -1166,7 +1166,7 @@ SCRAPE_URL Worker
 - `observedAt` from the offer
 - `inStock` mapped from availability (see below)
 
-This enables the price corrections overlay to work correctly and ensures scraped prices are excluded from consumer queries until explicitly enabled.
+This enables the price corrections overlay to work correctly and ensures scraped prices are gated by ADR-021 guardrails for consumer visibility.
 
 **Availability to inStock Mapping:**
 
@@ -1263,26 +1263,38 @@ scrape_rate_limit_wait_ms{domain}
 
 ## 12. Visibility Enforcement
 
-### 12.1 Consumer Exclusion (Mandatory)
+### 12.1 Consumer Visibility (Guarded)
 
-Scraped prices MUST be excluded from consumer-facing queries until explicitly enabled:
+Per ADR-021, SCRAPE data may be consumer-visible only when guardrails are met.
+If guardrails are not met, SCRAPE outputs MUST be excluded (fail closed).
 
 ```typescript
-// In all consumer-facing price queries
-{
-  ingestionRunType: { notIn: ['SCRAPE'] }
-}
+// In all consumer-facing price queries (conceptual)
+OR: [
+  { ingestionRunType: null },
+  { ingestionRunType: { not: 'SCRAPE' } },
+  {
+    ingestionRunType: 'SCRAPE',
+    source: {
+      scrapeEnabled: true,       // allowlist gate
+      robotsCompliant: true,     // robots.txt / legal gate
+      tosReviewedAt: not null,   // ToS approval recorded
+      tosApprovedBy: not null,
+      adapterEnabled: true       // scrape_adapter_status.enabled
+    }
+  }
+]
 ```
 
 ### 12.2 Audit Checklist
 
 Before enabling any scrape adapter for production:
 
-- [ ] `apps/api/src/services/ai-search/price-resolver.ts` excludes SCRAPE
-- [ ] `apps/api/src/services/saved-items.ts` excludes SCRAPE
-- [ ] `apps/api/src/services/market-deals.ts` excludes SCRAPE
-- [ ] `current_visible_prices` recompute excludes SCRAPE
-- [ ] Raw SQL queries audited for SCRAPE exclusion
+- [ ] Allowlist + ToS/robots approval recorded
+- [ ] SSRF guard enforced on all fetches
+- [ ] Drift detection + auto-disable enabled
+- [ ] Operational kill switch available (disable adapter/targets)
+- [ ] All consumer queries audited for visibility + corrections (no silent bypass)
 
 ### 12.3 Source Defaults
 
@@ -1376,7 +1388,7 @@ apps/harvester/src/scraper/
 - [ ] Drift detector + auto-disable (with OOS_NO_PRICE exclusion)
 - [ ] Scheduler for due targets
 - [ ] Metrics emission
-- [ ] Visibility audit (SCRAPE exclusion)
+- [ ] Visibility audit (SCRAPE guardrails)
 
 **Exit criteria:** Framework functional, can process URLs (no adapter yet).
 
@@ -1429,7 +1441,7 @@ apps/harvester/src/scraper/
 - [ ] Validator rejects offers missing required fields
 - [ ] Drift detector auto-disables adapter after 2 consecutive failed batches
 - [ ] OOS_NO_PRICE drops are tracked but excluded from drift calculations
-- [ ] SCRAPE runs excluded from all consumer queries (audited)
+- [ ] SCRAPE consumer-visibility guardrails audited (ADR-021)
 - [ ] Log events emitted for all key operations (v1 log-only observability)
 - [ ] Queue rejects new URLs when at capacity
 - [ ] Scheduler only queries sources with `scrape_enabled=TRUE AND robots_compliant=TRUE`

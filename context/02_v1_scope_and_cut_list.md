@@ -12,7 +12,7 @@ This document has higher authority than roadmaps, ideas, or partially implemente
 Terminology note:
 - Merchant = portal account, billing, auth boundary.
 - Retailer = consumer storefront, price visibility boundary.
-- v1 uses affiliate feeds only. Merchant onboarding, retailer feed ingestion, and subscription billing are deferred to v1.1.
+- v1 uses affiliate feeds and/or approved scraped sources for consumer pricing. Merchant onboarding, retailer feed ingestion, and subscription billing are deferred to v1.1.
 Where Merchant/Retailer terms appear, they describe the future model.
 
 ---
@@ -23,7 +23,7 @@ v1 is considered successful if IronScout:
 
 - Delivers clear, trustworthy price context to consumers
 - Makes AI-powered search meaningfully better than keyword-only alternatives
-- Proves affiliate-feed ingestion as a reliable source for consumer search and alerts
+- Proves affiliate-feed and/or approved scrape ingestion as a reliable source for consumer search and alerts
 - Is operable by a small team without constant manual intervention
 
 v1 is **not** required to be feature-complete or optimized for scale.
@@ -40,7 +40,7 @@ v1 is **not** required to be feature-complete or optimized for scale.
 - Historical price context (uniform for all users)
 - Basic price and availability alerts
 - Watchlists
-- Affiliate feeds are the only ingestion source in v1
+- Affiliate feeds and approved scraped sources are the only consumer ingestion sources in v1
 - No consumer Premium in v1; all consumer capabilities are available to every user
 
 ---
@@ -57,7 +57,7 @@ v1 is **not** required to be feature-complete or optimized for scale.
 
 ### Platform & Infrastructure
 
-- Harvester-based affiliate ingestion pipeline
+- Harvester-based affiliate and SCRAPE ingestion pipeline (approved targets only)
 - Idempotent scheduling and job execution
 - Batched database writes
 - Retailer visibility enforcement at query time (predicate: eligibility + listing; no subscription gating)

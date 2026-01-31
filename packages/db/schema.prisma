@@ -1299,6 +1299,7 @@ model sources {
   click_events             click_events[]
   scrape_targets           scrape_targets[]
   scrape_runs              scrape_runs[]
+  scrape_adapter_status    scrape_adapter_status? @relation("ScrapeAdapterStatusSources", fields: [adapterId], references: [adapterId])
 
   // Composite unique for FK validation from scrape_targets
   @@unique([id, adapterId], map: "sources_id_adapter_id_unique")
@@ -1456,6 +1457,7 @@ model scrape_adapter_status {
   // Relations (inverse - FK enforcement)
   scrape_targets scrape_targets[]
   scrape_runs    scrape_runs[]
+  sources        sources[] @relation("ScrapeAdapterStatusSources")
 }
 
 model subscriptions {

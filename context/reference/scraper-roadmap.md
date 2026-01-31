@@ -2,12 +2,12 @@
 
 **Status:** Active (decisions resolved)
 **Owner:** Engineering (Harvester)
-**Last updated:** 2026-01-29
+**Last updated:** 2026-01-31
 **Detailed spec:** `context/specs/scraper-framework-01.md`
 
 This roadmap defines how to build a surgical, URL-driven price monitoring system.
-It does NOT expand v1 scope. v1 consumer data remains affiliate-feed only per `context/02_v1_scope_and_cut_list.md`.
-Scraper outputs must remain non-consumer-visible until scope and promises change.
+Per ADR-021, SCRAPE data **may be consumer-visible in v1** when guardrails are met.
+If those guardrails are not met, SCRAPE outputs must remain non-consumer-visible.
 
 ---
 
@@ -38,7 +38,7 @@ Scraper outputs must remain non-consumer-visible until scope and promises change
 ## Non-Goals (v1)
 
 - No site-wide crawling or product discovery
-- No consumer visibility for scraped prices
+- No consumer visibility for scraped prices **without** ADR-021 guardrails
 - No real-time guarantees or SLAs
 - No purchase recommendations, verdicts, or deal scores
 - No JS rendering (defer until a target requires it)
@@ -112,7 +112,7 @@ See `context/specs/scraper-framework-01.md` for full details.
 - [ ] Drift detector + auto-disable logic
 - [ ] Scheduler for due targets
 - [ ] Metrics emission
-- [ ] Visibility audit (SCRAPE exclusion from all consumer queries)
+- [ ] Visibility audit (SCRAPE consumer-visibility guardrails)
 
 **Exit criteria:** Framework functional, can process URLs (no adapter yet).
 
@@ -244,21 +244,35 @@ When queue is full:
 
 ---
 
-## Visibility Enforcement (v1 Hard Gates)
+## Visibility Enforcement (v1 Guardrails)
 
-Scraper outputs MUST be excluded from consumers:
+SCRAPE data may be consumer-visible only when ADR-021 guardrails are satisfied.
+If guardrails are not satisfied, SCRAPE outputs MUST be excluded (fail closed):
 
 ```typescript
-// In all consumer-facing price queries
-{ ingestionRunType: { notIn: ['SCRAPE'] } }
+// In all consumer-facing price queries (conceptual)
+OR: [
+  { ingestionRunType: null },
+  { ingestionRunType: { not: 'SCRAPE' } },
+  {
+    ingestionRunType: 'SCRAPE',
+    source: {
+      scrapeEnabled: true,
+      robotsCompliant: true,
+      tosReviewedAt: not null,
+      tosApprovedBy: not null,
+      adapterEnabled: true
+    }
+  }
+]
 ```
 
 **Checklist before any scrape adapter goes live:**
-- [ ] `price-resolver.ts` excludes SCRAPE
-- [ ] `saved-items.ts` excludes SCRAPE
-- [ ] `market-deals.ts` excludes SCRAPE
-- [ ] `current_visible_prices` recompute excludes SCRAPE
-- [ ] All raw SQL queries audited
+- [ ] Allowlist + ToS/robots approval recorded
+- [ ] SSRF guard enforced on all fetches
+- [ ] Drift detection + auto-disable enabled
+- [ ] Operational kill switch available (disable adapter/targets)
+- [ ] All consumer queries audited for visibility + corrections (no silent bypass)
 
 **Source defaults:**
 - `visibilityStatus = 'INELIGIBLE'`
@@ -365,7 +379,7 @@ The Product Resolver (ADR-019) handles:
 - [ ] Rate limiter enforces 0.5 req/sec default
 - [ ] Validator rejects offers missing required fields
 - [ ] Drift detector auto-disables adapter after 2 consecutive failed batches
-- [ ] SCRAPE runs excluded from all consumer queries (audited)
+- [ ] Consumer visibility guardrails audited (ADR-021)
 - [ ] Metrics emitted for all key operations
 - [ ] Queue rejects new URLs when at capacity
 

@@ -1,5 +1,8 @@
 # Affiliate Feed Alerts v1
 
+**Amendment (2026-01-31):** If SCRAPE data is consumer-visible per ADR-021, alert
+evaluation may use SCRAPE data under the same guardrails and visibility rules.
+
 ## Goal
 
 Enable price drop and back-in-stock alerts for products ingested via affiliate feeds by

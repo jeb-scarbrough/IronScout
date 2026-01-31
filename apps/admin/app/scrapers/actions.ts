@@ -759,23 +759,44 @@ export async function toggleSourceScrapeEnabled(sourceId: string, enabled: boole
   try {
     const existing = await prisma.sources.findUnique({
       where: { id: sourceId },
-      select: { id: true, name: true, scrapeEnabled: true },
+      select: {
+        id: true,
+        name: true,
+        scrapeEnabled: true,
+        tosReviewedAt: true,
+        tosApprovedBy: true,
+      },
     })
 
     if (!existing) {
       return { success: false, error: 'Source not found' }
     }
 
+    const now = new Date()
+    const shouldStampTos = enabled && (!existing.tosReviewedAt || !existing.tosApprovedBy)
+
     await prisma.sources.update({
       where: { id: sourceId },
-      data: { scrapeEnabled: enabled },
+      data: {
+        scrapeEnabled: enabled,
+        ...(shouldStampTos && {
+          tosReviewedAt: existing.tosReviewedAt ?? now,
+          tosApprovedBy: existing.tosApprovedBy ?? session.userId,
+        }),
+      },
     })
 
     await logAdminAction(session.userId, enabled ? 'ENABLE_SOURCE_SCRAPING' : 'DISABLE_SOURCE_SCRAPING', {
       resource: 'Source',
       resourceId: sourceId,
       oldValue: { scrapeEnabled: existing.scrapeEnabled },
-      newValue: { scrapeEnabled: enabled },
+      newValue: {
+        scrapeEnabled: enabled,
+        ...(shouldStampTos && {
+          tosReviewedAt: existing.tosReviewedAt ?? now,
+          tosApprovedBy: existing.tosApprovedBy ?? session.userId,
+        }),
+      },
     })
 
     revalidatePath('/scrapers')
@@ -810,6 +831,8 @@ export async function updateSourceScrapeConfig(
         scrapeEnabled: true,
         adapterId: true,
         robotsCompliant: true,
+        tosReviewedAt: true,
+        tosApprovedBy: true,
       },
     })
 
@@ -825,12 +848,19 @@ export async function updateSourceScrapeConfig(
       }
     }
 
+    const now = new Date()
+    const shouldStampTos = data.scrapeEnabled === true && (!existing.tosReviewedAt || !existing.tosApprovedBy)
+
     await prisma.sources.update({
       where: { id: sourceId },
       data: {
         scrapeEnabled: data.scrapeEnabled ?? existing.scrapeEnabled,
         adapterId: data.adapterId !== undefined ? data.adapterId : existing.adapterId,
         robotsCompliant: data.robotsCompliant ?? existing.robotsCompliant,
+        ...(shouldStampTos && {
+          tosReviewedAt: existing.tosReviewedAt ?? now,
+          tosApprovedBy: existing.tosApprovedBy ?? session.userId,
+        }),
       },
     })
 
@@ -842,7 +872,13 @@ export async function updateSourceScrapeConfig(
         adapterId: existing.adapterId,
         robotsCompliant: existing.robotsCompliant,
       },
-      newValue: data,
+      newValue: {
+        ...data,
+        ...(shouldStampTos && {
+          tosReviewedAt: existing.tosReviewedAt ?? now,
+          tosApprovedBy: existing.tosApprovedBy ?? session.userId,
+        }),
+      },
     })
 
     revalidatePath('/retailers')
