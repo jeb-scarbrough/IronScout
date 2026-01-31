@@ -304,16 +304,41 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     log.debug('ADVISORY_LOCK_ACQUIRED', { feedLockId: feedLockId.toString(), feedId })
 
     // Step 2: Create run record (now holds lock, safe to create)
-    run = await prisma.affiliate_feed_runs.create({
-      data: {
-        id: randomUUID(),
+    // P0 Fix: Check for orphaned RUNNING run from failed job.updateData on previous attempt
+    // If a RUNNING run exists for this feed+trigger within last 10 minutes, reuse it
+    // This handles the case where run was created but job.updateData failed before retry
+    const recentRunCutoff = new Date(t0.getTime() - 10 * 60 * 1000) // 10 minutes ago
+    const orphanedRun = await prisma.affiliate_feed_runs.findFirst({
+      where: {
         feedId,
-        sourceId: feed.sourceId,
         trigger,
         status: 'RUNNING',
-        startedAt: t0,
+        startedAt: { gte: recentRunCutoff },
       },
+      orderBy: { startedAt: 'desc' },
     })
+
+    if (orphanedRun) {
+      log.warn('ORPHANED_RUN_RECOVERY', {
+        feedId,
+        trigger,
+        orphanedRunId: orphanedRun.id,
+        orphanedRunStartedAt: orphanedRun.startedAt.toISOString(),
+        message: 'Found RUNNING run from recent failed attempt - reusing instead of creating duplicate',
+      })
+      run = orphanedRun
+    } else {
+      run = await prisma.affiliate_feed_runs.create({
+        data: {
+          id: randomUUID(),
+          feedId,
+          sourceId: feed.sourceId,
+          trigger,
+          status: 'RUNNING',
+          startedAt: t0,
+        },
+      })
+    }
 
     // Step 3: IMMEDIATELY persist runId to job data
     // Per spec §6.4.1: If this fails, BullMQ will retry and create duplicate run

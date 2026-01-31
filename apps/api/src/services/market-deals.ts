@@ -69,6 +69,14 @@ export interface MarketDealsResponse {
   deals: MarketDeal[]
   hero: MarketDeal | null
   lastCheckedAt: string
+  _meta: {
+    /** True if more deals were eligible but truncated to MAX_DEALS_RETURNED */
+    isTruncated: boolean
+    /** Number of deals returned */
+    returned: number
+    /** Total eligible deals before truncation (if truncated) */
+    totalEligible?: number
+  }
 }
 
 /**
@@ -187,10 +195,14 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
   })
 
   if (currentPrices.length === 0) {
-    const result = {
+    const result: MarketDealsResponse = {
       deals: [],
       hero: null,
       lastCheckedAt: now.toISOString(),
+      _meta: {
+        isTruncated: false,
+        returned: 0,
+      },
     }
     log.info('MARKET_DEALS_TOTAL', {
       durationMs: Math.round(performance.now() - functionStart),
@@ -214,7 +226,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     WITH daily_best AS (
       SELECT
         p.id as "productId",
-        DATE_TRUNC('day', pr."observedAt") as day,
+        DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as day,
         MIN(pr.price) as daily_best
       FROM products p
       JOIN product_links pl ON pl."productId" = p.id
@@ -245,7 +257,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
         )
         -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
         AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
-      GROUP BY p.id, DATE_TRUNC('day', pr."observedAt")
+      GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT
       "productId",
@@ -501,10 +513,16 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
     })
   }
 
-  const result = {
+  const isTruncated = deals.length > MAX_DEALS_RETURNED
+  const result: MarketDealsResponse = {
     deals: deals.slice(0, MAX_DEALS_RETURNED),
     hero,
     lastCheckedAt: now.toISOString(),
+    _meta: {
+      isTruncated,
+      returned: Math.min(deals.length, MAX_DEALS_RETURNED),
+      ...(isTruncated && { totalEligible: deals.length }),
+    },
   }
 
   // Cache the result
@@ -545,9 +563,13 @@ export async function getMarketDealsWithGunLocker(
   otherDeals: MarketDeal[]
   hero: MarketDeal | null  // Hero is deterministic, NOT personalized
   lastCheckedAt: string
+  _meta: MarketDealsResponse['_meta'] & {
+    forYourGunsTruncated: boolean
+    otherDealsTruncated: boolean
+  }
 }> {
   // Get base deals with deterministic hero
-  const { deals, hero, lastCheckedAt } = await getMarketDeals()
+  const { deals, hero, lastCheckedAt, _meta } = await getMarketDeals()
 
   if (userCalibers.length === 0) {
     return {
@@ -555,6 +577,11 @@ export async function getMarketDealsWithGunLocker(
       otherDeals: deals,
       hero,  // Keep deterministic hero
       lastCheckedAt,
+      _meta: {
+        ..._meta,
+        forYourGunsTruncated: false,
+        otherDealsTruncated: deals.length > 5,
+      },
     }
   }
 
@@ -569,5 +596,10 @@ export async function getMarketDealsWithGunLocker(
     otherDeals: otherDeals.slice(0, 5),
     hero,  // Hero stays deterministic - NOT re-selected based on Gun Locker
     lastCheckedAt,
+    _meta: {
+      ..._meta,
+      forYourGunsTruncated: forYourGuns.length > 5,
+      otherDealsTruncated: otherDeals.length > 5,
+    },
   }
 }

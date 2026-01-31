@@ -808,6 +808,7 @@ import type {
 export async function getMarketPulse(token: string): Promise<MarketPulseResponse> {
   const response = await fetch(`${API_BASE_URL}/api/dashboard/pulse`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   await handleAuthResponse(response, 'Failed to fetch market pulse')
   return response.json()
@@ -860,6 +861,7 @@ export interface WatchlistPreviewResponse {
 export async function getDashboardState(token: string): Promise<DashboardStateContext> {
   const response = await fetch(`${API_BASE_URL}/api/dashboard/state`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   await handleAuthResponse(response, 'Failed to fetch dashboard state')
   return response.json()
@@ -875,6 +877,7 @@ export async function getWatchlistPreview(
   const params = new URLSearchParams({ limit: limit.toString() })
   const response = await fetch(`${API_BASE_URL}/api/dashboard/watchlist-preview?${params}`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   await handleAuthResponse(response, 'Failed to fetch watchlist preview')
   return response.json()
@@ -888,6 +891,7 @@ export async function getWatchlistPreview(
 export async function getSavings(token: string): Promise<SavingsResponse> {
   const response = await fetch(`${API_BASE_URL}/api/dashboard/savings`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   await handleAuthResponse(response, 'Failed to fetch savings')
   return response.json()
@@ -927,6 +931,7 @@ export async function getCaliberPriceHistory(
 export async function getWatchlist(token: string): Promise<WatchlistResponse> {
   const response = await fetch(`${API_BASE_URL}/api/watchlist`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   await handleAuthResponse(response, 'Failed to fetch watchlist')
   return response.json()
@@ -993,6 +998,7 @@ export async function removeFromWatchlist(id: string, token: string): Promise<vo
 export async function getWatchlistCollections(token: string): Promise<{ collections: any[] }> {
   const response = await fetch(`${API_BASE_URL}/api/watchlist/collections`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
@@ -1131,6 +1137,7 @@ export async function getSavedItems(token: string): Promise<SavedItemsResponse> 
 
   const response = await fetch(`${API_BASE_URL}/api/saved-items`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
@@ -1269,6 +1276,7 @@ export async function updateSavedItemPrefs(
 export async function isSaved(token: string, productId: string): Promise<boolean> {
   const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
 
   if (response.status === 404) {
@@ -1289,6 +1297,7 @@ export async function isSaved(token: string, productId: string): Promise<boolean
 export async function getSavedItem(token: string, productId: string): Promise<SavedItem | null> {
   const response = await fetch(`${API_BASE_URL}/api/saved-items/${productId}`, {
     headers: buildAuthHeaders(token),
+    cache: 'no-store', // P1 Fix: User-specific data must not be cached
   })
 
   if (response.status === 404) {

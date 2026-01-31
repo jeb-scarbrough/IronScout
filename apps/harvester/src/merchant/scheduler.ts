@@ -172,21 +172,43 @@ export async function scheduleRetailerFeeds(): Promise<number> {
         jobId,
       })
 
-      // Create feed run record
-      const feedRun = await prisma.retailer_feed_runs.create({
-        data: {
-          retailerId: feed.retailerId,
+      // P0 Fix: Check for orphaned PENDING run from previous failed enqueue
+      // If found, reuse it instead of creating a duplicate
+      const recentRunCutoff = new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes ago
+      let feedRun = await prisma.retailer_feed_runs.findFirst({
+        where: {
           feedId: feed.id,
           status: 'PENDING',
+          startedAt: { gte: recentRunCutoff },
         },
+        orderBy: { startedAt: 'desc' },
       })
+
+      if (feedRun) {
+        log.warn('ORPHANED_RUN_RECOVERY', {
+          feedId: feed.id,
+          retailerId: feed.retailerId,
+          orphanedRunId: feedRun.id,
+          orphanedRunStartedAt: feedRun.startedAt.toISOString(),
+          message: 'Found PENDING run from recent failed enqueue - reusing instead of creating duplicate',
+        })
+      } else {
+        // Create new feed run record
+        feedRun = await prisma.retailer_feed_runs.create({
+          data: {
+            retailerId: feed.retailerId,
+            feedId: feed.id,
+            status: 'PENDING',
+          },
+        })
+      }
 
       // Apply random jitter (0-2 minutes) to prevent thundering herd
       const jitterMs = getSchedulingJitter(2)
 
       // Queue the job with idempotent jobId
-      // SECURITY: Must add to queue BEFORE updating lastRunAt
       // If Redis fails, the job should be retried on next scheduler run
+      // (lastRunAt won't be updated, so feed will be re-evaluated)
       await retailerFeedIngestQueue.add(
         'ingest',
         {
