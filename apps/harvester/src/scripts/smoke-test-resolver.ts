@@ -17,7 +17,7 @@
  *   - Worker running (in another terminal): pnpm worker
  */
 
-import 'dotenv/config'
+import '../env'
 import { prisma } from '@ironscout/db'
 import { createId } from '@paralleldrive/cuid2'
 import { enqueueProductResolve, QUEUE_NAMES } from '../config/queues'

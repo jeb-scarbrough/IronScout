@@ -22,7 +22,7 @@
  *   - Consider IP allowlisting in production
  */
 
-import 'dotenv/config'
+import '../env'
 
 import express, { Request, Response, NextFunction } from 'express'
 import { createBullBoard } from '@bull-board/api'

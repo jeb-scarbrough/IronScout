@@ -8,7 +8,7 @@ import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut, DollarSign } from 'lucide-react'
-import { BRAND_NAME } from '@/lib/brand'
+import { BRAND, BRAND_NAME } from '@/lib/brand'
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -46,10 +46,8 @@ export function Header() {
               Price Check
             </Link>
             <a
-              href="https://www.ironscout.ai/retailers"
+              href={`${BRAND.website}/retailers`}
               className="text-sm font-medium hover:text-primary transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
             >
               For Retailers
             </a>
@@ -161,10 +159,8 @@ export function Header() {
                 Price Check
               </Link>
               <a
-                href="https://www.ironscout.ai/retailers"
+                href={`${BRAND.website}/retailers`}
                 className="text-sm font-medium hover:text-primary transition-colors"
-                target="_blank"
-                rel="noopener noreferrer"
                 onClick={() => setIsMenuOpen(false)}
               >
                 For Retailers

@@ -12,7 +12,7 @@
  */
 
 // Load environment variables first, before any other imports
-import 'dotenv/config'
+import './env'
 
 import {
   prisma,

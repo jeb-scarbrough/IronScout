@@ -21,7 +21,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="space-y-4">
-            <Link href="/search" className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-2">
               <Image
                 src="/logo-dark.svg"
                 alt="IronScout"
@@ -66,8 +66,6 @@ export function Footer() {
                 <a
                   href={`${WWW_URL}/about`}
                   className="text-muted-foreground hover:text-primary"
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   About
                 </a>
@@ -76,8 +74,6 @@ export function Footer() {
                 <a
                   href={`${WWW_URL}/retailers`}
                   className="text-muted-foreground hover:text-primary"
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   For Retailers
                 </a>
@@ -93,8 +89,6 @@ export function Footer() {
                 <a
                   href={`${WWW_URL}/privacy`}
                   className="text-muted-foreground hover:text-primary"
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   Privacy Policy
                 </a>
@@ -103,8 +97,6 @@ export function Footer() {
                 <a
                   href={`${WWW_URL}/terms`}
                   className="text-muted-foreground hover:text-primary"
-                  target="_blank"
-                  rel="noopener noreferrer"
                 >
                   Terms of Service
                 </a>

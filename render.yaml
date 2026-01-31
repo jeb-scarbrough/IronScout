@@ -25,6 +25,8 @@ envVarGroups:
         value: https://merchant.ironscout.ai
       - key: NEXT_PUBLIC_WEB_URL
         value: https://ironscout.ai
+      - key: NEXT_PUBLIC_WWW_URL
+        value: https://www.ironscout.ai
       - key: ADMIN_PORTAL_URL
         value: https://admin.ironscout.ai
       - key: FRONTEND_URL

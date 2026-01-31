@@ -54,7 +54,7 @@ export default function About() {
             </p>
             <div className="bg-iron-900/50 border border-iron-800 rounded-lg p-6 mt-8">
               <p className="text-iron-200 leading-relaxed">
-                Different situations call for different priorities.<br />
+                <span className="block">Different situations call for different priorities.</span>
                 <span className="text-primary">Range ammo, carry ammo, and match ammo</span> should
                 not be surfaced or ordered the same way.
               </p>
@@ -113,8 +113,8 @@ export default function About() {
             </p>
             <div className="border-l-2 border-primary pl-6 mt-8">
               <p className="text-iron-200 italic">
-                IronScout does not push urgency or tell you what to buy.<br />
-                It exists to make informed action easier.
+                <span className="block">IronScout does not push urgency or tell you what to buy.</span>
+                <span className="block">It exists to make informed action easier.</span>
               </p>
             </div>
           </div>
@@ -157,13 +157,13 @@ export default function About() {
             </ul>
             <div className="bg-iron-900/50 border border-iron-800 rounded-lg p-6 mt-6">
               <p className="text-iron-300 leading-relaxed">
-                IronScout does not track firearms, serial numbers, quantities, or usage.<br />
+                <span className="block">IronScout does not track firearms, serial numbers, quantities, or usage.</span>
                 <span className="text-iron-400">There is no inventory system and no registry.</span>
               </p>
             </div>
             <p className="text-iron-200 mt-6">
-              If you never add personal context, IronScout still works.<br />
-              If you do, it works better.
+              <span className="block">If you never add personal context, IronScout still works.</span>
+              <span className="block">If you do, it works better.</span>
             </p>
           </div>
         </div>
