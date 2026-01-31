@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAdminAccessToken } from '@/lib/admin-session'
+import { createLogger } from '@ironscout/logger'
+
+const logger = createLogger('web:api:admin')
 
 export async function GET() {
   const accessToken = await getAdminAccessToken()
@@ -29,7 +32,7 @@ export async function GET() {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Error proxying embedding stats:', error)
+    logger.error('Error proxying embedding stats', {}, error)
     return NextResponse.json({ error: 'Failed to fetch embedding stats' }, { status: 500 })
   }
 }

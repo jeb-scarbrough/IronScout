@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { RetailerPrice, ShippingInfo } from '@/components/results/types'
 import { refreshSessionToken } from '@/hooks/use-session-refresh'
 import { env } from '@/lib/env'
+import { safeLogger } from '@/lib/safe-logger'
 
 const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
@@ -104,7 +105,7 @@ export default function DashboardPage() {
 
         setRetailers(retailerPrices)
       } catch (err) {
-        console.error('Failed to fetch retailer prices:', err)
+        safeLogger.dashboard.error('Failed to fetch retailer prices', {}, err)
         setRetailers([])
       } finally {
         setLoadingPrices(false)

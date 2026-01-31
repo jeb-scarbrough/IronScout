@@ -45,6 +45,7 @@ import {
   updateAmmoPreferenceUseCase,
 } from '@/lib/api'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
+import { safeLogger } from '@/lib/safe-logger'
 import { Package, ExternalLink, ChevronDown } from 'lucide-react'
 import {
   Popover,
@@ -166,7 +167,7 @@ export function GunLockerManager() {
         const data = await getGunLocker(authToken)
         setGuns(data.guns || [])
       } catch (error) {
-        console.error('Failed to fetch guns:', error)
+        safeLogger.dashboard.error('Failed to fetch guns', {}, error)
         toast.error('Failed to load your guns')
       } finally {
         setIsLoading(false)
@@ -328,7 +329,7 @@ export function GunLockerManager() {
       const data = await getFirearmAmmoPreferences(token, gun.id)
       setAmmoPreferences(data.groups)
     } catch (error) {
-      console.error('Failed to fetch ammo preferences:', error)
+      safeLogger.dashboard.error('Failed to fetch ammo preferences', {}, error)
       toast.error('Failed to load ammo preferences')
     } finally {
       setIsLoadingPreferences(false)

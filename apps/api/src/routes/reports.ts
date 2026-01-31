@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@ironscout/db'
 import { z } from 'zod'
 import { logger } from '../config/logger'
-import { requireAdmin } from '../middleware/auth'
+import { requireAdmin, getAuthenticatedUserId } from '../middleware/auth'
 
 const log = logger.child('reports')
 
@@ -15,7 +15,7 @@ const router: ExpressRouter = Router()
 
 const createReportSchema = z.object({
   productId: z.string(),
-  userId: z.string().optional(), // Optional for anonymous reports
+  // SEC-010 FIX: userId removed from client input - derived from auth context
   priceId: z.string().optional(), // Optional - specific retailer/price issue
   issueType: z.enum([
     'INCORRECT_PRICE',
@@ -60,6 +60,10 @@ router.post('/', async (req, res) => {
   try {
     const data = createReportSchema.parse(req.body)
 
+    // SEC-010 FIX: Derive userId from auth context, not client input
+    // Anonymous reports are allowed (userId will be null)
+    const authenticatedUserId = getAuthenticatedUserId(req)
+
     // Verify product exists
     const product = await prisma.products.findUnique({
       where: { id: data.productId }
@@ -88,7 +92,7 @@ router.post('/', async (req, res) => {
       data: {
         id: randomUUID(),
         productId: data.productId,
-        userId: data.userId,
+        userId: authenticatedUserId, // SEC-010: Server-derived, not client-provided
         priceId: data.priceId,
         issueType: data.issueType,
         description: data.description,

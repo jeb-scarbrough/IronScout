@@ -788,3 +788,52 @@ export function generateSpanId(): string {
     return ((Math.random() * 16) | 0).toString(16)
   })
 }
+
+// =============================================================================
+// URL Sanitization - Strip credentials from URLs before logging
+// =============================================================================
+
+/**
+ * Sanitize a URL for safe logging by removing credentials (userinfo).
+ * URLs like "https://user:pass@host.com/path" become "https://host.com/path"
+ *
+ * @param url - The URL to sanitize (can be string or URL object)
+ * @returns Sanitized URL string safe for logging
+ *
+ * @example
+ * ```ts
+ * sanitizeUrlForLogging('https://user:secret@api.example.com/feed')
+ * // Returns: 'https://api.example.com/feed'
+ *
+ * sanitizeUrlForLogging('ftp://admin:password@files.example.com/data.csv')
+ * // Returns: 'ftp://files.example.com/data.csv'
+ * ```
+ */
+export function sanitizeUrlForLogging(url: string | URL | null | undefined): string {
+  if (!url) return '[no-url]'
+
+  try {
+    const parsed = typeof url === 'string' ? new URL(url) : url
+
+    // Check if URL has credentials
+    if (parsed.username || parsed.password) {
+      // Create a copy without credentials
+      const sanitized = new URL(parsed.toString())
+      sanitized.username = ''
+      sanitized.password = ''
+      return sanitized.toString()
+    }
+
+    return parsed.toString()
+  } catch {
+    // If URL parsing fails, try to redact credentials using regex as fallback
+    // Matches: protocol://user:pass@host or protocol://user@host
+    const urlStr = String(url)
+    const credentialPattern = /^(\w+:\/\/)([^:@]+:[^@]+@|[^:@]+@)/
+    if (credentialPattern.test(urlStr)) {
+      return urlStr.replace(credentialPattern, '$1')
+    }
+    // Return truncated URL to prevent credential exposure
+    return urlStr.length > 50 ? `${urlStr.substring(0, 50)}...` : urlStr
+  }
+}

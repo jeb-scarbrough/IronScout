@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { sanitizeUrlForLogging } from '@ironscout/logger';
 import { testFtpFeed } from '@/lib/ftp-test';
 import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
 
     if (!ssrfResult.safe) {
       reqLogger.warn('Feed test blocked by SSRF guard', {
-        url: url.substring(0, 50), // Log only partial URL for debugging
+        url: sanitizeUrlForLogging(url),
         error: ssrfResult.error
       });
       return NextResponse.json(
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
         const result = await testFtpFeed(safeUrl, accessType, username, password);
 
         if (!result.success) {
-          reqLogger.warn('FTP/SFTP test failed', { url, accessType, error: result.error });
+          reqLogger.warn('FTP/SFTP test failed', { url: sanitizeUrlForLogging(url), accessType, error: result.error });
           return NextResponse.json(
             { error: result.error || 'Connection failed' },
             { status: 400 }
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
           rowCount = content.split('\n').filter(line => line.trim()).length - 1;
         }
 
-        reqLogger.info('FTP/SFTP test successful', { url, accessType, rowCount: Math.max(0, rowCount) });
+        reqLogger.info('FTP/SFTP test successful', { url: sanitizeUrlForLogging(url), accessType, rowCount: Math.max(0, rowCount) });
 
         return NextResponse.json({
           success: true,
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
         });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        reqLogger.warn('FTP/SFTP test error', { url, accessType }, error);
+        reqLogger.warn('FTP/SFTP test error', { url: sanitizeUrlForLogging(url), accessType }, error);
         return NextResponse.json(
           { error: `Connection failed: ${message}` },
           { status: 400 }
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
         reqLogger.debug('Using basic auth for feed test');
       }
 
-      reqLogger.debug('Fetching feed URL', { url: safeUrl });
+      reqLogger.debug('Fetching feed URL', { url: sanitizeUrlForLogging(safeUrl) });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
@@ -151,10 +152,10 @@ export async function POST(request: Request) {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        reqLogger.warn('Feed test failed - server error', { 
-          url, 
-          status: response.status, 
-          statusText: response.statusText 
+        reqLogger.warn('Feed test failed - server error', {
+          url: sanitizeUrlForLogging(url),
+          status: response.status,
+          statusText: response.statusText
         });
         return NextResponse.json(
           { error: `Server returned ${response.status}: ${response.statusText}` },
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
       const isValidType = validTypes.some(t => contentType.includes(t));
 
       if (!isValidType) {
-        reqLogger.warn('Feed test failed - invalid content type', { url, contentType });
+        reqLogger.warn('Feed test failed - invalid content type', { url: sanitizeUrlForLogging(url), contentType });
         return NextResponse.json(
           { error: `Unexpected content type: ${contentType}. Expected CSV, JSON, or XML.` },
           { status: 400 }
@@ -187,7 +188,7 @@ export async function POST(request: Request) {
           const json = JSON.parse(text);
           rowCount = Array.isArray(json) ? json.length : (json.products?.length || json.items?.length || 0);
         } catch {
-          reqLogger.warn('Feed test failed - invalid JSON', { url });
+          reqLogger.warn('Feed test failed - invalid JSON', { url: sanitizeUrlForLogging(url) });
           return NextResponse.json(
             { error: 'Invalid JSON format' },
             { status: 400 }
@@ -199,10 +200,10 @@ export async function POST(request: Request) {
         rowCount = productMatches?.length || 0;
       }
 
-      reqLogger.info('Feed test successful', { 
-        url, 
-        contentType, 
-        rowCount: Math.max(0, rowCount) 
+      reqLogger.info('Feed test successful', {
+        url: sanitizeUrlForLogging(url),
+        contentType,
+        rowCount: Math.max(0, rowCount)
       });
 
       return NextResponse.json({
@@ -212,7 +213,7 @@ export async function POST(request: Request) {
       });
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        reqLogger.warn('Feed test failed - timeout', { url });
+        reqLogger.warn('Feed test failed - timeout', { url: sanitizeUrlForLogging(url) });
         return NextResponse.json(
           { error: 'Connection timed out after 10 seconds' },
           { status: 400 }
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
       }
       
       const message = error instanceof Error ? error.message : 'Unknown error';
-      reqLogger.warn('Feed test failed - connection error', { url }, error);
+      reqLogger.warn('Feed test failed - connection error', { url: sanitizeUrlForLogging(url) }, error);
       return NextResponse.json(
         { error: `Connection failed: ${message}` },
         { status: 400 }

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAdminAccessToken } from '@/lib/admin-session'
+import { createLogger } from '@ironscout/logger'
+
+const logger = createLogger('web:api:admin')
 
 export async function POST() {
   const accessToken = await getAdminAccessToken()
@@ -29,7 +32,7 @@ export async function POST() {
 
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Error proxying backfill:', error)
+    logger.error('Error proxying backfill', {}, error)
     return NextResponse.json({ error: 'Failed to trigger backfill' }, { status: 500 })
   }
 }
