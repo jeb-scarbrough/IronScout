@@ -6,10 +6,8 @@ import type { ProductFeedItem } from '@/types/dashboard'
 import { addToWatchlist, removeFromWatchlist, AuthError } from '@/lib/api'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
-
-const logger = createLogger('for-you-result-card')
 
 interface ForYouResultCardProps {
   item: ProductFeedItem
@@ -71,7 +69,7 @@ export function ForYouResultCard({
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to toggle tracking', {}, error)
+      safeLogger.components.error('Failed to toggle tracking', {}, error)
       toast.error('Failed to update alert')
     }
   }, [getValidToken, item.isWatched, item.id, item.product.id, onTrackChange])

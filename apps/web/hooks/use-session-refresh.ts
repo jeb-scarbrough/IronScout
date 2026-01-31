@@ -2,10 +2,8 @@
 
 import { useEffect, useCallback, useRef } from 'react'
 import { useSession, signOut, getSession } from 'next-auth/react'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { toast } from 'sonner'
-
-const logger = createLogger('hooks:session-refresh')
 
 // Refresh session 5 minutes before token expires (tokens last 1 hour)
 const PROACTIVE_REFRESH_INTERVAL = 50 * 60 * 1000 // 50 minutes
@@ -26,7 +24,7 @@ export function useSessionRefresh() {
   // Handle session errors - redirect to login
   useEffect(() => {
     if (session?.error === 'RefreshTokenError') {
-      logger.info('Session expired or token refresh failed, signing out')
+      safeLogger.hooks.info('Session expired or token refresh failed, signing out')
       signOut({ callbackUrl: '/auth/signin?reason=session_expired' })
     }
   }, [session])
@@ -45,12 +43,12 @@ export function useSessionRefresh() {
 
     // Set up proactive refresh
     refreshIntervalRef.current = setInterval(async () => {
-      logger.debug('Proactive session refresh')
+      safeLogger.hooks.debug('Proactive session refresh')
       try {
         // This triggers the JWT callback which will refresh the token if needed
         await update()
       } catch (error) {
-        logger.error('Proactive refresh failed', {}, error)
+        safeLogger.hooks.error('Proactive refresh failed', {}, error)
       }
     }, PROACTIVE_REFRESH_INTERVAL)
 
@@ -70,24 +68,24 @@ export function useSessionRefresh() {
  */
 export async function refreshSessionToken(): Promise<string | null> {
   try {
-    logger.debug('Attempting to refresh session token')
+    safeLogger.hooks.debug('Attempting to refresh session token')
     // getSession forces a new session fetch, triggering the JWT callback
     const session = await getSession()
 
     if (session?.error === 'RefreshTokenError') {
-      logger.warn('Session refresh returned error')
+      safeLogger.hooks.warn('Session refresh returned error')
       return null
     }
 
     const token = session?.accessToken
     if (token) {
-      logger.debug('Session token refreshed successfully')
+      safeLogger.hooks.debug('Session token refreshed successfully')
       return token
     }
 
     return null
   } catch (error) {
-    logger.error('Session refresh failed', {}, error)
+    safeLogger.hooks.error('Session refresh failed', {}, error)
     return null
   }
 }

@@ -9,15 +9,13 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { User, Mail, Bell, LogOut, Trash2, Shield, AlertTriangle, Clock, XCircle, Loader2 } from 'lucide-react'
 import Image from 'next/image'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import {
   checkDeletionEligibility,
   requestAccountDeletion,
   cancelAccountDeletion,
   type DeletionEligibility,
 } from '@/lib/api'
-
-const logger = createLogger('user-settings')
 
 export function UserSettings() {
   const { data: session } = useSession()
@@ -59,7 +57,7 @@ export function UserSettings() {
   const fetchDeletionEligibility = async () => {
     const token = session?.accessToken
     if (!token) {
-      logger.error('No access token available')
+      safeLogger.dashboard.error('No access token available')
       return
     }
 
@@ -68,7 +66,7 @@ export function UserSettings() {
       const data = await checkDeletionEligibility(token)
       setDeletionEligibility(data)
     } catch (error) {
-      logger.error('Failed to check deletion eligibility', {}, error)
+      safeLogger.dashboard.error('Failed to check deletion eligibility', {}, error)
     } finally {
       setLoadingEligibility(false)
     }
@@ -104,7 +102,7 @@ export function UserSettings() {
   const handleCancelDeletion = async () => {
     const token = session?.accessToken
     if (!token) {
-      logger.error('No access token available')
+      safeLogger.dashboard.error('No access token available')
       return
     }
 
@@ -115,7 +113,7 @@ export function UserSettings() {
       setDeletionEligibility(null)
       fetchDeletionEligibility()
     } catch (error) {
-      logger.error('Failed to cancel deletion', {}, error)
+      safeLogger.dashboard.error('Failed to cancel deletion', {}, error)
     } finally {
       setDeletionLoading(false)
     }

@@ -292,7 +292,10 @@ async function schedulerTick(): Promise<{ processed: number }> {
           continue
         }
 
-        const jobId = `${feed.id}-manual-${Date.now()}`
+        // P0 Fix (#119): Use stable job ID for idempotent enqueue
+        // BullMQ will dedupe based on jobId, preventing duplicate manual runs
+        // even if scheduler tick races with itself
+        const jobId = `${feed.id}-manual`
         log.debug('AFFILIATE_MANUAL_FEED_ENQUEUEING', {
           feedId: feed.id,
           trigger: 'MANUAL',
@@ -302,7 +305,10 @@ async function schedulerTick(): Promise<{ processed: number }> {
         await affiliateFeedQueue.add(
           'process',
           { feedId: feed.id, trigger: 'MANUAL' },
-          { jobId }
+          {
+            jobId,
+            // If job with this ID already exists, BullMQ will ignore this add
+          }
         )
         processed++
         log.info('AFFILIATE_MANUAL_FEED_ENQUEUED', {

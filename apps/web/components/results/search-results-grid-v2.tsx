@@ -10,11 +10,9 @@ import { getSavedItems, saveItem, unsaveItem, AuthError } from '@/lib/api'
 import { useSession } from 'next-auth/react'
 import { useViewPreference } from '@/hooks/use-view-preference'
 import { useSearchLoading } from '@/components/search/search-loading-context'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
 import type { RetailerPrice, ShippingInfo, ProductWithRetailers } from './types'
-
-const logger = createLogger('search-results-grid-v2')
 
 interface SearchResultsGridV2Props {
   products: Product[]
@@ -133,7 +131,7 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
           showSessionExpiredToast()
           return
         }
-        logger.error('Failed to load saved items', {}, error)
+        safeLogger.components.error('Failed to load saved items', {}, error)
       }
     }
     loadSavedItems()
@@ -183,7 +181,7 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
           showSessionExpiredToast()
           return
         }
-        logger.error('Failed to toggle watch state', {}, error)
+        safeLogger.components.error('Failed to toggle watch state', {}, error)
       }
     },
     [getValidToken, trackedIds]

@@ -13,10 +13,8 @@ import {
   Sparkles,
   Search
 } from 'lucide-react'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { env } from '@/lib/env'
-
-const logger = createLogger('admin-embeddings')
 
 const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
@@ -135,7 +133,7 @@ export default function EmbeddingsAdminPage() {
         setTestResult(data)
       }
     } catch (err) {
-      logger.error('Test search failed', {}, err)
+      safeLogger.admin.error('Test search failed', {}, err)
     } finally {
       setTestLoading(false)
     }

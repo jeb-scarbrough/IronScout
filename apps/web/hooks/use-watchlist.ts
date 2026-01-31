@@ -10,10 +10,8 @@ import {
   AuthError,
 } from '@/lib/api'
 import type { WatchlistResponse, UseWatchlistResult } from '@/types/dashboard'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from './use-session-refresh'
-
-const logger = createLogger('hooks:watchlist')
 
 /**
  * Hook for managing watchlist
@@ -67,7 +65,7 @@ export function useWatchlist(): UseWatchlistResult {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to fetch watchlist', {}, err)
+      safeLogger.hooks.error('Failed to fetch watchlist', {}, err)
       setError(err instanceof Error ? err.message : 'Failed to load watchlist')
     } finally {
       setLoading(false)

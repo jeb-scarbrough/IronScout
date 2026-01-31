@@ -4,10 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { getMarketPulse, AuthError } from '@/lib/api'
 import type { MarketPulseResponse, UseMarketPulseResult } from '@/types/dashboard'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from './use-session-refresh'
-
-const logger = createLogger('hooks:market-pulse')
 
 /**
  * Hook for fetching Market Pulse data
@@ -60,7 +58,7 @@ export function useMarketPulse(): UseMarketPulseResult {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to fetch market pulse', {}, err)
+      safeLogger.hooks.error('Failed to fetch market pulse', {}, err)
       setError(err instanceof Error ? err.message : 'Failed to load market pulse')
     } finally {
       setLoading(false)

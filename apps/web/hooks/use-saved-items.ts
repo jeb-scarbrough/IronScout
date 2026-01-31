@@ -12,10 +12,8 @@ import {
   type SavedItemsResponse,
   type UpdateSavedItemPrefs,
 } from '@/lib/api'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from './use-session-refresh'
-
-const logger = createLogger('hooks:saved-items')
 
 /**
  * Result type for useSavedItems hook
@@ -89,7 +87,7 @@ export function useSavedItems(): UseSavedItemsResult {
   const fetchSavedItems = useCallback(async () => {
     const authToken = await getValidToken()
     if (!authToken) {
-      logger.debug('No token available, skipping fetch')
+      safeLogger.hooks.debug('No token available, skipping fetch')
       setLoading(false)
       return
     }
@@ -97,7 +95,7 @@ export function useSavedItems(): UseSavedItemsResult {
     try {
       setLoading(true)
       setError(null)
-      logger.debug('Fetching saved items')
+      safeLogger.hooks.debug('Fetching saved items')
       const response = await getSavedItems(authToken)
       setData(response)
     } catch (err) {
@@ -117,7 +115,7 @@ export function useSavedItems(): UseSavedItemsResult {
         return
       }
       const message = err instanceof Error ? err.message : 'Failed to load saved items'
-      logger.error('Failed to fetch saved items', { message }, err)
+      safeLogger.hooks.error('Failed to fetch saved items', { message }, err)
       setError(message)
     } finally {
       setLoading(false)
@@ -141,7 +139,7 @@ export function useSavedItems(): UseSavedItemsResult {
     } else {
       // Authenticated but no token (session issue) - gracefully degrade to empty state
       // This matches useLoadout behavior and avoids blocking the user
-      logger.warn('Authenticated but no accessToken in session', { status })
+      safeLogger.hooks.warn('Authenticated but no accessToken in session', { status })
       setLoading(false)
       setData({ items: [], _meta: { itemCount: 0, itemLimit: 0, canAddMore: false, tier: 'FREE' } })
     }

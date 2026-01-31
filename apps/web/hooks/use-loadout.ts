@@ -2,11 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
 import { env } from '@/lib/env'
-
-const logger = createLogger('hooks:loadout')
 
 // Backend API URL
 const API_BASE_URL = env.NEXT_PUBLIC_API_URL
@@ -154,19 +152,19 @@ export function useLoadout(): UseLoadoutResult {
         // Handle expired/invalid session - try refresh once
         if (authRetryCount.current < MAX_AUTH_RETRIES) {
           authRetryCount.current++
-          logger.info('Token rejected, attempting session refresh', {
+          safeLogger.hooks.info('Token rejected, attempting session refresh', {
             attempt: authRetryCount.current,
           })
 
           const refreshed = await refreshSessionToken()
           if (refreshed) {
-            logger.info('Session refreshed, retrying fetch')
+            safeLogger.hooks.info('Session refreshed, retrying fetch')
             // Retry will happen on next render due to token change
             return
           }
         }
 
-        logger.info('Session refresh failed, showing toast')
+        safeLogger.hooks.info('Session refresh failed, showing toast')
         showSessionExpiredToast()
         return
       }
@@ -180,7 +178,7 @@ export function useLoadout(): UseLoadoutResult {
       setError(undefined)
       authRetryCount.current = 0
     } catch (err) {
-      logger.error('Failed to fetch loadout data', {}, err)
+      safeLogger.hooks.error('Failed to fetch loadout data', {}, err)
       setError(err instanceof Error ? err : new Error('Failed to load loadout'))
     } finally {
       setIsLoading(false)

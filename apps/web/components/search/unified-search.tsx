@@ -8,9 +8,7 @@ import { getSearchSuggestions } from '@/lib/api'
 import { PremiumFilters } from '@/components/premium'
 import { cn } from '@/lib/utils'
 import { useSearchLoading } from './search-loading-context'
-import { createLogger } from '@/lib/logger'
-
-const logger = createLogger('unified-search')
+import { safeLogger } from '@/lib/safe-logger'
 
 // Common calibers for the ammunition market
 const CALIBERS = [
@@ -169,7 +167,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
         const results = await getSearchSuggestions(query)
         setSuggestions(results.slice(0, 5))
       } catch (error) {
-        logger.error('Failed to fetch suggestions', {}, error)
+        safeLogger.search.error('Failed to fetch suggestions', {}, error)
       }
     }, 200)
 

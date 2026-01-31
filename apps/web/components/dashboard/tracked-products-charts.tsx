@@ -9,9 +9,7 @@ import { getUserAlerts, getProductPriceHistory, type Alert as AlertType, PriceHi
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { TrendingDown, TrendingUp, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
-import { createLogger } from '@/lib/logger'
-
-const logger = createLogger('components:tracked-products-charts')
+import { safeLogger } from '@/lib/safe-logger'
 
 export function TrackedProductsCharts() {
   const { data: session } = useSession()
@@ -45,12 +43,12 @@ export function TrackedProductsCharts() {
           const history = await getProductPriceHistory(alert.productId)
           histories[alert.productId] = history
         } catch (error) {
-          logger.error('Failed to fetch history for product', { productId: alert.productId }, error)
+          safeLogger.dashboard.error('Failed to fetch history for product', { productId: alert.productId }, error)
         }
       }
       setPriceData(histories)
     } catch (error) {
-      logger.error('Failed to fetch tracked products', {}, error)
+      safeLogger.dashboard.error('Failed to fetch tracked products', {}, error)
     } finally {
       setLoading(false)
     }
