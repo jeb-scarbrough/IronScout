@@ -172,6 +172,18 @@ CREATE TYPE "ProductLinkReasonCode" AS ENUM ('INSUFFICIENT_DATA', 'INVALID_UPC',
 -- CreateEnum
 CREATE TYPE "ProductResolveRequestStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 
+-- CreateEnum
+CREATE TYPE "ScrapeTargetStatus" AS ENUM ('ACTIVE', 'PAUSED', 'BROKEN', 'STALE');
+
+-- CreateEnum
+CREATE TYPE "ScrapeRunTrigger" AS ENUM ('SCHEDULED', 'MANUAL', 'RETRY', 'RECHECK');
+
+-- CreateEnum
+CREATE TYPE "ScrapeRunStatus" AS ENUM ('RUNNING', 'SUCCESS', 'FAILED', 'QUARANTINED');
+
+-- CreateEnum
+CREATE TYPE "ScrapeAdapterDisableReason" AS ENUM ('MANUAL', 'DRIFT_DETECTED', 'TOS_VIOLATION');
+
 -- CreateTable
 CREATE TABLE "Account" (
     "id" TEXT NOT NULL,
@@ -722,6 +734,31 @@ CREATE TABLE "price_corrections" (
 );
 
 -- CreateTable
+CREATE TABLE "current_visible_prices" (
+    "id" TEXT NOT NULL,
+    "productId" TEXT,
+    "retailerId" TEXT NOT NULL,
+    "merchantId" TEXT,
+    "sourceId" TEXT,
+    "sourceProductId" TEXT,
+    "price" DECIMAL(10,2) NOT NULL,
+    "visiblePrice" DECIMAL(10,2) NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "url" TEXT NOT NULL,
+    "inStock" BOOLEAN NOT NULL,
+    "observedAt" TIMESTAMP(3) NOT NULL,
+    "shippingCost" DECIMAL(10,2),
+    "retailerName" TEXT NOT NULL,
+    "retailerTier" "RetailerTier" NOT NULL,
+    "ingestionRunType" "IngestionRunType",
+    "ingestionRunId" TEXT,
+    "recomputedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "recomputeJobId" TEXT,
+
+    CONSTRAINT "current_visible_prices_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "product_reports" (
     "id" TEXT NOT NULL,
     "productId" TEXT NOT NULL,
@@ -999,8 +1036,89 @@ CREATE TABLE "sources" (
     "affiliateTrackingTemplate" TEXT,
     "isDisplayPrimary" BOOLEAN NOT NULL DEFAULT false,
     "sourceKind" "SourceKind" NOT NULL DEFAULT 'DIRECT',
+    "adapterId" TEXT,
+    "scrapeConfig" JSONB,
+    "scrapeEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "tosReviewedAt" TIMESTAMP(3),
+    "tosApprovedBy" TEXT,
+    "robotsCompliant" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "sources_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "scrape_targets" (
+    "id" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "canonicalUrl" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "adapterId" TEXT NOT NULL,
+    "sourceProductId" TEXT,
+    "schedule" TEXT,
+    "priority" INTEGER NOT NULL DEFAULT 0,
+    "status" "ScrapeTargetStatus" NOT NULL DEFAULT 'ACTIVE',
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "robotsPathBlocked" BOOLEAN NOT NULL DEFAULT false,
+    "lastScrapedAt" TIMESTAMP(3),
+    "lastStatus" TEXT,
+    "consecutiveFailures" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdBy" TEXT,
+    "notes" TEXT,
+
+    CONSTRAINT "scrape_targets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "scrape_runs" (
+    "id" TEXT NOT NULL,
+    "adapterId" TEXT NOT NULL,
+    "adapterVersion" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "retailerId" TEXT NOT NULL,
+    "trigger" "ScrapeRunTrigger" NOT NULL,
+    "status" "ScrapeRunStatus" NOT NULL DEFAULT 'RUNNING',
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completedAt" TIMESTAMP(3),
+    "durationMs" INTEGER,
+    "urlsAttempted" INTEGER NOT NULL DEFAULT 0,
+    "urlsSucceeded" INTEGER NOT NULL DEFAULT 0,
+    "urlsFailed" INTEGER NOT NULL DEFAULT 0,
+    "offersExtracted" INTEGER NOT NULL DEFAULT 0,
+    "offersValid" INTEGER NOT NULL DEFAULT 0,
+    "offersDropped" INTEGER NOT NULL DEFAULT 0,
+    "offersQuarantined" INTEGER NOT NULL DEFAULT 0,
+    "oosNoPriceCount" INTEGER NOT NULL DEFAULT 0,
+    "zeroPriceCount" INTEGER NOT NULL DEFAULT 0,
+    "failureRate" DECIMAL(5,4),
+    "yieldRate" DECIMAL(5,4),
+    "dropRate" DECIMAL(5,4),
+    "errorCode" TEXT,
+    "errorMessage" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "scrape_runs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "scrape_adapter_status" (
+    "adapterId" TEXT NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "disabledAt" TIMESTAMP(3),
+    "disabledReason" "ScrapeAdapterDisableReason",
+    "disabledBy" TEXT,
+    "baselineFailureRate" DECIMAL(5,4),
+    "baselineYieldRate" DECIMAL(5,4),
+    "baselineSampleSize" INTEGER NOT NULL DEFAULT 0,
+    "baselineUpdatedAt" TIMESTAMP(3),
+    "consecutiveFailedBatches" INTEGER NOT NULL DEFAULT 0,
+    "lastBatchFailureRate" DECIMAL(5,4),
+    "lastRunHadZeroPrice" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "scrape_adapter_status_pkey" PRIMARY KEY ("adapterId")
 );
 
 -- CreateTable
@@ -1352,6 +1470,24 @@ CREATE INDEX "price_corrections_revokedAt_idx" ON "price_corrections"("revokedAt
 CREATE INDEX "price_corrections_createdAt_idx" ON "price_corrections"("createdAt");
 
 -- CreateIndex
+CREATE INDEX "current_visible_prices_productId_idx" ON "current_visible_prices"("productId");
+
+-- CreateIndex
+CREATE INDEX "current_visible_prices_retailerId_idx" ON "current_visible_prices"("retailerId");
+
+-- CreateIndex
+CREATE INDEX "current_visible_prices_sourceProductId_idx" ON "current_visible_prices"("sourceProductId");
+
+-- CreateIndex
+CREATE INDEX "current_visible_prices_observedAt_idx" ON "current_visible_prices"("observedAt");
+
+-- CreateIndex
+CREATE INDEX "current_visible_prices_inStock_idx" ON "current_visible_prices"("inStock");
+
+-- CreateIndex
+CREATE INDEX "current_visible_prices_recomputedAt_idx" ON "current_visible_prices"("recomputedAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "products_upc_key" ON "products"("upc");
 
 -- CreateIndex
@@ -1427,6 +1563,9 @@ CREATE INDEX "source_products_identityKey_idx" ON "source_products"("identityKey
 CREATE INDEX "source_products_brandNorm_createdAt_idx" ON "source_products"("brandNorm", "createdAt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "source_products_source_identity_key_unique" ON "source_products"("sourceId", "identityKey");
+
+-- CreateIndex
 CREATE INDEX "source_product_identifiers_lookup" ON "source_product_identifiers"("idType", "idValue", "namespace");
 
 -- CreateIndex
@@ -1497,6 +1636,42 @@ CREATE UNIQUE INDEX "source_trust_config_sourceId_key" ON "source_trust_config"(
 
 -- CreateIndex
 CREATE INDEX "sources_retailer_id_idx" ON "sources"("retailerId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sources_id_adapter_id_unique" ON "sources"("id", "adapterId");
+
+-- CreateIndex
+CREATE INDEX "scrape_targets_sourceId_idx" ON "scrape_targets"("sourceId");
+
+-- CreateIndex
+CREATE INDEX "scrape_targets_adapterId_idx" ON "scrape_targets"("adapterId");
+
+-- CreateIndex
+CREATE INDEX "scrape_targets_status_idx" ON "scrape_targets"("status");
+
+-- CreateIndex
+CREATE INDEX "scrape_targets_schedule_idx" ON "scrape_targets"("schedule");
+
+-- CreateIndex
+CREATE INDEX "scrape_targets_enabled_status_idx" ON "scrape_targets"("enabled", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "scrape_targets_source_canonical_unique" ON "scrape_targets"("sourceId", "canonicalUrl");
+
+-- CreateIndex
+CREATE INDEX "scrape_runs_adapterId_idx" ON "scrape_runs"("adapterId");
+
+-- CreateIndex
+CREATE INDEX "scrape_runs_sourceId_idx" ON "scrape_runs"("sourceId");
+
+-- CreateIndex
+CREATE INDEX "scrape_runs_retailerId_idx" ON "scrape_runs"("retailerId");
+
+-- CreateIndex
+CREATE INDEX "scrape_runs_status_idx" ON "scrape_runs"("status");
+
+-- CreateIndex
+CREATE INDEX "scrape_runs_startedAt_idx" ON "scrape_runs"("startedAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "subscriptions_stripeId_key" ON "subscriptions"("stripeId");
@@ -1707,6 +1882,27 @@ ALTER TABLE "source_trust_config" ADD CONSTRAINT "source_trust_config_sourceId_f
 
 -- AddForeignKey
 ALTER TABLE "sources" ADD CONSTRAINT "sources_retailerId_fkey" FOREIGN KEY ("retailerId") REFERENCES "retailers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sources" ADD CONSTRAINT "sources_adapterId_fkey" FOREIGN KEY ("adapterId") REFERENCES "scrape_adapter_status"("adapterId") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_targets" ADD CONSTRAINT "scrape_targets_sourceId_fkey" FOREIGN KEY ("sourceId") REFERENCES "sources"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_targets" ADD CONSTRAINT "scrape_targets_sourceProductId_fkey" FOREIGN KEY ("sourceProductId") REFERENCES "source_products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_targets" ADD CONSTRAINT "scrape_targets_adapterId_fkey" FOREIGN KEY ("adapterId") REFERENCES "scrape_adapter_status"("adapterId") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_runs" ADD CONSTRAINT "scrape_runs_sourceId_fkey" FOREIGN KEY ("sourceId") REFERENCES "sources"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_runs" ADD CONSTRAINT "scrape_runs_retailerId_fkey" FOREIGN KEY ("retailerId") REFERENCES "retailers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scrape_runs" ADD CONSTRAINT "scrape_runs_adapterId_fkey" FOREIGN KEY ("adapterId") REFERENCES "scrape_adapter_status"("adapterId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_retailerId_fkey" FOREIGN KEY ("retailerId") REFERENCES "retailers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
