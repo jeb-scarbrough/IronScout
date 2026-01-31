@@ -1,5 +1,6 @@
 import { logger } from './logger'
 import { env, isE2E } from './env'
+import { throwApiError } from './api-error'
 
 const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
@@ -331,7 +332,7 @@ export async function createAlert(params: CreateAlertParams): Promise<Alert> {
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error || 'Failed to create alert')
+    throwApiError(error, 'Failed to create alert', 'ALERT_CREATE_FAILED')
   }
   return response.json()
 }
@@ -358,7 +359,7 @@ export async function updateAlert(alertId: string, params: UpdateAlertParams, to
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error || 'Failed to update alert')
+    throwApiError(error, 'Failed to update alert', 'ALERT_UPDATE_FAILED')
   }
   return response.json()
 }
@@ -370,7 +371,7 @@ export async function deleteAlert(alertId: string, token: string): Promise<void>
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error || 'Failed to delete alert')
+    throwApiError(error, 'Failed to delete alert', 'ALERT_DELETE_FAILED')
   }
 }
 
@@ -397,7 +398,7 @@ export async function createCheckoutSession(params: CreateCheckoutParams): Promi
   })
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error || 'Failed to create checkout session')
+    throwApiError(error, 'Failed to create checkout session', 'CHECKOUT_FAILED')
   }
   return response.json()
 }
@@ -915,7 +916,7 @@ export async function getCaliberPriceHistory(
   )
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to fetch price history')
+    throwApiError(error, 'Failed to fetch price history', 'PRICE_HISTORY_FAILED')
   }
   return response.json()
 }
@@ -954,7 +955,7 @@ export async function addToWatchlist(
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to add to watchlist')
+    throwApiError(error, 'Failed to add to watchlist', 'WATCHLIST_ADD_FAILED')
   }
   return response.json()
 }
@@ -974,7 +975,7 @@ export async function updateWatchlistItem(
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to update watchlist item')
+    throwApiError(error, 'Failed to update watchlist item', 'WATCHLIST_UPDATE_FAILED')
   }
   return response.json()
 }
@@ -989,7 +990,7 @@ export async function removeFromWatchlist(id: string, token: string): Promise<vo
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to remove from watchlist')
+    throwApiError(error, 'Failed to remove from watchlist', 'WATCHLIST_REMOVE_FAILED')
   }
 }
 
@@ -1003,7 +1004,7 @@ export async function getWatchlistCollections(token: string): Promise<{ collecti
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to fetch collections')
+    throwApiError(error, 'Failed to fetch collections', 'COLLECTIONS_FETCH_FAILED')
   }
   return response.json()
 }
@@ -1019,7 +1020,7 @@ export async function createWatchlistCollection(token: string, name: string): Pr
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to create collection')
+    throwApiError(error, 'Failed to create collection', 'COLLECTION_CREATE_FAILED')
   }
   return response.json()
 }
@@ -1035,7 +1036,7 @@ export async function deleteWatchlistCollection(id: string, token: string): Prom
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to delete collection')
+    throwApiError(error, 'Failed to delete collection', 'COLLECTION_DELETE_FAILED')
   }
 }
 
@@ -1142,10 +1143,7 @@ export async function getSavedItems(token: string): Promise<SavedItemsResponse> 
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    const message = error.details
-      ? `${error.error}: ${error.details}`
-      : error.error || `Failed to fetch saved items (${response.status})`
-    throw new Error(message)
+    throwApiError(error, 'Failed to fetch saved items', 'SAVED_ITEMS_FETCH_FAILED')
   }
   return response.json()
 }
@@ -1209,7 +1207,7 @@ export async function saveItem(token: string, productId: string): Promise<SaveIt
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
     // Use message field if available (contains helpful limit info), else fall back to error
-    throw new Error(error.message || error.error || 'Failed to save item')
+    throwApiError(error, 'Failed to save item', 'SAVE_ITEM_FAILED')
   }
 
   return response.json()
@@ -1231,7 +1229,7 @@ export async function unsaveItem(token: string, productId: string): Promise<void
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to remove saved item')
+    throwApiError(error, 'Failed to remove saved item', 'UNSAVE_ITEM_FAILED')
   }
 }
 
@@ -1265,7 +1263,7 @@ export async function updateSavedItemPrefs(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to update preferences')
+    throwApiError(error, 'Failed to update preferences', 'PREFERENCES_UPDATE_FAILED')
   }
 
   return response.json()
@@ -1400,7 +1398,7 @@ export async function getGunLocker(token: string): Promise<GunLockerResponse> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to fetch gun locker')
+    throwApiError(error, 'Failed to fetch gun locker', 'GUN_LOCKER_FETCH_FAILED')
   }
 
   return response.json()
@@ -1437,7 +1435,7 @@ export async function addGun(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to add gun')
+    throwApiError(error, 'Failed to add gun', 'GUN_ADD_FAILED')
   }
 
   return response.json()
@@ -1459,7 +1457,7 @@ export async function removeGun(token: string, gunId: string): Promise<void> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to remove gun')
+    throwApiError(error, 'Failed to remove gun', 'GUN_REMOVE_FAILED')
   }
 }
 
@@ -1486,7 +1484,7 @@ export async function updateGun(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to update gun')
+    throwApiError(error, 'Failed to update gun', 'GUN_UPDATE_FAILED')
   }
 
   return response.json()
@@ -1515,7 +1513,7 @@ export async function uploadGunImage(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to upload image')
+    throwApiError(error, 'Failed to upload image', 'IMAGE_UPLOAD_FAILED')
   }
 
   return response.json()
@@ -1542,7 +1540,7 @@ export async function deleteGunImage(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to delete image')
+    throwApiError(error, 'Failed to delete image', 'IMAGE_DELETE_FAILED')
   }
 
   return response.json()
@@ -1643,7 +1641,7 @@ export async function getFirearmAmmoPreferences(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to fetch ammo preferences')
+    throwApiError(error, 'Failed to fetch ammo preferences', 'AMMO_PREFS_FETCH_FAILED')
   }
 
   return response.json()
@@ -1668,7 +1666,7 @@ export async function getUserAmmoPreferences(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to fetch ammo preferences')
+    throwApiError(error, 'Failed to fetch ammo preferences', 'AMMO_PREFS_FETCH_FAILED')
   }
 
   return response.json()
@@ -1712,7 +1710,7 @@ export async function addAmmoPreference(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to add ammo preference')
+    throwApiError(error, 'Failed to add ammo preference', 'AMMO_PREF_ADD_FAILED')
   }
 
   return response.json()
@@ -1742,7 +1740,7 @@ export async function updateAmmoPreferenceUseCase(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to update ammo preference')
+    throwApiError(error, 'Failed to update ammo preference', 'AMMO_PREF_UPDATE_FAILED')
   }
 
   return response.json()
@@ -1770,7 +1768,7 @@ export async function removeAmmoPreference(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to remove ammo preference')
+    throwApiError(error, 'Failed to remove ammo preference', 'AMMO_PREF_REMOVE_FAILED')
   }
 }
 
@@ -1792,7 +1790,7 @@ export async function getFirearmCaliber(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to get firearm caliber')
+    throwApiError(error, 'Failed to get firearm caliber', 'FIREARM_CALIBER_FAILED')
   }
 
   return response.json()
@@ -1864,7 +1862,7 @@ export async function checkPrice(params: PriceCheckParams, token?: string): Prom
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to check price')
+    throwApiError(error, 'Failed to check price', 'PRICE_CHECK_FAILED')
   }
 
   return response.json()
@@ -1926,7 +1924,7 @@ export async function lookupProductByUpc(upc: string): Promise<UpcLookupResult> 
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new Error(error.error || 'Failed to lookup UPC')
+    throwApiError(error, 'Failed to lookup UPC', 'UPC_LOOKUP_FAILED')
   }
 
   return response.json()

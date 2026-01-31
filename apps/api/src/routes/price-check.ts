@@ -16,6 +16,7 @@ import { checkPrice } from '../services/price-check'
 import { CANONICAL_CALIBERS, isValidCaliber } from '../services/gun-locker'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { getRequestContext } from '@ironscout/logger'
 
 const log = loggers.dashboard // Use dashboard logger for user-facing features
 
@@ -77,7 +78,11 @@ router.post('/', async (req: Request, res: Response) => {
     log.error('Price check error', { message: err.message }, err)
 
     if (err.message.startsWith('Invalid caliber')) {
-      return res.status(400).json({ error: err.message })
+      return res.status(400).json({
+        errorCode: 'INVALID_CALIBER',
+        message: 'Invalid caliber specified',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     res.status(500).json({ error: 'Failed to check price' })

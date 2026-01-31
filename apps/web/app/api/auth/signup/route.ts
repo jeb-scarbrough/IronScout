@@ -27,7 +27,14 @@ export async function POST(req: Request) {
     const data = await response.json()
 
     if (!response.ok) {
-      return NextResponse.json(data, { status: response.status })
+      // SECURITY: Sanitize upstream response - only forward safe fields
+      return NextResponse.json({
+        errorCode: data.errorCode || 'SIGNUP_FAILED',
+        message: data.message || 'Signup failed. Please try again.',
+        requestId: data.requestId,
+        // Include validation errors if present (safe field-level info)
+        ...(data.validationErrors && { validationErrors: data.validationErrors }),
+      }, { status: response.status })
     }
 
     return NextResponse.json(data, { status: 201 })
