@@ -910,6 +910,7 @@ export async function getCaliberPriceHistory(
     `${API_BASE_URL}/api/dashboard/price-history/${encodeURIComponent(caliber)}?${params}`,
     {
       headers: buildAuthHeaders(token),
+      cache: 'no-store', // P1 Fix: User-specific data must not be cached
     }
   )
   if (!response.ok) {

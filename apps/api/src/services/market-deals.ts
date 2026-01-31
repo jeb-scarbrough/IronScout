@@ -76,6 +76,8 @@ export interface MarketDealsResponse {
     returned: number
     /** Total eligible deals before truncation (if truncated) */
     totalEligible?: number
+    /** True if product evaluation hit MAX_PRODUCTS_TO_EVALUATE limit (some deals may have been missed) */
+    evaluationCapped: boolean
   }
 }
 
@@ -202,6 +204,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
       _meta: {
         isTruncated: false,
         returned: 0,
+        evaluationCapped: false,
       },
     }
     log.info('MARKET_DEALS_TOTAL', {
@@ -514,6 +517,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
   }
 
   const isTruncated = deals.length > MAX_DEALS_RETURNED
+  const evaluationCapped = currentPrices.length >= MAX_PRODUCTS_TO_EVALUATE
   const result: MarketDealsResponse = {
     deals: deals.slice(0, MAX_DEALS_RETURNED),
     hero,
@@ -522,6 +526,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
       isTruncated,
       returned: Math.min(deals.length, MAX_DEALS_RETURNED),
       ...(isTruncated && { totalEligible: deals.length }),
+      evaluationCapped,
     },
   }
 
