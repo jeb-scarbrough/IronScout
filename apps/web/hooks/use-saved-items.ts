@@ -115,7 +115,7 @@ export function useSavedItems(): UseSavedItemsResult {
         return
       }
       const message = err instanceof Error ? err.message : 'Failed to load saved items'
-      safeLogger.hooks.error('Failed to fetch saved items', { message }, err)
+      safeLogger.hooks.error('Failed to fetch saved items', {}, err)
       setError(message)
     } finally {
       setLoading(false)

@@ -643,24 +643,20 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   }
 
   // Enqueue follow-up after lock release if needed
-  // P0 Fix (#120): Use stable job ID for idempotent follow-up
-  // Clear flag BEFORE enqueue to prevent re-enqueue on retry
   if (shouldEnqueueFollowUp) {
     moduleLog.info('Queuing follow-up manual run', { feedId })
 
-    // Clear flag first - if we fail after this, worst case is flag is cleared
-    // but no follow-up runs. This is better than duplicate follow-ups.
+    // Enqueue first; if enqueue fails, keep manualRunPending = true per spec
+    await affiliateFeedQueue.add(
+      'process',
+      { feedId, trigger: 'MANUAL_PENDING' },
+      { jobId: `${feedId}-manual-followup-${Date.now()}` }
+    )
+
     await prisma.affiliate_feeds.update({
       where: { id: feedId },
       data: { manualRunPending: false },
     })
-
-    // Use stable job ID - BullMQ will dedupe if follow-up already queued
-    await affiliateFeedQueue.add(
-      'process',
-      { feedId, trigger: 'MANUAL_PENDING' },
-      { jobId: `${feedId}-manual-followup` }
-    )
   }
 
   // Final job metrics (file logger is closed, use module logger)

@@ -3,10 +3,8 @@
 import { useState, useEffect } from 'react'
 import { X, Download, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { BRAND_NAME } from '@/lib/brand'
-
-const logger = createLogger('components:pwa:install-prompt')
 
 const PWA_DISMISS_KEY = 'pwa-prompt-dismissed'
 const PWA_SESSION_DISMISS_KEY = 'pwa-prompt-dismissed-session'
@@ -81,7 +79,7 @@ export function PWAInstallPrompt() {
     const { outcome } = await deferredPrompt.userChoice
 
     if (outcome === 'accepted') {
-      logger.info('User accepted the install prompt')
+      safeLogger.components.info('User accepted the install prompt')
     }
     
     // Clear the prompt
@@ -96,7 +94,7 @@ export function PWAInstallPrompt() {
 
     if (permanent) {
       localStorage.setItem(PWA_DISMISS_KEY, PWA_DISMISS_PERMANENT)
-      logger.info('User permanently dismissed the install prompt')
+      safeLogger.components.info('User permanently dismissed the install prompt')
     }
   }
 

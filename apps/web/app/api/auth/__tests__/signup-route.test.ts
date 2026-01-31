@@ -56,8 +56,13 @@ describe('web api/auth/signup route', () => {
     expect(SignupResponseSchema.parse(body)).toEqual(apiPayload)
   })
 
-  it('passes through API error status and body', async () => {
-    const apiPayload = { error: 'Validation failed' }
+  it('maps API error fields into safe response shape', async () => {
+    const apiPayload = {
+      error: 'Validation failed',
+      code: 'INVALID_INPUT',
+      details: { email: 'Invalid email' },
+      requestId: 'req-123',
+    }
 
     vi.stubGlobal(
       'fetch',
@@ -76,7 +81,12 @@ describe('web api/auth/signup route', () => {
     const body = await response.json()
 
     expect(response.status).toBe(400)
-    expect(body).toEqual(apiPayload)
+    expect(body).toEqual({
+      error: 'Validation failed',
+      errorCode: 'INVALID_INPUT',
+      requestId: 'req-123',
+      validationErrors: { email: 'Invalid email' },
+    })
   })
 
   it('returns 500 when upstream fetch throws', async () => {
