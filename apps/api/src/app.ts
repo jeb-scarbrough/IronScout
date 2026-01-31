@@ -190,11 +190,19 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
   const requestId = getRequestContext()?.requestId || 'unknown'
 
   // Return standardized safe response - NEVER include err.message or stack
-  res.status(classified.statusCode).json({
+  // Exception: Zod validation errors include field-level details (safe - no internal data)
+  const response: Record<string, unknown> = {
     errorCode: classified.code,
     message: getSafeMessage(classified),
     requestId,
-  })
+  }
+
+  // Include validation details for Zod errors (field paths, codes - no sensitive data)
+  if (classified.code === 'VALIDATION_FAILED' && classified.details?.issues) {
+    response.validationErrors = classified.details.issues
+  }
+
+  res.status(classified.statusCode).json(response)
 })
 
 // Export prisma for graceful shutdown
