@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { testFtpFeed } from '@/lib/ftp-test';
+import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -54,10 +55,28 @@ export async function POST(request: Request) {
       );
     }
 
+    // SSRF Protection: Validate URL before any fetch operation
+    const isFtpAccess = accessType === 'FTP' || accessType === 'SFTP';
+    const ssrfResult = await validateUrlForSSRF(url, { allowFTP: isFtpAccess });
+
+    if (!ssrfResult.safe) {
+      reqLogger.warn('Feed test blocked by SSRF guard', {
+        url: url.substring(0, 50), // Log only partial URL for debugging
+        error: ssrfResult.error
+      });
+      return NextResponse.json(
+        { error: ssrfResult.error || 'URL validation failed' },
+        { status: 400 }
+      );
+    }
+
+    // Use the normalized URL from SSRF validation
+    const safeUrl = ssrfResult.normalizedUrl || url;
+
     // Handle FTP/SFTP connections
-    if (accessType === 'FTP' || accessType === 'SFTP') {
+    if (isFtpAccess) {
       try {
-        const result = await testFtpFeed(url, accessType, username, password);
+        const result = await testFtpFeed(safeUrl, accessType, username, password);
 
         if (!result.success) {
           reqLogger.warn('FTP/SFTP test failed', { url, accessType, error: result.error });
@@ -118,12 +137,12 @@ export async function POST(request: Request) {
         reqLogger.debug('Using basic auth for feed test');
       }
 
-      reqLogger.debug('Fetching feed URL', { url });
+      reqLogger.debug('Fetching feed URL', { url: safeUrl });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      const response = await fetch(url!, {
+      const response = await fetch(safeUrl, {
         method: 'GET',
         headers,
         signal: controller.signal,

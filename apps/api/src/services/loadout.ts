@@ -307,12 +307,27 @@ async function getWatchingWithPrices(
   const ninetyDaysAgo = new Date(now)
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
 
-  // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
+  // ADR-015: Apply corrections overlay (IGNORE + MULTIPLIER corrections)
   const lowestPrices = productIds.length > 0
     ? await prisma.$queryRaw<Array<{ productId: string; lowestPrice: any }>>`
         SELECT
           p.id as "productId",
-          MIN(pr.price) as "lowestPrice"
+          -- ADR-015: Apply MULTIPLIER corrections to price
+          MIN(
+            pr.price * COALESCE((
+              SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+              FROM price_corrections pc
+              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+                AND (
+                  (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                  (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+                )
+            ), 1.0)
+          ) as "lowestPrice"
         FROM products p
         JOIN product_links pl ON pl."productId" = p.id
         JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
@@ -333,13 +348,29 @@ async function getWatchingWithPrices(
               AND pr."observedAt" >= pc."startTs"
               AND pr."observedAt" < pc."endTs"
               AND (
-                (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
-                (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
+                (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
                 (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
                 (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
                 (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
               )
           )
+          -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
+          AND (
+            SELECT COUNT(*)
+            FROM price_corrections pc
+            WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+              AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+              AND (
+                (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+              )
+          ) <= 2
+          -- scraper-framework-01 §12: Exclude SCRAPE prices from consumer queries
+          AND (pr."ingestionRunType" IS NULL OR pr."ingestionRunType" != 'SCRAPE')
         GROUP BY p.id
       `
     : []

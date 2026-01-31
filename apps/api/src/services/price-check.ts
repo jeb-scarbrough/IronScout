@@ -89,7 +89,37 @@ export async function checkPrice(
       SELECT
         p.id as product_id,
         DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as observed_day,
-        MIN(CASE WHEN p."roundCount" > 0 THEN pr.price / p."roundCount" ELSE pr.price END) as price_per_round
+        -- ADR-015: Apply MULTIPLIER corrections to price before aggregation
+        MIN(
+          CASE WHEN p."roundCount" > 0
+            THEN (pr.price * COALESCE((
+              SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+              FROM price_corrections pc
+              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+                AND (
+                  (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                  (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+                )
+            ), 1.0)) / p."roundCount"
+            ELSE pr.price * COALESCE((
+              SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+              FROM price_corrections pc
+              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+                AND (
+                  (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                  (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+                )
+            ), 1.0)
+          END
+        ) as price_per_round
       FROM products p
       JOIN product_links pl ON pl."productId" = p.id
       JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
@@ -110,13 +140,27 @@ export async function checkPrice(
             AND pr."observedAt" >= pc."startTs"
             AND pr."observedAt" < pc."endTs"
             AND (
-              (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
-              (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
               (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
               (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         )
+        -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
+        AND (
+          SELECT COUNT(*)
+          FROM price_corrections pc
+          WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+            AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+            AND (
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+            )
+        ) <= 2
         AND (${caliberConditions.sql})
         ${brandCondition}
         ${grainCondition}

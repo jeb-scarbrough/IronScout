@@ -623,9 +623,11 @@ export async function impersonateMerchant(merchantId: string) {
     const baseUrl = getMerchantPortalUrl();
     const redirectUrl = `${baseUrl}/api/auth/impersonate?token=${encodeURIComponent(token)}`;
 
-    loggers.merchants.debug('Impersonate URL construction', {
+    // Log only non-sensitive parts - NEVER log the token (even partially)
+    loggers.merchants.debug('Impersonate URL constructed', {
       baseUrl,
-      redirectUrlStart: redirectUrl.substring(0, 60) + '...',
+      hasToken: true,
+      tokenLength: token.length,
     });
 
     return {
