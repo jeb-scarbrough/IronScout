@@ -1,7 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
 import { prisma, isAlertProcessingEnabled, isEmailNotificationsEnabled } from '@ironscout/db'
-// Import visibility predicate directly to avoid circular import issues
-import { visibleRetailerPriceWhere } from '@ironscout/db/visibility.js'
 import { redisConnection } from '../config/redis'
 import { createRedisClient } from '../config/redis'
 import { logger } from '../config/logger'
@@ -21,17 +19,13 @@ const TIER_ALERT_DELAY_MS = {
 /**
  * Check if a product has any consumer-visible retailer prices.
  *
- * Uses shared A1 visibility predicate from @ironscout/db.
- * See packages/db/visibility.js for truth table and semantics.
- *
- * Subscription state MUST NOT gate consumer visibility.
+ * Uses current_visible_prices derived table (ADR-015).
+ * This table already enforces retailer visibility, ignored runs,
+ * corrections overlay, and SCRAPE guardrails (ADR-021).
  */
 async function hasVisibleRetailerPrice(productId: string): Promise<boolean> {
-  const visiblePrice = await prisma.prices.findFirst({
-    where: {
-      productId,
-      ...visibleRetailerPriceWhere(),
-    },
+  const visiblePrice = await prisma.current_visible_prices.findFirst({
+    where: { productId },
     select: { id: true },
   })
 

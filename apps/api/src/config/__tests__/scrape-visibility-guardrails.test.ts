@@ -23,6 +23,7 @@ describe('Scrape Visibility Guardrails', () => {
     const sourceClause = scrapeClause.AND.find((c: any) => c.sources)?.sources?.is
 
     expect(sourceClause).toMatchObject({
+      adapterId: { not: null },
       scrapeEnabled: true,
       robotsCompliant: true,
       tosReviewedAt: { not: null },

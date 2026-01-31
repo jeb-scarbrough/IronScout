@@ -2,7 +2,7 @@
  * Alerter Visibility Guardrail Tests
  *
  * These tests enforce that:
- * 1. The alerter imports the shared visibility predicate from @ironscout/db
+ * 1. The alerter uses the derived visibility table (ADR-015)
  * 2. The shared predicate implements A1 semantics
  *
  * A1 semantics:
@@ -35,10 +35,9 @@ describe('Alerter Visibility Guardrails', () => {
    *
    * This prevents drift between apps/api and apps/harvester visibility logic.
    */
-  it('alerter_imports_shared_visibility_predicate', () => {
-    // The alerter MUST import from @ironscout/db/visibility.js
-    expect(alerterSource).toContain('visibleRetailerPriceWhere')
-    expect(alerterSource).toContain("from '@ironscout/db/visibility.js'")
+  it('alerter_uses_current_visible_prices', () => {
+    // The alerter MUST rely on the derived table for visibility (ADR-015)
+    expect(alerterSource).toContain('current_visible_prices')
   })
 
   /**

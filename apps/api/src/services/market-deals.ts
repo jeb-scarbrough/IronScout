@@ -189,8 +189,6 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
       LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
       LEFT JOIN sources s ON s.id = pr."sourceId"
       LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
-      LEFT JOIN sources s ON s.id = pr."sourceId"
-      LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
       WHERE pl.status IN ('MATCHED', 'CREATED')
         AND pr."inStock" = true
         AND pr."observedAt" >= ${sevenDaysAgo}
@@ -232,6 +230,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
           OR pr."ingestionRunType" != 'SCRAPE'
           OR (
             pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
             AND s."scrapeEnabled" = true
             AND s."robotsCompliant" = true
             AND s."tosReviewedAt" IS NOT NULL
@@ -347,6 +346,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
           OR pr."ingestionRunType" != 'SCRAPE'
           OR (
             pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
             AND s."scrapeEnabled" = true
             AND s."robotsCompliant" = true
             AND s."tosReviewedAt" IS NOT NULL
@@ -450,6 +450,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
         OR pr."ingestionRunType" != 'SCRAPE'
         OR (
           pr."ingestionRunType" = 'SCRAPE'
+          AND s."adapterId" IS NOT NULL
           AND s."scrapeEnabled" = true
           AND s."robotsCompliant" = true
           AND s."tosReviewedAt" IS NOT NULL
@@ -518,6 +519,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
           OR pr."ingestionRunType" != 'SCRAPE'
           OR (
             pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
             AND s."scrapeEnabled" = true
             AND s."robotsCompliant" = true
             AND s."tosReviewedAt" IS NOT NULL

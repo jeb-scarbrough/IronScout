@@ -71,6 +71,13 @@ const expectIgnoredRunFilter = (query: string) => {
   expect(query).toContain('"ignoredAt"')
 }
 
+const expectScrapeGuardrail = (query: string) => {
+  expect(query).toContain('"ingestionRunType"')
+  expect(query).toContain("= 'SCRAPE'")
+  expect(query).toContain('scrape_adapter_status')
+  expect(query).toContain('s."adapterId" IS NOT NULL')
+}
+
 describe('loadout ADR-015 compliance', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -103,6 +110,7 @@ describe('loadout ADR-015 compliance', () => {
 
     expect(lowestQuery).toBeTruthy()
     expectIgnoredRunFilter(lowestQuery!)
+    expectScrapeGuardrail(lowestQuery!)
   })
 
   it('excludes prices from ignored runs in in-stock count', async () => {
@@ -115,6 +123,7 @@ describe('loadout ADR-015 compliance', () => {
 
     expect(inStockQuery).toBeTruthy()
     expectIgnoredRunFilter(inStockQuery!)
+    expectScrapeGuardrail(inStockQuery!)
   })
 
   it('excludes prices from ignored runs in top calibers', async () => {
@@ -125,5 +134,6 @@ describe('loadout ADR-015 compliance', () => {
 
     expect(topCalibersQuery).toBeTruthy()
     expectIgnoredRunFilter(topCalibersQuery!)
+    expectScrapeGuardrail(topCalibersQuery!)
   })
 })

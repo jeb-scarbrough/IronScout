@@ -288,6 +288,7 @@ async function buildDerivedTable(
         OR pr."ingestionRunType" != 'SCRAPE'
         OR (
           pr."ingestionRunType" = 'SCRAPE'
+          AND s."adapterId" IS NOT NULL
           AND s."scrapeEnabled" = true
           AND s."robotsCompliant" = true
           AND s."tosReviewedAt" IS NOT NULL
@@ -313,6 +314,33 @@ async function buildDerivedTable(
     `,
     ...params
   )
+
+  // Guardrail observability: log SCRAPE prices missing adapter configuration
+  const missingAdapterRows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `
+    SELECT COUNT(*) as count
+    FROM prices pr
+    LEFT JOIN sources s ON s.id = pr."sourceId"
+    WHERE pr."observedAt" >= $1
+      ${scopeFilter}
+      AND pr."ingestionRunType" = 'SCRAPE'
+      AND pr."sourceId" IS NOT NULL
+      AND s."adapterId" IS NULL
+    `,
+    ...params
+  )
+
+  const missingAdapterCount = Number(missingAdapterRows[0]?.count ?? 0)
+  if (missingAdapterCount > 0) {
+    log.warn('SCRAPE_VISIBILITY_BLOCKED', {
+      event_name: 'SCRAPE_VISIBILITY_BLOCKED',
+      reason: 'missing_adapter',
+      count: missingAdapterCount,
+      scope,
+      scopeId,
+      correlationId,
+    })
+  }
 
   const processed = visiblePrices.length
 

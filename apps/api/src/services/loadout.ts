@@ -375,12 +375,13 @@ async function getWatchingWithPrices(
           AND (
             pr."ingestionRunType" IS NULL
             OR pr."ingestionRunType" != 'SCRAPE'
-            OR (
-              pr."ingestionRunType" = 'SCRAPE'
-              AND s."scrapeEnabled" = true
-              AND s."robotsCompliant" = true
-              AND s."tosReviewedAt" IS NOT NULL
-              AND s."tosApprovedBy" IS NOT NULL
+          OR (
+            pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
+            AND s."scrapeEnabled" = true
+            AND s."robotsCompliant" = true
+            AND s."tosReviewedAt" IS NOT NULL
+            AND s."tosApprovedBy" IS NOT NULL
               AND sas."enabled" = true
             )
           )
@@ -474,6 +475,53 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
     LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
     LEFT JOIN sources s ON s.id = pr."sourceId"
     LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
+    WHERE pl.status IN ('MATCHED', 'CREATED')
+      AND pr."inStock" = true
+      AND pr."observedAt" >= ${sevenDaysAgo}
+      AND r."visibilityStatus" = 'ELIGIBLE'
+      AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
+      AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
+      -- ADR-015: Exclude prices with active IGNORE corrections
+      AND NOT EXISTS (
+        SELECT 1 FROM price_corrections pc
+        WHERE pc."revokedAt" IS NULL
+          AND pc.action = 'IGNORE'
+          AND pr."observedAt" >= pc."startTs"
+          AND pr."observedAt" < pc."endTs"
+          AND (
+            (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
+            (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
+            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+          )
+      )
+      -- ADR-021: Allow SCRAPE prices only when guardrails pass
+      AND (
+        pr."ingestionRunType" IS NULL
+        OR pr."ingestionRunType" != 'SCRAPE'
+        OR (
+          pr."ingestionRunType" = 'SCRAPE'
+          AND s."adapterId" IS NOT NULL
+          AND s."scrapeEnabled" = true
+          AND s."robotsCompliant" = true
+          AND s."tosReviewedAt" IS NOT NULL
+          AND s."tosApprovedBy" IS NOT NULL
+          AND sas."enabled" = true
+        )
+      )
+  `
+
+  // Get top calibers by in-stock count
+  // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
+  const topCalibers = await prisma.$queryRaw<Array<{ caliber: string; count: bigint }>>`
+    SELECT p.caliber, COUNT(DISTINCT p.id) as count
+    FROM products p
+    JOIN product_links pl ON pl."productId" = p.id
+    JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
+    JOIN retailers r ON r.id = pr."retailerId"
+    LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
+    LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
     LEFT JOIN sources s ON s.id = pr."sourceId"
     LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
     WHERE pl.status IN ('MATCHED', 'CREATED')
@@ -503,52 +551,7 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
         OR pr."ingestionRunType" != 'SCRAPE'
         OR (
           pr."ingestionRunType" = 'SCRAPE'
-          AND s."scrapeEnabled" = true
-          AND s."robotsCompliant" = true
-          AND s."tosReviewedAt" IS NOT NULL
-          AND s."tosApprovedBy" IS NOT NULL
-          AND sas."enabled" = true
-        )
-      )
-  `
-
-  // Get top calibers by in-stock count
-  // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
-  const topCalibers = await prisma.$queryRaw<Array<{ caliber: string; count: bigint }>>`
-    SELECT p.caliber, COUNT(DISTINCT p.id) as count
-    FROM products p
-    JOIN product_links pl ON pl."productId" = p.id
-    JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
-    JOIN retailers r ON r.id = pr."retailerId"
-    LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
-    LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
-    WHERE pl.status IN ('MATCHED', 'CREATED')
-      AND pr."inStock" = true
-      AND pr."observedAt" >= ${sevenDaysAgo}
-      AND r."visibilityStatus" = 'ELIGIBLE'
-      AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
-      AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
-      -- ADR-015: Exclude prices with active IGNORE corrections
-      AND NOT EXISTS (
-        SELECT 1 FROM price_corrections pc
-        WHERE pc."revokedAt" IS NULL
-          AND pc.action = 'IGNORE'
-          AND pr."observedAt" >= pc."startTs"
-          AND pr."observedAt" < pc."endTs"
-          AND (
-            (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
-            (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
-            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-          )
-      )
-      -- ADR-021: Allow SCRAPE prices only when guardrails pass
-      AND (
-        pr."ingestionRunType" IS NULL
-        OR pr."ingestionRunType" != 'SCRAPE'
-        OR (
-          pr."ingestionRunType" = 'SCRAPE'
+          AND s."adapterId" IS NOT NULL
           AND s."scrapeEnabled" = true
           AND s."robotsCompliant" = true
           AND s."tosReviewedAt" IS NOT NULL
