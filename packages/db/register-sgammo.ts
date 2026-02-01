@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { prisma } from './index.js'
 
 async function main() {
+  try {
   // 1. Check/create SGAmmo retailer
   let retailer = await prisma.retailers.findFirst({
     where: {
@@ -14,20 +15,33 @@ async function main() {
 
   if (!retailer) {
     console.log('Creating SGAmmo retailer...')
-    // Per spec §12.3: New sources start with PENDING visibility until admin review
+    // Per spec §12.3: New retailers start ineligible until admin review
     retailer = await prisma.retailers.create({
       data: {
         name: 'SGAmmo',
         website: 'https://www.sgammo.com',
         tier: 'STANDARD',
-        visibilityStatus: 'PENDING', // Safe default - requires admin approval
+        visibilityStatus: 'INELIGIBLE', // Safe default - requires admin approval
       }
     })
     console.log('Created retailer:', retailer.id, retailer.name)
-    console.log('⚠️  Retailer visibility is PENDING - admin must approve before data is visible')
+    console.log('⚠️  Retailer visibility is INELIGIBLE - admin must approve before data is visible')
   } else {
     console.log('Found retailer:', retailer.id, retailer.name)
   }
+
+  // Ensure adapter status exists before attaching adapterId to sources (FK constraint)
+  const adapter = await prisma.scrape_adapter_status.upsert({
+    where: { adapterId: 'sgammo' },
+    create: {
+      adapterId: 'sgammo',
+      enabled: true,
+    },
+    update: {
+      enabled: true,
+    },
+  })
+  console.log('Adapter status:', adapter.adapterId, 'enabled:', adapter.enabled)
 
   // 2. Check/create SGAmmo source
   let source = await prisma.sources.findFirst({
@@ -61,8 +75,6 @@ async function main() {
       data: {
         sourceId: source.id,
         upcTrusted: false, // Per spec §12.3: UPC not trusted until verified
-        brandMappingRequired: true,
-        priceMultiplierDefault: 1.0,
       }
     })
     console.log('Created source_trust_config with upcTrusted=false')
@@ -79,25 +91,20 @@ async function main() {
     console.log('Updated source:', source.id, source.name)
   }
 
-  // 3. Register adapter status
-  const adapter = await prisma.scrape_adapter_status.upsert({
-    where: { adapterId: 'sgammo' },
-    create: {
-      adapterId: 'sgammo',
-      enabled: true,
-    },
-    update: {
-      enabled: true,
-    },
-  })
-  console.log('Adapter status:', adapter.adapterId, 'enabled:', adapter.enabled)
-
   console.log('\n✓ SGAmmo is ready for scraping!')
   console.log('  Retailer ID:', retailer.id)
   console.log('  Source ID:', source.id)
   console.log('  Adapter ID: sgammo')
-
-  await prisma.$disconnect()
+  } finally {
+    await prisma.$disconnect()
+  }
 }
 
-main().catch(console.error)
+main()
+  .then(() => {
+    process.exit(0)
+  })
+  .catch(error => {
+    console.error(error)
+    process.exit(1)
+  })

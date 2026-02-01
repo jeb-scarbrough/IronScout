@@ -148,6 +148,12 @@ Key warnings:
 
 ---
 
+## Tooling Notes
+
+- GitHub CLI (`gh`) is available for issue/PR management when needed.
+
+---
+
 ## How to Handle Ambiguity
 
 If:
