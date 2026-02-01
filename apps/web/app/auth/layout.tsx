@@ -1,10 +1,26 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { BRAND } from '@/lib/brand'
 
 const WWW_URL = BRAND.website
+
+// Force dark theme for auth pages to match www site
+function useForceAuthTheme() {
+  const { setTheme, theme } = useTheme()
+
+  useEffect(() => {
+    // Store original theme and force dark
+    const originalTheme = theme
+    setTheme('dark')
+
+    // Note: We don't restore on unmount because user will navigate
+    // to dashboard which should respect their preference
+  }, [setTheme])
+}
 
 function AuthHeader() {
   const pathname = usePathname()
@@ -73,8 +89,11 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Force dark theme for auth pages to match www marketing site
+  useForceAuthTheme()
+
   return (
-    <div className="dark min-h-screen bg-background grid-bg">
+    <div className="min-h-screen bg-background grid-bg">
       <div className="noise-overlay" />
       <AuthHeader />
       <div className="pt-16">
