@@ -6,8 +6,8 @@ import { useSession, signIn, signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut, DollarSign } from 'lucide-react'
-import { BRAND, BRAND_NAME } from '@/lib/brand'
+import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut } from 'lucide-react'
+import { BRAND } from '@/lib/brand'
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -36,21 +36,23 @@ export function Header() {
             </span>
           </a>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation - matches www header */}
           <nav className="hidden md:flex items-center gap-4 sm:gap-6">
-            <Link href="/search" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-              Search
-            </Link>
             <Link href="/price-check" className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
               Price Check
             </Link>
+            <a
+              href={`${BRAND.website}/about`}
+              className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
+            >
+              About
+            </a>
             <a
               href={`${BRAND.website}/retailers`}
               className="text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
             >
               For Retailers
             </a>
-            <ThemeToggle />
             {session ? (
               <div className="relative">
                 <Button
@@ -105,6 +107,11 @@ export function Header() {
                           Settings
                         </Link>
                         <div className="border-t my-1"></div>
+                        <div className="flex items-center px-4 py-2 text-sm">
+                          <span className="mr-3">Theme</span>
+                          <ThemeToggle />
+                        </div>
+                        <div className="border-t my-1"></div>
                         <button
                           onClick={() => {
                             setIsUserMenuOpen(false)
@@ -121,12 +128,20 @@ export function Header() {
                 )}
               </div>
             ) : (
-              <button
-                onClick={() => signIn(undefined, { callbackUrl: '/dashboard' })}
-                className="btn-primary text-sm py-2"
-              >
-                Sign In
-              </button>
+              <>
+                <Link
+                  href="/auth/signin"
+                  className="text-foreground/80 hover:text-foreground text-sm font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="btn-primary text-sm py-2"
+                >
+                  Get Started
+                </Link>
+              </>
             )}
           </nav>
 
@@ -141,41 +156,37 @@ export function Header() {
           </Button>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Mobile Navigation - matches www header */}
         {isMenuOpen && (
-          <div className="md:hidden border-t py-4">
+          <div className="md:hidden border-t border-border py-4">
             <nav className="flex flex-col space-y-4">
               <Link
-                href="/search"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Search
-              </Link>
-              <Link
                 href="/price-check"
-                className="flex items-center text-sm font-medium hover:text-primary transition-colors"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
-                <DollarSign className="h-4 w-4 mr-2" />
                 Price Check
               </Link>
               <a
+                href={`${BRAND.website}/about`}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                About
+              </a>
+              <a
                 href={`${BRAND.website}/retailers`}
-                className="text-sm font-medium hover:text-primary transition-colors"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 For Retailers
               </a>
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium">Theme:</span>
-                <ThemeToggle />
-              </div>
               {session ? (
                 <>
+                  <div className="border-t border-border my-2"></div>
                   <Link
                     href="/dashboard"
-                    className="flex items-center text-sm font-medium hover:text-primary transition-colors"
+                    className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <LayoutDashboard className="h-4 w-4 mr-2" />
@@ -183,7 +194,7 @@ export function Header() {
                   </Link>
                   <Link
                     href="/search"
-                    className="flex items-center text-sm font-medium hover:text-primary transition-colors"
+                    className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <Search className="h-4 w-4 mr-2" />
@@ -191,7 +202,7 @@ export function Header() {
                   </Link>
                   <Link
                     href="/dashboard/saved"
-                    className="flex items-center text-sm font-medium hover:text-primary transition-colors"
+                    className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <Bookmark className="h-4 w-4 mr-2" />
@@ -199,37 +210,46 @@ export function Header() {
                   </Link>
                   <Link
                     href="/dashboard/settings"
-                    className="flex items-center text-sm font-medium hover:text-primary transition-colors"
+                    className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <Settings className="h-4 w-4 mr-2" />
+                    <Settings className="h-4 w-4 mr-3" />
                     Settings
                   </Link>
-                  <div className="border-t my-2"></div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <div className="flex items-center text-sm font-medium text-muted-foreground">
+                    <span className="mr-3">Theme</span>
+                    <ThemeToggle />
+                  </div>
+                  <div className="border-t border-border my-2"></div>
+                  <button
                     onClick={() => {
                       signOut({ callbackUrl: '/' })
                       setIsMenuOpen(false)
                     }}
-                    className="justify-start"
+                    className="flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <LogOut className="h-4 w-4 mr-2" />
                     Sign Out
-                  </Button>
+                  </button>
                 </>
               ) : (
-                <Button
-                  onClick={() => {
-                    signIn(undefined, { callbackUrl: '/dashboard' })
-                    setIsMenuOpen(false)
-                  }}
-                  size="sm"
-                  className="w-fit"
-                >
-                  Sign In
-                </Button>
+                <>
+                  <div className="border-t border-border my-2"></div>
+                  <Link
+                    href="/auth/signin"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="btn-primary text-sm py-2 w-fit"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Get Started
+                  </Link>
+                </>
               )}
             </nav>
           </div>
