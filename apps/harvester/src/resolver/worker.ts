@@ -24,6 +24,7 @@ import {
 import { resolveSourceProduct, RESOLVER_VERSION } from './resolver'
 import { brandAliasCache } from './brand-alias-cache'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import { logResolverResult, logResolverError, closeResolverLogger } from '../config/run-file-logger'
 import type { ResolverResult } from './types'
 import {
@@ -33,7 +34,11 @@ import {
   type ReasonCodeLabel,
 } from './metrics'
 
-const log = logger.resolver
+const baseLogger = logger.resolver
+const log = createWorkflowLogger(baseLogger, {
+  workflow: 'resolver',
+  stage: 'worker',
+})
 
 // Legacy metrics for backward compatibility (deprecated, use metrics.ts)
 let processedCount = 0
@@ -67,13 +72,14 @@ export async function startProductResolverWorker(options?: {
   // Initialize brand alias cache before starting worker
   await brandAliasCache.initialize(prisma)
   log.info('BRAND_ALIAS_CACHE_INITIALIZED', {
-    event_name: 'BRAND_ALIAS_CACHE_INITIALIZED',
     metrics: brandAliasCache.getMetrics(),
   })
 
-  console.log(`[Resolver] Starting worker on queue "${QUEUE_NAMES.PRODUCT_RESOLVE}" with concurrency=${concurrency}`)
+  log.info('RESOLVER_WORKER_STARTING', {
+    queueName: QUEUE_NAMES.PRODUCT_RESOLVE,
+    concurrency,
+  })
   log.info('RESOLVER_WORKER_START', {
-    event_name: 'RESOLVER_WORKER_START',
     concurrency,
     maxStalledCount,
     queueName: QUEUE_NAMES.PRODUCT_RESOLVE,
@@ -94,9 +100,12 @@ export async function startProductResolverWorker(options?: {
 
   // Event handlers for observability
   productResolverWorker.on('active', (job: Job<ProductResolveJobData>) => {
-    console.log(`[Resolver] Job picked up: ${job.id} trigger=${job.data.trigger} sourceProductId=${job.data.sourceProductId}`)
-    log.info('RESOLVER_JOB_ACTIVE', {
-      event_name: 'RESOLVER_JOB_ACTIVE',
+    const jobLog = log.child({
+      jobId: job.id,
+      runId: job.data.affiliateFeedRunId,
+      sourceProductId: job.data.sourceProductId,
+    })
+    jobLog.info('RESOLVER_JOB_ACTIVE', {
       jobId: job.id,
       sourceProductId: job.data.sourceProductId,
       trigger: job.data.trigger,
@@ -117,6 +126,7 @@ export async function startProductResolverWorker(options?: {
         if (manualBatchId !== null && manualBatchProcessedCount > 0) {
           // Log summary for previous batch
           log.warn('RESOLVER_MANUAL_BATCH_COMPLETE', {
+            runId: manualBatchId,
             batchId: manualBatchId,
             processed: manualBatchProcessedCount,
             matched: manualBatchMatchedCount,
@@ -128,6 +138,7 @@ export async function startProductResolverWorker(options?: {
         manualBatchMatchedCount = 0
         manualBatchNeedsReviewCount = 0
         log.warn('RESOLVER_MANUAL_BATCH_START', {
+          runId: batchId,
           batchId,
           trigger: 'MANUAL',
         })
@@ -143,6 +154,7 @@ export async function startProductResolverWorker(options?: {
       // Log progress periodically at WARN level so it's visible
       if (manualBatchProcessedCount % MANUAL_PROGRESS_LOG_INTERVAL === 0) {
         log.warn('RESOLVER_MANUAL_BATCH_PROGRESS', {
+          runId: batchId,
           batchId,
           processed: manualBatchProcessedCount,
           matched: manualBatchMatchedCount,
@@ -152,8 +164,8 @@ export async function startProductResolverWorker(options?: {
     }
 
     log.info('RESOLVER_JOB_COMPLETED', {
-      event_name: 'RESOLVER_JOB_COMPLETED',
       jobId: job.id,
+      runId: job.data.affiliateFeedRunId,
       sourceProductId: job.data.sourceProductId,
       trigger: job.data.trigger,
       status: result?.status,
@@ -164,8 +176,8 @@ export async function startProductResolverWorker(options?: {
   productResolverWorker.on('failed', (job: Job<ProductResolveJobData> | undefined, error: Error) => {
     errorCount++
     log.error('RESOLVER_JOB_FAILED', {
-      event_name: 'RESOLVER_JOB_FAILED',
       jobId: job?.id,
+      runId: job?.data?.affiliateFeedRunId,
       sourceProductId: job?.data?.sourceProductId,
       trigger: job?.data?.trigger,
       errorMessage: error.message,
@@ -179,7 +191,6 @@ export async function startProductResolverWorker(options?: {
     // Transient network errors (ECONNRESET, ETIMEDOUT, etc.) are expected
     // in long-running processes - log as warn, not error
     log.warn('RESOLVER_WORKER_ERROR', {
-      event_name: 'RESOLVER_WORKER_ERROR',
       errorMessage: error.message,
       errorName: error.name,
     })
@@ -187,7 +198,6 @@ export async function startProductResolverWorker(options?: {
 
   productResolverWorker.on('stalled', (jobId: string) => {
     log.error('RESOLVER_JOB_STALLED', {
-      event_name: 'RESOLVER_JOB_STALLED',
       jobId,
       reason: 'Job processing took too long or worker crashed',
     })
@@ -197,6 +207,7 @@ export async function startProductResolverWorker(options?: {
   productResolverWorker.on('drained', () => {
     if (manualBatchId !== null && manualBatchProcessedCount > 0) {
       log.warn('RESOLVER_MANUAL_BATCH_DRAINED', {
+        runId: manualBatchId,
         batchId: manualBatchId,
         totalProcessed: manualBatchProcessedCount,
         matched: manualBatchMatchedCount,
@@ -221,7 +232,6 @@ export async function startProductResolverWorker(options?: {
 export async function stopProductResolverWorker(): Promise<void> {
   if (productResolverWorker) {
     log.info('RESOLVER_WORKER_STOPPING', {
-      event_name: 'RESOLVER_WORKER_STOPPING',
       processedCount,
       errorCount,
       lastProcessedAt: lastProcessedAt?.toISOString(),
@@ -236,7 +246,6 @@ export async function stopProductResolverWorker(): Promise<void> {
     await closeResolverLogger()
 
     log.info('RESOLVER_WORKER_STOPPED', {
-      event_name: 'RESOLVER_WORKER_STOPPED',
       finalProcessedCount: processedCount,
       finalErrorCount: errorCount,
     })
@@ -256,9 +265,14 @@ async function processResolveJob(
 ): Promise<ResolverResult> {
   const { sourceProductId, trigger, resolverVersion } = job.data
   const startTime = Date.now()
+  const jobLog = log.child({
+    jobId: job.id,
+    runId: job.data.affiliateFeedRunId,
+    sourceProductId,
+  })
+  const log = jobLog
 
   log.info('RESOLVER_JOB_START', {
-    event_name: 'RESOLVER_JOB_START',
     jobId: job.id,
     sourceProductId,
     trigger,
@@ -271,7 +285,6 @@ async function processResolveJob(
   // Version check - warn if job was enqueued with different version
   if (resolverVersion !== RESOLVER_VERSION) {
     log.warn('RESOLVER_VERSION_MISMATCH', {
-      event_name: 'RESOLVER_VERSION_MISMATCH',
       sourceProductId,
       jobVersion: resolverVersion,
       currentVersion: RESOLVER_VERSION,
@@ -292,7 +305,6 @@ async function processResolveJob(
   })
 
   log.debug('RESOLVER_REQUEST_PROCESSING', {
-    event_name: 'RESOLVER_REQUEST_PROCESSING',
     sourceProductId,
     rowsUpdated: requestUpdate.count,
   })
@@ -300,7 +312,6 @@ async function processResolveJob(
   try {
     // Execute resolver algorithm
     log.debug('RESOLVER_ALGORITHM_START', {
-      event_name: 'RESOLVER_ALGORITHM_START',
       sourceProductId,
       trigger,
     })
@@ -314,7 +325,6 @@ async function processResolveJob(
     recordRequest(sourceKind)
 
     log.debug('RESOLVER_ALGORITHM_COMPLETE', {
-      event_name: 'RESOLVER_ALGORITHM_COMPLETE',
       sourceProductId,
       matchType: result.matchType,
       status: result.status,
@@ -336,7 +346,6 @@ async function processResolveJob(
 
     if (skipPersistence) {
       log.debug('RESOLVER_PERSISTENCE_SKIPPED', {
-        event_name: 'RESOLVER_PERSISTENCE_SKIPPED',
         sourceProductId,
         reason: isSourceNotFound
           ? 'Source product not found - cannot persist'
@@ -351,7 +360,6 @@ async function processResolveJob(
       const persistDuration = Date.now() - persistStart
 
       log.debug('RESOLVER_RESULT_PERSISTED', {
-        event_name: 'RESOLVER_RESULT_PERSISTED',
         sourceProductId,
         productId: result.productId,
         matchType: result.matchType,
@@ -365,7 +373,6 @@ async function processResolveJob(
           data: { normalizedHash: result.evidence.inputHash },
         })
         log.debug('RESOLVER_HASH_UPDATED', {
-          event_name: 'RESOLVER_HASH_UPDATED',
           sourceProductId,
           inputHash: result.evidence.inputHash.slice(0, 16) + '...',
         })
@@ -395,7 +402,6 @@ async function processResolveJob(
     })
 
     log.info('RESOLVER_JOB_COMPLETE', {
-      event_name: 'RESOLVER_JOB_COMPLETE',
       jobId: job.id,
       sourceProductId,
       trigger,
@@ -443,7 +449,6 @@ async function processResolveJob(
           })
           if (enqueued) {
             log.debug('EMBEDDING_JOB_ENQUEUED', {
-              event_name: 'EMBEDDING_JOB_ENQUEUED',
               productId: result.productId,
               sourceProductId,
               trigger: 'RESOLVE',
@@ -453,7 +458,6 @@ async function processResolveJob(
       } catch (embeddingErr) {
         // Log but don't fail the resolver job for embedding errors
         log.warn('EMBEDDING_ENQUEUE_FAILED', {
-          event_name: 'EMBEDDING_ENQUEUE_FAILED',
           productId: result.productId,
           sourceProductId,
           error: embeddingErr instanceof Error ? embeddingErr.message : String(embeddingErr),
@@ -492,7 +496,6 @@ async function processResolveJob(
     // If not final attempt, leave as PROCESSING so sweeper can recover if needed
 
     log.error('RESOLVER_JOB_ERROR', {
-      event_name: 'RESOLVER_JOB_ERROR',
       jobId: job.id,
       sourceProductId,
       trigger,
@@ -536,7 +539,6 @@ async function persistResolverResult(
 
   if (wasTruncated) {
     log.warn('RESOLVER_EVIDENCE_TRUNCATED', {
-      event_name: 'RESOLVER_EVIDENCE_TRUNCATED',
       sourceProductId,
       originalSize,
       finalSize,
@@ -546,7 +548,6 @@ async function persistResolverResult(
   }
 
   log.debug('RESOLVER_PERSIST_START', {
-    event_name: 'RESOLVER_PERSIST_START',
     sourceProductId,
     productId: result.productId,
     matchType: result.matchType,
@@ -691,13 +692,11 @@ let sweeperRunning = false
 export function startProcessingSweeper(): void {
   if (sweeperInterval) {
     log.warn('SWEEPER_ALREADY_RUNNING', {
-      event_name: 'SWEEPER_ALREADY_RUNNING',
     })
     return
   }
 
   log.info('SWEEPER_START', {
-    event_name: 'SWEEPER_START',
     intervalMs: SWEEPER_INTERVAL_MS,
     timeoutMs: PROCESSING_TIMEOUT_MS,
     maxAttempts: MAX_ATTEMPTS,
@@ -706,7 +705,6 @@ export function startProcessingSweeper(): void {
   sweeperInterval = setInterval(async () => {
     if (sweeperRunning) {
       log.debug('SWEEPER_SKIP_IN_PROGRESS', {
-        event_name: 'SWEEPER_SKIP_IN_PROGRESS',
       })
       return
     }
@@ -716,7 +714,6 @@ export function startProcessingSweeper(): void {
       await sweepStuckProcessing()
     } catch (err) {
       log.error('SWEEPER_ERROR', {
-        event_name: 'SWEEPER_ERROR',
         error: err instanceof Error ? err.message : String(err),
       }, err)
     } finally {
@@ -733,7 +730,6 @@ export function stopProcessingSweeper(): void {
     clearInterval(sweeperInterval)
     sweeperInterval = null
     log.info('SWEEPER_STOP', {
-      event_name: 'SWEEPER_STOP',
     })
   }
 }
@@ -769,7 +765,6 @@ async function sweepStuckProcessing(): Promise<void> {
   }
 
   log.info('SWEEPER_FOUND_STUCK', {
-    event_name: 'SWEEPER_FOUND_STUCK',
     count: stuckRequests.length,
     timeoutThreshold: timeoutThreshold.toISOString(),
   })
@@ -793,7 +788,6 @@ async function sweepStuckProcessing(): Promise<void> {
       failedCount++
 
       log.error('SWEEPER_REQUEST_FAILED', {
-        event_name: 'SWEEPER_REQUEST_FAILED',
         requestId: request.id,
         sourceProductId: request.sourceProductId,
         attempts: newAttempts,
@@ -826,7 +820,6 @@ async function sweepStuckProcessing(): Promise<void> {
       retriedCount++
 
       log.info('SWEEPER_REQUEST_RETRY', {
-        event_name: 'SWEEPER_REQUEST_RETRY',
         requestId: request.id,
         sourceProductId: request.sourceProductId,
         attempts: newAttempts,
@@ -836,7 +829,6 @@ async function sweepStuckProcessing(): Promise<void> {
   }
 
   log.info('SWEEPER_COMPLETE', {
-    event_name: 'SWEEPER_COMPLETE',
     totalStuck: stuckRequests.length,
     retried: retriedCount,
     failed: failedCount,

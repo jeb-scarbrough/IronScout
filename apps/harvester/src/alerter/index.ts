@@ -3,10 +3,14 @@ import { prisma, isAlertProcessingEnabled, isEmailNotificationsEnabled } from '@
 import { redisConnection } from '../config/redis'
 import { createRedisClient } from '../config/redis'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import { AlertJobData } from '../config/queues'
 import { Resend } from 'resend'
 
-const log = logger.alerter
+const log = createWorkflowLogger(logger.alerter, {
+  workflow: 'alert',
+  stage: 'worker',
+})
 const redis = createRedisClient()
 
 // V1: All users get real-time alerts (no tier delays)
@@ -322,11 +326,22 @@ export const alerterWorker = new Worker<AlertJobData>(
   'alert',
   async (job: Job<AlertJobData>) => {
     const { executionId, productId, oldPrice, newPrice, inStock } = job.data
+    const startTime = Date.now()
+    const jobLog = log.child({
+      runId: executionId,
+      jobId: job.id,
+      stage: 'evaluate',
+    })
+    const log = jobLog
 
     // Check if alert processing is enabled via admin settings
     const alertProcessingEnabled = await isAlertProcessingEnabled()
     if (!alertProcessingEnabled) {
-      log.info('Alert processing disabled via admin settings, skipping', { productId })
+      log.info('ALERT_EVALUATE_SKIP', {
+        productId,
+        reason: 'alert_processing_disabled',
+        durationMs: Date.now() - startTime,
+      })
 
       await prisma.execution_logs.create({
         data: {
@@ -341,7 +356,12 @@ export const alerterWorker = new Worker<AlertJobData>(
       return { success: true, skipped: 'alert_processing_disabled' }
     }
 
-    log.info('Evaluating alerts', { productId, oldPrice, newPrice, inStock })
+    log.debug('ALERT_EVALUATE_START', {
+      productId,
+      oldPrice,
+      newPrice,
+      inStock,
+    })
 
     try {
       // ADR-005: Check retailer visibility before evaluating alerts
@@ -349,7 +369,11 @@ export const alerterWorker = new Worker<AlertJobData>(
       const hasVisiblePrice = await hasVisibleRetailerPrice(productId)
 
       if (!hasVisiblePrice) {
-        log.debug('No visible retailer prices, skipping alerts', { productId })
+        log.info('ALERT_EVALUATE_SKIP', {
+          productId,
+          reason: 'no_visible_retailer',
+          durationMs: Date.now() - startTime,
+        })
 
         await prisma.execution_logs.create({
           data: {
@@ -440,7 +464,11 @@ export const alerterWorker = new Worker<AlertJobData>(
                   const cooldownHours = 168 // 7 days per alerts_policy_v1
                   const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
                   if (watchlistItem.lastPriceNotifiedAt > cooldownThreshold) {
-                    log.debug('Price drop alert in cooldown period, skipping', { alertId: alert.id })
+                    log.info('ALERT_SUPPRESSED', {
+                      alertId: alert.id,
+                      ruleType: 'PRICE_DROP',
+                      reason: 'cooldown',
+                    })
                     continue
                   }
                 }
@@ -461,7 +489,11 @@ export const alerterWorker = new Worker<AlertJobData>(
               if (watchlistItem.lastStockNotifiedAt) {
                 const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
                 if (watchlistItem.lastStockNotifiedAt > cooldownThreshold) {
-                  log.debug('Back in stock alert in cooldown period, skipping', { alertId: alert.id })
+                  log.info('ALERT_SUPPRESSED', {
+                    alertId: alert.id,
+                    ruleType: 'BACK_IN_STOCK',
+                    reason: 'cooldown',
+                  })
                   continue
                 }
               }
@@ -475,7 +507,12 @@ export const alerterWorker = new Worker<AlertJobData>(
           // Enforce per-user caps (1 per 6h, 3 per day)
           const canSend = await reserveUserAlertSlot(alert.userId)
           if (!canSend) {
-            log.info('Alert suppressed due to per-user caps', { userId: alert.userId, alertId: alert.id })
+            log.info('ALERT_SUPPRESSED', {
+              alertId: alert.id,
+              userId: alert.userId,
+              ruleType: alert.ruleType,
+              reason: 'rate_limit',
+            })
 
             await prisma.execution_logs.create({
               data: {
@@ -594,7 +631,7 @@ export const alerterWorker = new Worker<AlertJobData>(
 
             // Phase 2: Send
             try {
-              await sendNotification(alert, triggerReason)
+              await sendNotification(alert, triggerReason, log)
 
               // Phase 3: Commit (atomic, guarded by claimKey)
               const committed = await commitNotificationSend(watchlistItem.id, ruleType, claimKey)
@@ -662,6 +699,12 @@ export const alerterWorker = new Worker<AlertJobData>(
         },
       })
 
+      log.debug('ALERT_EVALUATE_END', {
+        triggeredCount,
+        delayedCount,
+        durationMs: Date.now() - startTime,
+      })
+
       return { success: true, triggeredCount, delayedCount }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -674,6 +717,12 @@ export const alerterWorker = new Worker<AlertJobData>(
           message: `Alert evaluation failed: ${errorMessage}`,
           metadata: { productId },
         },
+      })
+
+      log.error('ALERT_EVALUATE_ERROR', {
+        productId,
+        errorMessage,
+        durationMs: Date.now() - startTime,
       })
 
       throw error
@@ -699,8 +748,15 @@ export const delayedNotificationWorker = new Worker<{
   async (job) => {
     const { alertId, watchlistItemId, ruleType, triggerReason, executionId, jobCreatedAt } = job.data
     const claimKey = `delayed-${alertId}-${jobCreatedAt}`
+    const startTime = Date.now()
+    const jobLog = log.child({
+      runId: executionId,
+      jobId: job.id,
+      stage: 'notify',
+    })
+    const log = jobLog
 
-    log.info('Processing delayed notification', { alertId, watchlistItemId, ruleType, claimKey })
+    log.debug('ALERT_DELAYED_START', { alertId, watchlistItemId, ruleType, claimKey })
 
     try {
       // Fetch the alert with user, product, and watchlist info
@@ -714,13 +770,21 @@ export const delayedNotificationWorker = new Worker<{
       })
 
       if (!alert) {
-        log.warn('Alert not found, skipping', { alertId })
+        log.info('ALERT_DELAYED_SKIP', {
+          alertId,
+          reason: 'alert_not_found',
+          durationMs: Date.now() - startTime,
+        })
         return { success: false, reason: 'Alert not found' }
       }
 
       // ADR-011: Check if alert is still enabled
       if (!alert.isEnabled) {
-        log.debug('Alert no longer enabled, skipping', { alertId })
+        log.info('ALERT_DELAYED_SKIP', {
+          alertId,
+          reason: 'alert_disabled',
+          durationMs: Date.now() - startTime,
+        })
         return { success: false, reason: 'Alert no longer enabled' }
       }
 
@@ -728,18 +792,30 @@ export const delayedNotificationWorker = new Worker<{
 
       // ADR-011A: Check if watchlist item is soft-deleted
       if (watchlistItem?.deletedAt !== null && watchlistItem?.deletedAt !== undefined) {
-        log.debug('WatchlistItem is soft-deleted, skipping', { alertId })
+        log.info('ALERT_DELAYED_SKIP', {
+          alertId,
+          reason: 'watchlist_deleted',
+          durationMs: Date.now() - startTime,
+        })
         return { success: false, reason: 'WatchlistItem soft-deleted' }
       }
 
       // ADR-011: Check if notifications are still enabled on watchlist item
       if (watchlistItem && !watchlistItem.notificationsEnabled) {
-        log.debug('Notifications disabled for watchlist item, skipping', { alertId })
+        log.info('ALERT_DELAYED_SKIP', {
+          alertId,
+          reason: 'notifications_disabled',
+          durationMs: Date.now() - startTime,
+        })
         return { success: false, reason: 'Notifications disabled' }
       }
 
       if (!watchlistItem) {
-        log.warn('WatchlistItem not found, skipping', { alertId })
+        log.info('ALERT_DELAYED_SKIP', {
+          alertId,
+          reason: 'watchlist_not_found',
+          durationMs: Date.now() - startTime,
+        })
         return { success: false, reason: 'WatchlistItem not found' }
       }
 
@@ -753,11 +829,12 @@ export const delayedNotificationWorker = new Worker<{
       )
 
       if (!claimResult.claimed) {
-        log.info('Failed to claim notification slot for delayed job', {
+        log.info('ALERT_DELAYED_SUPPRESSED', {
           alertId,
           watchlistItemId,
           reason: claimResult.reason,
           claimKey,
+          durationMs: Date.now() - startTime,
         })
 
         await prisma.execution_logs.create({
@@ -780,16 +857,16 @@ export const delayedNotificationWorker = new Worker<{
 
       // Phase 2: Send
       try {
-        await sendNotification(alert, triggerReason)
+        await sendNotification(alert, triggerReason, log)
 
         // Phase 3: Commit (atomic, guarded by claimKey)
         const committed = await commitNotificationSend(watchlistItemId, ruleType, claimKey)
 
-        if (committed) {
-          await prisma.execution_logs.create({
-            data: {
-              executionId,
-              level: 'INFO',
+          if (committed) {
+            await prisma.execution_logs.create({
+              data: {
+                executionId,
+                level: 'INFO',
               event: 'ALERT_DELAYED_SENT',
               message: `Delayed alert notification sent`,
               metadata: {
@@ -801,13 +878,18 @@ export const delayedNotificationWorker = new Worker<{
                 ruleType,
               },
             },
-          })
+            })
 
-          return { success: true }
-        } else {
-          log.warn('Commit failed for delayed notification - claim may have been stolen', {
-            alertId,
-            claimKey,
+            log.debug('ALERT_DELAYED_END', {
+              alertId,
+              durationMs: Date.now() - startTime,
+              outcome: 'sent',
+            })
+            return { success: true }
+          } else {
+            log.warn('Commit failed for delayed notification - claim may have been stolen', {
+              alertId,
+              claimKey,
           })
           return { success: false, reason: 'Commit failed' }
         }
@@ -815,10 +897,11 @@ export const delayedNotificationWorker = new Worker<{
         // Send failed - release claim so another worker can retry
         await releaseNotificationClaim(watchlistItemId, ruleType, claimKey)
 
-        log.error('Failed to send delayed notification', {
+        log.error('ALERT_DELAYED_SEND_FAILED', {
           alertId,
           watchlistItemId,
           error: sendError instanceof Error ? sendError.message : 'Unknown error',
+          durationMs: Date.now() - startTime,
         })
 
         await prisma.execution_logs.create({
@@ -841,7 +924,11 @@ export const delayedNotificationWorker = new Worker<{
       }
     } catch (error) {
       const err = error as Error
-      log.error('Failed to process delayed notification', { alertId, error: err.message })
+      log.error('ALERT_DELAYED_ERROR', {
+        alertId,
+        error: err.message,
+        durationMs: Date.now() - startTime,
+      })
       throw error
     }
   },
@@ -853,7 +940,8 @@ export const delayedNotificationWorker = new Worker<{
 
 // Send notification to user
 // ADR-011: Uses ruleType instead of alertType
-async function sendNotification(alert: any, reason: string) {
+async function sendNotification(alert: any, reason: string, notifyLog: typeof log) {
+  const log = notifyLog.child({ stage: 'notify' })
   // Check if email notifications are enabled via admin settings
   const emailEnabled = await isEmailNotificationsEnabled()
   if (!emailEnabled) {
@@ -1114,17 +1202,31 @@ function generateBackInStockEmailHTML(data: {
 }
 
 alerterWorker.on('completed', (job) => {
-  log.info('Job completed', { jobId: job.id })
+  log.info('ALERT_JOB_COMPLETED', {
+    jobId: job.id,
+    runId: job.data.executionId,
+  })
 })
 
 alerterWorker.on('failed', (job, err) => {
-  log.error('Job failed', { jobId: job?.id, error: err.message })
+  log.error('ALERT_JOB_FAILED', {
+    jobId: job?.id,
+    runId: job?.data?.executionId,
+    error: err.message,
+  })
 })
 
 delayedNotificationWorker.on('completed', (job) => {
-  log.info('Delayed notification sent', { jobId: job.id })
+  log.info('ALERT_DELAYED_JOB_COMPLETED', {
+    jobId: job.id,
+    runId: job.data.executionId,
+  })
 })
 
 delayedNotificationWorker.on('failed', (job, err) => {
-  log.error('Delayed notification failed', { jobId: job?.id, error: err.message })
+  log.error('ALERT_DELAYED_JOB_FAILED', {
+    jobId: job?.id,
+    runId: job?.data?.executionId,
+    error: err.message,
+  })
 })

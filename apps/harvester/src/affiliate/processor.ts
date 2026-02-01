@@ -23,6 +23,7 @@ import { prisma } from '@ironscout/db'
 import { createHash } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import { computeUrlHash, normalizeUrl } from './parser'
 import { ProductMatcher } from './product-matcher'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
@@ -37,7 +38,10 @@ import type {
 import { ERROR_CODES, AffiliateFeedError } from './types'
 import { emitIngestRunSummary } from '../config/ingest-summary'
 
-const log = logger.affiliate
+const log = createWorkflowLogger(logger.affiliate, {
+  workflow: 'affiliate',
+  stage: 'process',
+})
 
 // Batch sizes for database operations
 // Per spec §7.3: 500-5000 rows per batch (using 1000 as default)
@@ -184,6 +188,17 @@ export async function processProducts(
 ): Promise<ProcessorResult> {
   const { feed, run, sourceId, retailerId, t0 } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
+  const runLog = log.child({
+    runId: run.id,
+    sourceId,
+    retailerId,
+    feedId: feed.id,
+  })
+  const log = runLog
+  const normalizeLog = runLog.child({ stage: 'normalize' })
+  const resolveLog = runLog.child({ stage: 'resolve' })
+  const writeLog = runLog.child({ stage: 'write' })
+  const alertLog = runLog.child({ stage: 'alert' })
 
   log.info('PROCESS_START', {
     runId: run.id,
@@ -221,6 +236,11 @@ export async function processProducts(
   // Per spec §4.2.2: "Last row wins" - only process the last occurrence
   // This avoids processing duplicates across chunks and ensures consistency.
   // ═══════════════════════════════════════════════════════════════════════════
+  normalizeLog.debug('NORMALIZE_START', {
+    totalRows: products.length,
+    maxRowCount,
+  })
+  const normalizeStart = Date.now()
   log.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
   const prescanStart = Date.now()
   const { winningRows, totalDuplicates, totalUrlHashFallbacks } = prescanIdentities(products)
@@ -236,6 +256,12 @@ export async function processProducts(
     duplicatePercentage: products.length > 0 ? ((totalDuplicates / products.length) * 100).toFixed(2) : 0,
     urlHashFallbacks: totalUrlHashFallbacks,
     urlHashPercentage: products.length > 0 ? ((totalUrlHashFallbacks / products.length) * 100).toFixed(2) : 0,
+  })
+  normalizeLog.debug('NORMALIZE_END', {
+    durationMs: Date.now() - normalizeStart,
+    uniqueIdentities: winningRows.size,
+    duplicatesSkipped: totalDuplicates,
+    urlHashFallbacks: totalUrlHashFallbacks,
   })
 
   // Process in chunks
@@ -340,6 +366,10 @@ export async function processProducts(
         chunkNum,
         count: sourceProductsForMatching.length,
       })
+      resolveLog.debug('RESOLVE_START', {
+        chunkNum,
+        candidates: sourceProductsForMatching.length,
+      })
       const matchStart = Date.now()
       const matchResults = await productMatcher.batchMatchByUpc(sourceProductsForMatching)
 
@@ -400,6 +430,12 @@ export async function processProducts(
         matchedCount,
         linksWrittenCount,
         unmatchedCount: sourceProductsForMatching.length - matchedCount,
+        enqueuedForResolver: itemsNeedingResolver.length,
+        durationMs: Date.now() - matchStart,
+      })
+      resolveLog.debug('RESOLVE_END', {
+        chunkNum,
+        matchedCount,
         enqueuedForResolver: itemsNeedingResolver.length,
         durationMs: Date.now() - matchStart,
       })
@@ -491,11 +527,26 @@ export async function processProducts(
         stockChanges: stockChanges.length,
         skipped: deduped.length - pricesToWrite.length,
       })
+      const provenanceGaps = {
+        missingRunId: pricesToWrite.filter((p) => !p.affiliateFeedRunId).length,
+        missingRetailerId: pricesToWrite.filter((p) => !p.retailerId).length,
+        missingSourceProductId: pricesToWrite.filter((p) => !p.sourceProductId).length,
+      }
+      writeLog.debug('WRITE_PROVENANCE_CHECK', {
+        chunkNum,
+        totalPlanned: pricesToWrite.length,
+        provenanceGaps,
+      })
 
       // Step 6: Bulk insert prices with ON CONFLICT DO NOTHING
       // Per spec §4.2.1: Use raw SQL with partial unique index for idempotency
       let actualInserted = 0
       if (pricesToWrite.length > 0) {
+        const writeStart = Date.now()
+        writeLog.debug('WRITE_START', {
+          chunkNum,
+          planned: pricesToWrite.length,
+        })
         log.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
         const insertStart = Date.now()
         actualInserted = await bulkInsertPrices(pricesToWrite, t0)
@@ -507,6 +558,13 @@ export async function processProducts(
           duplicatesRejected: pricesToWrite.length - actualInserted,
           durationMs: Date.now() - insertStart,
         })
+        writeLog.debug('WRITE_END', {
+          chunkNum,
+          requested: pricesToWrite.length,
+          inserted: actualInserted,
+          duplicatesRejected: pricesToWrite.length - actualInserted,
+          durationMs: Date.now() - writeStart,
+        })
 
         // ═══════════════════════════════════════════════════════════════════════
         // Step 6b: Queue alerts AFTER successful price writes
@@ -514,22 +572,36 @@ export async function processProducts(
         // ═══════════════════════════════════════════════════════════════════════
         if (priceChanges.length > 0 || stockChanges.length > 0) {
           const alertStart = Date.now()
+          alertLog.debug('ALERTS_ENQUEUE_START', {
+            chunkNum,
+            priceChanges: priceChanges.length,
+            stockChanges: stockChanges.length,
+          })
           const { priceDropsEnqueued, backInStockEnqueued } = await queueAffiliateAlerts(
             priceChanges,
             stockChanges,
-            run.id
+            run.id,
+            alertLog
           )
 
           if (priceDropsEnqueued > 0 || backInStockEnqueued > 0) {
-            log.info('AFFILIATE_ALERTS_ENQUEUED', {
-              event_name: 'AFFILIATE_ALERTS_ENQUEUED',
-              runId: run.id,
+            alertLog.info('ALERTS_ENQUEUED', {
               chunkNum,
               priceDropsEnqueued,
               backInStockEnqueued,
-              durationMs: Date.now() - alertStart,
             })
           }
+          alertLog.debug('ALERTS_ENQUEUE_END', {
+            chunkNum,
+            priceDropsEnqueued,
+            backInStockEnqueued,
+            durationMs: Date.now() - alertStart,
+          })
+        } else {
+          alertLog.debug('ALERTS_ENQUEUE_SKIPPED', {
+            chunkNum,
+            reason: 'NO_CHANGES',
+          })
         }
 
         // Update cache so later chunks see these writes
@@ -1670,10 +1742,12 @@ async function bulkInsertPrices(
 async function queueAffiliateAlerts(
   priceChanges: AffiliatePriceChange[],
   stockChanges: AffiliateStockChange[],
-  runId: string
+  runId: string,
+  alertLog: typeof log
 ): Promise<{ priceDropsEnqueued: number; backInStockEnqueued: number }> {
   let priceDropsEnqueued = 0
   let backInStockEnqueued = 0
+  let enqueueErrors = 0
 
   // Queue price drop alerts
   for (const change of priceChanges) {
@@ -1688,8 +1762,8 @@ async function queueAffiliateAlerts(
       await alertQueue.add('PRICE_DROP', jobData)
       priceDropsEnqueued++
     } catch (err) {
-      log.error('AFFILIATE_ALERTS_QUEUE_FAILED', {
-        event_name: 'AFFILIATE_ALERTS_QUEUE_FAILED',
+      enqueueErrors++
+      alertLog.error('ALERTS_QUEUE_FAILED', {
         runId,
         alertType: 'PRICE_DROP',
         productId: change.productId,
@@ -1711,8 +1785,8 @@ async function queueAffiliateAlerts(
       await alertQueue.add('BACK_IN_STOCK', jobData)
       backInStockEnqueued++
     } catch (err) {
-      log.error('AFFILIATE_ALERTS_QUEUE_FAILED', {
-        event_name: 'AFFILIATE_ALERTS_QUEUE_FAILED',
+      enqueueErrors++
+      alertLog.error('ALERTS_QUEUE_FAILED', {
         runId,
         alertType: 'BACK_IN_STOCK',
         productId: change.productId,
@@ -1721,6 +1795,15 @@ async function queueAffiliateAlerts(
       // Continue - alerts are best-effort per spec
     }
   }
+
+  alertLog.debug('ALERTS_QUEUE_SUMMARY', {
+    runId,
+    requestedPriceDrops: priceChanges.length,
+    requestedBackInStock: stockChanges.length,
+    priceDropsEnqueued,
+    backInStockEnqueued,
+    enqueueErrors,
+  })
 
   return { priceDropsEnqueued, backInStockEnqueued }
 }

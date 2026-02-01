@@ -17,6 +17,7 @@ import {
   affiliateFeedQueue,
 } from '../config/queues'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import { createRunFileLogger, createDualLogger, type RunFileLogger } from '../config/run-file-logger'
 import {
   notifyAffiliateFeedRunFailed,
@@ -32,7 +33,11 @@ import { evaluateCircuitBreaker, promoteProducts, copySeenFromPreviousRun } from
 import { AffiliateFeedError, FAILURE_KIND, ERROR_CODES } from './types'
 import type { FeedRunContext, RunStatus, FailureKind, ErrorCode } from './types'
 
-const moduleLog = logger.affiliate
+const baseLogger = logger.affiliate
+const moduleLog = createWorkflowLogger(baseLogger, {
+  workflow: 'affiliate',
+  stage: 'worker',
+})
 
 // Maximum consecutive failures before auto-disable
 const MAX_CONSECUTIVE_FAILURES = 3
@@ -373,7 +378,17 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     feedId: feed.id,
   })
   // Shadow the log variable - all subsequent log.X calls now go to both console and file
-  log = createDualLogger(moduleLog, runFileLogger)
+  log = createWorkflowLogger(
+    createDualLogger(baseLogger, runFileLogger),
+    {
+      workflow: 'affiliate',
+      stage: 'worker',
+      runId: run.id,
+      sourceId: feed.sourceId,
+      retailerId: feed.sources.retailerId,
+      feedId: feed.id,
+    }
+  )
   log.debug('File logger created', { filePath: runFileLogger.filePath })
 
   const context: FeedRunContext = {
@@ -486,7 +501,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       // FILE_NOT_FOUND gets WARN level for visibility; others get DEBUG
       if (result.skippedReason === 'FILE_NOT_FOUND') {
         log.warn('RUN_SKIPPED_FILE_NOT_FOUND', {
-          event_name: 'RUN_SKIPPED_FILE_NOT_FOUND',
           feedId: feed.id,
           runId: run.id,
           feedName: feed.sources.name,
@@ -701,7 +715,10 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
   const { feed, run } = context
 
   log.info('Downloading feed', { feedId: feed.id, runId: run.id })
-  const downloadResult = await downloadFeed(feed)
+  const downloadResult = await downloadFeed(feed, {
+    runId: run.id,
+    retailerId: feed.sources.retailerId,
+  })
 
   if (downloadResult.skipped) {
     return {
@@ -723,7 +740,12 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
     downloadResult.content.toString('utf-8'),
     feed.format,
     feed.maxRowCount || 500000,
-    feed.id
+    feed.id,
+    {
+      runId: run.id,
+      sourceId: feed.sourceId,
+      retailerId: feed.sources.retailerId,
+    }
   )
   log.debug('Parse complete', { rowsRead: parseResult.rowsRead, rowsParsed: parseResult.rowsParsed })
 

@@ -18,6 +18,7 @@ import { prisma } from '@ironscout/db'
 import type { ScrapedOffer } from '../types.js'
 import { mapAvailabilityToInStock } from '../types.js'
 import type { ILogger } from '@ironscout/logger'
+import { createWorkflowLogger, sanitizeUrl } from '../../config/structured-log'
 
 /**
  * Target information for a scrape write.
@@ -248,9 +249,22 @@ export async function writeScrapeOffer(
   runId: string,
   logger: ILogger
 ): Promise<WriteResult> {
+  const log = createWorkflowLogger(logger, {
+    workflow: 'scraper',
+    stage: 'write',
+    runId,
+    sourceId: offer.sourceId,
+    retailerId: offer.retailerId,
+  })
+  const startTime = Date.now()
+  log.debug('SCRAPE_WRITE_START', {
+    targetId: target.id,
+    identityKey: offer.identityKey,
+  })
+
   try {
     // 1. Resolve or upsert source_product
-    const sourceProductId = await resolveSourceProduct(offer, target, logger)
+    const sourceProductId = await resolveSourceProduct(offer, target, log)
 
     // 2. Write identifiers (UPC, SKU)
     await writeIdentifiers(sourceProductId, offer)
@@ -258,7 +272,8 @@ export async function writeScrapeOffer(
     // 3. Write price record
     const priceId = await writePrice(sourceProductId, offer, runId)
 
-    logger.debug('Wrote scraped offer', {
+    log.debug('SCRAPE_WRITE_END', {
+      durationMs: Date.now() - startTime,
       sourceProductId,
       priceId,
       identityKey: offer.identityKey,
@@ -272,11 +287,13 @@ export async function writeScrapeOffer(
     }
   } catch (error) {
     const err = error as Error
-    logger.error('Failed to write scraped offer', {
+    const urlMeta = sanitizeUrl(offer.url)
+    log.error('SCRAPE_WRITE_ERROR', {
+      durationMs: Date.now() - startTime,
       error: err.message,
       identityKey: offer.identityKey,
-      url: offer.url,
-    })
+      ...urlMeta,
+    }, err)
 
     return {
       success: false,

@@ -10,12 +10,16 @@
 import { parse as parseCSV } from 'csv-parse/sync'
 import { createHash } from 'crypto'
 import { logger } from '../config/logger'
+import { createWorkflowLogger, sanitizeUrl, hashValue } from '../config/structured-log'
 import { parseAttributes, parseUrlSignals } from './signal-extraction'
 import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../utils/ammo-utils'
 import type { ParsedFeedProduct, ParseResult, ParseError, ErrorCode } from './types'
 import { ERROR_CODES } from './types'
 
-const log = logger.affiliate
+const log = createWorkflowLogger(logger.affiliate, {
+  workflow: 'affiliate',
+  stage: 'parse',
+})
 
 /**
  * Parse feed content (CSV only for v1)
@@ -24,9 +28,10 @@ export async function parseFeed(
   content: string,
   format: 'CSV',
   maxRows: number,
-  feedId?: string
+  feedId?: string,
+  logContext?: { runId?: string; sourceId?: string; retailerId?: string }
 ): Promise<ParseResult> {
-  const parseLog = feedId ? log.child({ feedId }) : log
+  const parseLog = feedId ? log.child({ feedId, ...logContext }) : log
   const parseStart = Date.now()
   const errors: ParseError[] = []
   let rowsRead = 0
@@ -78,8 +83,15 @@ export async function parseFeed(
       parseLog.error('PARSE_CSV_FAILED', {
         phase: 'csv_parse',
         errorMessage: message,
-        contentPreview: content.slice(0, 200),
+        contentHash: hashValue(content),
         durationMs: Date.now() - csvParseStart,
+      })
+      parseLog.debug('PARSE_END', {
+        durationMs: Date.now() - parseStart,
+        rowsRead: 0,
+        rowsParsed: 0,
+        errorCount: 1,
+        outcome: 'error',
       })
       return {
         products: [],
@@ -151,13 +163,14 @@ export async function parseFeed(
 
           // Log first few validation errors in detail
           if (errors.length <= 5) {
+            const urlMeta = product.url ? sanitizeUrl(product.url) : {}
             parseLog.debug('PARSE_VALIDATION_ERROR', {
               phase: 'validation',
               rowNumber,
               errorCode: validationError.code,
               errorMessage: validationError.message,
               productName: product.name?.slice(0, 50),
-              productUrl: product.url?.slice(0, 100),
+              ...urlMeta,
               productPrice: product.price,
             })
           }
@@ -220,6 +233,13 @@ export async function parseFeed(
       avgMsPerRow,
       throughputRowsPerSec: totalDurationMs > 0 ? Math.round((rowsRead / totalDurationMs) * 1000) : 0,
     })
+    parseLog.debug('PARSE_END', {
+      durationMs: totalDurationMs,
+      rowsRead,
+      rowsParsed,
+      errorCount: errors.length,
+      outcome: 'success',
+    })
 
     return { products, rowsRead, rowsParsed, errors }
   } catch (err) {
@@ -233,6 +253,13 @@ export async function parseFeed(
       rowsRead,
       rowsParsed,
     }, err as Error)
+    parseLog.debug('PARSE_END', {
+      durationMs: totalDurationMs,
+      rowsRead,
+      rowsParsed,
+      errorCount: 1,
+      outcome: 'error',
+    })
     return {
       products: [],
       rowsRead: 0,

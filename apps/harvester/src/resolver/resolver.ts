@@ -25,9 +25,11 @@ import {
   type CandidateProduct,
 } from './types'
 import { logger } from '../config/logger'
+import { createWorkflowLogger, sanitizeUrl } from '../config/structured-log'
 import { logResolverDetail } from '../config/run-file-logger'
 import {
   deriveShotgunLoadType,
+  extractBrand,
   extractCaliber,
   extractGrainWeight,
   extractRoundCount,
@@ -40,13 +42,16 @@ import { normalizeBrandString } from './brand-normalization'
 import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
 import { recordMatchPath, recordMissingFields, type MissingFieldLabel } from './metrics'
 
-const log = logger.resolver
+const baseLog = createWorkflowLogger(logger.resolver, {
+  workflow: 'resolver',
+  stage: 'resolve',
+})
 
 // Current resolver version - bump on algorithm changes
-export const RESOLVER_VERSION = '1.2.0'
+export const RESOLVER_VERSION = '1.3.0'
 
 // Dictionary version - bump on normalization dictionary changes
-const DICTIONARY_VERSION = '1.0.0'
+const DICTIONARY_VERSION = '1.1.0'
 
 // Identity key version - bump on identity key format changes
 // This allows coexistence of products created with different identity key algorithms
@@ -94,22 +99,43 @@ export function getTrustConfigCacheStats(): { size: number; maxSize: number; ttl
  * Logs to both console and per-run file (when affiliateFeedRunId is provided)
  */
 function createResolverLog(sourceProductId: string, trigger: string, affiliateFeedRunId?: string) {
+  const log = baseLog.child({
+    runId: affiliateFeedRunId,
+    sourceProductId,
+  })
+  const fileBaseMeta = {
+    workflow: 'resolver',
+    stage: 'resolve',
+    runId: affiliateFeedRunId,
+    sourceProductId,
+    trigger,
+  }
   return {
     debug: (event: string, meta?: Record<string, unknown>) => {
-      log.debug(event, { sourceProductId, trigger, ...meta })
-      logResolverDetail('debug', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+      log.debug(event, { trigger, ...meta })
+      logResolverDetail('debug', sourceProductId, event, { ...fileBaseMeta, ...meta }, affiliateFeedRunId)
     },
     info: (event: string, meta?: Record<string, unknown>) => {
-      log.info(event, { sourceProductId, trigger, ...meta })
-      logResolverDetail('info', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+      log.info(event, { trigger, ...meta })
+      logResolverDetail('info', sourceProductId, event, { ...fileBaseMeta, ...meta }, affiliateFeedRunId)
     },
     warn: (event: string, meta?: Record<string, unknown>) => {
-      log.warn(event, { sourceProductId, trigger, ...meta })
-      logResolverDetail('warn', sourceProductId, event, { trigger, ...meta }, affiliateFeedRunId)
+      log.warn(event, { trigger, ...meta })
+      logResolverDetail('warn', sourceProductId, event, { ...fileBaseMeta, ...meta }, affiliateFeedRunId)
     },
     error: (event: string, meta?: Record<string, unknown>, error?: unknown) => {
-      log.error(event, { sourceProductId, trigger, ...meta }, error)
-      logResolverDetail('error', sourceProductId, event, { trigger, ...meta, error: error instanceof Error ? error.message : String(error) }, affiliateFeedRunId)
+      log.error(event, { trigger, ...meta }, error as Error)
+      logResolverDetail(
+        'error',
+        sourceProductId,
+        event,
+        {
+          ...fileBaseMeta,
+          ...meta,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        affiliateFeedRunId
+      )
     },
   }
 }
@@ -176,7 +202,6 @@ export async function resolveSourceProduct(
     // WARN not ERROR: Expected when source product was deleted after job enqueue
     // or due to race conditions during ingestion. Worker handles gracefully.
     rlog.warn('SOURCE_NOT_FOUND', {
-      event_name: 'SOURCE_NOT_FOUND',
       phase: 'load',
       durationMs: Date.now() - startTime,
     })
@@ -189,12 +214,13 @@ export async function resolveSourceProduct(
   const existingLink = sourceProduct.product_links
   const identifierTypes = sourceProduct.source_product_identifiers.map(i => i.idType)
 
+  const sourceUrlMeta = sanitizeUrl(sourceProduct.url)
   rlog.debug('SOURCE_LOADED', {
     phase: 'load',
     sourceId: sourceProduct.sourceId,
     title: sourceProduct.title?.slice(0, 100),
     brand: sourceProduct.brand,
-    url: sourceProduct.url?.slice(0, 100),
+    ...sourceUrlMeta,
     identifierCount: sourceProduct.source_product_identifiers.length,
     identifierTypes,
     hasExistingLink: !!existingLink,
@@ -289,7 +315,7 @@ export async function resolveSourceProduct(
     rawInput: {
       title: sourceProduct.title?.slice(0, 80),
       brand: sourceProduct.brand,
-      url: sourceProduct.url?.slice(0, 80),
+      ...sourceUrlMeta,
     },
     normalizedOutput: {
       titleNorm: normalized.titleNorm?.slice(0, 80),
@@ -632,10 +658,24 @@ function normalizeInput(
     })
   }
 
+  // Normalize title first (needed for brand extraction fallback)
+  const rawTitle = sourceProduct.title
+
   // Normalize brand with alias lookup
-  const rawBrand = sourceProduct.brand
+  // If sourceProduct.brand is null, try to extract brand from title
+  const rawBrand = sourceProduct.brand || extractBrand(rawTitle || '')
+  const brandExtractedFromTitle = !sourceProduct.brand && rawBrand
   const brandResult = normalizeBrand(rawBrand)
   const normalizedBrand = brandResult.brandNorm
+
+  if (brandExtractedFromTitle) {
+    rlog.info('BRAND_EXTRACTED_FROM_TITLE', {
+      phase: 'normalize',
+      rawTitle: rawTitle?.slice(0, 80),
+      extractedBrand: rawBrand,
+      normalizedBrand,
+    })
+  }
 
   if (rawBrand && !normalizedBrand) {
     rlog.warn('BRAND_NORMALIZATION_FAILED', {
@@ -657,7 +697,6 @@ function normalizeInput(
   }
 
   // Normalize title
-  const rawTitle = sourceProduct.title
   const normalizedTitle = normalizeTitle(rawTitle)
   const titleSignature = computeTitleSignature(rawTitle)
 
