@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 const exampleQueries = [
   '9mm hollow point',
@@ -78,28 +77,18 @@ export function SearchHero({ initialQuery = '', compact = false }: SearchHeroPro
     )
   }
 
-  // Full hero mode - matches www home page
+  // Full hero mode - search box with example queries
   return (
-    <section className="relative pt-12 sm:pt-16 pb-12">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 -left-64 w-[500px] h-[500px] bg-muted/50 rounded-full blur-3xl" />
-      </div>
-
+    <section className="relative pt-8 sm:pt-12 pb-8">
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Headline */}
-          <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.1] mb-4">
-            Ammo search that thinks<br />
-            <span className="text-primary">like a shooter</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground font-display mb-8">
+        <div className="max-w-3xl mx-auto">
+          {/* Subtitle */}
+          <p className="text-center text-lg text-muted-foreground font-display mb-6">
             Range day or carry day. We search differently.
           </p>
 
           {/* Search Box */}
-          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6">
+          <form onSubmit={handleSearch} className="mb-6">
             <div className="relative flex items-center">
               <div className="absolute left-4 flex items-center">
                 <Search className="w-5 h-5 text-muted-foreground" />
@@ -127,9 +116,9 @@ export function SearchHero({ initialQuery = '', compact = false }: SearchHeroPro
           </form>
 
           {/* Example Queries */}
-          <div className="mb-8">
+          <div>
             <p className="text-sm text-muted-foreground mb-3">Try:</p>
-            <div className="flex flex-wrap justify-center gap-2">
+            <div className="flex flex-wrap gap-2">
               {exampleQueries.map((example, i) => (
                 <button
                   key={i}
