@@ -18,6 +18,42 @@ export interface MarketingHeaderProps {
 }
 
 /**
+ * IronScout Logo - Hexagon with scope pattern
+ * Inline SVG for consistent rendering across all apps without external file dependencies.
+ */
+function IronScoutLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      fill="none"
+      className={className}
+    >
+      {/* Hexagon border */}
+      <path
+        d="M50 5 L89 27.5 V72.5 L50 95 L11 72.5 V27.5 Z"
+        stroke="#00C2CB"
+        strokeWidth="6"
+        strokeLinejoin="round"
+      />
+      {/* Scope crosshairs */}
+      <g transform="translate(50,50)">
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(0)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(60)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(120)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(180)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(240)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(300)" />
+      </g>
+      {/* Center dot */}
+      <circle cx="50" cy="50" r="12" fill="#00C2CB" />
+      {/* Corner accent */}
+      <circle cx="82" cy="18" r="4" fill="#00C2CB" />
+    </svg>
+  )
+}
+
+/**
  * Shared marketing header component used across www, web, and other apps.
  * Provides consistent navigation and branding across all IronScout properties.
  *
@@ -41,11 +77,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <a href={websiteUrl} className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
+            <IronScoutLogo className="w-8 h-8" />
             <span className="font-display text-xl font-semibold tracking-tight">
               Iron<span className="text-primary">Scout</span>
             </span>
