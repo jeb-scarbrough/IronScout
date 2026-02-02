@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
@@ -114,8 +114,8 @@ export function ScrapeTargetsTable({ targets }: ScrapeTargetsTableProps) {
               : ''
 
             return (
-              <>
-                <tr key={target.id} className={`${rowClass} hover:bg-gray-50`}>
+              <Fragment key={target.id}>
+                <tr className={`${rowClass} hover:bg-gray-50`}>
                   <td className="px-3 py-4">
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : target.id)}
@@ -210,7 +210,7 @@ export function ScrapeTargetsTable({ targets }: ScrapeTargetsTableProps) {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             )
           })}
         </tbody>
