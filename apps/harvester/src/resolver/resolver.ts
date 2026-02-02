@@ -51,7 +51,7 @@ const baseLog = createWorkflowLogger(logger.resolver, {
 export const RESOLVER_VERSION = '1.3.0'
 
 // Dictionary version - bump on normalization dictionary changes
-const DICTIONARY_VERSION = '1.1.0'
+const DICTIONARY_VERSION = '1.3.0'
 
 // Identity key version - bump on identity key format changes
 // This allows coexistence of products created with different identity key algorithms
