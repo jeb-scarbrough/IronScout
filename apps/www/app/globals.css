@@ -1,5 +1,8 @@
 @import "@ironscout/ui/styles/globals.css";
 
+/* Tell Tailwind to scan the shared UI package for class usage */
+@source "../../../packages/ui/components";
+
 /* www-specific: Marketing site is always dark mode */
 :root {
   color-scheme: dark;
