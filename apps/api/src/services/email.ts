@@ -3,8 +3,17 @@ import { loggers } from '../config/logger'
 
 const log = loggers.email
 const resend = new Resend(process.env.RESEND_API_KEY)
-// All apps use EMAIL_FROM for consistency
-const FROM_EMAIL = process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>'
+
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`${name} not configured`)
+  }
+  return value
+}
+
+const ALERTS_EMAIL_FROM = () => requireEnv('ALERTS_EMAIL_FROM')
+const TRANSACTIONAL_EMAIL_FROM = () => requireEnv('TRANSACTIONAL_EMAIL_FROM')
 
 interface PriceDropEmailData {
   userName: string
@@ -42,7 +51,7 @@ export async function sendPriceDropEmail(
 
   try {
     await resend.emails.send({
-      from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
+      from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM()}>`,
       to: [to],
       subject: `🎉 Price Drop Alert: ${data.productName}`,
       html
@@ -62,7 +71,7 @@ export async function sendBackInStockEmail(
 
   try {
     await resend.emails.send({
-      from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
+      from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM()}>`,
       to: [to],
       subject: `✨ Back in Stock: ${data.productName}`,
       html
@@ -313,7 +322,7 @@ export async function sendAccountDeletionEmail(
 
   try {
     await resend.emails.send({
-      from: `IronScout.ai <${FROM_EMAIL}>`,
+      from: `IronScout.ai <${TRANSACTIONAL_EMAIL_FROM()}>`,
       to: [to],
       subject: 'Account Deletion Request Received',
       html

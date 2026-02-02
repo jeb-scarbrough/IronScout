@@ -512,6 +512,12 @@ export async function resendVerificationEmail(merchantId: string) {
       return { success: false, error: 'Email service not configured' };
     }
 
+    const fromEmail = process.env.MERCHANT_EMAIL_FROM
+    if (!fromEmail) {
+      loggers.merchants.error('MERCHANT_EMAIL_FROM not configured', { merchantId })
+      return { success: false, error: 'Email service not configured' }
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -519,7 +525,7 @@ export async function resendVerificationEmail(merchantId: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>',
+        from: fromEmail,
         to: merchantUser.email,
         subject: 'Verify Your IronScout Merchant Account',
         html: `

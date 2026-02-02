@@ -19,7 +19,10 @@ function getResendClient(): Resend {
   return resendClient;
 }
 
-const FROM_EMAIL = process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>';
+const FROM_EMAIL = process.env.MERCHANT_EMAIL_FROM;
+if (!FROM_EMAIL) {
+  throw new Error('MERCHANT_EMAIL_FROM not configured');
+}
 const MERCHANT_URL = process.env.NEXT_PUBLIC_MERCHANT_URL || 'https://merchant.ironscout.ai';
 
 export interface SendEmailResult {

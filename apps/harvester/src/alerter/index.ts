@@ -45,7 +45,10 @@ try {
 } catch (error) {
   log.warn('Resend API key not configured - email notifications will be disabled')
 }
-const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
+const ALERTS_EMAIL_FROM = process.env.ALERTS_EMAIL_FROM
+if (!ALERTS_EMAIL_FROM) {
+  throw new Error('ALERTS_EMAIL_FROM not configured')
+}
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 // Queue for delayed notifications
@@ -1003,7 +1006,7 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
 
       if (resend) {
         await resend.emails.send({
-          from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
+          from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
           to: [alert.users.email],
           subject: `🎉 Price Drop Alert: ${alert.products.name}`,
           html
@@ -1026,7 +1029,7 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
 
       if (resend) {
         await resend.emails.send({
-          from: `IronScout.ai Alerts <${FROM_EMAIL}>`,
+          from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
           to: [alert.users.email],
           subject: `✨ Back in Stock: ${alert.products.name}`,
           html

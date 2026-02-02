@@ -24,7 +24,14 @@ function getResendClient(): Resend {
 }
 
 // Email configuration
-const FROM_EMAIL = process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>';
+const FROM_EMAIL = process.env.MERCHANT_EMAIL_FROM;
+if (!FROM_EMAIL) {
+  throw new Error('MERCHANT_EMAIL_FROM not configured');
+}
+const OPERATIONS_EMAIL_TO = process.env.OPERATIONS_EMAIL_TO;
+if (!OPERATIONS_EMAIL_TO) {
+  throw new Error('OPERATIONS_EMAIL_TO not configured');
+}
 const BASE_URL = process.env.NEXT_PUBLIC_MERCHANT_URL || 'https://merchant.ironscout.ai';
 
 export interface SendEmailResult {
@@ -362,7 +369,7 @@ export async function sendAdminNewMerchantNotification(
   emailLogger.info('Sending admin notification for new merchant');
 
   // Send to operations@ironscout.ai for new merchant notifications
-  const notificationEmail = 'operations@ironscout.ai';
+  const notificationEmail = OPERATIONS_EMAIL_TO;
   const adminUrl = process.env.ADMIN_PORTAL_URL || 'https://admin.ironscout.ai';
   const merchantDetailUrl = `${adminUrl}/merchants/${merchantId}`;
 
