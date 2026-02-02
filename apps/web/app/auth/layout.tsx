@@ -39,9 +39,9 @@ export default function AuthLayout({
         websiteUrl={BRAND.website}
         appUrl={BRAND.appUrl}
       />
-      <div className="pt-16">
+      <main className="pt-32">
         {children}
-      </div>
+      </main>
     </div>
   )
 }
