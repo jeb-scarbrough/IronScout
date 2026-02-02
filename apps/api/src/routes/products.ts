@@ -11,6 +11,55 @@ const log = loggers.products
 
 const router: any = Router()
 
+export function getObservedAtMs(value: unknown): number {
+  if (!value) return 0
+  const timestamp = new Date(value as any).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+export function toPriceNumber(value: unknown): number {
+  if (value === null || value === undefined) return Number.POSITIVE_INFINITY
+  const parsed = parseFloat(String(value))
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
+}
+
+export function dedupeLatestByRetailer(prices: any[]): any[] {
+  const byRetailer = new Map<string, any>()
+  const unkeyed: any[] = []
+
+  for (const price of prices) {
+    const retailerId = price.retailers?.id
+    if (!retailerId) {
+      unkeyed.push(price)
+      continue
+    }
+
+    const existing = byRetailer.get(retailerId)
+    if (!existing) {
+      byRetailer.set(retailerId, price)
+      continue
+    }
+
+    const currentObservedAt = getObservedAtMs(price.observedAt)
+    const existingObservedAt = getObservedAtMs(existing.observedAt)
+
+    if (currentObservedAt > existingObservedAt) {
+      byRetailer.set(retailerId, price)
+      continue
+    }
+
+    if (currentObservedAt === existingObservedAt) {
+      const currentPrice = toPriceNumber(price.price)
+      const existingPrice = toPriceNumber(existing.price)
+      if (currentPrice < existingPrice) {
+        byRetailer.set(retailerId, price)
+      }
+    }
+  }
+
+  return [...byRetailer.values(), ...unkeyed]
+}
+
 const searchSchema = z.object({
   q: z.string().optional(),
   category: z.string().optional(),
@@ -136,6 +185,8 @@ router.get('/search', async (req: Request, res: Response) => {
       if (maxPrice) {
         filteredPrices = filteredPrices.filter((pr: any) => parseFloat(pr.price.toString()) <= parseFloat(maxPrice))
       }
+
+      filteredPrices = dedupeLatestByRetailer(filteredPrices)
 
       // Sort prices by retailer tier, then price
       filteredPrices.sort((a: any, b: any) => {
@@ -286,9 +337,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     // Get prices via product_links
     const prices = await getPricesViaProductLinks(id)
+    const dedupedPrices = dedupeLatestByRetailer(prices)
 
     // Sort by retailer tier desc, then price asc
-    const sortedPrices = [...prices].sort((a: any, b: any) => {
+    const sortedPrices = [...dedupedPrices].sort((a: any, b: any) => {
       const tierOrder: Record<string, number> = { 'PREMIUM': 2, 'STANDARD': 1 }
       const aTier = tierOrder[a.retailers?.tier || 'STANDARD'] || 0
       const bTier = tierOrder[b.retailers?.tier || 'STANDARD'] || 0
