@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, XCircle, AlertTriangle, Power } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Power, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAdapterEnabled } from '../actions'
 import type { AdapterStatusDTO } from '../actions'
+import { AdapterEditDialog } from './adapter-edit-dialog'
 
 interface AdapterStatusTableProps {
   adapters: AdapterStatusDTO[]
@@ -56,6 +57,7 @@ function formatRate(rate: number | null): string {
 export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
   const router = useRouter()
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [editingAdapter, setEditingAdapter] = useState<string | null>(null)
 
   const handleToggle = async (adapterId: string, currentEnabled: boolean) => {
     setLoadingId(adapterId)
@@ -164,27 +166,44 @@ export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
                 )}
               </td>
               <td className="px-4 py-4">
-                <button
-                  onClick={() => handleToggle(adapter.adapterId, adapter.enabled)}
-                  disabled={loadingId === adapter.adapterId}
-                  className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50 ${
-                    adapter.enabled
-                      ? 'text-red-700 bg-red-100 hover:bg-red-200'
-                      : 'text-green-700 bg-green-100 hover:bg-green-200'
-                  }`}
-                >
-                  <Power className="h-3 w-3" />
-                  {loadingId === adapter.adapterId
-                    ? '...'
-                    : adapter.enabled
-                    ? 'Disable'
-                    : 'Enable'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditingAdapter(adapter.adapterId)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleToggle(adapter.adapterId, adapter.enabled)}
+                    disabled={loadingId === adapter.adapterId}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md disabled:opacity-50 ${
+                      adapter.enabled
+                        ? 'text-red-700 bg-red-100 hover:bg-red-200'
+                        : 'text-green-700 bg-green-100 hover:bg-green-200'
+                    }`}
+                  >
+                    <Power className="h-3 w-3" />
+                    {loadingId === adapter.adapterId
+                      ? '...'
+                      : adapter.enabled
+                      ? 'Disable'
+                      : 'Enable'}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {/* Edit Dialog */}
+      {editingAdapter && (
+        <AdapterEditDialog
+          adapterId={editingAdapter}
+          onClose={() => setEditingAdapter(null)}
+        />
+      )}
     </div>
   )
 }

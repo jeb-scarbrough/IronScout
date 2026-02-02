@@ -637,6 +637,140 @@ export async function toggleAdapterEnabled(adapterId: string, enabled: boolean):
   }
 }
 
+export interface AdapterDetailDTO extends AdapterStatusDTO {
+  baselineFailureRate: number | null
+  baselineYieldRate: number | null
+  baselineSampleSize: number
+  baselineUpdatedAt: Date | null
+  lastBatchFailureRate: number | null
+  lastRunHadZeroPrice: boolean
+  disabledBy: string | null
+  targetCount: number
+}
+
+export async function getAdapterDetail(adapterId: string): Promise<{ success: boolean; error?: string; adapter?: AdapterDetailDTO }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const adapter = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+    })
+
+    if (!adapter) {
+      return { success: false, error: 'Adapter not found' }
+    }
+
+    // Get target count for this adapter
+    const targetCount = await prisma.scrape_targets.count({
+      where: { adapterId },
+    })
+
+    // Get run stats
+    const [totalRuns, lastRun, successfulRuns] = await Promise.all([
+      prisma.scrape_runs.count({
+        where: {
+          adapterId,
+          startedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+      prisma.scrape_runs.findFirst({
+        where: { adapterId },
+        orderBy: { startedAt: 'desc' },
+        select: { startedAt: true },
+      }),
+      prisma.scrape_runs.count({
+        where: {
+          adapterId,
+          status: 'SUCCESS',
+          startedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ])
+
+    const totalRecentRuns = await prisma.scrape_runs.count({
+      where: {
+        adapterId,
+        startedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      },
+    })
+
+    const successRate = totalRecentRuns > 0 ? successfulRuns / totalRecentRuns : null
+
+    return {
+      success: true,
+      adapter: {
+        adapterId: adapter.adapterId,
+        enabled: adapter.enabled,
+        lastRunAt: lastRun?.startedAt ?? null,
+        consecutiveFailedBatches: adapter.consecutiveFailedBatches,
+        disabledAt: adapter.disabledAt,
+        disabledReason: adapter.disabledReason,
+        disabledBy: adapter.disabledBy,
+        totalRuns,
+        successRate,
+        baselineFailureRate: adapter.baselineFailureRate ? Number(adapter.baselineFailureRate) : null,
+        baselineYieldRate: adapter.baselineYieldRate ? Number(adapter.baselineYieldRate) : null,
+        baselineSampleSize: adapter.baselineSampleSize,
+        baselineUpdatedAt: adapter.baselineUpdatedAt,
+        lastBatchFailureRate: adapter.lastBatchFailureRate ? Number(adapter.lastBatchFailureRate) : null,
+        lastRunHadZeroPrice: adapter.lastRunHadZeroPrice,
+        targetCount,
+      },
+    }
+  } catch (error) {
+    log.error('Failed to get adapter detail', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to get adapter' }
+  }
+}
+
+export async function resetAdapterFailures(adapterId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const existing = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+    })
+
+    if (!existing) {
+      return { success: false, error: 'Adapter not found' }
+    }
+
+    await prisma.scrape_adapter_status.update({
+      where: { adapterId },
+      data: {
+        consecutiveFailedBatches: 0,
+        lastBatchFailureRate: null,
+        lastRunHadZeroPrice: false,
+      },
+    })
+
+    await logAdminAction(session.userId, 'RESET_ADAPTER_FAILURES', {
+      resource: 'ScrapeAdapter',
+      resourceId: adapterId,
+      oldValue: {
+        consecutiveFailedBatches: existing.consecutiveFailedBatches,
+        lastBatchFailureRate: existing.lastBatchFailureRate,
+        lastRunHadZeroPrice: existing.lastRunHadZeroPrice,
+      },
+      newValue: {
+        consecutiveFailedBatches: 0,
+        lastBatchFailureRate: null,
+        lastRunHadZeroPrice: false,
+      },
+    })
+
+    log.info('Adapter failures reset', { adapterId, userId: session.userId })
+
+    revalidatePath('/scrapers/adapters')
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to reset adapter failures', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to reset failures' }
+  }
+}
+
 // =============================================================================
 // Manual Trigger
 // =============================================================================
