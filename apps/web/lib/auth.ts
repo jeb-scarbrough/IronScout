@@ -73,10 +73,8 @@ const isLocalhost = env.NEXTAUTH_URL.includes('localhost')
 // Use secure cookies only in production AND not on localhost
 const useSecureCookies = isProd && !isLocalhost
 
-// Cookie domain for cross-subdomain auth
-const COOKIE_DOMAIN = useSecureCookies && env.COOKIE_DOMAIN
-  ? env.COOKIE_DOMAIN
-  : undefined
+// Cookie domain for cross-subdomain auth (allow in dev if explicitly set)
+const COOKIE_DOMAIN = env.COOKIE_DOMAIN ? env.COOKIE_DOMAIN : undefined
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   // No adapter - pure JWT sessions

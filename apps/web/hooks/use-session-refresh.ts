@@ -8,6 +8,11 @@ import { toast } from 'sonner'
 // Refresh session 5 minutes before token expires (tokens last 1 hour)
 const PROACTIVE_REFRESH_INTERVAL = 50 * 60 * 1000 // 50 minutes
 
+// Track whether a user session is currently present so we can suppress
+// "session expired" toasts for logged-out users.
+let hasActiveSession = false
+let lastSessionError: string | null = null
+
 /**
  * Hook that monitors session for refresh token errors
  * and automatically signs out when the refresh token is invalid/expired.
@@ -20,6 +25,11 @@ const PROACTIVE_REFRESH_INTERVAL = 50 * 60 * 1000 // 50 minutes
 export function useSessionRefresh() {
   const { data: session, update } = useSession()
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    hasActiveSession = !!session?.user
+    lastSessionError = (session as any)?.error ?? null
+  }, [session?.user, (session as any)?.error])
 
   // Handle session errors - redirect to login
   useEffect(() => {
@@ -95,6 +105,11 @@ export async function refreshSessionToken(): Promise<string | null> {
  * Use this when token refresh fails.
  */
 export function showSessionExpiredToast() {
+  if (!hasActiveSession && !lastSessionError) {
+    safeLogger.hooks.debug('Suppressing session expired toast (no active session)')
+    return
+  }
+  safeLogger.hooks.info('Showing session expired toast')
   toast.error('Your session has expired', {
     description: 'Please sign in again to continue.',
     action: {
