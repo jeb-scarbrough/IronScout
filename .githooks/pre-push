@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pnpm not found; skipping checks."
+  exit 0
+fi
+
+echo "Running pre-push checks..."
+
+pnpm preflight --verbose
+pnpm --filter harvester test:run
+
+echo "Pre-push checks passed!"
