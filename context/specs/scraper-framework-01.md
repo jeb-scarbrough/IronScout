@@ -1204,6 +1204,41 @@ function mapAvailability(availability: Availability): boolean {
 - `BACKORDER` → `false`: Treat as unavailable for alerts (user can't buy immediately)
 - Alerts trigger on `inStock` transitions, so this mapping determines alert behavior
 
+### 10.3 Skip-to-Disable Feedback Loop
+
+When an operator marks a scraped product as `SKIP` in the admin review queue, the system should offer to disable the associated scrape target to prevent re-scraping non-ammunition products.
+
+**Workflow:**
+
+```
+Operator marks product_link as SKIP (e.g., "not ammo")
+       │
+       ▼
+System checks: Does this source_product have an associated scrape_target?
+       │
+       ├── No → Done (no scrape target to disable)
+       │
+       └── Yes → Prompt operator:
+           "This product came from a scrape target. Disable future scraping of this URL?"
+           │
+           ├── [Yes] → Set scrape_targets.enabled = FALSE, status = 'PAUSED'
+           │           Log: SCRAPE_TARGET_DISABLED_BY_REVIEW { targetId, reason, operator }
+           │
+           └── [No]  → Keep scrape_target unchanged
+```
+
+**Implementation notes:**
+
+1. **Association lookup:** `source_products.id` → `scrape_targets.source_product_id`
+2. **Skip reasons that should trigger prompt:**
+   - "not ammo" / "not ammunition"
+   - "accessory"
+   - "non-product" (MREs, apparel, etc.)
+3. **Audit trail:** Log all skip-to-disable actions for compliance review
+4. **Bulk operations:** When bulk-skipping, aggregate prompt: "N products have scrape targets. Disable all?"
+
+**Rationale:** Manual review decisions should propagate back to the scrape pipeline to prevent repeatedly ingesting and reviewing the same non-ammunition products. This creates an operational feedback loop that improves data quality over time.
+
 ---
 
 ## 11. Observability (v1: Log-Only)
@@ -1415,6 +1450,7 @@ apps/harvester/src/scraper/
 - [ ] Admin portal: enable/disable adapters
 - [ ] Admin portal: toggle `sources.scrape_enabled` (allowlist gate)
 - [ ] Admin portal: manual enqueue with backpressure feedback
+- [ ] Admin portal: skip-to-disable feedback loop (see §10.3)
 - [ ] Grafana dashboard for scraper metrics
 - [ ] Runbook for drift alerts
 - [ ] Runbook for adapter re-enable
@@ -1466,6 +1502,7 @@ apps/harvester/src/scraper/
 
 - [ ] Ops can add/remove/pause scrape_targets via admin portal
 - [ ] Ops can enable/disable adapters via admin portal
+- [ ] Skip-to-disable feedback loop works (marking product as SKIP prompts to disable scrape target)
 - [ ] Drift alert log events emitted correctly in staging
 - [ ] Auto-disable triggers and recovers correctly
 - [ ] Runbooks documented and reviewed
