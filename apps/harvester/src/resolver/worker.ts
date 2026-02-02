@@ -270,9 +270,8 @@ async function processResolveJob(
     runId: job.data.affiliateFeedRunId,
     sourceProductId,
   })
-  const log = jobLog
 
-  log.info('RESOLVER_JOB_START', {
+  jobLog.info('RESOLVER_JOB_START', {
     jobId: job.id,
     sourceProductId,
     trigger,
@@ -284,7 +283,7 @@ async function processResolveJob(
 
   // Version check - warn if job was enqueued with different version
   if (resolverVersion !== RESOLVER_VERSION) {
-    log.warn('RESOLVER_VERSION_MISMATCH', {
+    jobLog.warn('RESOLVER_VERSION_MISMATCH', {
       sourceProductId,
       jobVersion: resolverVersion,
       currentVersion: RESOLVER_VERSION,
@@ -304,14 +303,14 @@ async function processResolveJob(
     },
   })
 
-  log.debug('RESOLVER_REQUEST_PROCESSING', {
+  jobLog.debug('RESOLVER_REQUEST_PROCESSING', {
     sourceProductId,
     rowsUpdated: requestUpdate.count,
   })
 
   try {
     // Execute resolver algorithm
-    log.debug('RESOLVER_ALGORITHM_START', {
+    jobLog.debug('RESOLVER_ALGORITHM_START', {
       sourceProductId,
       trigger,
     })
@@ -324,7 +323,7 @@ async function processResolveJob(
     // Record request metric (now using sourceKind from result)
     recordRequest(sourceKind)
 
-    log.debug('RESOLVER_ALGORITHM_COMPLETE', {
+    jobLog.debug('RESOLVER_ALGORITHM_COMPLETE', {
       sourceProductId,
       matchType: result.matchType,
       status: result.status,
@@ -345,7 +344,7 @@ async function processResolveJob(
     const skipPersistence = result.skipped || isSourceNotFound
 
     if (skipPersistence) {
-      log.debug('RESOLVER_PERSISTENCE_SKIPPED', {
+      jobLog.debug('RESOLVER_PERSISTENCE_SKIPPED', {
         sourceProductId,
         reason: isSourceNotFound
           ? 'Source product not found - cannot persist'
@@ -359,7 +358,7 @@ async function processResolveJob(
       await persistResolverResult(sourceProductId, result)
       const persistDuration = Date.now() - persistStart
 
-      log.debug('RESOLVER_RESULT_PERSISTED', {
+      jobLog.debug('RESOLVER_RESULT_PERSISTED', {
         sourceProductId,
         productId: result.productId,
         matchType: result.matchType,
@@ -372,7 +371,7 @@ async function processResolveJob(
           where: { id: sourceProductId },
           data: { normalizedHash: result.evidence.inputHash },
         })
-        log.debug('RESOLVER_HASH_UPDATED', {
+        jobLog.debug('RESOLVER_HASH_UPDATED', {
           sourceProductId,
           inputHash: result.evidence.inputHash.slice(0, 16) + '...',
         })
@@ -401,7 +400,7 @@ async function processResolveJob(
       },
     })
 
-    log.info('RESOLVER_JOB_COMPLETE', {
+    jobLog.info('RESOLVER_JOB_COMPLETE', {
       jobId: job.id,
       sourceProductId,
       trigger,
@@ -448,7 +447,7 @@ async function processResolveJob(
             affiliateFeedRunId: job.data.affiliateFeedRunId,
           })
           if (enqueued) {
-            log.debug('EMBEDDING_JOB_ENQUEUED', {
+            jobLog.debug('EMBEDDING_JOB_ENQUEUED', {
               productId: result.productId,
               sourceProductId,
               trigger: 'RESOLVE',
@@ -457,7 +456,7 @@ async function processResolveJob(
         }
       } catch (embeddingErr) {
         // Log but don't fail the resolver job for embedding errors
-        log.warn('EMBEDDING_ENQUEUE_FAILED', {
+        jobLog.warn('EMBEDDING_ENQUEUE_FAILED', {
           productId: result.productId,
           sourceProductId,
           error: embeddingErr instanceof Error ? embeddingErr.message : String(embeddingErr),
@@ -495,7 +494,7 @@ async function processResolveJob(
     }
     // If not final attempt, leave as PROCESSING so sweeper can recover if needed
 
-    log.error('RESOLVER_JOB_ERROR', {
+    jobLog.error('RESOLVER_JOB_ERROR', {
       jobId: job.id,
       sourceProductId,
       trigger,
