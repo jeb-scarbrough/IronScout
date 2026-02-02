@@ -188,19 +188,18 @@ export async function processProducts(
 ): Promise<ProcessorResult> {
   const { feed, run, sourceId, retailerId, t0 } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
-  const runLog = log.child({
+  const procLog = log.child({
     runId: run.id,
     sourceId,
     retailerId,
     feedId: feed.id,
   })
-  const log = runLog
-  const normalizeLog = runLog.child({ stage: 'normalize' })
-  const resolveLog = runLog.child({ stage: 'resolve' })
-  const writeLog = runLog.child({ stage: 'write' })
-  const alertLog = runLog.child({ stage: 'alert' })
+  const normalizeLog = procLog.child({ stage: 'normalize' })
+  const resolveLog = procLog.child({ stage: 'resolve' })
+  const writeLog = procLog.child({ stage: 'write' })
+  const alertLog = procLog.child({ stage: 'alert' })
 
-  log.info('PROCESS_START', {
+  procLog.info('PROCESS_START', {
     runId: run.id,
     feedId: feed.id,
     sourceId,
@@ -241,13 +240,13 @@ export async function processProducts(
     maxRowCount,
   })
   const normalizeStart = Date.now()
-  log.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
+  procLog.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
   const prescanStart = Date.now()
   const { winningRows, totalDuplicates, totalUrlHashFallbacks } = prescanIdentities(products)
   duplicateKeyCount = totalDuplicates
   urlHashFallbackCount = totalUrlHashFallbacks
 
-  log.info('PRESCAN_OK', {
+  procLog.info('PRESCAN_OK', {
     runId: run.id,
     durationMs: Date.now() - prescanStart,
     totalRows: products.length,
@@ -266,7 +265,7 @@ export async function processProducts(
 
   // Process in chunks
   const totalChunks = Math.ceil(products.length / BATCH_SIZE)
-  log.debug('Starting chunk processing', {
+  procLog.debug('Starting chunk processing', {
     runId: run.id,
     totalChunks,
     batchSize: BATCH_SIZE,
@@ -277,7 +276,7 @@ export async function processProducts(
     const chunkNum = Math.floor(chunkStart / BATCH_SIZE) + 1
     const chunkStartTime = Date.now()
 
-    log.debug('Processing chunk', {
+    procLog.debug('Processing chunk', {
       runId: run.id,
       chunkNum,
       totalChunks,
@@ -290,7 +289,7 @@ export async function processProducts(
       // Per spec §4.2.2: "Last row wins" - skip non-winning rows (duplicates)
       const deduped = filterToWinningRows(chunk, chunkStart, winningRows)
 
-      log.debug('Chunk deduplication complete', {
+      procLog.debug('Chunk deduplication complete', {
         runId: run.id,
         chunkNum,
         originalSize: chunk.length,
@@ -299,7 +298,7 @@ export async function processProducts(
       })
 
       if (deduped.length === 0) {
-        log.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
+        procLog.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
         continue
       }
 
@@ -318,7 +317,7 @@ export async function processProducts(
         await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine)
         productsQuarantined += toQuarantine.length
 
-        log.info('QUARANTINE_BATCH', {
+        procLog.info('QUARANTINE_BATCH', {
           runId: run.id,
           chunkNum,
           quarantinedCount: toQuarantine.length,
@@ -327,19 +326,19 @@ export async function processProducts(
       }
 
       if (validProducts.length === 0) {
-        log.debug('Chunk skipped - all quarantined', { runId: run.id, chunkNum })
+        procLog.debug('Chunk skipped - all quarantined', { runId: run.id, chunkNum })
         continue
       }
 
       // Step 2: Batch upsert SourceProducts
-      log.debug('Upserting source products', { runId: run.id, chunkNum, count: validProducts.length })
+      procLog.debug('Upserting source products', { runId: run.id, chunkNum, count: validProducts.length })
       const upsertStart = Date.now()
       const upsertedProducts = await batchUpsertSourceProducts(
         sourceId,
         validProducts,
         run.id
       )
-      log.debug('Source products upserted', {
+      procLog.debug('Source products upserted', {
         runId: run.id,
         chunkNum,
         count: upsertedProducts.length,
@@ -361,7 +360,7 @@ export async function processProducts(
         upc: identityKeyToProduct.get(sp.identityKey)?.upc ?? null,
       }))
 
-      log.debug('Matching source products to canonical products', {
+      procLog.debug('Matching source products to canonical products', {
         runId: run.id,
         chunkNum,
         count: sourceProductsForMatching.length,
@@ -416,7 +415,7 @@ export async function processProducts(
             })
           )
         )
-        log.debug('RESOLVER_ENQUEUE_OK', {
+        procLog.debug('RESOLVER_ENQUEUE_OK', {
           runId: run.id,
           chunkNum,
           enqueuedCount: itemsNeedingResolver.length,
@@ -424,7 +423,7 @@ export async function processProducts(
         })
       }
 
-      log.info('MATCH_OK', {
+      procLog.info('MATCH_OK', {
         runId: run.id,
         chunkNum,
         matchedCount,
@@ -445,7 +444,7 @@ export async function processProducts(
       // (e.g., due to identifier collision). Without dedup, ON CONFLICT fails with:
       // "ON CONFLICT DO UPDATE command cannot affect row a second time"
       const uniqueSourceProductIds = [...new Set(sourceProductIds)]
-      log.debug('Updating presence and seen records', {
+      procLog.debug('Updating presence and seen records', {
         runId: run.id,
         chunkNum,
         count: uniqueSourceProductIds.length,
@@ -456,7 +455,7 @@ export async function processProducts(
         batchUpdatePresence(uniqueSourceProductIds, t0),
         batchRecordSeen(run.id, uniqueSourceProductIds),
       ])
-      log.debug('Presence and seen records updated', {
+      procLog.debug('Presence and seen records updated', {
         runId: run.id,
         chunkNum,
         durationMs: Date.now() - presenceStart,
@@ -466,7 +465,7 @@ export async function processProducts(
       // Per spec §4.2.1: Only fetch for IDs not already in cache
       const uncachedIds = sourceProductIds.filter((id) => !lastPriceCache.has(id))
       if (uncachedIds.length > 0) {
-        log.debug('Fetching last prices for uncached products', {
+        procLog.debug('Fetching last prices for uncached products', {
           runId: run.id,
           chunkNum,
           uncachedCount: uncachedIds.length,
@@ -477,14 +476,14 @@ export async function processProducts(
         for (const lp of fetchedPrices) {
           lastPriceCache.set(lp.sourceProductId, lp)
         }
-        log.debug('Last prices fetched', {
+        procLog.debug('Last prices fetched', {
           runId: run.id,
           chunkNum,
           fetchedCount: fetchedPrices.length,
           durationMs: Date.now() - fetchStart,
         })
       } else {
-        log.debug('All products in cache - skipping price fetch', { runId: run.id, chunkNum })
+        procLog.debug('All products in cache - skipping price fetch', { runId: run.id, chunkNum })
       }
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -493,7 +492,7 @@ export async function processProducts(
       // than expected. The cache grows with unique products, not rows.
       // ═══════════════════════════════════════════════════════════════════════
       if (lastPriceCache.size > maxRowCount) {
-        log.error('Memory guard triggered - unique product limit exceeded', {
+        procLog.error('Memory guard triggered - unique product limit exceeded', {
           runId: run.id,
           chunkNum,
           cacheSize: lastPriceCache.size,
@@ -509,7 +508,7 @@ export async function processProducts(
       // Step 5: Decide writes in-memory and collect prices to insert
       // Per spec §4.2.1: No per-row DB reads - all decisions use cache
       // Per affiliate-feed-alerts-v1: Also returns price/stock changes for alerting
-      log.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
+      procLog.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
       const { pricesToWrite, priceChanges, stockChanges } = decidePriceWrites(
         deduped,
         upsertedProducts,
@@ -519,7 +518,7 @@ export async function processProducts(
         lastPriceCache,
         sourceProductIdToProductId
       )
-      log.debug('Price write decisions made', {
+      procLog.debug('Price write decisions made', {
         runId: run.id,
         chunkNum,
         pricesToWrite: pricesToWrite.length,
@@ -547,10 +546,10 @@ export async function processProducts(
           chunkNum,
           planned: pricesToWrite.length,
         })
-        log.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
+        procLog.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
         const insertStart = Date.now()
         actualInserted = await bulkInsertPrices(pricesToWrite, t0)
-        log.debug('Prices inserted', {
+        procLog.debug('Prices inserted', {
           runId: run.id,
           chunkNum,
           requested: pricesToWrite.length,
@@ -623,7 +622,7 @@ export async function processProducts(
       pricesWritten += actualInserted
 
       const chunkDuration = Date.now() - chunkStartTime
-      log.info('CHUNK_OK', {
+      procLog.info('CHUNK_OK', {
         runId: run.id,
         chunkNum,
         totalChunks,
@@ -650,7 +649,7 @@ export async function processProducts(
         sample: { chunkSize: chunk.length },
       })
 
-      log.error('Chunk processing failed', {
+      procLog.error('Chunk processing failed', {
         runId: run.id,
         chunkNum,
         error: message,
@@ -662,7 +661,7 @@ export async function processProducts(
   const matcherStats = productMatcher.getStats()
   const totalDurationMs = Date.now() - t0.getTime()
 
-  log.info('Processing complete', {
+  procLog.info('Processing complete', {
     runId: run.id,
     productsUpserted,
     pricesWritten,
