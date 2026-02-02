@@ -32,7 +32,7 @@ let isEnabled = false
  * Start the Current Price Recompute scheduler
  *
  * IMPORTANT (ADR-001): Only one scheduler instance should run.
- * Enable via HARVESTER_SCHEDULER_ENABLED=true on exactly one harvester instance.
+ * Enable/disable via Admin Settings (database is single source of truth).
  *
  * Uses BullMQ repeatable jobs pattern (same as affiliate scheduler).
  */

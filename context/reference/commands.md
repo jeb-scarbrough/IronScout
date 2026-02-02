@@ -76,12 +76,15 @@ pnpm dev
 
 ### Harvester
 
-⚠️ Scheduler must be singleton.
+⚠️ Scheduler must be singleton (controlled via Admin Settings).
 
 ```bash
 cd apps/harvester
-HARVESTER_SCHEDULER_ENABLED=false pnpm dev
+pnpm dev
 ```
+
+Note: Scheduler enabled/disabled state is controlled via Admin UI (Settings > Danger Zone).
+For local dev, the database setting typically defaults to `false`. Use Admin UI to toggle.
 
 ---
 

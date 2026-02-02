@@ -67,8 +67,11 @@ This ADR applies to schedulers that create **execution records** (ingestion runs
 | Merchant scheduler (`apps/harvester/src/merchant/scheduler.ts`) | BullMQ repeatable jobs | **No** - BullMQ handles deduplication internally |
 
 **Key invariant**: No duplicate ingestion runs may be created. Different schedulers achieve this through different mechanisms:
-- Affiliate scheduler: distributed lock (`FOR UPDATE SKIP LOCKED`) + `HARVESTER_SCHEDULER_ENABLED` env var
+- Affiliate scheduler: distributed lock (`FOR UPDATE SKIP LOCKED`) + database setting (Admin UI control)
 - Merchant scheduler: BullMQ jobId deduplication (inherently idempotent)
+- Scrape scheduler: database setting (Admin UI control) with Emergency Stop capability
+
+**Scheduler Control (Updated 2026-02)**: The `HARVESTER_SCHEDULER_ENABLED` setting is now controlled exclusively via the Admin UI (Settings > Danger Zone). The database is the single source of truth - no env var override. This ensures Emergency Stop reliably disables all schedulers.
 
 **Workers** (job processors) are always safe to scale horizontally regardless of this ADR.
 

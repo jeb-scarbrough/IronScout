@@ -144,9 +144,11 @@ Networking:
 - `USER_AGENT` (optional)
 
 Scheduling:
-- `HARVESTER_SCHEDULER_ENABLED=true|false`
-  - Use this to enforce singleton scheduler deployments (ADR-001).
-  - Only one instance should set this true in production.
+- `HARVESTER_SCHEDULER_ENABLED` - **Controlled via admin settings only**
+  - This setting is managed through the Admin UI (Settings > Danger Zone)
+  - Database is the single source of truth (env var is ignored)
+  - Use Emergency Stop in admin to disable scheduler and clear queues
+  - Per ADR-001: Only one instance should run the scheduler
 
 Logging:
 - `LOG_ASYNC=true|1` - Enable async buffered logging with flush on shutdown (default: false)

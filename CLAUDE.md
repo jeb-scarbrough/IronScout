@@ -87,7 +87,8 @@ The Harvester is trust-critical.
 
 - Scheduling must be singleton
 - Do not run multiple schedulers
-- Use `HARVESTER_SCHEDULER_ENABLED=false` by default in local dev
+- Scheduler is controlled via Admin Settings (database is single source of truth)
+- Use Emergency Stop in admin to disable scheduler and clear queues
 - Never duplicate ingestion or mutate historical data
 - Never write data for ineligible dealers
 

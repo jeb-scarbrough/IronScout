@@ -7,7 +7,7 @@
  * Combined gate: sources.scrape_enabled AND sources.robots_compliant
  *
  * Singleton pattern - only one scheduler instance should run per deployment.
- * Use HARVESTER_SCHEDULER_ENABLED=true to enable.
+ * Enable/disable via Admin Settings (database is single source of truth).
  */
 
 import CronParser from 'cron-parser'
@@ -1122,7 +1122,7 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
  * Start the scrape scheduler.
  *
  * Singleton - only one scheduler should run.
- * Check HARVESTER_SCHEDULER_ENABLED before calling.
+ * Controlled via Admin Settings (database is single source of truth).
  */
 export function startScrapeScheduler(config?: SchedulerConfig): void {
   if (schedulerInterval) {

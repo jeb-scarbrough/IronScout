@@ -105,9 +105,18 @@ const CACHE_TTL_MS = 60_000 // 1 minute
 // =============================================================================
 
 /**
- * Get a boolean setting value (with env var override)
+ * Get a boolean setting value (with env var override for most settings)
+ *
+ * Note: HARVESTER_SCHEDULER_ENABLED is database-only (no env override)
+ * to ensure emergency stop works reliably.
  */
 export async function getBooleanSetting(key: SettingKey): Promise<boolean> {
+  // HARVESTER_SCHEDULER_ENABLED is database-only (no env override)
+  // This ensures emergency stop from admin UI works reliably
+  if (key === SETTING_KEYS.HARVESTER_SCHEDULER_ENABLED) {
+    return (await getSettingValue(key)) as boolean
+  }
+
   // Check env var first (for local override)
   const envValue = process.env[key]
   if (envValue === 'true') return true

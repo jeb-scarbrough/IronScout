@@ -12,10 +12,7 @@
  * - Skips failed feeds until manually re-enabled
  *
  * ADR-001 Scope Clarification:
- * ADR-001 (Singleton Harvester Scheduler) applies to the affiliate scheduler
- * which creates execution_logs and requires explicit singleton enforcement
- * via HARVESTER_SCHEDULER_ENABLED.
- *
+ * Scheduler is controlled via Admin Settings (database is single source of truth).
  * This retailer scheduler uses BullMQ repeatable jobs which handle
  * deduplication internally - multiple instances scheduling the same
  * repeatable job is safe because BullMQ deduplicates by jobId.

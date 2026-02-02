@@ -167,13 +167,14 @@ Workers log startup and heartbeat messages. Check logs for:
 **Symptom:** Duplicate job creation, data corruption
 
 **Prevention:**
-- Only one instance should have `HARVESTER_SCHEDULER_ENABLED=true`
+- Scheduler is controlled via Admin Settings (database is single source of truth)
+- Use Emergency Stop in Admin UI to disable scheduler and clear all queues
 - Other instances process jobs only, don't schedule
 
 **Resolution if detected:**
-1. Stop all harvester instances
-2. Clear any duplicate jobs from queues
-3. Restart with only ONE scheduler enabled
+1. Use Emergency Stop in Admin UI (Settings > Danger Zone or Scrapers page)
+2. This will disable scheduler AND clear all pending queue jobs
+3. Restart harvester - it will respect the database setting
 
 ---
 
@@ -223,7 +224,21 @@ Weekly checks:
 
 ## Emergency Procedures
 
-### Stopping All Processing
+### Emergency Stop (Recommended)
+
+Use the Admin UI Emergency Stop for immediate scraper shutdown:
+
+1. Navigate to Admin UI → Scrapers page
+2. Click "Emergency Stop" button
+3. Type `EMERGENCY_STOP` to confirm
+4. This will:
+   - Disable the harvester scheduler (database setting)
+   - Mark all running scrape runs as FAILED
+   - Clear all scraper queue jobs from Redis (scrape-url, product-resolve)
+
+The harvester will respect the disabled setting on restart.
+
+### Stopping All Processing (Manual)
 
 ```bash
 # Graceful shutdown (waits for current jobs)
@@ -243,7 +258,7 @@ Use Bull Board to:
 ### Recovery After Outage
 
 1. Verify Redis and PostgreSQL are healthy
-2. Start harvester workers (scheduler disabled initially)
+2. Start harvester workers (scheduler will check database setting)
 3. Check Bull Board for backed-up jobs
-4. Enable scheduler on ONE instance
+4. Enable scheduler via Admin Settings when ready
 5. Monitor for normal processing

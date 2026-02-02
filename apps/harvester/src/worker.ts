@@ -97,11 +97,11 @@ let currentPriceRecomputeWorker: Worker | null = null
 let scrapeWorker: Worker | null = null
 
 /**
- * Scheduler enabled flags (set during startup from database/env)
+ * Scheduler enabled flags (set during startup from database)
  *
  * IMPORTANT (ADR-001): Only ONE harvester instance should run schedulers.
- * Enable via admin settings or HARVESTER_SCHEDULER_ENABLED env var on exactly one instance.
- * All other instances should leave disabled or omit the variable.
+ * Enable/disable via Admin Settings (Danger Zone) - database is single source of truth.
+ * Emergency Stop in admin UI will disable scheduler and clear all queues.
  *
  * Running multiple schedulers causes duplicate ingestion and data corruption.
  */
