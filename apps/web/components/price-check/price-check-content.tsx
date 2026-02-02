@@ -320,10 +320,52 @@ function InitialView({
         </button>
       </div>
 
-      <p className="text-xs text-iron-500 pt-4">
-        Compare against recent online prices from major retailers.
+      {/* How it works */}
+      <div className="pt-6 border-t border-iron-800/50">
+        <h2 className="text-sm font-medium text-iron-300 mb-4">How it works</h2>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <div className="text-2xl font-bold text-primary mb-1">1</div>
+            <p className="text-xs text-iron-400">Scan UPC or enter caliber + price</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-primary mb-1">2</div>
+            <p className="text-xs text-iron-400">We compare against online prices</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-primary mb-1">3</div>
+            <p className="text-xs text-iron-400">See if you're getting a fair deal</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sample result preview */}
+      <div className="pt-4">
+        <p className="text-xs text-iron-500 mb-3">Example result:</p>
+        <Card className="border-blue-800/50 bg-blue-950/20 text-left">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-900/30 flex items-center justify-center">
+                <Minus className="h-5 w-5 text-blue-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">Typical Price</p>
+                <p className="text-xs text-iron-400 mt-0.5">
+                  $0.32/rd for 9mm is right in line with online prices
+                </p>
+                <p className="text-xs text-iron-500 mt-1">
+                  Range: $0.28 – $0.38/rd from 15 retailers
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <p className="text-xs text-iron-500 pt-2">
+        Based on 50,000+ price points from major retailers.
         <br />
-        In-store prices may differ. This is not financial advice.
+        This is not financial advice.
       </p>
     </div>
   )
