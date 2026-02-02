@@ -1437,6 +1437,10 @@ model scrape_adapter_status {
   disabledAt     DateTime?
   disabledReason ScrapeAdapterDisableReason?
   disabledBy     String?
+  ingestionPaused       Boolean  @default(false)
+  ingestionPausedAt     DateTime?
+  ingestionPausedReason String?
+  ingestionPausedBy     String?
 
   // Baseline metrics (7-day rolling, per spec §7.3)
   baselineFailureRate Decimal?  @db.Decimal(5, 4)

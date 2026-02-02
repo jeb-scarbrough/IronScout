@@ -145,6 +145,10 @@ export interface ScrapeRunDTO {
 export interface AdapterStatusDTO {
   adapterId: string
   enabled: boolean
+  ingestionPaused: boolean
+  ingestionPausedAt: Date | null
+  ingestionPausedReason: string | null
+  ingestionPausedBy: string | null
   lastRunAt: Date | null
   consecutiveFailedBatches: number
   disabledAt: Date | null
@@ -577,6 +581,10 @@ export async function listAdapterStatuses(): Promise<{ success: boolean; error?:
     const dtos: AdapterStatusDTO[] = statuses.map((s) => ({
       adapterId: s.adapterId,
       enabled: s.enabled,
+      ingestionPaused: s.ingestionPaused,
+      ingestionPausedAt: s.ingestionPausedAt,
+      ingestionPausedReason: s.ingestionPausedReason,
+      ingestionPausedBy: s.ingestionPausedBy,
       lastRunAt: lastRunMap.get(s.adapterId) ?? null,
       consecutiveFailedBatches: s.consecutiveFailedBatches,
       disabledAt: s.disabledAt,
@@ -634,6 +642,54 @@ export async function toggleAdapterEnabled(adapterId: string, enabled: boolean):
   } catch (error) {
     log.error('Failed to toggle adapter', { adapterId, enabled }, error instanceof Error ? error : new Error(String(error)))
     return { success: false, error: 'Failed to toggle adapter' }
+  }
+}
+
+export async function toggleAdapterIngestionPaused(adapterId: string, paused: boolean): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const existing = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+    })
+
+    const now = new Date()
+
+    if (!existing) {
+      await prisma.scrape_adapter_status.create({
+        data: {
+          adapterId,
+          enabled: true,
+          ingestionPaused: paused,
+          ingestionPausedAt: paused ? now : null,
+          ingestionPausedReason: paused ? 'MANUAL' : null,
+          ingestionPausedBy: paused ? (session.email ?? session.userId) : null,
+        },
+      })
+    } else {
+      await prisma.scrape_adapter_status.update({
+        where: { adapterId },
+        data: {
+          ingestionPaused: paused,
+          ingestionPausedAt: paused ? now : null,
+          ingestionPausedReason: paused ? 'MANUAL' : null,
+          ingestionPausedBy: paused ? (session.email ?? session.userId) : null,
+        },
+      })
+    }
+
+    await logAdminAction(session.userId, paused ? 'PAUSE_ADAPTER_INGESTION' : 'RESUME_ADAPTER_INGESTION', {
+      resource: 'ScrapeAdapter',
+      resourceId: adapterId,
+      newValue: { ingestionPaused: paused },
+    })
+
+    revalidatePath('/scrapers/adapters')
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to toggle adapter ingestion', { adapterId, paused }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to toggle adapter ingestion' }
   }
 }
 
@@ -702,6 +758,10 @@ export async function getAdapterDetail(adapterId: string): Promise<{ success: bo
       adapter: {
         adapterId: adapter.adapterId,
         enabled: adapter.enabled,
+        ingestionPaused: adapter.ingestionPaused,
+        ingestionPausedAt: adapter.ingestionPausedAt,
+        ingestionPausedReason: adapter.ingestionPausedReason,
+        ingestionPausedBy: adapter.ingestionPausedBy,
         lastRunAt: lastRun?.startedAt ?? null,
         consecutiveFailedBatches: adapter.consecutiveFailedBatches,
         disabledAt: adapter.disabledAt,
@@ -813,13 +873,17 @@ export async function triggerManualScrape(targetId: string): Promise<{ success: 
       return { success: false, error: 'Source is not robots compliant' }
     }
 
-    // Check adapter is enabled
+    // Check adapter is enabled and not paused
     const adapterStatus = await prisma.scrape_adapter_status.findUnique({
       where: { adapterId: target.adapterId },
     })
 
     if (adapterStatus && !adapterStatus.enabled) {
       return { success: false, error: 'Adapter is disabled' }
+    }
+
+    if (adapterStatus?.ingestionPaused) {
+      return { success: false, error: 'Adapter ingestion is paused' }
     }
 
     // Per spec §8.2: Check queue capacity before accepting manual triggers

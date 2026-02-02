@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-react'
+import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Target, Package, VolumeX, Crosshair, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
 import { PremiumFilters } from '@/components/premium'
@@ -41,13 +41,13 @@ const ROTATING_PLACEHOLDERS = [
   ".308 match grade for long range",
 ]
 
-// Quick-start example chips
+// Quick-start example chips with icons
 const EXAMPLE_CHIPS = [
-  { label: '9mm bulk', query: '9mm bulk for range' },
-  { label: '.223 range ammo', query: '.223 cheap target practice' },
-  { label: 'home defense', query: '9mm hollow point home defense' },
-  { label: '.22 LR', query: '.22 LR bulk cheap' },
-  { label: '5.56 NATO', query: '5.56 NATO M855 bulk' },
+  { label: '9mm Range', query: '9mm for range practice', icon: Target },
+  { label: '9mm Bulk', query: '9mm bulk for range', icon: Package },
+  { label: '300BLK Subsonic', query: '300 blackout subsonic', icon: VolumeX },
+  { label: '5.56 Match 77gr', query: '5.56 match grade 77 grain', icon: Crosshair },
+  { label: '.22LR Plinking', query: '.22 LR bulk plinking', icon: Target },
 ]
 
 const advancedExampleQueries = [
@@ -257,18 +257,18 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
 
   return (
     <div className="w-full">
-      {/* Hero Search Bar - Tactical Console Style */}
+      {/* Hero Search Bar - Pill Style per Design */}
       <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="relative">
-          <div className="relative">
-            {/* AI Search - subtle indicator */}
-            <div className="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <div className="relative flex items-center bg-card border border-border rounded-full shadow-lg hover:shadow-xl transition-shadow">
+            {/* AI Badge - Cyan pill on the left */}
+            <div className="flex-shrink-0 pl-4">
               <div className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-muted-foreground font-mono text-xs transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold transition-all",
                 isSearching && "animate-pulse"
               )}>
                 <Sparkles className={cn("h-3.5 w-3.5", isSearching && "animate-spin")} />
-                <span className="text-xs font-medium">AI</span>
+                <span>AI</span>
               </div>
             </div>
 
@@ -285,7 +285,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
               onFocus={() => setShowSuggestions(true)}
               placeholder={ROTATING_PLACEHOLDERS[placeholderIndex]}
               data-testid="search-input"
-              className="w-full pl-24 sm:pl-28 pr-36 py-5 text-lg bg-transparent border-2 border-border rounded-2xl focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/60 transition-all shadow-lg hover:shadow-xl dark:shadow-primary/5"
+              className="flex-1 px-4 py-4 text-base bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-muted-foreground/50"
             />
 
             {/* Clear button */}
@@ -296,23 +296,23 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                   setQuery('')
                   inputRef.current?.focus()
                 }}
-                className="absolute right-28 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors"
+                className="flex-shrink-0 p-2 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             )}
 
+            {/* Search Button - Cyan pill on the right */}
             <Button
               type="submit"
               disabled={isSearching}
-              size="lg"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-primary hover:bg-primary/90 rounded-xl px-5 font-semibold tracking-wide shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200"
+              className="flex-shrink-0 mr-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-5 py-2 h-auto font-semibold shadow-md hover:shadow-lg transition-all"
             >
               {isSearching ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  <Search className="h-5 w-5 mr-2" />
+                  <Search className="h-4 w-4 mr-2" />
                   Search
                 </>
               )}
@@ -358,20 +358,30 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
               Compare prices across retailers. Save what you find.
             </p>
 
-            {/* Clickable example chips */}
+            {/* Clickable example chips with icons */}
             <div className="flex flex-wrap justify-center gap-2">
-              {EXAMPLE_CHIPS.map((chip, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setQuery(chip.query)
-                    handleSearch(chip.query)
-                  }}
-                  className="px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/50 transition-all text-sm font-medium text-foreground shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  {chip.label}
-                </button>
-              ))}
+              {EXAMPLE_CHIPS.map((chip, i) => {
+                const Icon = chip.icon
+                const isFirst = i === 0
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setQuery(chip.query)
+                      handleSearch(chip.query)
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0",
+                      isFirst
+                        ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                        : "bg-card text-foreground border-border hover:border-primary/50"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {chip.label}
+                  </button>
+                )
+              })}
             </div>
 
             <div className="pt-3 border-t border-border">
@@ -397,183 +407,198 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
         )}
       </div>
 
-      {/* Refine Toggle - Minimal, secondary action */}
+      {/* Horizontal Filter Bar - Always visible when query exists */}
       {query && (
-        <div className="max-w-4xl mx-auto mt-2 flex items-center justify-center">
-          <button
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-xs ${
-              filtersOpen || activeFilterCount > 0
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>
-              {activeFilterCount > 0 ? `Refine (${activeFilterCount})` : 'Refine results'}
-            </span>
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
-          </button>
+        <div className="max-w-4xl mx-auto mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filters button - opens advanced panel */}
+            <button
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors",
+                filtersOpen || activeFilterCount > 0
+                  ? "bg-muted text-foreground border-border"
+                  : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {/* Inline dropdown filters */}
+            <select
+              value={filters.caliber}
+              onChange={(e) => handleSelectChange('caliber', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.caliber ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Caliber</option>
+              {CALIBERS.map(cal => (
+                <option key={cal} value={cal}>{cal}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.minGrain && filters.maxGrain ? `${filters.minGrain}-${filters.maxGrain}` : ''}
+              onChange={(e) => {
+                if (!e.target.value) {
+                  const newFilters = { ...filters, minGrain: '', maxGrain: '' }
+                  setFilters(newFilters)
+                  applyFilters(newFilters)
+                } else {
+                  const [min, max] = e.target.value.split('-').map(Number)
+                  handleGrainRange(min, max)
+                }
+              }}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.minGrain ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Grain</option>
+              {GRAIN_RANGES.map(range => (
+                <option key={range.label} value={`${range.min}-${range.max}`}>{range.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.caseMaterial}
+              onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Casing</option>
+              {CASE_MATERIALS.map(mat => (
+                <option key={mat} value={mat}>{mat}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.purpose}
+              onChange={(e) => handleSelectChange('purpose', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Type</option>
+              {PURPOSES.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            {/* Spacer to push toggles to the right */}
+            <div className="flex-1" />
+
+            {/* Toggle pill buttons */}
+            <button
+              onClick={() => handleCheckboxChange(!filters.inStock)}
+              className={cn(
+                "px-4 py-2 rounded-lg border text-sm font-medium transition-colors",
+                filters.inStock
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              In Stock
+            </button>
+
+            {/* Clear filters button - shown when filters are active */}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearFilters}
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                title="Clear all filters"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Refine Panel */}
+      {/* Advanced Filters Panel - shown when Filters button is clicked */}
       {filtersOpen && (
         <div className="max-w-4xl mx-auto mt-3 p-4 bg-muted/30 rounded-xl border border-border/50 animate-in slide-in-from-top-2 duration-200">
-          {activeFilterCount > 0 && (
-            <div className="flex justify-end mb-3">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-foreground">Advanced Filters</h3>
+            {activeFilterCount > 0 && (
               <button
                 onClick={clearFilters}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
               >
                 <RotateCcw className="h-3 w-3" />
-                Clear
+                Clear all
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Core 3 filters - always visible */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Caliber */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Caliber
-              </label>
-              <select
-                value={filters.caliber}
-                onChange={(e) => handleSelectChange('caliber', e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-              >
-                <option value="">All calibers</option>
-                {CALIBERS.map(cal => (
-                  <option key={cal} value={cal}>{cal}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Total Price */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Total Price
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                  <input
-                    id="min-price"
-                    name="minPrice"
-                    type="number"
-                    value={filters.minPrice}
-                    onChange={(e) => handlePriceChange('minPrice', e.target.value)}
-                    placeholder="Min"
-                    min="0"
-                    step="0.01"
-                    className="w-full pl-6 pr-2 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                  />
-                </div>
-                <span className="text-muted-foreground">–</span>
-                <div className="relative flex-1">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                  <input
-                    id="max-price"
-                    name="maxPrice"
-                    type="number"
-                    value={filters.maxPrice}
-                    onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
-                    placeholder="Max"
-                    min="0"
-                    step="0.01"
-                    className="w-full pl-6 pr-2 py-2.5 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* In Stock Toggle */}
-            <div className="flex items-end">
-              <label htmlFor="in-stock" className="flex items-center gap-3 cursor-pointer w-full px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/50 transition-colors">
+          {/* Price Range */}
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-2">
+              Total Price Range
+            </label>
+            <div className="flex items-center gap-2 max-w-xs">
+              <div className="relative flex-1">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <input
-                  id="in-stock"
-                  name="inStock"
-                  type="checkbox"
-                  checked={filters.inStock}
-                  onChange={(e) => handleCheckboxChange(e.target.checked)}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                  id="min-price"
+                  name="minPrice"
+                  type="number"
+                  value={filters.minPrice}
+                  onChange={(e) => handlePriceChange('minPrice', e.target.value)}
+                  placeholder="Min"
+                  min="0"
+                  step="0.01"
+                  className="w-full pl-6 pr-2 py-2 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
                 />
-                <span className="text-sm">In stock only</span>
-              </label>
+              </div>
+              <span className="text-muted-foreground">–</span>
+              <div className="relative flex-1">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <input
+                  id="max-price"
+                  name="maxPrice"
+                  type="number"
+                  value={filters.maxPrice}
+                  onChange={(e) => handlePriceChange('maxPrice', e.target.value)}
+                  placeholder="Max"
+                  min="0"
+                  step="0.01"
+                  className="w-full pl-6 pr-2 py-2 text-sm border rounded-lg bg-background focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Advanced Refinements - collapsed by default */}
-          <details className="mt-3 pt-3 border-t border-border/50 group">
-            <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors list-none flex items-center gap-1.5">
-              <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
-              Advanced refinements
-            </summary>
-
-            <div className="mt-3 space-y-3">
-              {/* Purpose, Case Material, Grain - in a compact row */}
-              <div className="grid grid-cols-3 gap-3">
-                <select
-                  value={filters.purpose}
-                  onChange={(e) => handleSelectChange('purpose', e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border rounded-lg bg-background focus:border-primary transition-colors"
-                >
-                  <option value="">Purpose</option>
-                  {PURPOSES.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.caseMaterial}
-                  onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border rounded-lg bg-background focus:border-primary transition-colors"
-                >
-                  <option value="">Case material</option>
-                  {CASE_MATERIALS.map(mat => (
-                    <option key={mat} value={mat}>{mat}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={filters.minGrain && filters.maxGrain ? `${filters.minGrain}-${filters.maxGrain}` : ''}
-                  onChange={(e) => {
-                    if (!e.target.value) {
-                      const newFilters = { ...filters, minGrain: '', maxGrain: '' }
-                      setFilters(newFilters)
-                      applyFilters(newFilters)
-                    } else {
-                      const [min, max] = e.target.value.split('-').map(Number)
-                      handleGrainRange(min, max)
-                    }
-                  }}
-                  className="w-full px-2 py-1.5 text-xs border rounded-lg bg-background focus:border-primary transition-colors"
-                >
-                  <option value="">Grain weight</option>
-                  {GRAIN_RANGES.map(range => (
-                    <option key={range.label} value={`${range.min}-${range.max}`}>{range.label}</option>
-                  ))}
-                </select>
+          {/* Performance Filters */}
+          <div className="pt-3 border-t border-border/50">
+            <button
+              onClick={() => setPerformanceFiltersOpen(!performanceFiltersOpen)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span>Performance filters</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${performanceFiltersOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {performanceFiltersOpen && (
+              <div className="mt-3">
+                <PremiumFilters />
               </div>
-
-              <div className="pt-2">
-                <button
-                  onClick={() => setPerformanceFiltersOpen(!performanceFiltersOpen)}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span>Performance filters</span>
-                  <ChevronDown className={`h-3 w-3 transition-transform ${performanceFiltersOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {performanceFiltersOpen && (
-                  <div className="mt-2">
-                    <PremiumFilters />
-                  </div>
-                )}
-              </div>
-            </div>
-          </details>
+            )}
+          </div>
         </div>
       )}
     </div>

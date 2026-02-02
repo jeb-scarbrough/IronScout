@@ -773,7 +773,7 @@ async function processManualRuns(): Promise<void> {
 
       const adapterStatus = await prisma.scrape_adapter_status.findUnique({
         where: { adapterId: target.adapterId },
-        select: { enabled: true },
+        select: { enabled: true, ingestionPaused: true },
       })
 
       if (adapterStatus && !adapterStatus.enabled) {
@@ -784,6 +784,18 @@ async function processManualRuns(): Promise<void> {
         await prisma.scrape_targets.update({
           where: { id: target.id },
           data: { lastStatus: 'SKIPPED_ADAPTER_DISABLED' },
+        })
+        continue
+      }
+
+      if (adapterStatus?.ingestionPaused) {
+        log.warn('Skipping manual run - adapter ingestion paused', {
+          targetId: target.id,
+          adapterId: target.adapterId,
+        })
+        await prisma.scrape_targets.update({
+          where: { id: target.id },
+          data: { lastStatus: 'SKIPPED_INGESTION_PAUSED' },
         })
         continue
       }
@@ -952,11 +964,19 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         // Check adapter status in database
         const adapterStatus = await prisma.scrape_adapter_status.findUnique({
           where: { adapterId: target.adapterId },
-          select: { enabled: true },
+          select: { enabled: true, ingestionPaused: true },
         })
 
         if (adapterStatus && !adapterStatus.enabled) {
           log.debug('Skipping target - adapter disabled', {
+            targetId: target.id,
+            adapterId: target.adapterId,
+          })
+          continue
+        }
+
+        if (adapterStatus?.ingestionPaused) {
+          log.debug('Skipping target - adapter ingestion paused', {
             targetId: target.id,
             adapterId: target.adapterId,
           })

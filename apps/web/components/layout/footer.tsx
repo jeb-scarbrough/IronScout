@@ -50,11 +50,6 @@ export function Footer() {
                   Pricing
                 </Link>
               </li>
-              <li>
-                <Link href="/dashboard" className="text-muted-foreground hover:text-primary">
-                  Dashboard
-                </Link>
-              </li>
             </ul>
           </div>
 

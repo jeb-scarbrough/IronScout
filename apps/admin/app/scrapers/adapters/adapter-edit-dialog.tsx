@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, RefreshCw, ExternalLink, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { X, RefreshCw, ExternalLink, AlertTriangle, CheckCircle, XCircle, PauseCircle, PlayCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { getAdapterDetail, resetAdapterFailures, toggleAdapterEnabled } from '../actions'
+import { getAdapterDetail, resetAdapterFailures, toggleAdapterEnabled, toggleAdapterIngestionPaused } from '../actions'
 import type { AdapterDetailDTO } from '../actions'
 
 interface AdapterEditDialogProps {
@@ -56,11 +56,30 @@ function StatusBadge({ enabled, disabledReason }: { enabled: boolean; disabledRe
   )
 }
 
+function IngestionBadge({ paused }: { paused: boolean }) {
+  if (paused) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+        <PauseCircle className="h-3 w-3" />
+        Ingestion Paused
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+      <PlayCircle className="h-3 w-3" />
+      Ingestion Active
+    </span>
+  )
+}
+
 export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps) {
   const router = useRouter()
   const [adapter, setAdapter] = useState<AdapterDetailDTO | null>(null)
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState(false)
+  const [pausing, setPausing] = useState(false)
   const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
@@ -97,6 +116,28 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
       toast.error('An unexpected error occurred')
     } finally {
       setToggling(false)
+    }
+  }
+
+  const handleToggleIngestion = async () => {
+    if (!adapter) return
+    setPausing(true)
+    try {
+      const result = await toggleAdapterIngestionPaused(adapterId, !adapter.ingestionPaused)
+      if (result.success) {
+        toast.success(adapter.ingestionPaused ? 'Ingestion resumed' : 'Ingestion paused')
+        const updated = await getAdapterDetail(adapterId)
+        if (updated.success && updated.adapter) {
+          setAdapter(updated.adapter)
+        }
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to toggle ingestion')
+      }
+    } catch {
+      toast.error('An unexpected error occurred')
+    } finally {
+      setPausing(false)
     }
   }
 
@@ -148,7 +189,10 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
               <code className="text-sm font-medium bg-gray-100 px-3 py-1.5 rounded">
                 {adapter.adapterId}
               </code>
-              <StatusBadge enabled={adapter.enabled} disabledReason={adapter.disabledReason} />
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge enabled={adapter.enabled} disabledReason={adapter.disabledReason} />
+                <IngestionBadge paused={adapter.ingestionPaused} />
+              </div>
             </div>
 
             {/* Disabled info */}
@@ -165,6 +209,24 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
                 {adapter.disabledBy && (
                   <p className="text-sm text-red-700 mt-1">
                     <strong>By:</strong> {adapter.disabledBy}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {adapter.ingestionPaused && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>Ingestion paused:</strong> {formatDate(adapter.ingestionPausedAt)}
+                </p>
+                {adapter.ingestionPausedReason && (
+                  <p className="text-sm text-yellow-700 mt-1">
+                    <strong>Reason:</strong> {adapter.ingestionPausedReason}
+                  </p>
+                )}
+                {adapter.ingestionPausedBy && (
+                  <p className="text-sm text-yellow-700 mt-1">
+                    <strong>By:</strong> {adapter.ingestionPausedBy}
                   </p>
                 )}
               </div>
@@ -264,6 +326,18 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
                 }`}
               >
                 {toggling ? 'Processing...' : adapter.enabled ? 'Disable Adapter' : 'Enable Adapter'}
+              </button>
+
+              <button
+                onClick={handleToggleIngestion}
+                disabled={pausing}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50 ${
+                  adapter.ingestionPaused
+                    ? 'text-green-700 bg-green-100 hover:bg-green-200'
+                    : 'text-yellow-800 bg-yellow-100 hover:bg-yellow-200'
+                }`}
+              >
+                {pausing ? 'Processing...' : adapter.ingestionPaused ? 'Resume Ingestion' : 'Pause Ingestion'}
               </button>
 
               <Link

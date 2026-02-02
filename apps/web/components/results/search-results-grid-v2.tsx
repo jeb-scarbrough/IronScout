@@ -235,7 +235,7 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
 
       {viewMode === 'card' ? (
         // Card View
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
           {displayProducts.map((product) => (
             <div key={product.id} className="h-full">
               <ResultCardV2
@@ -378,7 +378,7 @@ export function SearchResultsGridV2Skeleton({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: count }).map((_, i) => (
         <ResultCardV2Skeleton key={i} />
       ))}
