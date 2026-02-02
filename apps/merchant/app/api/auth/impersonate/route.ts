@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
   if (!token) {
     loggers.auth.error('Impersonation: No token provided');
-    return NextResponse.redirect(`${baseUrl}/login?error=missing_token`);
+    return NextResponse.redirect(`${baseUrl}/status/401`);
   }
 
   try {
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     // Check if this is an impersonation token
     if (!payload.isImpersonating) {
       loggers.auth.error('Impersonation: Token is not an impersonation token');
-      return NextResponse.redirect(`${baseUrl}/login?error=invalid_token`);
+      return NextResponse.redirect(`${baseUrl}/status/401`);
     }
 
     // Verify the merchant user still exists and is valid
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     if (!merchantUser) {
       loggers.auth.error('Impersonation: Merchant user not found', { merchantUserId });
-      return NextResponse.redirect(`${baseUrl}/login?error=merchant_not_found`);
+      return NextResponse.redirect(`${baseUrl}/status/403`);
     }
 
     // Create a fresh session token
@@ -148,6 +148,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     loggers.auth.error('Impersonation error', {}, error instanceof Error ? error : new Error(String(error)));
-    return NextResponse.redirect(`${baseUrl}/login?error=invalid_token`);
+    return NextResponse.redirect(`${baseUrl}/status/401`);
   }
 }

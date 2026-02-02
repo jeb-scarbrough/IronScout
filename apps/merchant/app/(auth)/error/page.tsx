@@ -1,20 +1,12 @@
-import Link from 'next/link'
+import Link from 'next/link';
 
 const ERROR_COPY: Record<string, { title: string; description: string; steps: string[] }> = {
   AccessDenied: {
     title: 'Access denied',
-    description: 'This account is not authorized for admin access.',
+    description: 'This account is not authorized to sign in.',
     steps: [
       'Try a different account.',
       'If you believe this is a mistake, contact support.',
-    ],
-  },
-  OAuthAccountNotLinked: {
-    title: 'Account already exists',
-    description: 'This email is linked to a different sign-in method.',
-    steps: [
-      'Use the sign-in method you originally used.',
-      'Contact support if you no longer have access.',
     ],
   },
   Configuration: {
@@ -33,14 +25,14 @@ const ERROR_COPY: Record<string, { title: string; description: string; steps: st
       'Ensure cookies are enabled in your browser.',
     ],
   },
-}
+};
 
 export default function AuthErrorPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: { error?: string };
 }) {
-  const errorKey = searchParams.error || 'AccessDenied'
+  const errorKey = searchParams.error || 'AccessDenied';
   const config = ERROR_COPY[errorKey] ?? {
     title: 'Sign-in error',
     description: 'We couldn’t complete the sign-in request.',
@@ -48,7 +40,7 @@ export default function AuthErrorPage({
       'Try again using the sign-in page.',
       'Contact support if the issue continues.',
     ],
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
@@ -63,7 +55,7 @@ export default function AuthErrorPage({
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
-            href="/auth/signin"
+            href="/login"
             className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
             Back to sign in
@@ -77,5 +69,5 @@ export default function AuthErrorPage({
         </div>
       </div>
     </div>
-  )
+  );
 }
