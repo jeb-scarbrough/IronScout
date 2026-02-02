@@ -1826,6 +1826,9 @@ export interface PriceCheckParams {
   pricePerRound: number
   brand?: string
   grain?: number
+  roundCount?: number
+  caseMaterial?: string
+  bulletType?: BulletType
 }
 
 /**

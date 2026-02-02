@@ -33,6 +33,8 @@ import {
   type PriceCheckResult,
   type PriceClassification,
   type UpcLookupProduct,
+  type BulletType,
+  BULLET_TYPE_LABELS,
 } from '@/lib/api'
 import { BarcodeScanner } from '@/components/price-check/barcode-scanner'
 
@@ -76,6 +78,9 @@ export function PriceCheckContent({ accessToken }: PriceCheckContentProps) {
   const [pricePerRound, setPricePerRound] = useState('')
   const [brand, setBrand] = useState('')
   const [grain, setGrain] = useState('')
+  const [roundCount, setRoundCount] = useState('')
+  const [caseMaterial, setCaseMaterial] = useState('')
+  const [bulletType, setBulletType] = useState<BulletType | ''>('')
 
   // Result state
   const [result, setResult] = useState<PriceCheckResult | null>(null)
@@ -133,6 +138,7 @@ export function PriceCheckContent({ accessToken }: PriceCheckContentProps) {
           pricePerRound: calculatedPricePerRound,
           brand: scannedProduct.brand || undefined,
           grain: scannedProduct.grainWeight || undefined,
+          roundCount: scannedProduct.roundCount || undefined,
         },
         accessToken
       )
@@ -166,6 +172,9 @@ export function PriceCheckContent({ accessToken }: PriceCheckContentProps) {
           pricePerRound: price,
           brand: brand || undefined,
           grain: grain ? parseInt(grain) : undefined,
+          roundCount: roundCount ? parseInt(roundCount) : undefined,
+          caseMaterial: caseMaterial || undefined,
+          bulletType: bulletType || undefined,
         },
         accessToken
       )
@@ -188,6 +197,9 @@ export function PriceCheckContent({ accessToken }: PriceCheckContentProps) {
     setPricePerRound('')
     setBrand('')
     setGrain('')
+    setRoundCount('')
+    setCaseMaterial('')
+    setBulletType('')
     setError(null)
     setPageState('initial')
   }
@@ -252,6 +264,12 @@ export function PriceCheckContent({ accessToken }: PriceCheckContentProps) {
           setBrand={setBrand}
           grain={grain}
           setGrain={setGrain}
+          roundCount={roundCount}
+          setRoundCount={setRoundCount}
+          caseMaterial={caseMaterial}
+          setCaseMaterial={setCaseMaterial}
+          bulletType={bulletType}
+          setBulletType={setBulletType}
           onSubmit={handleManualPriceCheck}
           onBack={() => setPageState('initial')}
           isLoading={isLoading}
@@ -282,30 +300,30 @@ function InitialView({
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
           <ScanBarcode className="h-10 w-10 text-primary" />
         </div>
-        <h1 className="text-xl font-semibold text-white">Is this price normal?</h1>
+        <h1 className="text-xl font-semibold text-white">Check a store price fast</h1>
         <p className="text-sm text-iron-400 mt-2">
-          Scan a barcode or enter details manually.
+          Scan an in-store barcode or enter the box details.
         </p>
       </div>
 
       <div className="space-y-4">
         <Button onClick={onStartScan} className="w-full h-12 text-base" size="lg">
           <ScanBarcode className="h-5 w-5 mr-2" />
-          Scan Barcode
+          Scan In-Store Barcode
         </Button>
 
         <button
           onClick={onManualEntry}
           className="text-sm text-iron-400 hover:text-white underline underline-offset-4 transition-colors"
         >
-          or enter details manually
+          or enter box details manually
         </button>
       </div>
 
       <p className="text-xs text-iron-500 pt-4">
         Compare against recent online prices from major retailers.
         <br />
-        This is not financial advice.
+        In-store prices may differ. This is not financial advice.
       </p>
     </div>
   )
@@ -384,7 +402,7 @@ function ProductFoundView({
       {/* Price Entry Form */}
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="boxPrice" className="text-iron-200">What price are you seeing?</Label>
+          <Label htmlFor="boxPrice" className="text-iron-200">What in-store price are you seeing?</Label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-iron-500">
               $
@@ -496,6 +514,12 @@ function ManualEntryForm({
   setBrand,
   grain,
   setGrain,
+  roundCount,
+  setRoundCount,
+  caseMaterial,
+  setCaseMaterial,
+  bulletType,
+  setBulletType,
   onSubmit,
   onBack,
   isLoading,
@@ -509,6 +533,12 @@ function ManualEntryForm({
   setBrand: (v: string) => void
   grain: string
   setGrain: (v: string) => void
+  roundCount: string
+  setRoundCount: (v: string) => void
+  caseMaterial: string
+  setCaseMaterial: (v: string) => void
+  bulletType: BulletType | ''
+  setBulletType: (v: BulletType | '') => void
   onSubmit: (e: React.FormEvent) => void
   onBack: () => void
   isLoading: boolean
@@ -521,7 +551,7 @@ function ManualEntryForm({
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-lg font-semibold text-white">Manual Price Check</h1>
+          <h1 className="text-lg font-semibold text-white">Manual Store Price Check</h1>
           <p className="text-sm text-iron-400">
             Enter the details you see on the box
           </p>
@@ -598,6 +628,56 @@ function ManualEntryForm({
             onChange={(e) => setGrain(e.target.value)}
             className="bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
           />
+        </div>
+
+        {/* Optional: Round count */}
+        <div className="space-y-2">
+          <Label htmlFor="roundCount" className="text-iron-200">Box count (optional)</Label>
+          <Input
+            id="roundCount"
+            type="number"
+            min="1"
+            max="5000"
+            placeholder="e.g., 20, 50, 100"
+            value={roundCount}
+            onChange={(e) => setRoundCount(e.target.value)}
+            className="bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
+          />
+        </div>
+
+        {/* Optional: Case material */}
+        <div className="space-y-2">
+          <Label htmlFor="caseMaterial" className="text-iron-200">Case material (optional)</Label>
+          <Input
+            id="caseMaterial"
+            placeholder="e.g., Brass, Steel, Aluminum"
+            value={caseMaterial}
+            onChange={(e) => setCaseMaterial(e.target.value)}
+            className="bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
+          />
+        </div>
+
+        {/* Optional: Bullet type */}
+        <div className="space-y-2">
+          <Label htmlFor="bulletType" className="text-iron-200">Bullet type (optional)</Label>
+          <Select
+            value={bulletType}
+            onValueChange={(v) => setBulletType(v === '' ? '' : (v as BulletType))}
+          >
+            <SelectTrigger id="bulletType" className="bg-iron-900 border-iron-700 text-white">
+              <SelectValue placeholder="Select bullet type" />
+            </SelectTrigger>
+            <SelectContent className="bg-iron-900 border-iron-700">
+              <SelectItem value="" className="text-iron-200 focus:bg-iron-800 focus:text-white">
+                Not specified
+              </SelectItem>
+              {Object.entries(BULLET_TYPE_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value} className="text-iron-200 focus:bg-iron-800 focus:text-white">
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {error && (

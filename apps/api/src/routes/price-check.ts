@@ -17,6 +17,7 @@ import { CANONICAL_CALIBERS, isValidCaliber } from '../services/gun-locker'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { getRequestContext } from '@ironscout/logger'
+import { BULLET_TYPE_LABELS, type BulletType } from '../types/product-metadata'
 
 const log = loggers.dashboard // Use dashboard logger for user-facing features
 
@@ -25,6 +26,8 @@ const router: Router = Router()
 // ============================================================================
 // Validation Schema
 // ============================================================================
+
+const BULLET_TYPES = Object.keys(BULLET_TYPE_LABELS) as BulletType[]
 
 const priceCheckSchema = z.object({
   caliber: z.string().refine(isValidCaliber, {
@@ -36,6 +39,9 @@ const priceCheckSchema = z.object({
     .max(10, 'Price per round seems too high (max $10/rd)'),
   brand: z.string().max(100).optional(),
   grain: z.number().int().min(1).max(1000).optional(),
+  roundCount: z.number().int().min(1).max(5000).optional(),
+  caseMaterial: z.string().max(50).optional(),
+  bulletType: z.enum(BULLET_TYPES).optional(),
 })
 
 // ============================================================================
@@ -52,9 +58,17 @@ router.post('/', async (req: Request, res: Response) => {
       })
     }
 
-    const { caliber, pricePerRound, brand, grain } = parsed.data
+    const { caliber, pricePerRound, brand, grain, roundCount, caseMaterial, bulletType } = parsed.data
 
-    const result = await checkPrice(caliber, pricePerRound, brand, grain)
+    const result = await checkPrice(
+      caliber,
+      pricePerRound,
+      brand,
+      grain,
+      roundCount,
+      caseMaterial,
+      bulletType
+    )
 
     // Check if user has Gun Locker (for optional prompt)
     const userId = getAuthenticatedUserId(req)

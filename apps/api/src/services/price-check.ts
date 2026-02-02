@@ -40,12 +40,18 @@ export interface PriceCheckResult {
  * @param pricePerRound - Entered price per round in cents (e.g., 0.30 = $0.30/rd)
  * @param brand - Optional brand filter
  * @param grain - Optional grain weight filter
+ * @param roundCount - Optional round count filter
+ * @param caseMaterial - Optional case material filter
+ * @param bulletType - Optional bullet type filter
  */
 export async function checkPrice(
   caliber: string,
   pricePerRound: number,
   brand?: string,
-  grain?: number
+  grain?: number,
+  roundCount?: number,
+  caseMaterial?: string,
+  bulletType?: string
 ): Promise<PriceCheckResult> {
   // Validate caliber is canonical
   if (!isValidCaliber(caliber)) {
@@ -63,6 +69,9 @@ export async function checkPrice(
   // Build brand/grain filters
   let brandCondition = ''
   let grainCondition = ''
+  let roundCountCondition = ''
+  let caseMaterialCondition = ''
+  let bulletTypeCondition = ''
   const params: any[] = [thirtyDaysAgo, ...caliberConditions.params]
 
   if (brand) {
@@ -73,6 +82,21 @@ export async function checkPrice(
   if (grain) {
     grainCondition = `AND p."grainWeight" = $${params.length + 1}`
     params.push(grain)
+  }
+
+  if (roundCount) {
+    roundCountCondition = `AND p."roundCount" = $${params.length + 1}`
+    params.push(roundCount)
+  }
+
+  if (caseMaterial) {
+    caseMaterialCondition = `AND LOWER(p."caseMaterial") LIKE $${params.length + 1}`
+    params.push(`%${caseMaterial.toLowerCase()}%`)
+  }
+
+  if (bulletType) {
+    bulletTypeCondition = `AND p."bulletType" = $${params.length + 1}`
+    params.push(bulletType)
   }
 
   // Get daily best prices per product for the caliber in trailing 30 days
@@ -180,6 +204,9 @@ export async function checkPrice(
         AND (${caliberConditions.sql})
         ${brandCondition}
         ${grainCondition}
+        ${roundCountCondition}
+        ${caseMaterialCondition}
+        ${bulletTypeCondition}
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT
