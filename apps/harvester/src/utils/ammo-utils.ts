@@ -40,12 +40,12 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?380\s?acp\b|380\s?auto\b/i, normalized: '.380 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?32\s?acp\b|32\s?auto\b/i, normalized: '.32 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?32\s?h&r\s?mag(?:num)?\b/i, normalized: '.32 H&R Magnum' },
-  { pattern: /(?:^|\s|\W)\.?\s?32\s?win(?:chester)?\s?(?:special|spl)\b|32\s?special\b/i, normalized: '.32 Winchester Special' },
+  { pattern: /(?:^|\s|\W)\.?\s?32\s?win\.?\s?(?:chester)?\s?(?:special|spl)\b|32\s?special\b/i, normalized: '.32 Winchester Special' },
   { pattern: /(?:^|\s|\W)\.?\s?32-20\s?win(?:chester)?\b|32-20\b/i, normalized: '.32-20 Winchester' },
   { pattern: /(?:^|\s|\W)\.?\s?25\s?acp\b|25\s?auto\b/i, normalized: '.25 ACP' },
   { pattern: /\b5\.7x28(?:mm)?\b|5\.7\s?fn\b/i, normalized: '5.7x28mm' },
   { pattern: /\b4\.6\s?x?\s?30(?:mm)?\b/i, normalized: '4.6x30mm' },
-  { pattern: /(?:^|\s|\W)\.?\s?44\s?mag(?:num)?\b/i, normalized: '.44 Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?44\s?(?:rem(?:ington)?\s+)?mag(?:num)?\b/i, normalized: '.44 Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?44\s?special\b|44\s?spl\b/i, normalized: '.44 Special' },
   { pattern: /(?:^|\s|\W)\.?\s?44-40\s?win(?:chester)?\b|44-40\b/i, normalized: '.44-40 Winchester' },
   { pattern: /(?:^|\s|\W)\.?\s?41\s?mag(?:num)?\b/i, normalized: '.41 Magnum' },
@@ -147,7 +147,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
 
   // Rifle calibers - .30
   { pattern: /(?:^|\s|\W)\.?\s?30-06\b|30-06\s?springfield\b/i, normalized: '.30-06 Springfield' },
-  { pattern: /(?:^|\s|\W)\.?\s?30\s?carbine\b|30\s?carbine\b/i, normalized: '.30 Carbine' },
+  { pattern: /(?:^|\s|\W)\.?\s?30\s?(?:cal\s+)?carbine\b|30\s?(?:cal\s+)?carbine\b/i, normalized: '.30 Carbine' },
   { pattern: /(?:^|\s|\W)\.?\s?30-30\b|30-30\s?win(?:chester)?\b/i, normalized: '.30-30 Winchester' },
   { pattern: /(?:^|\s|\W)\.?\s?30-40\s?krag\b/i, normalized: '.30-40 Krag' },
 
