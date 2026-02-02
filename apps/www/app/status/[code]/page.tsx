@@ -69,6 +69,11 @@ const STATUS_MAP: Record<string, { title: string; description: string; steps: st
   },
 };
 
+// Generate static pages for all known status codes
+export function generateStaticParams() {
+  return Object.keys(STATUS_MAP).map((code) => ({ code }));
+}
+
 export default async function StatusPage({
   params,
 }: {

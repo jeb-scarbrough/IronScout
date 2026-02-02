@@ -330,12 +330,11 @@ export const alerterWorker = new Worker<AlertJobData>(
   async (job: Job<AlertJobData>) => {
     const { executionId, productId, oldPrice, newPrice, inStock } = job.data
     const startTime = Date.now()
-    const jobLog = log.child({
+    const jobLog = logger.alerter.child({
       runId: executionId,
       jobId: job.id,
       stage: 'evaluate',
     })
-    const log = jobLog
 
     // Check if alert processing is enabled via admin settings
     const alertProcessingEnabled = await isAlertProcessingEnabled()
@@ -752,12 +751,11 @@ export const delayedNotificationWorker = new Worker<{
     const { alertId, watchlistItemId, ruleType, triggerReason, executionId, jobCreatedAt } = job.data
     const claimKey = `delayed-${alertId}-${jobCreatedAt}`
     const startTime = Date.now()
-    const jobLog = log.child({
+    const jobLog = logger.alerter.child({
       runId: executionId,
       jobId: job.id,
       stage: 'notify',
     })
-    const log = jobLog
 
     log.debug('ALERT_DELAYED_START', { alertId, watchlistItemId, ruleType, claimKey })
 

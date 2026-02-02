@@ -23,6 +23,7 @@ const FROM_EMAIL = process.env.MERCHANT_EMAIL_FROM;
 if (!FROM_EMAIL) {
   throw new Error('MERCHANT_EMAIL_FROM not configured');
 }
+const VALIDATED_FROM_EMAIL: string = FROM_EMAIL;
 const MERCHANT_URL = process.env.NEXT_PUBLIC_MERCHANT_URL || 'https://merchant.ironscout.ai';
 
 export interface SendEmailResult {
@@ -48,7 +49,7 @@ export async function sendApprovalEmail(
     const resend = getResendClient();
     
     const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
+      from: VALIDATED_FROM_EMAIL,
       to: email,
       subject: 'Your IronScout Merchant account is approved',
       html: `

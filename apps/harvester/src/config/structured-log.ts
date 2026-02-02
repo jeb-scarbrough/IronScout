@@ -38,7 +38,10 @@ export function createWorkflowLogger(base: BaseLogger, context: LogContext) {
       ...baseContext,
       ...(meta ? compact(meta) : {}),
     }
-    base[level](event, payload, err)
+    const logFn = base[level]
+    if (logFn) {
+      logFn(event, payload, err)
+    }
   }
 
   return {

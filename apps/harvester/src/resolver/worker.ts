@@ -714,7 +714,7 @@ export function startProcessingSweeper(): void {
     } catch (err) {
       log.error('SWEEPER_ERROR', {
         error: err instanceof Error ? err.message : String(err),
-      }, err)
+      }, err instanceof Error ? err : undefined)
     } finally {
       sweeperRunning = false
     }
