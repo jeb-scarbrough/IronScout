@@ -60,20 +60,25 @@ const STATUS_MAP: Record<string, { title: string; description: string; steps: st
   },
 };
 
-export default function StatusPage({ params }: { params: { code: string } }) {
-  const config = STATUS_MAP[params.code];
+export default async function StatusPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
+  const config = STATUS_MAP[code];
   if (!config) {
     notFound();
   }
 
-  const primaryHref = params.code === '401' ? '/login' : '/dashboard';
-  const primaryLabel = params.code === '401' ? 'Sign in' : 'Go to dashboard';
+  const primaryHref = code === '401' ? '/login' : '/dashboard';
+  const primaryLabel = code === '401' ? 'Sign in' : 'Go to dashboard';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
       <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">
-          {params.code}
+          {code}
         </div>
         <h1 className="mt-3 text-2xl font-semibold text-gray-900">{config.title}</h1>
         <p className="mt-2 text-sm text-gray-600">{config.description}</p>

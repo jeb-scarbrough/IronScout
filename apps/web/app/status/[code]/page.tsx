@@ -89,8 +89,13 @@ const STATUS_MAP: Record<string, {
   },
 }
 
-export default function StatusPage({ params }: { params: { code: string } }) {
-  const config = STATUS_MAP[params.code]
+export default async function StatusPage({
+  params,
+}: {
+  params: Promise<{ code: string }>
+}) {
+  const { code } = await params
+  const config = STATUS_MAP[code]
   if (!config) {
     notFound()
   }
@@ -98,7 +103,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
       <BrandedErrorCard
-        code={params.code}
+        code={code}
         title={config.title}
         description={config.description}
         steps={config.steps}

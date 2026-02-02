@@ -69,8 +69,13 @@ const STATUS_MAP: Record<string, { title: string; description: string; steps: st
   },
 };
 
-export default function StatusPage({ params }: { params: { code: string } }) {
-  const config = STATUS_MAP[params.code];
+export default async function StatusPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
+  const config = STATUS_MAP[code];
   if (!config) {
     notFound();
   }
@@ -83,7 +88,7 @@ export default function StatusPage({ params }: { params: { code: string } }) {
           <div className="card border-iron-800/80 bg-iron-950/70">
             <div className="p-8">
               <div className="text-xs font-mono uppercase tracking-[0.3em] text-iron-500">
-                {params.code}
+                {code}
               </div>
               <h1 className="mt-3 text-3xl font-display font-semibold">
                 {config.title}
