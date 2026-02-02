@@ -207,15 +207,28 @@ function isPortOpen(port, host = '127.0.0.1', timeoutMs = 500) {
 function startServiceInTerminal(service, devMode) {
   const command = devMode ? service.devCommand : service.prodCommand
   const title = `IronScout - ${service.name}`
+  const safeTitle = title.replace(/["^]/g, '')
+  const titleKeepalive = isWindows()
+    ? `start /b cmd /c ^"for /l %i in (0,0,0) do (title ${safeTitle} ^& timeout /t 5 ^>nul)^"`
+    : ''
+  const cmdBody = [
+    `title ${safeTitle}`,
+    titleKeepalive,
+    `cd /d ${PROJECT_ROOT}`,
+    `set NODE_EXTRA_CA_CERTS=${CADDY_CA_CERT}`,
+    command,
+  ].filter(Boolean).join(' & ')
 
   info(`Starting ${service.name} in new terminal...`)
   if (service.port) {
     console.log(`${colors.gray}  Port: ${service.port}${colors.reset}`)
   }
 
-  // Use Windows 'start' command to open a new terminal
-  // Set NODE_EXTRA_CA_CERTS for server-side HTTPS fetch in Next.js apps
-  const startCmd = `start "${title}" cmd /k "title ${title} & cd /d ${PROJECT_ROOT} && set NODE_EXTRA_CA_CERTS=${CADDY_CA_CERT} && ${command}"`
+  // Prefer Windows Terminal tabs when already running inside Windows Terminal.
+  // Falls back to 'start' for legacy consoles.
+  const startCmd = process.env.WT_SESSION
+    ? `wt -w 0 new-tab --title "${title}" --startingDirectory ${PROJECT_ROOT} cmd /k "${cmdBody}"`
+    : `start "${title}" cmd /k "${cmdBody}"`
 
   const child = spawn(startCmd, [], {
     cwd: PROJECT_ROOT,
