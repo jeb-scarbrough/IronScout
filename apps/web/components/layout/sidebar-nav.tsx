@@ -48,8 +48,8 @@ const navItems = [
     icon: Crosshair,
   },
   {
-    title: 'Mobile Price Scanner',
-    href: '/price-check',
+    title: 'Price Scanner',
+    href: '/dashboard/price-check',
     icon: ScanLine,
   },
   {
