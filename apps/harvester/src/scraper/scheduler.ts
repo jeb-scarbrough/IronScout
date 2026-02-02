@@ -986,6 +986,25 @@ async function tick(config: Required<SchedulerConfig>): Promise<void> {
         continue
       }
 
+      // Check if there's already a RUNNING run for this source to prevent overlap
+      const existingRun = await prisma.scrape_runs.findFirst({
+        where: {
+          sourceId,
+          status: 'RUNNING',
+        },
+        select: { id: true, startedAt: true },
+      })
+
+      if (existingRun) {
+        log.debug('Skipping source - run already in progress', {
+          sourceId,
+          adapterId,
+          existingRunId: existingRun.id,
+          runningForMs: Date.now() - existingRun.startedAt.getTime(),
+        })
+        continue
+      }
+
       // Create a run for this source batch
       const firstTarget = sourceTargets[0]
       const runId = await createScrapeRun(
@@ -1112,6 +1131,9 @@ export function startScrapeScheduler(config?: SchedulerConfig): void {
   }
 
   const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+
+  // Note: Adapters are registered once at harvester startup (in main worker.ts)
+  // before either the scrape worker or scheduler starts
 
   log.info('Starting scrape scheduler', {
     tickIntervalMs: mergedConfig.tickIntervalMs,
