@@ -14,6 +14,11 @@
       "types": "./components/marketing-header.tsx",
       "import": "./components/marketing-header.tsx",
       "require": "./components/marketing-header.tsx"
+    },
+    "./components/iron-scout-logo": {
+      "types": "./components/iron-scout-logo.tsx",
+      "import": "./components/iron-scout-logo.tsx",
+      "require": "./components/iron-scout-logo.tsx"
     }
   },
   "files": [
