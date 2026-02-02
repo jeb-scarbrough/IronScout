@@ -377,7 +377,9 @@ async function incrementRunMetric(
       data: { [field]: { increment: 1 } },
     })
   } catch (error) {
-    log.error('Failed to increment run metric', { runId, field, error })
+    // Warn instead of error - run may have been aborted by emergency stop
+    // or finalized before job completed. This is expected in some cases.
+    log.warn('Failed to increment run metric (run may be aborted)', { runId, field })
   }
 }
 
