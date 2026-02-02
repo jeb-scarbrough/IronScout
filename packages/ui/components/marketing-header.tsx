@@ -55,7 +55,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
                 currentPage === 'price-check' ? 'text-white' : 'text-iron-400 hover:text-white'
               }`}
             >
-              Price Check
+              In-Store Price Check
             </a>
             <a
               href={`${websiteUrl}/about`}
