@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { signOut } from 'next-auth/react'
-import { BRAND_NAME } from '@/lib/brand'
+import { BRAND_NAME, BRAND } from '@/lib/brand'
 
 interface SidebarNavProps {
   userName?: string
@@ -72,9 +72,9 @@ export function SidebarNav({ userName }: SidebarNavProps) {
 
   const SidebarContent = () => (
     <>
-      {/* Logo */}
+      {/* Logo - links to www site */}
       <div className="flex items-center gap-2 px-3 py-4 border-b">
-        <Link href="/" className="flex items-center gap-2">
+        <a href={BRAND.website} className="flex items-center gap-2">
           <Image
             src="/logo-dark.svg"
             alt="IronScout"
@@ -83,7 +83,7 @@ export function SidebarNav({ userName }: SidebarNavProps) {
             className="flex-shrink-0"
           />
           <span className="text-lg font-bold">{BRAND_NAME}</span>
-        </Link>
+        </a>
       </div>
 
       {/* User Info */}
