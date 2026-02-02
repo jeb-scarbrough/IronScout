@@ -1046,9 +1046,10 @@ export async function emergencyStopScraper(confirmationCode: string): Promise<{
       })
 
       // Find and delete all scraper-related BullMQ keys
-      const scraperKeys = await redis.keys('bull:scraper:*')
-      const resolverKeys = await redis.keys('bull:resolver:*')
-      const allKeys = [...scraperKeys, ...resolverKeys]
+      // Queue names: scrape-url, product-resolve (from queues.ts QUEUE_NAMES)
+      const scrapeUrlKeys = await redis.keys('bull:scrape-url:*')
+      const productResolveKeys = await redis.keys('bull:product-resolve:*')
+      const allKeys = [...scrapeUrlKeys, ...productResolveKeys]
 
       if (allKeys.length > 0) {
         queuesCleared = await redis.del(...allKeys)
