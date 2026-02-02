@@ -139,6 +139,25 @@ Key warnings:
 
 ---
 
+## Local Development Setup
+
+Local development uses **Caddy** as a reverse proxy with local DNS URLs:
+
+| App | Local URL | Port |
+|-----|-----------|------|
+| web | https://app.local.ironscout.ai | 3000 |
+| www | https://www.local.ironscout.ai | 3004 |
+| admin | https://admin.local.ironscout.ai | 3001 |
+| merchant | https://merchant.local.ironscout.ai | 3002 |
+| api | https://api.local.ironscout.ai | 8000 |
+
+- Caddy handles HTTPS termination and routing
+- All `.env.local` files use `*.local.ironscout.ai` URLs
+- Never use `localhost` URLs in code or configuration
+- Access apps via local DNS URLs, not localhost ports
+
+---
+
 ## Testing Expectations
 
 Tests must protect:

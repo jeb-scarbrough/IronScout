@@ -50,13 +50,6 @@ const EXAMPLE_CHIPS = [
   { label: '5.56 NATO', query: '5.56 NATO M855 bulk' },
 ]
 
-// Popular searches for social proof
-const TRENDING_SEARCHES = [
-  '9mm bulk',
-  '.223 range ammo',
-  '5.56 green tip',
-]
-
 const advancedExampleQueries = [
   "9mm for compact carry, low flash",
   "subsonic .300 blackout for suppressor",
@@ -377,25 +370,6 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                   className="px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/50 transition-all text-sm font-medium text-foreground shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                 >
                   {chip.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Common searches - neutral label without implied ranking */}
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <span className="text-muted-foreground font-medium">
-                Common searches:
-              </span>
-              {TRENDING_SEARCHES.map((term, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setQuery(term)
-                    handleSearch(term)
-                  }}
-                  className="hover:text-primary transition-colors underline-offset-2 hover:underline font-medium"
-                >
-                  {term}{i < TRENDING_SEARCHES.length - 1 ? ',' : ''}
                 </button>
               ))}
             </div>

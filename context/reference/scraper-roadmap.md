@@ -2,7 +2,7 @@
 
 **Status:** Active (decisions resolved)
 **Owner:** Engineering (Harvester)
-**Last updated:** 2026-01-31
+**Last updated:** 2026-02-01
 **Detailed spec:** `context/specs/scraper-framework-01.md`
 
 This roadmap defines how to build a surgical, URL-driven price monitoring system.
@@ -14,12 +14,14 @@ If those guardrails are not met, SCRAPE outputs must remain non-consumer-visible
 ## Architecture: Surgical Scraping (Not Site Crawling)
 
 **Key decision:** We scrape **specific URLs stored in the database**, not entire sites.
+Discovery (if used) is an **external, ops-run seeding step** per ADR-022, not
+adapter pagination.
 
 | Aspect | Site Crawling (Rejected) | Surgical Scraping (Adopted) |
 |--------|--------------------------|------------------------------|
 | URL source | Adapter discovers via pagination | Database (`scrape_targets` table) |
 | Volume | Thousands of pages | Tens to hundreds of URLs |
-| Discovery | Finds new products | Monitors known products only |
+| Discovery | Finds new products | Optional seeding via sitemap/listing pages (ADR-022) |
 | Adapter complexity | High (pagination, dedup) | Low (single page extraction) |
 | Risk profile | Higher ToS exposure | Lower, more controlled |
 
@@ -29,6 +31,7 @@ If those guardrails are not met, SCRAPE outputs must remain non-consumer-visible
 
 - Build a surgical price monitoring framework where new retailers can be added via thin adapters
 - Scrape specific product URLs (not site-wide crawling)
+- Optional, ops-run discovery seeding to populate `scrape_targets` without adapter pagination (ADR-022)
 - Preserve trust invariants: append-only price facts (ADR-004/015), fail-closed ambiguity (ADR-009)
 - Keep the system operable with clear run logging, quarantine controls, and deterministic outputs
 - Ensure cross-source grouping via Product Resolver (ADR-019)
@@ -37,7 +40,7 @@ If those guardrails are not met, SCRAPE outputs must remain non-consumer-visible
 
 ## Non-Goals (v1)
 
-- No site-wide crawling or product discovery
+- No autonomous site-wide crawling; discovery seeding limited to allowlisted sitemaps/listing pages (ADR-022)
 - No consumer visibility for scraped prices **without** ADR-021 guardrails
 - No real-time guarantees or SLAs
 - No purchase recommendations, verdicts, or deal scores
@@ -95,6 +98,21 @@ See `context/specs/scraper-framework-01.md` for full details.
 **Exit criteria:** ToS approved, tables exist, robots.txt policy documented.
 
 **Gate:** Phase 1 must not start until Phase 0 completes.
+
+---
+
+### Phase 0.5 — Discovery Seeding (Optional, Ops-Run)
+
+**Owner:** Engineering (Ops)
+**Deliverables:**
+- [ ] Discovery script (sitemap + allowlisted listing pages) per ADR-022
+- [ ] Robots/ToS compliance gates (fail-closed on ambiguity)
+- [ ] Canonicalization + dedupe into `scrape_targets`
+- [ ] Page caps + conservative rate limits
+- [ ] Discovery provenance recorded in `scrape_targets.notes`
+
+**Exit criteria:** Can seed targets without adapter pagination and without
+violating guardrails.
 
 ---
 

@@ -155,6 +155,15 @@ export declare function generateSpanId(): string;
  *
  * @param url - The URL to sanitize (can be string or URL object)
  * @returns Sanitized URL string safe for logging
+ *
+ * @example
+ * ```ts
+ * sanitizeUrlForLogging('https://user:secret@api.example.com/feed')
+ * // Returns: 'https://api.example.com/feed'
+ *
+ * sanitizeUrlForLogging('https://api.example.com/feed?token=abc123&limit=10')
+ * // Returns: 'https://api.example.com/feed?token=[REDACTED]&limit=10'
+ * ```
  */
 export declare function sanitizeUrlForLogging(url: string | URL | null | undefined): string;
 export {};

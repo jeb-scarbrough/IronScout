@@ -20,7 +20,6 @@ import { redisConnection } from '../config/redis.js'
 import { QUEUE_NAMES, ScrapeUrlJobData, enqueueProductResolve, decrementAdapterPending } from '../config/queues.js'
 import { RESOLVER_VERSION } from '../resolver/index.js'
 import { getAdapterRegistry } from './registry.js'
-import { registerAllAdapters } from './adapters/index.js'
 import { HttpFetcher } from './fetch/http-fetcher.js'
 import { RobotsPolicyImpl } from './fetch/robots.js'
 import { RedisRateLimiter } from './fetch/rate-limiter.js'
@@ -38,19 +37,13 @@ const log = loggers.scraper
 let fetcher: HttpFetcher | null = null
 let rateLimiter: RedisRateLimiter | null = null
 let robotsPolicy: RobotsPolicyImpl | null = null
-let adaptersRegistered = false
 
 /**
  * Initialize shared infrastructure.
+ * Note: Adapters are registered once at harvester startup (in main worker.ts)
+ * before the scrape worker starts.
  */
 function initInfrastructure(): void {
-  // Register all adapters (idempotent)
-  if (!adaptersRegistered) {
-    registerAllAdapters()
-    adaptersRegistered = true
-    log.info('Registered scrape adapters', { count: getAdapterRegistry().size() })
-  }
-
   if (!robotsPolicy) {
     robotsPolicy = new RobotsPolicyImpl()
   }
@@ -474,7 +467,24 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
   worker = new Worker<ScrapeUrlJobData>(
     QUEUE_NAMES.SCRAPE_URL,
     async (job) => {
-      await processScrapeJob(job)
+      try {
+        await processScrapeJob(job)
+      } catch (err) {
+        // Ensure we always throw a proper Error with a message
+        // This helps diagnose issues where non-Error values are thrown
+        if (err instanceof Error) {
+          throw err
+        }
+        // Wrap non-Error values
+        const message = err === undefined
+          ? 'Job failed with undefined error'
+          : err === null
+            ? 'Job failed with null error'
+            : typeof err === 'string'
+              ? err
+              : `Job failed with non-Error: ${JSON.stringify(err)}`
+        throw new Error(message)
+      }
     },
     {
       connection: redisConnection,
@@ -494,8 +504,7 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
     log.error('Job failed', {
       jobId: job?.id,
       targetId: job?.data?.targetId,
-      error: error.message,
-    })
+    }, error)
     // Decrement per-adapter pending count even on failure
     if (job?.data?.adapterId) {
       decrementAdapterPending(job.data.adapterId).catch((err) => {
@@ -505,7 +514,7 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
   })
 
   worker.on('error', (error) => {
-    log.error('Worker error', { error: error.message })
+    log.error('Worker error', {}, error)
   })
 
   return worker

@@ -14,7 +14,7 @@
     "test:integration": "vitest run src/__tests__/integration/**/*.integration.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.0",
+    "@anthropic-ai/sdk": "^0.72.1",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
     "bcryptjs": "^3.0.3",

@@ -72,6 +72,8 @@ import {
   startScrapeScheduler,
   stopScrapeScheduler,
 } from './scraper/scheduler'
+import { registerAllAdapters } from './scraper/adapters/index'
+import { getAdapterRegistry } from './scraper/registry'
 
 import type { Worker } from 'bullmq'
 
@@ -284,6 +286,11 @@ async function startup() {
   // Start current price recompute worker (ADR-015 - always on)
   log.info('Starting current price recompute worker')
   currentPriceRecomputeWorker = await startCurrentPriceRecomputeWorker({ concurrency: 5 })
+
+  // Register scrape adapters before starting worker/scheduler
+  // This ensures the registry is populated for all components
+  registerAllAdapters()
+  log.info('Registered scrape adapters', { count: getAdapterRegistry().size() })
 
   // Start scrape URL worker (scraper-framework-01 - always on)
   // Worker processes jobs regardless of scheduler state (supports manual triggers)

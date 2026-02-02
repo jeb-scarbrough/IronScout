@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -15,6 +16,8 @@ import {
   ScanBarcode,
   Loader2,
 } from 'lucide-react'
+import { MarketingHeader } from '@ironscout/ui/components/marketing-header'
+import { BRAND } from '@/lib/brand'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -57,7 +60,19 @@ type PageState =
   | 'manual-entry' // Manual caliber + price form
   | 'result' // Price check result
 
+// Force dark theme for price-check to match www marketing site
+function useForceDarkTheme() {
+  const { setTheme } = useTheme()
+
+  useEffect(() => {
+    setTheme('dark')
+  }, [setTheme])
+}
+
 export default function PriceCheckPage() {
+  // Force dark theme to match www app styling
+  useForceDarkTheme()
+
   const { data: session } = useSession()
   const [pageState, setPageState] = useState<PageState>('initial')
 
@@ -199,27 +214,14 @@ export default function PriceCheckPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
-        <div className="container flex items-center h-14 px-4">
-          <Link href="/" className="flex items-center gap-2 mr-4">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/logo-dark.svg"
-              alt="IronScout"
-              width={20}
-              height={20}
-              className="flex-shrink-0"
-            />
-            <span className="font-semibold">Price Check</span>
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-screen bg-iron-950">
+      <MarketingHeader
+        currentPage="price-check"
+        websiteUrl={BRAND.website}
+        appUrl={BRAND.appUrl}
+      />
 
-      <main className="container max-w-md mx-auto px-4 py-6">
+      <main className="container max-w-md mx-auto px-4 py-6 pt-24">
         {pageState === 'initial' && (
           <InitialView
             onStartScan={() => setPageState('scanning')}
@@ -301,8 +303,8 @@ function InitialView({
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
           <ScanBarcode className="h-10 w-10 text-primary" />
         </div>
-        <h1 className="text-xl font-semibold">Is this price normal?</h1>
-        <p className="text-sm text-muted-foreground mt-2">
+        <h1 className="text-xl font-semibold text-white">Is this price normal?</h1>
+        <p className="text-sm text-iron-400 mt-2">
           Scan a barcode or enter details manually.
         </p>
       </div>
@@ -315,13 +317,13 @@ function InitialView({
 
         <button
           onClick={onManualEntry}
-          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
+          className="text-sm text-iron-400 hover:text-white underline underline-offset-4 transition-colors"
         >
           or enter details manually
         </button>
       </div>
 
-      <p className="text-xs text-muted-foreground pt-4">
+      <p className="text-xs text-iron-500 pt-4">
         Compare against recent online prices from major retailers.
         <br />
         This is not financial advice.
@@ -338,8 +340,8 @@ function LookingUpView({ upc }: { upc: string }) {
     <div className="space-y-6 text-center pt-16">
       <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary" />
       <div>
-        <h2 className="text-lg font-medium">Looking up product...</h2>
-        <p className="text-sm text-muted-foreground mt-1">UPC: {upc}</p>
+        <h2 className="text-lg font-medium text-white">Looking up product...</h2>
+        <p className="text-sm text-iron-400 mt-1">UPC: {upc}</p>
       </div>
     </div>
   )
@@ -370,7 +372,7 @@ function ProductFoundView({
   return (
     <div className="space-y-6">
       {/* Product Card */}
-      <Card>
+      <Card className="bg-iron-900 border-iron-800">
         <CardContent className="pt-6">
           <div className="flex gap-4">
             {product.imageUrl ? (
@@ -382,15 +384,15 @@ function ProductFoundView({
                 className="rounded-md object-cover"
               />
             ) : (
-              <div className="w-20 h-20 bg-muted rounded-md flex items-center justify-center">
-                <ScanBarcode className="h-8 w-8 text-muted-foreground" />
+              <div className="w-20 h-20 bg-iron-800 rounded-md flex items-center justify-center">
+                <ScanBarcode className="h-8 w-8 text-iron-500" />
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h2 className="font-medium text-sm leading-tight line-clamp-2">
+              <h2 className="font-medium text-sm leading-tight line-clamp-2 text-white">
                 {product.name}
               </h2>
-              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+              <div className="text-xs text-iron-400 mt-1 space-y-0.5">
                 {product.brand && <p>{product.brand}</p>}
                 {product.caliber && <p>{product.caliber}</p>}
                 {product.roundCount && <p>{product.roundCount} rounds</p>}
@@ -403,9 +405,9 @@ function ProductFoundView({
       {/* Price Entry Form */}
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="boxPrice">What price are you seeing?</Label>
+          <Label htmlFor="boxPrice" className="text-iron-200">What price are you seeing?</Label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-iron-500">
               $
             </span>
             <Input
@@ -416,17 +418,17 @@ function ProductFoundView({
               placeholder="14.99"
               value={boxPrice}
               onChange={(e) => setBoxPrice(e.target.value)}
-              className="pl-7 text-lg h-12"
+              className="pl-7 text-lg h-12 bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
               autoFocus
             />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-iron-500">
             Enter the total box price (not price per round)
           </p>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-destructive text-sm">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>
@@ -444,14 +446,14 @@ function ProductFoundView({
       <div className="flex justify-center gap-4 text-sm">
         <button
           onClick={onScanAnother}
-          className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+          className="text-iron-400 hover:text-white underline underline-offset-4 transition-colors"
         >
           Scan different product
         </button>
-        <span className="text-muted-foreground">|</span>
+        <span className="text-iron-600">|</span>
         <button
           onClick={onManualEntry}
-          className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+          className="text-iron-400 hover:text-white underline underline-offset-4 transition-colors"
         >
           Enter manually
         </button>
@@ -476,17 +478,17 @@ function ProductNotFoundView({
 }) {
   return (
     <div className="space-y-6 text-center pt-8">
-      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30">
-        <AlertCircle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-900/30">
+        <AlertCircle className="h-8 w-8 text-amber-400" />
       </div>
 
       <div>
-        <h2 className="text-lg font-medium">Product Not Found</h2>
-        <p className="text-sm text-muted-foreground mt-2">
+        <h2 className="text-lg font-medium text-white">Product Not Found</h2>
+        <p className="text-sm text-iron-400 mt-2">
           {error || `We don't have this product in our database yet.`}
         </p>
         {upc && (
-          <p className="text-xs text-muted-foreground mt-1">UPC: {upc}</p>
+          <p className="text-xs text-iron-500 mt-1">UPC: {upc}</p>
         )}
       </div>
 
@@ -495,7 +497,7 @@ function ProductNotFoundView({
           <ScanBarcode className="h-4 w-4 mr-2" />
           Try Scanning Again
         </Button>
-        <Button variant="outline" onClick={onManualEntry} className="w-full">
+        <Button variant="outline" onClick={onManualEntry} className="w-full border-iron-700 text-iron-300 hover:bg-iron-800 hover:text-white">
           Enter Details Manually
         </Button>
       </div>
@@ -536,12 +538,12 @@ function ManualEntryForm({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button variant="ghost" size="icon" onClick={onBack} className="text-iron-400 hover:text-white hover:bg-iron-800">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-lg font-semibold">Manual Price Check</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-lg font-semibold text-white">Manual Price Check</h1>
+          <p className="text-sm text-iron-400">
             Enter the details you see on the box
           </p>
         </div>
@@ -550,17 +552,17 @@ function ManualEntryForm({
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Caliber - Required */}
         <div className="space-y-2">
-          <Label htmlFor="caliber">Caliber *</Label>
+          <Label htmlFor="caliber" className="text-iron-200">Caliber *</Label>
           <Select
             value={caliber}
             onValueChange={(v) => setCaliber(v as CaliberValue)}
           >
-            <SelectTrigger id="caliber">
+            <SelectTrigger id="caliber" className="bg-iron-900 border-iron-700 text-white">
               <SelectValue placeholder="Select caliber" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-iron-900 border-iron-700">
               {CALIBERS.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
+                <SelectItem key={c.value} value={c.value} className="text-iron-200 focus:bg-iron-800 focus:text-white">
                   {c.label}
                 </SelectItem>
               ))}
@@ -570,9 +572,9 @@ function ManualEntryForm({
 
         {/* Price - Required */}
         <div className="space-y-2">
-          <Label htmlFor="price">Price per round *</Label>
+          <Label htmlFor="price" className="text-iron-200">Price per round *</Label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-iron-500">
               $
             </span>
             <Input
@@ -584,28 +586,29 @@ function ManualEntryForm({
               placeholder="0.30"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="pl-7"
+              className="pl-7 bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-iron-500">
             Enter the price per round (e.g., $0.30 for 30 cents/rd)
           </p>
         </div>
 
         {/* Optional: Brand */}
         <div className="space-y-2">
-          <Label htmlFor="brand">Brand (optional)</Label>
+          <Label htmlFor="brand" className="text-iron-200">Brand (optional)</Label>
           <Input
             id="brand"
             placeholder="e.g., Federal, Winchester"
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
+            className="bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
           />
         </div>
 
         {/* Optional: Grain */}
         <div className="space-y-2">
-          <Label htmlFor="grain">Grain weight (optional)</Label>
+          <Label htmlFor="grain" className="text-iron-200">Grain weight (optional)</Label>
           <Input
             id="grain"
             type="number"
@@ -614,11 +617,12 @@ function ManualEntryForm({
             placeholder="e.g., 115, 124, 147"
             value={grain}
             onChange={(e) => setGrain(e.target.value)}
+            className="bg-iron-900 border-iron-700 text-white placeholder:text-iron-500"
           />
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-destructive text-sm">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>
@@ -633,7 +637,7 @@ function ManualEntryForm({
         </Button>
       </form>
 
-      <p className="text-xs text-center text-muted-foreground">
+      <p className="text-xs text-center text-iron-500">
         Prices compared against recent online listings from major retailers.
         <br />
         This is not financial advice.
@@ -662,8 +666,8 @@ function PriceCheckResultDisplay({
         <CardContent className="pt-6">
           <div className="text-center">
             <ClassificationIcon classification={classification} />
-            <h2 className="text-2xl font-bold mt-3">{message}</h2>
-            <p className="text-lg mt-1">
+            <h2 className="text-2xl font-bold mt-3 text-white">{message}</h2>
+            <p className="text-lg mt-1 text-iron-300">
               ${enteredPricePerRound.toFixed(2)}/rd for{' '}
               {CALIBERS.find((c) => c.value === caliber)?.label || caliber}
             </p>
@@ -673,14 +677,14 @@ function PriceCheckResultDisplay({
 
       {/* Context Information */}
       {context.pricePointCount > 0 && (
-        <Card>
+        <Card className="bg-iron-900 border-iron-800">
           <CardContent className="pt-6">
-            <h3 className="font-medium mb-3">Recent Online Range</h3>
+            <h3 className="font-medium mb-3 text-white">Recent Online Range</h3>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Low</span>
-              <span className="text-muted-foreground">High</span>
+              <span className="text-iron-400">Low</span>
+              <span className="text-iron-400">High</span>
             </div>
-            <div className="relative h-3 bg-muted rounded-full mt-1 mb-2">
+            <div className="relative h-3 bg-iron-800 rounded-full mt-1 mb-2">
               {/* Range bar */}
               <div
                 className="absolute inset-y-0 bg-primary/30 rounded-full"
@@ -689,7 +693,7 @@ function PriceCheckResultDisplay({
               {/* Position indicator */}
               {context.minPrice !== null && context.maxPrice !== null && (
                 <div
-                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full border-2 border-background"
+                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full border-2 border-iron-950"
                   style={{
                     left: `${getPositionPercent(enteredPricePerRound, context.minPrice, context.maxPrice)}%`,
                     transform: 'translate(-50%, -50%)',
@@ -697,13 +701,13 @@ function PriceCheckResultDisplay({
                 />
               )}
             </div>
-            <div className="flex items-center justify-between text-sm font-medium">
+            <div className="flex items-center justify-between text-sm font-medium text-white">
               <span>${context.minPrice?.toFixed(2) || '---'}/rd</span>
               <span>${context.maxPrice?.toFixed(2) || '---'}/rd</span>
             </div>
 
             {/* Freshness indicator */}
-            <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1">
+            <p className="text-xs text-iron-500 mt-4 flex items-center gap-1">
               <Info className="h-3 w-3" />
               {freshnessIndicator}
             </p>
@@ -719,7 +723,7 @@ function PriceCheckResultDisplay({
 
         {!result._meta.hasGunLocker && (
           <Link href="/dashboard/gun-locker">
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full border-iron-700 text-iron-300 hover:bg-iron-800 hover:text-white">
               <Plus className="h-4 w-4 mr-2" />
               Add to Gun Locker for personalized results
             </Button>
@@ -727,7 +731,7 @@ function PriceCheckResultDisplay({
         )}
       </div>
 
-      <p className="text-xs text-center text-muted-foreground">
+      <p className="text-xs text-center text-iron-500">
         Price data is for informational purposes only. No guarantees.
       </p>
     </div>
@@ -738,26 +742,26 @@ function ClassificationIcon({ classification }: { classification: PriceClassific
   switch (classification) {
     case 'LOWER':
       return (
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30">
-          <TrendingDown className="h-8 w-8 text-green-600 dark:text-green-400" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-900/30">
+          <TrendingDown className="h-8 w-8 text-green-400" />
         </div>
       )
     case 'HIGHER':
       return (
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30">
-          <TrendingUp className="h-8 w-8 text-red-600 dark:text-red-400" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-900/30">
+          <TrendingUp className="h-8 w-8 text-red-400" />
         </div>
       )
     case 'TYPICAL':
       return (
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30">
-          <Minus className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-900/30">
+          <Minus className="h-8 w-8 text-blue-400" />
         </div>
       )
     case 'INSUFFICIENT_DATA':
       return (
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30">
-          <AlertCircle className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-900/30">
+          <AlertCircle className="h-8 w-8 text-amber-400" />
         </div>
       )
   }
@@ -766,13 +770,13 @@ function ClassificationIcon({ classification }: { classification: PriceClassific
 function getClassificationCardClass(classification: PriceClassification): string {
   switch (classification) {
     case 'LOWER':
-      return 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+      return 'border-green-800 bg-green-950/20'
     case 'HIGHER':
-      return 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
+      return 'border-red-800 bg-red-950/20'
     case 'TYPICAL':
-      return 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20'
+      return 'border-blue-800 bg-blue-950/20'
     case 'INSUFFICIENT_DATA':
-      return 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+      return 'border-amber-800 bg-amber-950/20'
   }
 }
 
