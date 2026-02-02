@@ -11,7 +11,7 @@ import { IronScoutLogo } from './iron-scout-logo'
  */
 export interface MarketingHeaderProps {
   /** Current active page for highlighting */
-  currentPage?: 'home' | 'price-check' | 'about' | 'retailers' | 'privacy' | 'terms' | 'signin' | 'signup'
+  currentPage?: 'home' | 'search' | 'price-check' | 'about' | 'retailers' | 'privacy' | 'terms' | 'signin' | 'signup'
   /** Base URL for the marketing website (www) */
   websiteUrl: string
   /** Base URL for the web app */
@@ -49,6 +49,14 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
           </a>
 
           <div className="flex items-center gap-4 sm:gap-6">
+            <a
+              href={`${appUrl}/search`}
+              className={`text-sm font-medium transition-colors ${
+                currentPage === 'search' ? 'text-white' : 'text-iron-400 hover:text-white'
+              }`}
+            >
+              Search
+            </a>
             <a
               href={`${appUrl}/price-check`}
               className={`text-sm font-medium transition-colors ${

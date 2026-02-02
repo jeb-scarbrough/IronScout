@@ -353,11 +353,6 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
         {/* Quick-start chips - shown when no query */}
         {!query && (
           <div className="mt-6 space-y-5">
-            {/* Value proposition - what search unlocks */}
-            <p className="text-sm text-muted-foreground text-center">
-              Compare prices across retailers. Save what you find.
-            </p>
-
             {/* Clickable example chips with icons */}
             <div className="flex flex-wrap justify-center gap-2">
               {EXAMPLE_CHIPS.map((chip, i) => {

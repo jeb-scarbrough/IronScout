@@ -2,6 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { PriceCheckContent } from '@/components/price-check/price-check-content'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 
 /**
  * Dashboard Price Check Page
@@ -18,15 +19,15 @@ export default function DashboardPriceCheckPage() {
   const token = session?.accessToken
 
   return (
-    <div className="py-6 px-4 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Price Check</h1>
+    <DashboardContent>
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Price Check</h1>
         <p className="text-sm text-iron-400 mt-1">
           Scan a barcode or enter details to check if a price is normal
         </p>
       </div>
 
       <PriceCheckContent accessToken={token} />
-    </div>
+    </DashboardContent>
   )
 }

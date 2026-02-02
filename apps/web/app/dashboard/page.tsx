@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
 import { GunLockerCard, WatchingCard, MarketActivityCard } from '@/components/dashboard/loadout'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -156,7 +157,7 @@ export default function DashboardPage() {
   // Error state
   if (error || !data) {
     return (
-      <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+      <DashboardContent>
         <Card>
           <CardContent className="py-12">
             <p className="text-center text-destructive">
@@ -164,15 +165,15 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </DashboardContent>
     )
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <DashboardContent>
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">My Loadout</h1>
+        <h1 className="text-2xl font-bold italic text-white">My Loadout</h1>
         <p className="text-sm text-iron-400 mt-1">
           Track your firearms, ammo preferences, and price alerts
         </p>
@@ -213,7 +214,7 @@ export default function DashboardPage() {
         isWatched={isWatched}
         onWatchToggle={handleWatchToggle}
       />
-    </div>
+    </DashboardContent>
   )
 }
 
@@ -222,7 +223,7 @@ export default function DashboardPage() {
  */
 function DashboardSkeleton() {
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <DashboardContent>
       {/* Gun Locker skeleton */}
       <Card>
         <CardContent className="pt-6">
@@ -275,6 +276,6 @@ function DashboardSkeleton() {
           </Card>
         </div>
       </div>
-    </div>
+    </DashboardContent>
   )
 }
