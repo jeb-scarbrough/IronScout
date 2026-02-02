@@ -9,14 +9,45 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut } from 'lucide-react'
 import { BRAND } from '@/lib/brand'
 
+/**
+ * IronScout Logo - Hexagon with scope pattern
+ */
+function IronScoutLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      fill="none"
+      className={className}
+    >
+      <path
+        d="M50 5 L89 27.5 V72.5 L50 95 L11 72.5 V27.5 Z"
+        stroke="#00C2CB"
+        strokeWidth="6"
+        strokeLinejoin="round"
+      />
+      <g transform="translate(50,50)">
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(0)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(60)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(120)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(180)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(240)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(300)" />
+      </g>
+      <circle cx="50" cy="50" r="12" fill="#00C2CB" />
+      <circle cx="82" cy="18" r="4" fill="#00C2CB" />
+    </svg>
+  )
+}
+
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const { data: session } = useSession()
   const pathname = usePathname()
 
-  // Don't render main header on auth pages - they have their own header
-  if (pathname?.startsWith('/auth')) {
+  // Don't render main header on pages that use MarketingHeader
+  if (pathname?.startsWith('/auth') || pathname === '/price-check') {
     return null
   }
 
@@ -26,11 +57,7 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo - links to www home page */}
           <a href={BRAND.website} className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
+            <IronScoutLogo className="w-8 h-8" />
             <span className="font-display text-xl font-semibold tracking-tight">
               Iron<span className="text-primary">Scout</span>
             </span>

@@ -4,6 +4,37 @@ import { useState } from 'react';
 import { Header } from './components/Header';
 import { BRAND } from '../lib/brand';
 
+/**
+ * IronScout Logo - Hexagon with scope pattern
+ */
+function IronScoutLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      fill="none"
+      className={className}
+    >
+      <path
+        d="M50 5 L89 27.5 V72.5 L50 95 L11 72.5 V27.5 Z"
+        stroke="#00C2CB"
+        strokeWidth="6"
+        strokeLinejoin="round"
+      />
+      <g transform="translate(50,50)">
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(0)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(60)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(120)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(180)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(240)" />
+        <path d="M0 -30 Q15 -30 22 -10 L0 0 Z" stroke="#00C2CB" strokeWidth="2" fill="none" transform="rotate(300)" />
+      </g>
+      <circle cx="50" cy="50" r="12" fill="#00C2CB" />
+      <circle cx="82" cy="18" r="4" fill="#00C2CB" />
+    </svg>
+  )
+}
+
 const APP_URL = BRAND.appUrl;
 
 const exampleQueries = [
@@ -333,11 +364,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-                <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+              <IronScoutLogo className="w-8 h-8" />
               <span className="font-display text-xl font-semibold tracking-tight">
                 Iron<span className="text-primary">Scout</span>
               </span>
