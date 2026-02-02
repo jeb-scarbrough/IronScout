@@ -10,7 +10,8 @@ import {
   CheckCircle,
   Loader2,
 } from 'lucide-react';
-import { linkToProduct, createAndLinkProduct, skipReview } from '../actions';
+import { linkToProduct, createAndLinkProduct, skipReview, disableScrapeTarget } from '../actions';
+import { DisableScrapeTargetModal } from './disable-scrape-target-modal';
 
 interface Candidate {
   productId: string;
@@ -42,6 +43,15 @@ interface InputNormalized {
   upcNorm?: string;
 }
 
+/** Info about an associated scrape target (for skip-to-disable feedback loop) */
+interface ScrapeTargetInfo {
+  id: string;
+  url: string;
+  canonicalUrl: string;
+  enabled: boolean;
+  status: string;
+}
+
 interface ReviewActionsProps {
   sourceProductId: string;
   candidates: Candidate[];
@@ -69,6 +79,11 @@ export function ReviewActions({
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [skipReason, setSkipReason] = useState('');
+
+  // Skip-to-disable feedback loop state (per spec §10.3)
+  const [showDisableModal, setShowDisableModal] = useState(false);
+  const [pendingScrapeTarget, setPendingScrapeTarget] = useState<ScrapeTargetInfo | null>(null);
+  const [isDisabling, setIsDisabling] = useState(false);
 
   // New product form state
   const [newProductName, setNewProductName] = useState(inputNormalized?.title ?? '');
@@ -138,12 +153,44 @@ export function ReviewActions({
     const result = await skipReview(sourceProductId, skipReason);
 
     if (result.success) {
-      setSuccess('Item skipped');
-      setTimeout(() => router.push('/review-queue'), 1500);
+      // Check if there's an associated scrape target (per spec §10.3)
+      if (result.scrapeTarget) {
+        // Show the disable modal instead of redirecting immediately
+        setPendingScrapeTarget(result.scrapeTarget);
+        setShowDisableModal(true);
+        setIsSubmitting(false);
+      } else {
+        setSuccess('Item skipped');
+        setTimeout(() => router.push('/review-queue'), 1500);
+      }
     } else {
       setError(result.error ?? 'Failed to skip item');
       setIsSubmitting(false);
     }
+  };
+
+  /** Handle disabling the scrape target after skip */
+  const handleDisableScrapeTarget = async () => {
+    if (!pendingScrapeTarget) return;
+
+    setIsDisabling(true);
+    const result = await disableScrapeTarget(pendingScrapeTarget.id, skipReason);
+
+    if (result.success) {
+      setShowDisableModal(false);
+      setSuccess('Item skipped and scrape target disabled');
+      setTimeout(() => router.push('/review-queue'), 1500);
+    } else {
+      setError(result.error ?? 'Failed to disable scrape target');
+      setIsDisabling(false);
+    }
+  };
+
+  /** Skip disabling the scrape target and just complete the skip */
+  const handleSkipDisable = () => {
+    setShowDisableModal(false);
+    setSuccess('Item skipped');
+    setTimeout(() => router.push('/review-queue'), 1500);
   };
 
   if (success) {
@@ -383,6 +430,22 @@ export function ReviewActions({
           </button>
         </div>
       </div>
+
+      {/* Skip-to-disable feedback loop modal (per spec §10.3) */}
+      {pendingScrapeTarget && (
+        <DisableScrapeTargetModal
+          isOpen={showDisableModal}
+          onClose={() => {
+            setShowDisableModal(false);
+            handleSkipDisable();
+          }}
+          onConfirm={handleDisableScrapeTarget}
+          onSkip={handleSkipDisable}
+          scrapeTarget={pendingScrapeTarget}
+          skipReason={skipReason}
+          isSubmitting={isDisabling}
+        />
+      )}
     </div>
   );
 }

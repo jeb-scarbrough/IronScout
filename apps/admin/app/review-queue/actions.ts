@@ -279,17 +279,29 @@ export async function createAndLinkProduct(
   }
 }
 
+/** Info about an associated scrape target (for skip-to-disable feedback loop) */
+interface ScrapeTargetInfo {
+  id: string;
+  url: string;
+  canonicalUrl: string;
+  enabled: boolean;
+  status: string;
+}
+
 /**
  * Skip a review item - marks as SKIPPED terminal state
  *
  * Guards:
  * - Only allows update if current status is NEEDS_REVIEW or UNMATCHED
  * - Preserves existing resolver evidence, adds skipped block
+ *
+ * Per scraper-framework-01 spec §10.3: Returns scrape target info if one exists,
+ * enabling the skip-to-disable feedback loop for non-ammunition products.
  */
 export async function skipReview(
   sourceProductId: string,
   reason: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; scrapeTarget?: ScrapeTargetInfo }> {
   const session = await getAdminSession();
   if (!session) {
     return { success: false, error: 'Unauthorized' };
@@ -357,10 +369,122 @@ export async function skipReview(
       newStatus: 'SKIPPED',
     });
 
+    // Per spec §10.3: Check for associated scrape target for skip-to-disable feedback loop
+    let scrapeTarget: ScrapeTargetInfo | undefined;
+    try {
+      const target = await prisma.scrape_targets.findFirst({
+        where: { sourceProductId },
+        select: {
+          id: true,
+          url: true,
+          canonicalUrl: true,
+          enabled: true,
+          status: true,
+        },
+      });
+
+      if (target && target.enabled) {
+        scrapeTarget = {
+          id: target.id,
+          url: target.url,
+          canonicalUrl: target.canonicalUrl,
+          enabled: target.enabled,
+          status: target.status,
+        };
+        log.debug('Scrape target found for skipped product', {
+          sourceProductId,
+          scrapeTargetId: target.id,
+          scrapeTargetUrl: target.canonicalUrl,
+        });
+      }
+    } catch (scrapeTargetError) {
+      // Non-fatal: continue even if scrape target lookup fails
+      log.warn('Failed to lookup scrape target for skip feedback loop', {
+        sourceProductId,
+        error: scrapeTargetError,
+      });
+    }
+
     revalidatePath('/review-queue');
-    return { success: true };
+    return { success: true, scrapeTarget };
   } catch (error) {
     log.error('Failed to skip review', { sourceProductId, reason }, error);
     return { success: false, error: 'Failed to skip review' };
+  }
+}
+
+/**
+ * Disable a scrape target after skipping a review item
+ *
+ * Per scraper-framework-01 spec §10.3: Part of the skip-to-disable feedback loop.
+ * When an operator marks a scraped product as SKIP, they can optionally disable
+ * the associated scrape target to prevent re-scraping non-ammunition products.
+ */
+export async function disableScrapeTarget(
+  scrapeTargetId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession();
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // Verify target exists and is enabled
+    const target = await prisma.scrape_targets.findUnique({
+      where: { id: scrapeTargetId },
+      select: {
+        id: true,
+        url: true,
+        canonicalUrl: true,
+        enabled: true,
+        status: true,
+        sourceProductId: true,
+      },
+    });
+
+    if (!target) {
+      return { success: false, error: 'Scrape target not found' };
+    }
+
+    if (!target.enabled) {
+      // Already disabled, nothing to do
+      log.info('Scrape target already disabled', { scrapeTargetId });
+      return { success: true };
+    }
+
+    // Disable the scrape target
+    await prisma.scrape_targets.update({
+      where: { id: scrapeTargetId },
+      data: {
+        enabled: false,
+        status: 'PAUSED',
+        notes: `Disabled via skip feedback loop: ${reason} (${session.email} at ${new Date().toISOString()})`,
+      },
+    });
+
+    await logAdminAction(session.userId, 'DISABLE_SCRAPE_TARGET', {
+      resource: 'scrape_targets',
+      resourceId: scrapeTargetId,
+      newValue: {
+        enabled: false,
+        status: 'PAUSED',
+        reason,
+        url: target.canonicalUrl,
+        sourceProductId: target.sourceProductId,
+      },
+    });
+
+    log.info('Scrape target disabled via skip feedback loop', {
+      scrapeTargetId,
+      url: target.canonicalUrl,
+      reason,
+      actor: session.email,
+    });
+
+    return { success: true };
+  } catch (error) {
+    log.error('Failed to disable scrape target', { scrapeTargetId, reason }, error);
+    return { success: false, error: 'Failed to disable scrape target' };
   }
 }
