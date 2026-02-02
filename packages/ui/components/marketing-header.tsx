@@ -38,7 +38,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
   const isSignUp = currentPage === 'signup'
 
   return (
-    <nav className="fixed top-8 left-0 right-0 z-50 bg-iron-950/80 backdrop-blur-md border-b border-iron-800/50">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-iron-950/80 backdrop-blur-md border-b border-iron-800/50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <a href={websiteUrl} className="flex items-center gap-2">
