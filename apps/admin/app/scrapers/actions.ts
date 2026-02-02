@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { getAdminSession, logAdminAction } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
+import Redis from 'ioredis'
 
 const log = loggers.admin
 
@@ -197,10 +198,14 @@ export async function listScrapeTargets(options?: {
   status?: string
   adapterId?: string
   sourceId?: string
+  search?: string
+  enabledOnly?: boolean
+  disabledOnly?: boolean
   limit?: number
-}): Promise<{ success: boolean; error?: string; targets: ScrapeTargetDTO[] }> {
+  offset?: number
+}): Promise<{ success: boolean; error?: string; targets: ScrapeTargetDTO[]; total: number }> {
   const session = await getAdminSession()
-  if (!session) return { success: false, error: 'Unauthorized', targets: [] }
+  if (!session) return { success: false, error: 'Unauthorized', targets: [], total: 0 }
 
   try {
     const where: Prisma.scrape_targetsWhereInput = {}
@@ -214,20 +219,38 @@ export async function listScrapeTargets(options?: {
     if (options?.sourceId) {
       where.sourceId = options.sourceId
     }
+    if (options?.enabledOnly) {
+      where.enabled = true
+    }
+    if (options?.disabledOnly) {
+      where.enabled = false
+    }
+    if (options?.search) {
+      const searchTerm = options.search.trim()
+      where.OR = [
+        { url: { contains: searchTerm, mode: 'insensitive' } },
+        { canonicalUrl: { contains: searchTerm, mode: 'insensitive' } },
+        { sources: { name: { contains: searchTerm, mode: 'insensitive' } } },
+      ]
+    }
 
-    const targets = await prisma.scrape_targets.findMany({
-      where,
-      include: {
-        sources: {
-          select: {
-            id: true,
-            name: true,
+    const [targets, total] = await Promise.all([
+      prisma.scrape_targets.findMany({
+        where,
+        include: {
+          sources: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-      orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
-      take: options?.limit ?? 100,
-    })
+        orderBy: [{ status: 'asc' }, { priority: 'desc' }, { createdAt: 'desc' }],
+        take: options?.limit ?? 50,
+        skip: options?.offset ?? 0,
+      }),
+      prisma.scrape_targets.count({ where }),
+    ])
 
     const dtos: ScrapeTargetDTO[] = targets.map((t) => ({
       id: t.id,
@@ -246,10 +269,10 @@ export async function listScrapeTargets(options?: {
       createdAt: t.createdAt,
     }))
 
-    return { success: true, targets: dtos }
+    return { success: true, targets: dtos, total }
   } catch (error) {
     log.error('Failed to list scrape targets', {}, error instanceof Error ? error : new Error(String(error)))
-    return { success: false, error: 'Failed to list targets', targets: [] }
+    return { success: false, error: 'Failed to list targets', targets: [], total: 0 }
   }
 }
 
@@ -955,5 +978,196 @@ export async function getScrapeStats(): Promise<{
   } catch (error) {
     log.error('Failed to get scrape stats', {}, error instanceof Error ? error : new Error(String(error)))
     return { success: false, error: 'Failed to get stats' }
+  }
+}
+
+// =============================================================================
+// Emergency Stop
+// =============================================================================
+
+/**
+ * Emergency stop for the scraper system.
+ *
+ * This will:
+ * 1. Disable the harvester scheduler via system setting
+ * 2. Mark all RUNNING scrape runs as FAILED
+ * 3. Clear all scraper-related BullMQ queues in Redis
+ *
+ * Use this when you discover a critical error and need to stop all scraping immediately.
+ */
+export async function emergencyStopScraper(confirmationCode: string): Promise<{
+  success: boolean
+  error?: string
+  runsAborted?: number
+  queuesCleared?: number
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  // Require explicit confirmation
+  if (confirmationCode !== 'EMERGENCY_STOP') {
+    return { success: false, error: 'Invalid confirmation code. Type EMERGENCY_STOP to confirm.' }
+  }
+
+  try {
+    log.warn('EMERGENCY STOP initiated', { userId: session.userId, email: session.email })
+
+    // 1. Disable the harvester scheduler
+    await prisma.system_settings.upsert({
+      where: { key: 'HARVESTER_SCHEDULER_ENABLED' },
+      create: {
+        key: 'HARVESTER_SCHEDULER_ENABLED',
+        value: false,
+        description: 'Enable the main harvester scheduler',
+        updatedBy: session.email,
+      },
+      update: {
+        value: false,
+        updatedBy: session.email,
+      },
+    })
+
+    // 2. Abort all RUNNING scrape runs
+    const abortResult = await prisma.scrape_runs.updateMany({
+      where: { status: 'RUNNING' },
+      data: {
+        status: 'FAILED',
+        completedAt: new Date(),
+      },
+    })
+
+    // 3. Clear Redis queues
+    let queuesCleared = 0
+    try {
+      const redis = new Redis({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        password: process.env.REDIS_PASSWORD || undefined,
+      })
+
+      // Find and delete all scraper-related BullMQ keys
+      const scraperKeys = await redis.keys('bull:scraper:*')
+      const resolverKeys = await redis.keys('bull:resolver:*')
+      const allKeys = [...scraperKeys, ...resolverKeys]
+
+      if (allKeys.length > 0) {
+        queuesCleared = await redis.del(...allKeys)
+      }
+
+      await redis.quit()
+    } catch (redisError) {
+      log.error('Failed to clear Redis queues during emergency stop', {}, redisError instanceof Error ? redisError : new Error(String(redisError)))
+      // Continue - the scheduler disable and run abort are the critical parts
+    }
+
+    await logAdminAction(session.userId, 'EMERGENCY_STOP_SCRAPER', {
+      resource: 'Scraper',
+      newValue: {
+        schedulerDisabled: true,
+        runsAborted: abortResult.count,
+        queuesCleared,
+      },
+    })
+
+    log.warn('EMERGENCY STOP completed', {
+      userId: session.userId,
+      runsAborted: abortResult.count,
+      queuesCleared,
+    })
+
+    revalidatePath('/scrapers')
+    revalidatePath('/settings')
+
+    return {
+      success: true,
+      runsAborted: abortResult.count,
+      queuesCleared,
+    }
+  } catch (error) {
+    log.error('Failed to execute emergency stop', {}, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to execute emergency stop' }
+  }
+}
+
+/**
+ * Get the current scraper enabled status
+ */
+export async function getScraperStatus(): Promise<{
+  success: boolean
+  error?: string
+  enabled?: boolean
+  runningRuns?: number
+  pendingJobs?: number
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    // Check scheduler setting
+    const setting = await prisma.system_settings.findUnique({
+      where: { key: 'HARVESTER_SCHEDULER_ENABLED' },
+    })
+    const enabled = setting ? (setting.value as boolean) : true // Default true
+
+    // Count running runs
+    const runningRuns = await prisma.scrape_runs.count({
+      where: { status: 'RUNNING' },
+    })
+
+    // Count pending manual requests
+    const pendingJobs = await prisma.scrape_targets.count({
+      where: {
+        lastStatus: { in: ['PENDING_MANUAL', 'ENQUEUED'] },
+      },
+    })
+
+    return {
+      success: true,
+      enabled,
+      runningRuns,
+      pendingJobs,
+    }
+  } catch (error) {
+    log.error('Failed to get scraper status', {}, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to get status' }
+  }
+}
+
+/**
+ * Enable the scraper scheduler
+ */
+export async function enableScraperScheduler(): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    await prisma.system_settings.upsert({
+      where: { key: 'HARVESTER_SCHEDULER_ENABLED' },
+      create: {
+        key: 'HARVESTER_SCHEDULER_ENABLED',
+        value: true,
+        description: 'Enable the main harvester scheduler',
+        updatedBy: session.email,
+      },
+      update: {
+        value: true,
+        updatedBy: session.email,
+      },
+    })
+
+    await logAdminAction(session.userId, 'ENABLE_SCRAPER_SCHEDULER', {
+      resource: 'Scraper',
+      newValue: { enabled: true },
+    })
+
+    log.info('Scraper scheduler enabled', { userId: session.userId })
+
+    revalidatePath('/scrapers')
+    revalidatePath('/settings')
+
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to enable scraper scheduler', {}, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to enable scheduler' }
   }
 }

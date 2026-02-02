@@ -10,7 +10,6 @@ import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import FacebookProvider from 'next-auth/providers/facebook'
 import GitHubProvider from 'next-auth/providers/github'
-import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from '@ironscout/db'
 import { loggers } from './logger'
 
@@ -30,7 +29,7 @@ const AUTH_SECRET = process.env.NEXTAUTH_SECRET
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: AUTH_SECRET,
-  adapter: PrismaAdapter(prisma),
+  // No adapter - pure JWT sessions (admin emails verified in signIn callback)
   trustHost: true,
   providers: [
     // Google OAuth (primary for admins)
@@ -136,7 +135,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Only allow admin emails
+      // Only allow admin emails - check FIRST before any database operations
       const email = user.email?.toLowerCase()
 
       if (!email || !ADMIN_EMAILS.includes(email)) {
@@ -144,7 +143,67 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false
       }
 
-      loggers.auth.info('Approved login for admin', { email })
+      // Create or update user record in database for consistent audit trail
+      if (account?.provider && account.providerAccountId) {
+        try {
+          // Upsert user - create if not exists, update if exists
+          const dbUser = await prisma.users.upsert({
+            where: { email },
+            create: {
+              email,
+              name: user.name || null,
+              image: user.image || null,
+              emailVerified: new Date(), // OAuth = verified
+            },
+            update: {
+              name: user.name || undefined,
+              image: user.image || undefined,
+              emailVerified: new Date(),
+            },
+          })
+
+          // Link OAuth account if not already linked
+          await prisma.account.upsert({
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+              },
+            },
+            create: {
+              userId: dbUser.id,
+              type: account.type || 'oauth',
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token,
+              refresh_token: account.refresh_token,
+              expires_at: account.expires_at,
+              token_type: account.token_type,
+              scope: account.scope,
+              id_token: account.id_token,
+            },
+            update: {
+              access_token: account.access_token,
+              refresh_token: account.refresh_token,
+              expires_at: account.expires_at,
+            },
+          })
+
+          // Store internal user ID for JWT callback
+          ;(user as any).dbId = dbUser.id
+
+          loggers.auth.info('Admin login approved and user synced', {
+            email,
+            userId: dbUser.id,
+            provider: account.provider,
+          })
+        } catch (error) {
+          // Fail closed - if we can't create/update user, block login
+          loggers.auth.error('Failed to sync admin user to database', { email }, error)
+          return false
+        }
+      }
+
       return true
     },
     async redirect({ url, baseUrl }) {
@@ -205,7 +264,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async jwt({ token, user }) {
       if (user) {
-        token.sub = user.id
+        // Use database user ID (from signIn callback) for consistent audit trail
+        // Falls back to OAuth provider ID if dbId not set
+        token.sub = (user as any).dbId || user.id
         token.email = user.email
       }
       return token
