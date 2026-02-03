@@ -1,22 +1,24 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-const STATUS_MAP: Record<string, { title: string; description: string; steps: string[] }> = {
+const STATUS_MAP: Record<string, { title: string; description: string; steps: string[]; showSignOut?: boolean }> = {
   '401': {
     title: 'Sign-in required',
-    description: 'You need an admin account to access this page.',
+    description: 'You need an authorized admin account to access this page.',
     steps: [
       'Sign in with your admin account.',
-      'If you’re already signed in, refresh the page.',
+      'If you signed in with the wrong account, use "Try different account" below.',
     ],
+    showSignOut: true,
   },
   '403': {
     title: 'Access denied',
-    description: 'Your account doesn’t have permission to view this content.',
+    description: "Your account doesn't have permission to view this content.",
     steps: [
       'Confirm you are using the correct account.',
-      'If this seems wrong, contact support.',
+      'If you need to use a different account, use "Try different account" below.',
     ],
+    showSignOut: true,
   },
   '404': {
     title: 'Page not found',
@@ -36,7 +38,7 @@ const STATUS_MAP: Record<string, { title: string; description: string; steps: st
   },
   '500': {
     title: 'Server error',
-    description: 'We couldn’t complete the request.',
+    description: "We couldn't complete the request.",
     steps: [
       'Try again in a few seconds.',
       'If the issue persists, contact support.',
@@ -44,7 +46,7 @@ const STATUS_MAP: Record<string, { title: string; description: string; steps: st
   },
   '501': {
     title: 'Not implemented',
-    description: 'That feature isn’t available yet.',
+    description: "That feature isn't available yet.",
     steps: [
       'Try a different action.',
       'Check back later.',
@@ -94,6 +96,14 @@ export default async function StatusPage({
           >
             {primaryLabel}
           </Link>
+          {config.showSignOut && (
+            <a
+              href="/api/auth/logout"
+              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Try different account
+            </a>
+          )}
           <a
             href="mailto:support@ironscout.ai"
             className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

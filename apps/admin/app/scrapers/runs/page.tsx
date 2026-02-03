@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react'
 import { listScrapeRuns } from '../actions'
+import { CancelRunButton } from './cancel-run-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,6 +153,9 @@ export default async function ScrapeRunsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Yield
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -224,6 +228,13 @@ export default async function ScrapeRunsPage() {
                         >
                           {formatRate(run.yieldRate)}
                         </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm whitespace-nowrap">
+                      {run.status === 'RUNNING' ? (
+                        <CancelRunButton runId={run.id} />
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}

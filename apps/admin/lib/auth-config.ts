@@ -57,11 +57,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: '/auth/signin',
     error: '/auth/error',
   },
+  // Use unique cookie names for admin app to prevent session conflicts with web app
+  // Both apps share the same parent domain (*.ironscout.ai), so they need distinct cookies
   cookies: {
     sessionToken: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Secure-authjs.session-token'
-        : 'authjs.session-token',
+        ? '__Secure-authjs.admin-session-token'
+        : 'authjs.admin-session-token',
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -72,8 +74,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     callbackUrl: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Secure-authjs.callback-url'
-        : 'authjs.callback-url',
+        ? '__Secure-authjs.admin-callback-url'
+        : 'authjs.admin-callback-url',
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -84,8 +86,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     csrfToken: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Host-authjs.csrf-token'
-        : 'authjs.csrf-token',
+        ? '__Host-authjs.admin-csrf-token'
+        : 'authjs.admin-csrf-token',
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -96,8 +98,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     pkceCodeVerifier: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Secure-authjs.pkce.code_verifier'
-        : 'authjs.pkce.code_verifier',
+        ? '__Secure-authjs.admin-pkce.code_verifier'
+        : 'authjs.admin-pkce.code_verifier',
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -109,8 +111,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     state: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Secure-authjs.state'
-        : 'authjs.state',
+        ? '__Secure-authjs.admin-state'
+        : 'authjs.admin-state',
       options: {
         httpOnly: true,
         sameSite: 'lax',
@@ -122,8 +124,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     nonce: {
       name: process.env.NODE_ENV === 'production'
-        ? '__Secure-authjs.nonce'
-        : 'authjs.nonce',
+        ? '__Secure-authjs.admin-nonce'
+        : 'authjs.admin-nonce',
       options: {
         httpOnly: true,
         sameSite: 'lax',

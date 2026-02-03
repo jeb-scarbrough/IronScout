@@ -477,6 +477,56 @@ export async function deleteScrapeTarget(id: string): Promise<{ success: boolean
 // Scrape Runs
 // =============================================================================
 
+/**
+ * Cancel a stuck scrape run.
+ *
+ * Use this when a run is stuck in RUNNING status but the worker has crashed or
+ * otherwise failed to complete it. This marks the run as FAILED so the scheduler
+ * can pick up new work for that source.
+ */
+export async function cancelScrapeRun(runId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const run = await prisma.scrape_runs.findUnique({
+      where: { id: runId },
+      select: { id: true, status: true, adapterId: true, sourceId: true, startedAt: true },
+    })
+
+    if (!run) {
+      return { success: false, error: 'Run not found' }
+    }
+
+    if (run.status !== 'RUNNING') {
+      return { success: false, error: `Run is not in RUNNING status (current: ${run.status})` }
+    }
+
+    await prisma.scrape_runs.update({
+      where: { id: runId },
+      data: {
+        status: 'FAILED',
+        completedAt: new Date(),
+      },
+    })
+
+    await logAdminAction(session.userId, 'CANCEL_SCRAPE_RUN', {
+      resource: 'ScrapeRun',
+      resourceId: runId,
+      oldValue: { status: 'RUNNING', startedAt: run.startedAt },
+      newValue: { status: 'FAILED', reason: 'MANUAL_CANCEL' },
+    })
+
+    log.info('Scrape run cancelled', { runId, adapterId: run.adapterId, sourceId: run.sourceId, userId: session.userId })
+
+    revalidatePath('/scrapers/runs')
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to cancel scrape run', { runId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to cancel run' }
+  }
+}
+
 export async function listScrapeRuns(options?: {
   adapterId?: string
   sourceId?: string
