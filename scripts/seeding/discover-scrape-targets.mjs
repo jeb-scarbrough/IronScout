@@ -9,6 +9,8 @@
  *     --listing <url> [--listing <url> ...] \
  *     --product-path-prefix /product/ \
  *     [--product-url-regex "<regex>"] \
+ *     [--paginate] \
+ *     [--max-pages 10] \
  *     [--max-urls 1000] \
  *     [--dry-run] \
  *     [--count-only] \
@@ -22,6 +24,7 @@ const DEFAULT_DELAY_MS = 1000
 const MIN_DELAY_MS = 1000
 const MAX_DELAY_MS = 60000
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+const DEFAULT_MAX_PAGES = 10
 
 async function main() {
   const args = process.argv.slice(2)
@@ -40,10 +43,6 @@ async function main() {
     fail('Provide at least one --sitemap or --listing URL, or use --auto-sitemap')
   }
 
-  if (!opts.productPathPrefix && !opts.productUrlRegex) {
-    fail('Provide --product-path-prefix or --product-url-regex to filter product URLs')
-  }
-
   const startedAt = Date.now()
   const runId = new Date().toISOString()
 
@@ -59,7 +58,7 @@ async function main() {
     fail('--accept cannot be used with --count-only')
   }
 
-  if (!opts.dryRun && opts.sourceId) {
+  if (opts.sourceId) {
     const db = await import('../../packages/db/index.js')
     prisma = db.prisma
 
@@ -89,8 +88,15 @@ async function main() {
       fail(`adapterId mismatch: source=${source.adapterId} input=${opts.adapterId}`)
     }
 
-    if (!source.scrapeEnabled || !source.robotsCompliant || !source.tosReviewedAt || !source.tosApprovedBy) {
-      fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
+    if (!opts.dryRun) {
+      if (
+        !source.scrapeEnabled ||
+        !source.robotsCompliant ||
+        !source.tosReviewedAt ||
+        !source.tosApprovedBy
+      ) {
+        fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
+      }
     }
   } else if (opts.accept) {
     fail('Cannot write without --source-id')
@@ -142,20 +148,39 @@ async function main() {
     fail('Invalid maxUrls cap')
   }
 
+  const configProductUrlRegex =
+    typeof discoveryConfig?.productUrlRegex === 'string' ? discoveryConfig.productUrlRegex : null
+  const configProductPathPrefix =
+    typeof discoveryConfig?.productPathPrefix === 'string' ? discoveryConfig.productPathPrefix : null
+  const configTargetUrlTemplate =
+    typeof discoveryConfig?.targetUrlTemplate === 'string' ? discoveryConfig.targetUrlTemplate : null
+  const configPaginate = discoveryConfig?.paginate === true
+  const configMaxPages = Number.isFinite(discoveryConfig?.maxPages)
+    ? Number.parseInt(discoveryConfig.maxPages, 10)
+    : null
+
+  const effectiveProductUrlRegex = opts.productUrlRegex ?? configProductUrlRegex
+  const effectiveProductPathPrefix = opts.productPathPrefix ?? configProductPathPrefix
+  const effectiveTargetUrlTemplate = opts.targetUrlTemplate ?? configTargetUrlTemplate
+
+  if (!effectiveProductPathPrefix && !effectiveProductUrlRegex) {
+    fail('Provide --product-path-prefix or --product-url-regex to filter product URLs')
+  }
+
   let productRegex = null
-  if (opts.productUrlRegex) {
+  if (effectiveProductUrlRegex) {
     try {
-      productRegex = new RegExp(opts.productUrlRegex)
+      productRegex = new RegExp(effectiveProductUrlRegex)
     } catch {
       fail('Invalid --product-url-regex')
     }
   }
-  const productPrefix = opts.productPathPrefix ? normalizePrefix(opts.productPathPrefix) : null
+  const productPrefix = effectiveProductPathPrefix ? normalizePrefix(effectiveProductPathPrefix) : null
 
   const robots = new RobotsPolicy({ userAgent: 'IronScout' })
   const rateLimiter = new DomainRateLimiter()
 
-  const canonicalToUrl = new Map()
+  const canonicalToRecord = new Map()
   let totalScanned = 0
   let eligibleCount = 0
   let skippedRobots = 0
@@ -191,11 +216,7 @@ async function main() {
   }
 
   for (const listingUrl of opts.listings) {
-    const html = await fetchWithRobots(listingUrl, robots, rateLimiter)
-    const links = extractLinks(html, listingUrl)
-    for (const link of links) {
-      await handleCandidate(link)
-    }
+    await collectFromListing(listingUrl)
   }
 
   const records = []
@@ -203,9 +224,9 @@ async function main() {
   const notes = buildNotes(runId, method, opts.notes)
   const createdBy = process.env.USER || process.env.USERNAME || 'discovery-script'
 
-  for (const [canonicalUrl, originalUrl] of canonicalToUrl.entries()) {
+  for (const [canonicalUrl, record] of canonicalToRecord.entries()) {
     records.push({
-      url: originalUrl,
+      url: record.targetUrl,
       canonicalUrl,
       sourceId: source?.id ?? 'no-db',
       adapterId: source?.adapterId ?? opts.adapterId ?? 'unknown',
@@ -289,7 +310,7 @@ async function main() {
     if (totalScanned - lastProgressLogged >= PROGRESS_INTERVAL) {
       lastProgressLogged = totalScanned
       console.log(
-        `::discovery-progress:: scanned=${totalScanned} eligible=${eligibleCount} discovered=${canonicalToUrl.size}`
+        `::discovery-progress:: scanned=${totalScanned} eligible=${eligibleCount} discovered=${canonicalToRecord.size}`
       )
     }
     const cleaned = cleanCandidateUrl(candidateUrl)
@@ -297,6 +318,13 @@ async function main() {
       skippedInvalid += 1
       if (opts.logUrls) {
         console.log(`url: skip reason=invalid raw=${String(candidateUrl).trim()}`)
+      }
+      return
+    }
+    if (!isSameDomain(cleaned, sourceDomain)) {
+      skippedPattern += 1
+      if (opts.logUrls) {
+        console.log(`url: skip reason=domain url=${cleaned}`)
       }
       return
     }
@@ -326,16 +354,17 @@ async function main() {
     eligibleCount += 1
 
     const canonicalUrl = canonicalizeUrl(cleaned)
-    if (!canonicalToUrl.has(canonicalUrl)) {
-      if (!opts.countOnly && canonicalToUrl.size >= effectiveMaxUrls) {
-        const details = formatCapDetails(capInfo, canonicalToUrl.size + 1)
+    if (!canonicalToRecord.has(canonicalUrl)) {
+      if (!opts.countOnly && canonicalToRecord.size >= effectiveMaxUrls) {
+        const details = formatCapDetails(capInfo, canonicalToRecord.size + 1)
         const hint = capOverrideHint(capInfo)
         fail(`Discovery cap exceeded. ${details}${hint}`)
       }
-      canonicalToUrl.set(canonicalUrl, cleaned)
+      const targetUrl = buildTargetUrl(cleaned, effectiveTargetUrlTemplate)
+      canonicalToRecord.set(canonicalUrl, { targetUrl, sourceUrl: cleaned })
       okCount += 1
       if (opts.logUrls) {
-        console.log(`url: ok url=${cleaned}`)
+        console.log(`url: ok url=${targetUrl}`)
       }
     } else if (opts.logUrls) {
       skippedDuplicate += 1
@@ -345,7 +374,7 @@ async function main() {
 
   async function collectFromSitemap(sitemapUrl, depth) {
     if (depth > MAX_SITEMAP_DEPTH) return
-    const xml = await fetchWithRobots(sitemapUrl, robots, rateLimiter)
+    const xml = await fetchWithRobots(sitemapUrl, robots, rateLimiter, false)
     const locs = extractSitemapLocs(xml)
     if (xml.includes('<sitemapindex')) {
       for (const loc of locs) {
@@ -356,6 +385,66 @@ async function main() {
 
     for (const loc of locs) {
       await handleCandidate(loc)
+    }
+  }
+
+  async function collectFromListing(listingUrl) {
+    const visited = new Set()
+    let currentUrl = listingUrl
+    let pagesProcessed = 0
+    const paginateEnabled = opts.paginate || configPaginate
+    const maxPages = paginateEnabled
+      ? opts.maxPagesProvided
+        ? opts.maxPages
+        : Number.isFinite(configMaxPages)
+          ? Math.max(1, configMaxPages)
+          : DEFAULT_MAX_PAGES
+      : 1
+
+    while (currentUrl && pagesProcessed < maxPages) {
+      const canonicalListingUrl = canonicalizeUrl(currentUrl)
+      if (visited.has(canonicalListingUrl)) {
+        break
+      }
+      visited.add(canonicalListingUrl)
+      pagesProcessed += 1
+
+      const acceptJson = shouldPreferJson(currentUrl)
+      const body = await fetchWithRobots(currentUrl, robots, rateLimiter, acceptJson)
+      const parsedJson = tryParseJson(body)
+      let nextUrl = null
+
+      if (parsedJson && Array.isArray(parsedJson.items)) {
+        const productUrls = extractProductUrlsFromListingJson(parsedJson, currentUrl)
+        for (const link of productUrls) {
+          await handleCandidate(link)
+        }
+        if (paginateEnabled) {
+          nextUrl = findNextListingUrlFromJson(parsedJson)
+        }
+      } else {
+        const links = extractLinks(body, currentUrl)
+        for (const link of links) {
+          await handleCandidate(link)
+        }
+        if (paginateEnabled) {
+          nextUrl = findNextListingUrl(body, currentUrl)
+        }
+      }
+
+      if (!paginateEnabled) {
+        break
+      }
+
+      if (!nextUrl) {
+        break
+      }
+
+      if (!isSameDomain(nextUrl, sourceDomain)) {
+        break
+      }
+
+      currentUrl = nextUrl
     }
   }
   } finally {
@@ -378,6 +467,10 @@ function parseArgs(argv) {
     productUrlRegex: null,
     maxUrls: null,
     maxUrlsProvided: false,
+    paginate: false,
+    maxPages: DEFAULT_MAX_PAGES,
+    maxPagesProvided: false,
+    targetUrlTemplate: null,
     dryRun: false,
     countOnly: false,
     accept: false,
@@ -406,9 +499,19 @@ function parseArgs(argv) {
       out.productPathPrefix = argv[++i]
     } else if (arg === '--product-url-regex') {
       out.productUrlRegex = argv[++i]
+    } else if (arg === '--target-url-template') {
+      out.targetUrlTemplate = argv[++i]
     } else if (arg === '--max-urls') {
       out.maxUrls = Number.parseInt(argv[++i], 10)
       out.maxUrlsProvided = true
+    } else if (arg === '--paginate') {
+      out.paginate = true
+    } else if (arg === '--max-pages') {
+      out.maxPages = Number.parseInt(argv[++i], 10)
+      out.maxPagesProvided = true
+      if (!Number.isFinite(out.maxPages) || out.maxPages < 1) {
+        fail('Invalid --max-pages value')
+      }
     } else if (arg === '--dry-run') {
       out.dryRun = true
     } else if (arg === '--count-only') {
@@ -437,6 +540,9 @@ function printHelp() {
   console.log('  --sitemap <url> (repeatable)')
   console.log('  --listing <url> (repeatable)')
   console.log('  --product-path-prefix /product/ OR --product-url-regex "<regex>"')
+  console.log('  --target-url-template "<url with {slug} placeholder>"')
+  console.log('  --paginate (follow rel=next or page= links on listing pages)')
+  console.log('  --max-pages 10 (cap listing pagination; only when --paginate)')
   console.log('  --max-urls 500 (default; capped by scrapeConfig.discovery.maxUrls)')
   console.log('  --dry-run')
   console.log('  --count-only (scan and report totals; no writes)')
@@ -503,13 +609,34 @@ function cleanCandidateUrl(url) {
   return decodeHtmlEntities(trimmed)
 }
 
+function buildTargetUrl(sourceUrl, template) {
+  if (!template) return sourceUrl
+  if (!template.includes('{slug}') && !template.includes('{path}')) {
+    fail('Invalid targetUrlTemplate: missing {slug} or {path} placeholder')
+  }
+
+  let parsed = null
+  try {
+    parsed = new URL(sourceUrl)
+  } catch {
+    fail(`Invalid URL for target template: ${sourceUrl}`)
+  }
+
+  const path = parsed.pathname || '/'
+  const slug = path.replace(/^\/+/, '').replace(/\/$/, '')
+
+  return template
+    .replaceAll('{slug}', slug)
+    .replaceAll('{path}', path)
+}
+
 function resolveMethod(opts) {
   if (opts.sitemaps.length > 0 && opts.listings.length > 0) return 'MIXED'
   if (opts.sitemaps.length > 0) return 'SITEMAP'
   return 'LISTING'
 }
 
-async function fetchWithRobots(url, robotsPolicy, limiter) {
+async function fetchWithRobots(url, robotsPolicy, limiter, acceptJson) {
   const robotsCheck = await robotsPolicy.check(url)
   if (!robotsCheck.fetchSucceeded) {
     fail(`robots.txt fetch failed for ${getRegistrableDomain(url)}`)
@@ -520,15 +647,17 @@ async function fetchWithRobots(url, robotsPolicy, limiter) {
 
   const delayMs = clampDelayMs(robotsCheck.crawlDelayMs ?? DEFAULT_DELAY_MS)
   await limiter.wait(url, delayMs)
-  return await fetchText(url)
+  return await fetchText(url, acceptJson)
 }
 
-async function fetchText(url) {
+async function fetchText(url, acceptJson) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 30000)
 
   const headers = buildHeaders({
-    Accept: 'text/html,application/xhtml+xml,application/xml',
+    Accept: acceptJson
+      ? 'application/json,text/plain,*/*'
+      : 'text/html,application/xhtml+xml,application/xml',
   })
 
   const response = await fetch(url, {
@@ -583,6 +712,118 @@ function extractLinks(html, baseUrl) {
     }
   }
   return urls
+}
+
+function shouldPreferJson(url) {
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname.includes('/api/')) return true
+    if (parsed.searchParams.has('fieldset')) return true
+    if (parsed.searchParams.has('include')) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
+function tryParseJson(value) {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.startsWith('<')) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+}
+
+function extractProductUrlsFromListingJson(payload, baseUrl) {
+  const urls = []
+  let origin = null
+  try {
+    origin = new URL(baseUrl).origin
+  } catch {
+    origin = 'https://www.primaryarms.com'
+  }
+
+  for (const item of payload.items || []) {
+    if (!item || typeof item !== 'object') continue
+    const urlComponent = item.urlcomponent || item.urlComponent || item.urlcomponentid
+    const rawUrl = item.url || item.link || item.canonicalurl
+    if (rawUrl && typeof rawUrl === 'string') {
+      try {
+        urls.push(new URL(rawUrl, origin).toString())
+        continue
+      } catch {
+        // fall through
+      }
+    }
+    if (urlComponent && typeof urlComponent === 'string') {
+      const trimmed = urlComponent.trim()
+      if (trimmed) {
+        const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+        urls.push(`${origin}${path}`)
+      }
+    }
+  }
+
+  return urls
+}
+
+function findNextListingUrlFromJson(payload) {
+  if (!payload || !Array.isArray(payload.links)) return null
+  const next = payload.links.find(link => link?.rel === 'next' && link?.href)
+  if (next && typeof next.href === 'string') {
+    return next.href
+  }
+  return null
+}
+
+function findNextListingUrl(html, baseUrl) {
+  let currentPage = 1
+  let currentPath = ''
+  try {
+    const parsed = new URL(baseUrl)
+    currentPath = parsed.pathname
+    const pageParam = parsed.searchParams.get('page')
+    if (pageParam) {
+      const parsedPage = Number.parseInt(pageParam, 10)
+      if (Number.isFinite(parsedPage) && parsedPage > 0) {
+        currentPage = parsedPage
+      }
+    }
+  } catch {
+    return null
+  }
+
+  const links = extractLinks(html, baseUrl)
+  let bestUrl = null
+  let bestPage = Infinity
+
+  for (const link of links) {
+    let candidate = null
+    try {
+      candidate = new URL(link, baseUrl)
+    } catch {
+      continue
+    }
+
+    if (candidate.pathname !== currentPath) {
+      continue
+    }
+
+    const pageParam = candidate.searchParams.get('page')
+    if (!pageParam) continue
+    const pageNumber = Number.parseInt(pageParam, 10)
+    if (!Number.isFinite(pageNumber) || pageNumber <= currentPage) continue
+
+    if (pageNumber < bestPage) {
+      bestPage = pageNumber
+      bestUrl = candidate.toString()
+    }
+  }
+
+  return bestUrl
 }
 
 function decodeHtmlEntities(value) {
@@ -681,6 +922,21 @@ function normalizeDomain(host) {
     return lower.slice(4)
   }
   return lower
+}
+
+function isSameDomain(url, expectedDomain) {
+  try {
+    const domain = getRegistrableDomain(url)
+    const expected = normalizeDomain(expectedDomain)
+    if (!domain || !expected) return false
+    return (
+      domain === expected ||
+      domain.endsWith(`.${expected}`) ||
+      expected.endsWith(`.${domain}`)
+    )
+  } catch {
+    return false
+  }
 }
 
 const publicHostCache = new Map()

@@ -25,6 +25,9 @@ Implementation location:
 Discovery may use:
 - `sitemap.xml` (preferred)
 - Explicitly allowlisted listing/catalog pages
+- Allowlisted JSON listing endpoints when a site serves JS shells
+- Optional pagination on allowlisted listing pages when links are present in HTML
+  (e.g., `rel=next` or `page=` links), with strict caps
 - Sitemap auto-discovery via `robots.txt` `Sitemap:` lines, with fallback to
   `/sitemap.xml` or `/sitemap_index.xml` when no sitemap is declared
 
@@ -41,10 +44,14 @@ Discovery must:
 - Record discovery provenance in `scrape_targets.notes` using a structured
   tag: `discovery:<runId> method:<SITEMAP|LISTING|MIXED>`
 - Validate candidate URLs against adapter-compatible patterns
+- If pagination is used:
+  - Only follow links on the same path as the allowlisted listing page
+  - Only follow explicit `page=` links (no crawling category trees)
+  - Enforce a per-listing page cap in addition to global URL caps
 
 Discovery must **not**:
 - Scrape prices or product data
-- Paginate beyond explicit allowlists or caps
+- Paginate beyond explicit allowlists, page caps, or URL caps
 - Run continuously or autonomously without ops control
 
 ## Alternatives Considered
@@ -64,8 +71,12 @@ Discovery must **not**:
 - Allowlist storage + caps live in `sources.scrapeConfig.discovery`:
   - `allowlist`: array of sitemap/listing seed URLs
   - `maxUrls`: integer cap (default 500 if unset)
+  - `targetUrlTemplate`: optional template to convert discovered product URLs into
+    scrape target URLs (e.g., JSON endpoints). Use `{slug}` for the product
+    path without a leading slash (canonical URL remains the HTML product URL).
   - CLI seeds must be a subset of allowlist when present
 - Cap enforcement is fail-closed: if discovery exceeds `maxUrls`, abort.
+- Pagination cap is enforced per listing run (CLI `--max-pages`, default 10 when `--paginate` is used).
 
 Discovery seeding is an ops-only input path into `scrape_targets`. It does not
 change scraper adapter responsibilities or consumer visibility rules.
