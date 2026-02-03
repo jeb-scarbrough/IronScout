@@ -25,33 +25,47 @@ interface SidebarNavProps {
 }
 
 // V1 Navigation items - no premium gating
-const navItems = [
+type NavItem = {
+  title: string
+  href: string
+  icon: typeof Search
+  exact?: boolean
+}
+
+type NavSeparator = {
+  separator: true
+}
+
+const navItems: (NavItem | NavSeparator)[] = [
   {
-    title: 'Search',
+    title: 'Ammo Search',
     href: '/search',
     icon: Search,
   },
   {
-    title: 'My Loadout',
+    title: 'Recon',
     href: '/dashboard',
     icon: LayoutDashboard,
     exact: true,
   },
-  {
-    title: 'Watchlist',
-    href: '/dashboard/saved',
-    icon: Bookmark,
-  },
+  { separator: true },
   {
     title: 'Gun Locker',
     href: '/dashboard/gun-locker',
     icon: Crosshair,
   },
   {
-    title: 'Price Scanner',
+    title: 'Watchlist',
+    href: '/dashboard/saved',
+    icon: Bookmark,
+  },
+  { separator: true },
+  {
+    title: 'In-Store Price Check',
     href: '/dashboard/price-check',
     icon: ScanLine,
   },
+  { separator: true },
   {
     title: 'Settings',
     href: '/dashboard/settings',
@@ -63,11 +77,15 @@ export function SidebarNav({ userName }: SidebarNavProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
-  const isActive = (item: typeof navItems[0]) => {
+  const isActive = (item: NavItem) => {
     if (item.exact) {
       return pathname === item.href
     }
     return pathname.startsWith(item.href)
+  }
+
+  const isSeparator = (item: NavItem | NavSeparator): item is NavSeparator => {
+    return 'separator' in item
   }
 
   const SidebarContent = () => (
@@ -97,7 +115,12 @@ export function SidebarNav({ userName }: SidebarNavProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {navItems.map((item, index) => {
+          if (isSeparator(item)) {
+            return (
+              <div key={`sep-${index}`} className="my-2 mx-3 border-t border-border" />
+            )
+          }
           const active = isActive(item)
           return (
             <Link

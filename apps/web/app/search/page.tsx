@@ -45,31 +45,37 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasQuery = Boolean(query)
 
   return (
-    <div>
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Search</h1>
+        <p className="text-sm text-iron-400 mt-1">
+          Find and compare ammunition prices across retailers
+        </p>
+      </div>
+
       {/* Search Hero - matches www home page style */}
       <Suspense fallback={
-        <div className="h-64 animate-pulse bg-muted" />
+        <div className="h-32 animate-pulse bg-muted rounded-lg" />
       }>
         <SearchHero initialQuery={query} compact={hasQuery} />
       </Suspense>
 
       {/* Results - only show when there's a query */}
       {hasQuery && (
-        <div className="container mx-auto px-4 py-6">
-          <div className="relative flex flex-col">
-            <SearchLoadingOverlay />
-            <Suspense fallback={
-              <div className="text-center py-12">
-                <div className="animate-pulse flex flex-col items-center">
-                  <div className="w-12 h-12 bg-muted rounded-full mb-4"></div>
-                  <div className="h-4 w-48 bg-muted rounded mb-2"></div>
-                  <div className="h-3 w-32 bg-muted rounded"></div>
-                </div>
+        <div className="relative flex flex-col">
+          <SearchLoadingOverlay />
+          <Suspense fallback={
+            <div className="text-center py-12">
+              <div className="animate-pulse flex flex-col items-center">
+                <div className="w-12 h-12 bg-muted rounded-full mb-4"></div>
+                <div className="h-4 w-48 bg-muted rounded mb-2"></div>
+                <div className="h-3 w-32 bg-muted rounded"></div>
               </div>
-            }>
-              <SearchResults searchParams={params} />
-            </Suspense>
-          </div>
+            </div>
+          }>
+            <SearchResults searchParams={params} />
+          </Suspense>
         </div>
       )}
     </div>

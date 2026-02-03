@@ -736,15 +736,15 @@ export function GunLockerManager() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {guns.map((gun) => (
             <Card key={gun.id} className="group relative overflow-hidden">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
                   {/* Image or placeholder */}
                   <button
                     onClick={() => gun.imageUrl ? setViewingImage(gun) : handleImageUploadClick(gun.id)}
-                    className="relative flex-shrink-0 h-16 w-16 rounded-lg overflow-hidden bg-muted hover:opacity-80 transition-opacity"
+                    className="relative flex-shrink-0 h-20 w-20 rounded-lg overflow-hidden bg-muted hover:opacity-80 transition-opacity"
                     disabled={isSubmitting && uploadingGunId === gun.id}
                   >
                     {gun.imageUrl ? (
@@ -759,8 +759,8 @@ export function GunLockerManager() {
                           <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
-                            <Camera className="h-5 w-5 mb-1" />
-                            <span className="text-[10px]">Add Photo</span>
+                            <Camera className="h-6 w-6 mb-1" />
+                            <span className="text-xs">Add Photo</span>
                           </>
                         )}
                       </div>
@@ -772,11 +772,11 @@ export function GunLockerManager() {
                     onClick={() => handleOpenGunDetail(gun)}
                     className="flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
                   >
-                    <p className="font-medium truncate">{getCaliberLabel(gun.caliber)}</p>
+                    <p className="font-semibold text-base">{getCaliberLabel(gun.caliber)}</p>
                     {gun.nickname && (
-                      <p className="text-sm text-muted-foreground truncate">{gun.nickname}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{gun.nickname}</p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-1">View ammo preferences →</p>
+                    <p className="text-xs text-muted-foreground mt-2">View ammo preferences →</p>
                   </button>
 
                   {/* Action buttons */}

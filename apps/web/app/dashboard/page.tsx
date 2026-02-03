@@ -173,9 +173,9 @@ export default function DashboardPage() {
     <DashboardContent>
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold italic text-white">My Loadout</h1>
+        <h1 className="text-2xl font-bold italic text-white">Recon</h1>
         <p className="text-sm text-iron-400 mt-1">
-          Track your firearms, ammo preferences, and price alerts
+          Personalized results based on what you shoot and watch
         </p>
       </div>
 
