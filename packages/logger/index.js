@@ -265,6 +265,9 @@ function isAsyncEnabled() {
     return flag === 'true' || flag === '1';
 }
 function isRedactionEnabled() {
+    // Browser logs should always be redacted to avoid client-side leaks.
+    if (isBrowser)
+        return true;
     if (redactionEnabled !== null)
         return redactionEnabled;
     const flag = getEnv('LOG_REDACT');
@@ -411,11 +414,11 @@ function formatPrettyBrowser(entry) {
     const componentPath = entry.component
         ? `${entry.service}:${entry.component}`
         : entry.service;
-    // Extract known fields - meta suppressed in browser to prevent sensitive data leaks
+    // Extract known fields
     const { timestamp, level, service, component, message, error, ...meta } = entry;
-    // Browser: suppress meta to prevent sensitive data leaks (use server logs for debugging)
-    // Only show count of meta keys if any exist
-    const metaStr = Object.keys(meta).length > 0 ? ` [+${Object.keys(meta).length} fields]` : '';
+    // Browser: redact metadata to prevent sensitive data leaks
+    const redactedMeta = redactEntry(meta);
+    const metaStr = Object.keys(redactedMeta).length > 0 ? ` ${JSON.stringify(redactedMeta)}` : '';
     // Build message with %c placeholders for styling
     const formattedMessage = `%c${timestamp} %c${levelStr} %c[${componentPath}] %c${message}${metaStr}`;
     const styles = [

@@ -2,18 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   mockFindMany: vi.fn(),
-  mockTargetCount: vi.fn(),
   mockRunFindMany: vi.fn(),
   mockRunFindFirst: vi.fn(),
   mockRunCreate: vi.fn(),
   mockRunUpdate: vi.fn(),
+  mockScrapeTargetsCount: vi.fn(),
+  mockScrapeTargetsFindUnique: vi.fn(),
   mockAdapterStatusFind: vi.fn(),
   mockAdapterStatusFindMany: vi.fn(),
   mockAdapterStatusCreate: vi.fn(),
   mockAdapterStatusUpdate: vi.fn(),
-  mockCycleCreate: vi.fn(),
-  mockCycleFindUnique: vi.fn(),
-  mockCycleUpdate: vi.fn(),
+  mockScrapeCyclesCreate: vi.fn(),
+  mockScrapeCyclesFindUnique: vi.fn(),
+  mockScrapeCyclesUpdate: vi.fn(),
   mockEnqueueScrapeUrl: vi.fn(),
   mockQueueGetJobs: vi.fn(),
   mockGetScrapeQueueStats: vi.fn(),
@@ -34,11 +35,11 @@ vi.mock('@ironscout/db', () => ({
   prisma: {
     scrape_targets: {
       findMany: mocks.mockFindMany,
-      findUnique: vi.fn(),
+      findUnique: mocks.mockScrapeTargetsFindUnique,
+      count: mocks.mockScrapeTargetsCount,
       update: vi.fn(),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
-      count: mocks.mockTargetCount,
     },
     scrape_runs: {
       findMany: mocks.mockRunFindMany,
@@ -46,16 +47,16 @@ vi.mock('@ironscout/db', () => ({
       create: mocks.mockRunCreate,
       update: mocks.mockRunUpdate,
     },
+    scrape_cycles: {
+      create: mocks.mockScrapeCyclesCreate,
+      findUnique: mocks.mockScrapeCyclesFindUnique,
+      update: mocks.mockScrapeCyclesUpdate,
+    },
     scrape_adapter_status: {
-      findUnique: mocks.mockAdapterStatusFind,
       findMany: mocks.mockAdapterStatusFindMany,
+      findUnique: mocks.mockAdapterStatusFind,
       create: mocks.mockAdapterStatusCreate,
       update: mocks.mockAdapterStatusUpdate,
-    },
-    scrape_cycles: {
-      create: mocks.mockCycleCreate,
-      findUnique: mocks.mockCycleFindUnique,
-      update: mocks.mockCycleUpdate,
     },
     sources: {
       findUnique: vi.fn(),
@@ -76,7 +77,6 @@ vi.mock('../../config/queues.js', () => ({
     getJobs: mocks.mockQueueGetJobs,
   },
   getScrapeQueueStats: mocks.mockGetScrapeQueueStats,
-  decrementAdapterPending: vi.fn(),
 }))
 
 vi.mock('../../config/logger.js', () => ({
@@ -98,8 +98,8 @@ const createTarget = (overrides: Partial<any> = {}) => ({
   sourceId: 'source-1',
   adapterId: 'adapter-1',
   priority: 5,
-  schedule: null,
-  lastScrapedAt: null,
+  schedule: null, // Use default cron schedule
+  lastScrapedAt: null, // Never scraped = always due
   sources: {
     id: 'source-1',
     retailerId: 'retailer-1',
@@ -108,23 +108,12 @@ const createTarget = (overrides: Partial<any> = {}) => ({
   ...overrides,
 })
 
-const createDueAdapter = (overrides: Partial<any> = {}) => ({
-  adapterId: 'adapter-1',
-  schedule: null,
-  lastCycleStartedAt: null,
-  currentCycleId: null,
-  cycleTimeoutMinutes: 180,
-  enabled: true,
-  ingestionPaused: false,
-  ...overrides,
-})
-
 const createCycle = (overrides: Partial<any> = {}) => ({
   id: 'cycle-1',
   adapterId: 'adapter-1',
   status: 'RUNNING',
   trigger: 'SCHEDULED',
-  startedAt: new Date('2025-01-01T00:00:00Z'),
+  startedAt: new Date('2025-02-03T12:00:00Z'),
   completedAt: null,
   durationMs: null,
   totalTargets: 2,
@@ -138,11 +127,15 @@ const createCycle = (overrides: Partial<any> = {}) => ({
 })
 
 describe('Scrape Scheduler', () => {
+  let cycleTargets: ReturnType<typeof createTarget>[] = []
+  let cycleHasMore = false
+  let manualTargets: ReturnType<typeof createTarget>[] = []
+  let brokenTargets: ReturnType<typeof createTarget>[] = []
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Default: no stale runs to finalize
     mocks.mockRunFindMany.mockResolvedValue([])
-    mocks.mockRunFindFirst.mockResolvedValue(null)
     mocks.mockQueueGetJobs.mockResolvedValue([])
     // Default queue stats: low utilization, no backpressure
     mocks.mockGetScrapeQueueStats.mockResolvedValue({
@@ -155,54 +148,59 @@ describe('Scrape Scheduler', () => {
     })
     // Default enqueue result: accepted
     mocks.mockEnqueueScrapeUrl.mockResolvedValue({ status: 'accepted', jobId: 'job-1' })
-    // Default: no due adapters (getDueAdapters)
-    mocks.mockAdapterStatusFindMany.mockResolvedValue([])
-    // Default: 0 target count
-    mocks.mockTargetCount.mockResolvedValue(0)
-    // Default cycle mocks
-    mocks.mockCycleUpdate.mockResolvedValue({})
-    mocks.mockCycleFindUnique.mockResolvedValue(null)
-    // Default: findMany always returns [] (maintenance, manual runs, getCycleTargetBatch)
-    mocks.mockFindMany.mockResolvedValue([])
+    cycleTargets = []
+    cycleHasMore = false
+    manualTargets = []
+    brokenTargets = []
+
+    mocks.mockFindMany.mockImplementation(async (args?: any) => {
+      const where = args?.where ?? {}
+      if (where.status === 'BROKEN') {
+        return brokenTargets
+      }
+      if (where.lastStatus === 'PENDING_MANUAL') {
+        return manualTargets
+      }
+      if (where.adapterId) {
+        if (args?.take === 1) {
+          return cycleHasMore ? cycleTargets.slice(0, 1) : []
+        }
+        return cycleTargets.slice(0, args?.take ?? cycleTargets.length)
+      }
+      return []
+    })
+
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: null,
+        currentCycleId: null,
+        cycleTimeoutMinutes: 60,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+    mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: true, ingestionPaused: false })
+    mocks.mockScrapeTargetsCount.mockResolvedValue(2)
+    mocks.mockScrapeTargetsFindUnique.mockResolvedValue({ priority: 5 })
+    mocks.mockScrapeCyclesCreate.mockResolvedValue(createCycle())
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValue(createCycle())
+    mocks.mockScrapeCyclesUpdate.mockResolvedValue(createCycle())
+    mocks.mockRunFindFirst.mockResolvedValue(null)
   })
 
   it('creates runs and enqueues jobs per adapter', async () => {
     const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
     mocks.registry.get.mockReturnValue(adapter)
 
-    // getDueAdapters returns one adapter due for scheduling
-    mocks.mockAdapterStatusFindMany.mockResolvedValue([createDueAdapter()])
+    cycleTargets = [
+      createTarget({ id: 'target-1' }),
+      createTarget({ id: 'target-2', url: 'https://example.com/other' }),
+    ]
+    cycleHasMore = false
 
-    // startNewCycle: count targets
-    mocks.mockTargetCount.mockResolvedValue(2)
-
-    // startNewCycle: create cycle
-    const cycle = createCycle()
-    mocks.mockCycleCreate.mockResolvedValue(cycle)
-
-    // getCycleTargetBatch: return targets on first call, empty on hasMore check
-    // Note: earlier findMany calls (maintenance recheckBrokenUrls, processManualRuns)
-    // return [] from default. The first mockResolvedValueOnce overrides for getCycleTargetBatch.
-    mocks.mockFindMany
-      .mockResolvedValueOnce([]) // recheckBrokenUrls (maintenance, runs on first test)
-      .mockResolvedValueOnce([]) // processManualRuns
-      .mockResolvedValueOnce([
-        createTarget({ id: 'target-1' }),
-        createTarget({ id: 'target-2', url: 'https://example.com/other' }),
-      ]) // getCycleTargetBatch (batch)
-      // subsequent calls fall back to [] (getCycleTargetBatch hasMore check)
-
-    // processCycleBatch: create run for source
     mocks.mockRunCreate.mockResolvedValue({ id: 'run-1' })
-
-    // finalizeCycle: getCurrentCycle returns cycle data
-    mocks.mockCycleFindUnique.mockResolvedValue({
-      ...cycle,
-      adapterId: 'adapter-1',
-      startedAt: new Date('2025-01-01T00:00:00Z'),
-      targetsCompleted: 2,
-      targetsFailed: 0,
-    })
 
     await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
 
@@ -237,8 +235,7 @@ describe('Scrape Scheduler', () => {
 
   it('skips targets when adapter is not registered', async () => {
     mocks.registry.get.mockReturnValue(undefined)
-    // getDueAdapters returns one adapter, but registry doesn't have it
-    mocks.mockAdapterStatusFindMany.mockResolvedValue([createDueAdapter()])
+    cycleTargets = [createTarget()]
 
     await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
 
@@ -246,11 +243,10 @@ describe('Scrape Scheduler', () => {
     expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
   })
 
-  it('skips targets when adapter is disabled', async () => {
-    const adapter = { id: 'adapter-1', version: '1.0.0', domain: 'example.com' }
-    mocks.registry.get.mockReturnValue(adapter)
-    // getDueAdapters filters by enabled=true, so disabled adapter won't appear
+  it('skips scheduling when no adapters are due', async () => {
+    mocks.registry.get.mockReturnValue({ id: 'adapter-1', version: '1.0.0', domain: 'example.com' })
     mocks.mockAdapterStatusFindMany.mockResolvedValue([])
+    cycleTargets = [createTarget()]
 
     await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
 
@@ -261,6 +257,7 @@ describe('Scrape Scheduler', () => {
   it('records run completion metrics for finalized runs', async () => {
     const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
     mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([])
 
     mocks.mockRunFindMany.mockResolvedValueOnce([
       {
@@ -276,7 +273,6 @@ describe('Scrape Scheduler', () => {
         offersDropped: 0,
         offersQuarantined: 0,
         oosNoPriceCount: 0,
-        zeroPriceCount: 0,
       },
     ])
     mocks.mockQueueGetJobs.mockResolvedValue([])
@@ -298,14 +294,9 @@ describe('Scrape Scheduler', () => {
   it('records queue rejections during scheduling', async () => {
     const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
     mocks.registry.get.mockReturnValue(adapter)
-    mocks.mockAdapterStatusFind.mockResolvedValue({ enabled: true })
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([])
 
-    // Set up findMany for manual run path:
-    // processManualRuns finds PENDING_MANUAL target (maintenance skipped after first test)
-    mocks.mockFindMany.mockReset()
-    mocks.mockFindMany.mockResolvedValue([]) // default fallback
-    mocks.mockFindMany.mockResolvedValueOnce([createTarget({ id: 'target-1' })]) // processManualRuns
-
+    manualTargets = [createTarget({ id: 'target-1' })]
     mocks.mockRunCreate.mockResolvedValue({ id: 'run-1' })
     mocks.mockEnqueueScrapeUrl.mockResolvedValue({
       status: 'rejected',
@@ -323,6 +314,225 @@ describe('Scrape Scheduler', () => {
         adapterId: 'adapter-1',
         sourceId: 'source-1',
         reason: 'queue_full',
+      })
+    )
+  })
+
+  it('skips scheduling when queue utilization is high', async () => {
+    mocks.mockGetScrapeQueueStats.mockResolvedValue({
+      waiting: 9000,
+      active: 200,
+      delayed: 0,
+      total: 9200,
+      capacity: 10000,
+      utilizationPercent: 95,
+    })
+    cycleTargets = [createTarget()]
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockScrapeCyclesCreate).not.toHaveBeenCalled()
+    expect(mocks.mockRunCreate).not.toHaveBeenCalled()
+    expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+  })
+
+  it('reuses a running scheduled run for the same cycle', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    const cycle = createCycle({ id: 'cycle-1' })
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: cycle.startedAt,
+        currentCycleId: 'cycle-1',
+        cycleTimeoutMinutes: 60,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValue(cycle)
+    mocks.mockRunFindFirst.mockResolvedValue({
+      id: 'run-1',
+      trigger: 'SCHEDULED',
+      cycleId: 'cycle-1',
+    })
+    cycleTargets = [
+      createTarget({ id: 'target-1' }),
+      createTarget({ id: 'target-2', url: 'https://example.com/other' }),
+    ]
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockRunCreate).not.toHaveBeenCalled()
+    expect(mocks.mockEnqueueScrapeUrl).toHaveBeenCalledTimes(2)
+    expect(mocks.mockRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run-1' },
+        data: { urlsAttempted: { increment: 2 } },
+      })
+    )
+  })
+
+  it('reuses a running scheduled run when cycleId is null', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    const cycle = createCycle({ id: 'cycle-1' })
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: cycle.startedAt,
+        currentCycleId: 'cycle-1',
+        cycleTimeoutMinutes: 60,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValue(cycle)
+    mocks.mockRunFindFirst.mockResolvedValue({
+      id: 'run-1',
+      trigger: 'SCHEDULED',
+      cycleId: null,
+    })
+    cycleTargets = [createTarget({ id: 'target-1' })]
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockRunCreate).not.toHaveBeenCalled()
+    expect(mocks.mockEnqueueScrapeUrl).toHaveBeenCalledTimes(1)
+    expect(mocks.mockRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'run-1' },
+        data: { urlsAttempted: { increment: 1 } },
+      })
+    )
+  })
+
+  it('defers scheduling when an existing run is from a different trigger', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    const cycle = createCycle({ id: 'cycle-1' })
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: cycle.startedAt,
+        currentCycleId: 'cycle-1',
+        cycleTimeoutMinutes: 60,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValue(cycle)
+    mocks.mockRunFindFirst.mockResolvedValue({
+      id: 'run-1',
+      trigger: 'MANUAL',
+      cycleId: 'cycle-1',
+    })
+    cycleTargets = [createTarget({ id: 'target-1' })]
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+    expect(mocks.mockRunUpdate).not.toHaveBeenCalled()
+    expect(mocks.mockScrapeCyclesUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) })
+    )
+  })
+
+  it('defers scheduling when an existing run belongs to a different cycle', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    const cycle = createCycle({ id: 'cycle-1' })
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: cycle.startedAt,
+        currentCycleId: 'cycle-1',
+        cycleTimeoutMinutes: 60,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValue(cycle)
+    mocks.mockRunFindFirst.mockResolvedValue({
+      id: 'run-1',
+      trigger: 'SCHEDULED',
+      cycleId: 'cycle-other',
+    })
+    cycleTargets = [createTarget({ id: 'target-1' })]
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+    expect(mocks.mockRunUpdate).not.toHaveBeenCalled()
+    expect(mocks.mockScrapeCyclesUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) })
+    )
+  })
+
+  it('finalizes a cycle immediately when there are no targets', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockScrapeTargetsCount.mockResolvedValueOnce(0)
+    const emptyCycle = createCycle({ id: 'cycle-empty', totalTargets: 0 })
+    mocks.mockScrapeCyclesCreate.mockResolvedValueOnce(emptyCycle)
+    mocks.mockScrapeCyclesFindUnique.mockResolvedValueOnce(emptyCycle)
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockScrapeCyclesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cycle-empty' },
+        data: expect.objectContaining({ status: 'COMPLETED' }),
+      })
+    )
+    expect(mocks.mockEnqueueScrapeUrl).not.toHaveBeenCalled()
+  })
+
+  it('handles stuck cycles by finalizing and starting a new cycle', async () => {
+    const adapter = { id: 'adapter-1', version: '1.2.3', domain: 'example.com' }
+    const now = Date.now()
+    const stuckStartedAt = new Date(now - 2 * 60 * 60 * 1000)
+    const stuckCycle = createCycle({ id: 'cycle-stuck', startedAt: stuckStartedAt })
+    const newCycle = createCycle({ id: 'cycle-new', totalTargets: 0, startedAt: new Date(now) })
+
+    mocks.registry.get.mockReturnValue(adapter)
+    mocks.mockAdapterStatusFindMany.mockResolvedValue([
+      {
+        adapterId: 'adapter-1',
+        schedule: null,
+        lastCycleStartedAt: stuckStartedAt,
+        currentCycleId: 'cycle-stuck',
+        cycleTimeoutMinutes: 30,
+        enabled: true,
+        ingestionPaused: false,
+      },
+    ])
+
+    mocks.mockScrapeCyclesFindUnique.mockImplementation(async (args: any) => {
+      if (args?.where?.id === 'cycle-stuck') return stuckCycle
+      if (args?.where?.id === 'cycle-new') return newCycle
+      return stuckCycle
+    })
+
+    mocks.mockScrapeTargetsCount.mockResolvedValueOnce(0)
+    mocks.mockScrapeCyclesCreate.mockResolvedValueOnce(newCycle)
+
+    await triggerScrapeSchedulerTick({ maxUrlsPerTick: 10 })
+
+    expect(mocks.mockScrapeCyclesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cycle-stuck' },
+        data: expect.objectContaining({ status: 'FAILED' }),
+      })
+    )
+    expect(mocks.mockScrapeCyclesCreate).toHaveBeenCalled()
+    expect(mocks.mockAdapterStatusUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ currentCycleId: null }),
       })
     )
   })
