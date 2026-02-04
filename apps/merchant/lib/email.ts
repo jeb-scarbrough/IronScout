@@ -23,19 +23,24 @@ function getResendClient(): Resend {
   return resendClient;
 }
 
-// Email configuration - validated at module load, asserted as non-null
-const FROM_EMAIL = process.env.MERCHANT_EMAIL_FROM;
-if (!FROM_EMAIL) {
-  throw new Error('MERCHANT_EMAIL_FROM not configured');
-}
-const VALIDATED_FROM_EMAIL: string = FROM_EMAIL;
-
-const OPERATIONS_EMAIL_TO = process.env.OPERATIONS_EMAIL_TO;
-if (!OPERATIONS_EMAIL_TO) {
-  throw new Error('OPERATIONS_EMAIL_TO not configured');
-}
-const VALIDATED_OPERATIONS_EMAIL: string = OPERATIONS_EMAIL_TO;
+// Email configuration - resolved lazily to avoid build-time failures
 const BASE_URL = process.env.NEXT_PUBLIC_MERCHANT_URL || 'https://merchant.ironscout.ai';
+
+function getFromEmail(): string {
+  const from = process.env.MERCHANT_EMAIL_FROM;
+  if (!from) {
+    throw new Error('MERCHANT_EMAIL_FROM not configured');
+  }
+  return from;
+}
+
+function getOperationsEmail(): string {
+  const to = process.env.OPERATIONS_EMAIL_TO;
+  if (!to) {
+    throw new Error('OPERATIONS_EMAIL_TO not configured');
+  }
+  return to;
+}
 
 export interface SendEmailResult {
   success: boolean;
@@ -65,7 +70,7 @@ export async function sendVerificationEmail(
     const resend = getResendClient();
 
     const { data, error } = await resend.emails.send({
-      from: VALIDATED_FROM_EMAIL,
+      from: getFromEmail(),
       to: email,
       subject: 'Verify your IronScout Merchant account',
       html: `
@@ -169,7 +174,7 @@ export async function sendPasswordResetEmail(
     const resend = getResendClient();
 
     const { data, error } = await resend.emails.send({
-      from: VALIDATED_FROM_EMAIL,
+      from: getFromEmail(),
       to: email,
       subject: 'Reset your IronScout Merchant password',
       html: `
@@ -264,7 +269,7 @@ export async function sendApprovalEmail(
     const resend = getResendClient();
 
     const { data, error } = await resend.emails.send({
-      from: VALIDATED_FROM_EMAIL,
+      from: getFromEmail(),
       to: email,
       subject: '🎉 Your IronScout Merchant account is approved!',
       html: `
@@ -372,7 +377,7 @@ export async function sendAdminNewMerchantNotification(
   emailLogger.info('Sending admin notification for new merchant');
 
   // Send to operations@ironscout.ai for new merchant notifications
-  const notificationEmail = VALIDATED_OPERATIONS_EMAIL;
+  const notificationEmail = getOperationsEmail();
   const adminUrl = process.env.ADMIN_PORTAL_URL || 'https://admin.ironscout.ai';
   const merchantDetailUrl = `${adminUrl}/merchants/${merchantId}`;
 
@@ -380,7 +385,7 @@ export async function sendAdminNewMerchantNotification(
     const resend = getResendClient();
 
     const { data, error } = await resend.emails.send({
-      from: VALIDATED_FROM_EMAIL,
+      from: getFromEmail(),
       to: notificationEmail,
       subject: `🆕 New Merchant Registration: ${businessName}`,
       html: `
