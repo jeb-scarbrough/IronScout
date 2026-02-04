@@ -7,12 +7,19 @@ import { BRAND } from '../lib/brand';
 
 const APP_URL = BRAND.appUrl;
 
-const exampleQueries = [
-  '9mm hollow point',
-  'bulk .223 brass case',
-  '.308 match grade',
-  '5.56 green tip',
-  '300 blackout subsonic',
+// Primary example chips — must match apps/web/components/search/unified-search.tsx
+const EXAMPLE_CHIPS = [
+  { label: '9mm Range', query: '9mm for range practice' },
+  { label: '9mm Bulk', query: '9mm bulk for range' },
+  { label: '300BLK Subsonic', query: '300 blackout subsonic' },
+  { label: '5.56 Match 77gr', query: '5.56 match grade 77 grain' },
+  { label: '.22LR Plinking', query: '.22 LR bulk plinking' },
+];
+
+const advancedExampleQueries = [
+  '9mm for compact carry, low flash',
+  'subsonic .300 blackout for suppressor',
+  'short barrel optimized defense ammo',
 ];
 
 const whyIronScoutItems = [
@@ -123,21 +130,40 @@ export default function Home() {
               </div>
             </form>
 
-            {/* Example Queries */}
-            <div className="mb-12">
-              <p className="text-sm text-iron-500 mb-3">Try:</p>
+            {/* Example Chips — matches web app search */}
+            <div className="mb-12 space-y-5">
               <div className="flex flex-wrap justify-center gap-2">
-                {exampleQueries.map((example, i) => (
+                {EXAMPLE_CHIPS.map((chip, i) => (
                   <button
                     key={i}
-                    onClick={() => handleExampleClick(example)}
-                    className="text-sm px-3 py-1.5 rounded-full border border-iron-700
-                             hover:border-primary hover:bg-primary/10
-                             transition-colors text-iron-400 hover:text-primary"
+                    onClick={() => handleExampleClick(chip.query)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-iron-700
+                             bg-iron-900/50 text-iron-200 text-sm font-medium
+                             shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0
+                             hover:border-primary/50 transition-all"
                   >
-                    {example}
+                    {chip.label}
                   </button>
                 ))}
+              </div>
+
+              <div className="pt-3 border-t border-iron-800">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <p className="text-xs text-iron-500 font-medium">Advanced searches:</p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {advancedExampleQueries.map((example, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleExampleClick(example)}
+                      className="text-xs px-3 py-1.5 rounded-full border border-iron-700
+                               hover:border-primary/50 hover:bg-iron-800/50
+                               transition-colors text-iron-500"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
