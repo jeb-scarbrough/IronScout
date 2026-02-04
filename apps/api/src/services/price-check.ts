@@ -400,7 +400,7 @@ function formatPrice(price: number): string {
  * PRIVACY RULES (ENFORCED):
  * - NO individual-level persistence: Raw enteredPrice must not be stored in user-linked records
  * - Aggregation only: Events aggregated to caliber-level statistics before long-term storage
- * - Retention: Raw event logs retained ≤7 days for debugging, then purged or aggregated
+ * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
  * - No user linking: Events must not be joinable to user identity after aggregation
  */
 export interface PriceCheckEvent {
@@ -420,7 +420,7 @@ export interface PriceCheckEvent {
  * Per mobile_price_check_v1_spec.md Privacy Rules (ENFORCED):
  * - NO individual-level persistence of raw enteredPrice
  * - Aggregation only: Events must be aggregated to caliber-level statistics
- * - Retention: Raw event logs retained ≤7 days, then purged or aggregated
+ * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
  * - No user linking: Events must not be joinable to user identity
  *
  * CURRENT STATE: This stub only logs aggregate-safe fields (no enteredPrice).
@@ -448,6 +448,6 @@ export function emitPriceCheckEvent(event: PriceCheckEvent): void {
   // 1. Bucket enteredPrice into ranges (e.g., $0.20-0.25, $0.25-0.30) before aggregation
   // 2. Aggregate to caliber-level counts (e.g., "9mm: 150 checks, 45 LOWER, 80 TYPICAL, 25 HIGHER")
   // 3. Store only aggregated statistics for long-term retention
-  // 4. Purge raw event logs after 7 days
+  // 4. Purge raw event logs after the short-term retention window
   // 5. Ensure no join path to user identity after aggregation
 }

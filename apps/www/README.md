@@ -56,12 +56,21 @@ www/
 │   ├── layout.tsx      # Root layout with fonts & meta
 │   ├── page.tsx        # Landing page (Hero, Features, Comparison, How it Works, CTA)
 │   ├── privacy/        # Privacy policy
-│   └── terms/          # Terms of service
+│   ├── terms/          # Terms of service
+│   └── sitemap.ts      # Dynamic sitemap (brands + calibers + retailers)
 ├── public/
-│   ├── robots.txt
-│   └── sitemap.xml
+│   └── robots.txt
+├── content/
+│   ├── brands/         # Brand SEO pages
+│   ├── calibers/       # Caliber SEO pages
+│   └── retailers/      # Retailer SEO pages
 └── tailwind.config.ts  # IronScout brand colors (iron, brass, gunmetal)
 ```
+
+## Sitemap
+
+`app/sitemap.ts` generates `/sitemap.xml` dynamically. Any new content sections
+in `apps/www/content/*` should be added there so they are discoverable.
 
 ## Cross-Domain Auth
 
@@ -75,4 +84,3 @@ auth (shared cookies on `.ironscout.ai`) means authenticated users stay logged i
 - [ ] Add /about page
 - [ ] Add /dealers page (for dealer acquisition)
 - [ ] Blog/content section (later phase for SEO)
-

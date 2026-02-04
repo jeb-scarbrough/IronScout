@@ -192,6 +192,7 @@ Agents should:
 - Make minimal, focused changes
 - Explain reasoning in commit messages or PR descriptions
 - Reference ADRs and context docs explicitly
+- Ensure marketing content changes in `apps/www/content/*` are reflected in the sitemap (dynamic `apps/www/app/sitemap.ts` should be updated when new content sections are added)
 
 Agents should not:
 - Introduce speculative features

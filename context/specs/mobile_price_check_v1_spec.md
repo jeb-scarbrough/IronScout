@@ -12,6 +12,7 @@ Answers:
 - Mobile route (/price-check)
 - Header quick access
 - Deep links
+- Public endpoint. Authentication is optional (used only for optional Gun Locker prompts).
 
 ---
 
@@ -22,7 +23,10 @@ Required:
 
 Optional:
 - Brand
-- Grain / load
+- Grain weight
+- Box count (round count)
+- Case material
+- Bullet type
 
 ---
 
@@ -35,6 +39,8 @@ Single screen:
 - Supporting context:
   - Recent online price range
   - Freshness indicator
+
+V1 does not surface retailer offers or outbound purchase links on this screen.
 
 No verdicts or recommendations.
 
@@ -87,8 +93,11 @@ PriceCheckEvent {
 ### Privacy Rules (Enforced)
 - **No individual-level persistence**: Raw `enteredPrice` values must not be stored in user-linked records
 - **Aggregation only**: Events are aggregated to caliber-level statistics before long-term storage
-- **Retention**: Raw event logs retained ≤7 days for debugging, then purged or aggregated
+- **Retention**: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
 - **No user linking**: Events must not be joinable to user identity after aggregation
+
+**Implementation note (v1):** If event telemetry is emitted before aggregation is implemented,
+it must remain short-lived and must not be stored in any user-linked system.
 
 ---
 
@@ -96,6 +105,8 @@ PriceCheckEvent {
 - Optional prompt to add Gun Locker after result
 - Optional save item flow
 - No direct deal injection
+
+**Analytics note:** `clickedOffer` is reserved for future offer-link UX. In v1, it should remain `false`/unused.
 
 ---
 
