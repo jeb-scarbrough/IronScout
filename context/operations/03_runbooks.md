@@ -81,6 +81,80 @@ Examples:
 
 ## Core Runbooks
 
+### Runbook: Scraper Adapter Auto-Disabled (Drift Detected)
+
+**Symptoms**
+- A scrape adapter stops producing data
+- `scrape_adapter_status.enabled=false` and `disabledReason` indicates auto-disable
+- Scrape runs show elevated failure rate or zero-price streaks
+
+**Immediate Actions**
+1. Confirm auto-disable reason and last two runs in Admin (Scrapers > Adapters).
+2. Check recent scrape runs for:
+   - high failure rate
+   - zero offers extracted
+   - zero-price quarantine spikes
+3. Inspect adapter logs and a sample of target URLs for layout or selector drift.
+4. If the issue is clearly a transient site outage, pause adapter ingestion and wait.
+5. If a selector/HTML change is confirmed, fix adapter first. Do **not** re-enable until a fix is deployed.
+
+**Verification**
+- Adapter is re-enabled only after a successful dry run or confirmed fix.
+- New runs complete with acceptable failure/yield rates.
+
+**Follow-Up**
+- Update adapter tests and fixtures with new HTML.
+- Document the root cause and add detection improvements if needed.
+
+---
+
+### Runbook: Scraper Cycle Stuck (RUNNING Beyond Timeout)
+
+**Symptoms**
+- `scrape_cycles.status=RUNNING` longer than `cycleTimeoutMinutes`
+- No progress in `targetsCompleted` for the active cycle
+- Scheduler logs show repeated deferrals or no progress
+
+**Immediate Actions**
+1. Verify the cycle is stuck in Admin (Scrapers > Adapters > Cycle details).
+2. Check harvester logs for errors or queue backpressure.
+3. Cancel the stuck cycle in Admin if progress is not occurring.
+4. If needed, trigger a manual scrape for a known-good target to confirm worker health.
+5. If workers appear stuck, restart harvester workers after confirming queue state.
+
+**Verification**
+- Cycle status moves to FAILED or COMPLETED.
+- A new cycle can start and enqueue jobs.
+
+**Follow-Up**
+- Identify the blocking condition (queue saturation, adapter errors, Redis issues).
+- Adjust batch sizes or pause non-critical adapters if needed.
+
+---
+
+### Runbook: Scraper Queue Backlog / Global Pause
+
+**Symptoms**
+- Scheduler logs indicate global pause or high backoff
+- Queue utilization > 90% for sustained periods
+- Scrape targets are not being enqueued or processed
+
+**Immediate Actions**
+1. Check queue stats in Admin (Scrapers page) and Redis health.
+2. Pause non-critical adapters to reduce queue pressure.
+3. Reduce `maxUrlsPerTick` or adjust adapter schedules to lower enqueue rate.
+4. If queue is wedged, clear stuck jobs via Admin Emergency Stop **only if necessary**.
+
+**Verification**
+- Queue utilization decreases and jobs resume processing.
+- Scheduler resumes normal tick behavior without extended pauses.
+
+**Follow-Up**
+- Identify root cause (rate limit blocks, worker failures, bursty scheduling).
+- Add or refine rate limits and backoff settings.
+
+---
+
 ### Runbook: Ineligible Retailer Inventory Visible
 
 **Symptoms**
