@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { sgammoAdapter } from '../adapter.js'
+import { midwayusaAdapter } from '../adapter.js'
 
 const ctx = {
   sourceId: 'source_test',
@@ -12,12 +12,12 @@ const ctx = {
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, fatal: () => {}, child: () => ctx.logger },
 } as const
 
-describe('sgammo adapter', () => {
+describe('midwayusa adapter', () => {
   it('extracts in-stock fixture', () => {
     const fixturePath = join(__dirname, 'fixtures', 'in-stock.html')
     const html = readFileSync(fixturePath, 'utf8')
 
-    const extracted = sgammoAdapter.extract(html, 'https://sgammo.com/product/9mm-luger-ammo/250-round-case-9mm-luger-p-135-grain-hornady-critical-duty-flexlock-hollow-point-ammo-90226/', ctx)
+    const extracted = midwayusaAdapter.extract(html, 'https://www.midwayusa.com/product/100155156?pid=186680', ctx)
     if (!extracted.ok) {
       throw new Error(`extract failed: ${extracted.reason} ${extracted.details ?? ''}`)
     }
@@ -27,7 +27,7 @@ describe('sgammo adapter', () => {
     const fixturePath = join(__dirname, 'fixtures', 'out-of-stock.html')
     const html = readFileSync(fixturePath, 'utf8')
 
-    const extracted = sgammoAdapter.extract(html, 'https://sgammo.com/product/9mm-luger-ammo/250-round-case-9mm-luger-p-124-grain-xtp-hornady-american-gunner-ammo-90224/', ctx)
+    const extracted = midwayusaAdapter.extract(html, 'https://www.midwayusa.com/product/1023281272?pid=520053', ctx)
     if (!extracted.ok) {
       throw new Error(`extract failed: ${extracted.reason} ${extracted.details ?? ''}`)
     }

@@ -18,8 +18,11 @@
  */
 
 import { promises as dns } from 'dns'
+import { createInterface } from 'node:readline/promises'
+import { stdin as input, stdout as output } from 'node:process'
+import { loadEnv } from '../lib/load-env.mjs'
 
-const DEFAULT_USER_AGENT = null
+const DEFAULT_USER_AGENT = 'IronScout/1.0 (+https://ironscout.ai/bot; bot@ironscout.ai)'
 const DEFAULT_DELAY_MS = 1000
 const MIN_DELAY_MS = 1000
 const MAX_DELAY_MS = 60000
@@ -27,6 +30,8 @@ const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 const DEFAULT_MAX_PAGES = 10
 
 async function main() {
+  loadEnv()
+
   const args = process.argv.slice(2)
   const opts = parseArgs(args)
 
@@ -62,22 +67,74 @@ async function main() {
     const db = await import('../../packages/db/index.js')
     prisma = db.prisma
 
-    source = await prisma.sources.findUnique({
-      where: { id: opts.sourceId },
-      select: {
-        id: true,
-        url: true,
-        adapterId: true,
-        scrapeEnabled: true,
-        robotsCompliant: true,
-        tosReviewedAt: true,
-        tosApprovedBy: true,
-        scrapeConfig: true,
-      },
-    })
+    const sourceSelect = {
+      id: true,
+      url: true,
+      adapterId: true,
+      scrapeEnabled: true,
+      robotsCompliant: true,
+      tosReviewedAt: true,
+      tosApprovedBy: true,
+      scrapeConfig: true,
+    }
+
+    try {
+      source = await prisma.sources.findUnique({
+        where: { id: opts.sourceId },
+        select: sourceSelect,
+      })
+    } catch (error) {
+      const message = error?.message || String(error)
+      if (message.includes('does not exist') || message.includes('column')) {
+        console.error('Error: Database schema appears out of date for sources.')
+        console.error('Expected columns: adapterId, scrapeConfig, scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy.')
+        console.error('Fix: run `pnpm db:migrate:dev` (or point DATABASE_URL to a migrated database).')
+        process.exit(1)
+      }
+      throw error
+    }
 
     if (!source) {
-      fail(`Source not found: ${opts.sourceId}`)
+      const adapterMatches = await prisma.sources.findMany({
+        where: { adapterId: opts.sourceId },
+        select: sourceSelect,
+        take: 5,
+      })
+
+      if (adapterMatches.length === 1) {
+        source = adapterMatches[0]
+        console.log(`Auto-resolved source-id "${opts.sourceId}" to source ${source.id} via adapterId.`)
+      } else if (adapterMatches.length > 1) {
+        console.error(`Error: Multiple sources found with adapterId="${opts.sourceId}".`)
+        for (const match of adapterMatches) {
+          console.error(`  - ${match.id} ${match.url}`)
+        }
+        process.exit(1)
+      } else {
+        const looksLikeDomain = opts.sourceId.includes('.') || opts.sourceId.includes('/')
+        if (looksLikeDomain) {
+          const domain = opts.sourceId.replace(/^https?:\/\//, '').split('/')[0]
+          const urlMatches = await prisma.sources.findMany({
+            where: { url: { contains: domain, mode: 'insensitive' } },
+            select: sourceSelect,
+            take: 5,
+          })
+          if (urlMatches.length === 1) {
+            source = urlMatches[0]
+            console.log(`Auto-resolved source-id "${opts.sourceId}" to source ${source.id} via url match.`)
+          } else if (urlMatches.length > 1) {
+            console.error(`Error: Multiple sources found matching url "${domain}".`)
+            for (const match of urlMatches) {
+              console.error(`  - ${match.id} ${match.url}`)
+            }
+            process.exit(1)
+          }
+        }
+      }
+    }
+
+    if (!source) {
+      fail(`Source not found: ${opts.sourceId}. Use a Source ID (CUID) or a unique adapterId.`)
     }
 
     if (!source.adapterId) {
@@ -89,14 +146,7 @@ async function main() {
     }
 
     if (!opts.dryRun) {
-      if (
-        !source.scrapeEnabled ||
-        !source.robotsCompliant ||
-        !source.tosReviewedAt ||
-        !source.tosApprovedBy
-      ) {
-        fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
-      }
+      source = await ensureSourceGates(source, prisma)
     }
   } else if (opts.accept) {
     fail('Cannot write without --source-id')
@@ -657,7 +707,7 @@ async function fetchText(url, acceptJson) {
   const headers = buildHeaders({
     Accept: acceptJson
       ? 'application/json,text/plain,*/*'
-      : 'text/html,application/xhtml+xml,application/xml',
+      : 'application/xml,text/xml,application/xhtml+xml,text/html,*/*',
   })
 
   const response = await fetch(url, {
@@ -668,6 +718,29 @@ async function fetchText(url, acceptJson) {
   })
 
   clearTimeout(timeoutId)
+
+  if (response.status === 406 && headers.Accept !== '*/*') {
+    const retryController = new AbortController()
+    const retryTimeoutId = setTimeout(() => retryController.abort(), 30000)
+    const retryHeaders = buildHeaders({ Accept: '*/*' })
+    const retryResponse = await fetch(url, {
+      method: 'GET',
+      headers: retryHeaders,
+      redirect: 'follow',
+      signal: retryController.signal,
+    })
+    clearTimeout(retryTimeoutId)
+
+    if (retryResponse.ok) {
+      const text = await retryResponse.text()
+      if (text.length > MAX_RESPONSE_BYTES) {
+        fail(`Response too large for ${url}`)
+      }
+      return text
+    }
+
+    fail(`HTTP ${retryResponse.status} for ${url}`)
+  }
 
   if (!response.ok) {
     fail(`HTTP ${response.status} for ${url}`)
@@ -1068,28 +1141,56 @@ class RobotsPolicy {
     return { allowed: true, fetchSucceeded: true, crawlDelayMs: rules.crawlDelayMs }
   }
 
-  async getRules(domain) {
-    const cached = this.cache.get(domain)
-    const now = Date.now()
-    if (cached && now - cached.cachedAt < 24 * 60 * 60 * 1000) {
-      return cached
-    }
+    async getRules(domain) {
+      const cached = this.cache.get(domain)
+      const now = Date.now()
+      if (cached && now - cached.cachedAt < 24 * 60 * 60 * 1000) {
+        return cached
+      }
 
-    const robotsUrl = `https://${domain}/robots.txt`
-    let text = null
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000)
-        const headers = buildHeaders()
-        const response = await fetch(robotsUrl, {
-          method: 'GET',
-          headers,
-          signal: controller.signal,
-        })
-        clearTimeout(timeoutId)
+      const robotsUrls = buildRobotsUrls(domain)
+      let text = null
+      let sawNotFound = false
+      let lastError = null
 
-        if (response.status === 404) {
+      for (const robotsUrl of robotsUrls) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 10000)
+            const headers = buildHeaders()
+            const response = await fetch(robotsUrl, {
+              method: 'GET',
+              headers,
+              signal: controller.signal,
+            })
+            clearTimeout(timeoutId)
+
+            if (response.status === 404) {
+              sawNotFound = true
+              break
+            }
+
+            if (response.ok) {
+              text = await response.text()
+              break
+            }
+          } catch (error) {
+            lastError = error
+          }
+
+          if (attempt < 3) {
+            await sleep(1000 * attempt)
+          }
+        }
+
+        if (text !== null) {
+          break
+        }
+      }
+
+      if (text === null) {
+        if (sawNotFound && !lastError) {
           const rules = {
             globalDisallowed: [],
             agentDisallowed: [],
@@ -1101,35 +1202,21 @@ class RobotsPolicy {
           return rules
         }
 
-        if (response.ok) {
-          text = await response.text()
-          break
+        const rules = {
+          globalDisallowed: ['*'],
+          agentDisallowed: [],
+          crawlDelayMs: null,
+          cachedAt: Date.now(),
+          fetchSucceeded: false,
         }
-      } catch {
-        // retry
+        this.cache.set(domain, rules)
+        return rules
       }
 
-      if (attempt < 3) {
-        await sleep(1000 * attempt)
-      }
+      const parsed = parseRobotsTxt(text, this.userAgent)
+      this.cache.set(domain, parsed)
+      return parsed
     }
-
-    if (text === null) {
-      const rules = {
-        globalDisallowed: ['*'],
-        agentDisallowed: [],
-        crawlDelayMs: null,
-        cachedAt: Date.now(),
-        fetchSucceeded: false,
-      }
-      this.cache.set(domain, rules)
-      return rules
-    }
-
-    const parsed = parseRobotsTxt(text, this.userAgent)
-    this.cache.set(domain, parsed)
-    return parsed
-  }
 }
 
 function parseRobotsTxt(text, userAgent) {
@@ -1219,40 +1306,51 @@ async function discoverSitemaps(domain) {
 }
 
 async function fetchRobotsTxt(domain) {
-  const robotsUrl = `https://${domain}/robots.txt`
-  await ensurePublicUrl(robotsUrl)
-
+  const robotsUrls = buildRobotsUrls(domain)
   let text = null
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      const headers = buildHeaders()
-      const response = await fetch(robotsUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      })
-      clearTimeout(timeoutId)
+  let sawNotFound = false
 
-      if (response.status === 404) {
-        return { fetchSucceeded: true, sitemaps: [] }
+  for (const robotsUrl of robotsUrls) {
+    await ensurePublicUrl(robotsUrl)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        const headers = buildHeaders()
+        const response = await fetch(robotsUrl, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+
+        if (response.status === 404) {
+          sawNotFound = true
+          break
+        }
+
+        if (response.ok) {
+          text = await response.text()
+          break
+        }
+      } catch {
+        // retry
       }
 
-      if (response.ok) {
-        text = await response.text()
-        break
+      if (attempt < 3) {
+        await sleep(1000 * attempt)
       }
-    } catch {
-      // retry
     }
 
-    if (attempt < 3) {
-      await sleep(1000 * attempt)
+    if (text !== null) {
+      break
     }
   }
 
   if (text === null) {
+    if (sawNotFound) {
+      return { fetchSucceeded: true, sitemaps: [] }
+    }
     return { fetchSucceeded: false, sitemaps: [] }
   }
 
@@ -1273,6 +1371,97 @@ function extractSitemapLines(text) {
     }
   }
   return sitemaps
+}
+
+function buildRobotsUrls(domain) {
+  const normalized = normalizeDomain(domain)
+  const candidates = [normalized]
+  if (!normalized.startsWith('www.')) {
+    candidates.push(`www.${normalized}`)
+  }
+  const urls = candidates.map(host => `https://${host}/robots.txt`)
+  return Array.from(new Set(urls))
+}
+
+async function promptYesNo(question, defaultNo = false) {
+  if (!process.stdin.isTTY) return false
+  const rl = createInterface({ input, output })
+  try {
+    const raw = (await rl.question(question)).trim().toLowerCase()
+    if (!raw) return !defaultNo
+    return raw === 'y' || raw === 'yes'
+  } finally {
+    rl.close()
+  }
+}
+
+async function promptText(question, defaultValue = '') {
+  if (!process.stdin.isTTY) return defaultValue
+  const rl = createInterface({ input, output })
+  try {
+    const raw = (await rl.question(question)).trim()
+    return raw || defaultValue
+  } finally {
+    rl.close()
+  }
+}
+
+async function ensureSourceGates(source, prisma) {
+  const missing = []
+  if (!source.scrapeEnabled) missing.push('scrapeEnabled')
+  if (!source.robotsCompliant) missing.push('robotsCompliant')
+  if (!source.tosReviewedAt) missing.push('tosReviewedAt')
+  if (!source.tosApprovedBy) missing.push('tosApprovedBy')
+
+  if (missing.length === 0) {
+    return source
+  }
+
+  console.error(`Source gates not satisfied (${missing.join(', ')})`)
+  if (!process.stdin.isTTY) {
+    fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
+  }
+
+  const shouldUpdate = await promptYesNo(
+    'Update gates now? This will enable scraping for this source. (Y/n) '
+  )
+  if (!shouldUpdate) {
+    fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
+  }
+
+  const defaultApprover =
+    source.tosApprovedBy ||
+    process.env.USER ||
+    process.env.USERNAME ||
+    'ops@ironscout.ai'
+  const tosApprovedBy = await promptText('ToS approved by (required): ', defaultApprover)
+  if (!tosApprovedBy) {
+    fail('tosApprovedBy is required to update gates.')
+  }
+
+  const data = {}
+  if (!source.scrapeEnabled) data.scrapeEnabled = true
+  if (!source.robotsCompliant) data.robotsCompliant = true
+  if (!source.tosReviewedAt) data.tosReviewedAt = new Date()
+  if (!source.tosApprovedBy) data.tosApprovedBy = tosApprovedBy
+
+  const updated = await prisma.sources.update({
+    where: { id: source.id },
+    data,
+    select: {
+      id: true,
+      url: true,
+      adapterId: true,
+      scrapeEnabled: true,
+      robotsCompliant: true,
+      tosReviewedAt: true,
+      tosApprovedBy: true,
+      scrapeConfig: true,
+    },
+  })
+
+  console.log('Updated source gates to satisfy discovery write requirements.')
+  return updated
 }
 
 main()

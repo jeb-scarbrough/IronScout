@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Outfit, JetBrains_Mono } from 'next/font/google'
 import Script from 'next/script'
+import { GoogleAnalytics } from '@next/third-parties/google'
 import './globals.css'
 import { Providers } from './providers'
 import { Header } from '@/components/layout/header'
@@ -72,19 +73,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${jetbrainsMono.variable}`}>
       <head>
-        {/* Google Analytics */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-1CDJQS6N90" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-1CDJQS6N90');
-            `,
-          }}
-        />
-
         {/* PWA Meta Tags */}
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
@@ -137,6 +125,7 @@ export default function RootLayout({
           <Toaster richColors position="top-right" />
         </Providers>
       </body>
+      <GoogleAnalytics gaId="G-1CDJQS6N90" />
     </html>
   )
 }

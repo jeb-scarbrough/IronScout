@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, XCircle, AlertTriangle, Power, Pencil, PauseCircle, PlayCircle } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Power, Pencil, PauseCircle, PlayCircle, Clock, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAdapterEnabled } from '../actions'
 import type { AdapterStatusDTO } from '../actions'
@@ -67,15 +67,97 @@ function formatDate(date: Date | null): string {
   })
 }
 
+function formatDateWithTimeZone(date: Date, timeZone: string): string {
+  return new Date(date).toLocaleString('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function renderDateCell(date: Date | null, emptyLabel: string) {
+  if (!date) {
+    return <span className="text-gray-400">{emptyLabel}</span>
+  }
+
+  const local = formatDate(date)
+  const eastern = formatDateWithTimeZone(date, 'America/New_York')
+
+  return (
+    <span title={`ET: ${eastern}`}>
+      {local}
+    </span>
+  )
+}
+
 function formatRate(rate: number | null): string {
   if (rate === null) return '-'
   return `${(rate * 100).toFixed(1)}%`
+}
+
+/**
+ * Convert a cron expression to a short human-readable label.
+ * Handles common patterns; falls back to raw expression.
+ */
+function formatCron(cron: string | null): { label: string; raw: string | null } {
+  if (!cron) return { label: 'Not set', raw: null }
+
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return { label: cron, raw: cron }
+
+  const [minute, hour, dom, mon, dow] = parts
+
+  // Every N minutes: */N * * * *
+  if (hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+    const match = minute.match(/^\*\/(\d+)$/)
+    if (match) return { label: `Every ${match[1]}m`, raw: cron }
+    if (minute === '*') return { label: 'Every minute', raw: cron }
+  }
+
+  // Every N hours: 0 */N * * *  or  M */N * * *
+  if (dom === '*' && mon === '*' && dow === '*') {
+    const hourMatch = hour.match(/^\*\/(\d+)$/)
+    if (hourMatch) return { label: `Every ${hourMatch[1]}h`, raw: cron }
+
+    // Specific hours list: 0 0,4,8,12,16,20 * * *
+    if (hour.includes(',') && /^\d+$/.test(minute)) {
+      const hours = hour.split(',')
+      const interval = hours.length > 1 ? parseInt(hours[1]) - parseInt(hours[0]) : null
+      if (interval && hours.every((h, i) => i === 0 || parseInt(h) - parseInt(hours[i - 1]) === interval)) {
+        return { label: `Every ${interval}h`, raw: cron }
+      }
+    }
+
+    // Daily at specific time: M H * * *
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) {
+      const h = parseInt(hour)
+      const period = h >= 12 ? 'PM' : 'AM'
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+      return { label: `Daily ${h12}:${minute.padStart(2, '0')} ${period}`, raw: cron }
+    }
+  }
+
+  return { label: cron, raw: cron }
 }
 
 export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
   const router = useRouter()
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [editingAdapter, setEditingAdapter] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const handleCopy = async (adapterId: string) => {
+    try {
+      await navigator.clipboard.writeText(adapterId)
+      setCopiedId(adapterId)
+      toast.success('Adapter ID copied')
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
 
   const handleToggle = async (adapterId: string, currentEnabled: boolean) => {
     setLoadingId(adapterId)
@@ -117,7 +199,13 @@ export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
               Ingestion
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Schedule
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Last Run
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Next Run
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Runs (30d)
@@ -144,9 +232,22 @@ export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
               }
             >
               <td className="px-4 py-4">
-                <code className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">
-                  {adapter.adapterId}
-                </code>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm font-medium bg-gray-100 px-2 py-1 rounded">
+                    {adapter.adapterId}
+                  </code>
+                  <button
+                    onClick={() => handleCopy(adapter.adapterId)}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    title="Copy adapter ID"
+                  >
+                    {copiedId === adapter.adapterId ? (
+                      <Check className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
               </td>
               <td className="px-4 py-4">
                 <StatusIndicator
@@ -157,8 +258,27 @@ export function AdapterStatusTable({ adapters }: AdapterStatusTableProps) {
               <td className="px-4 py-4">
                 <IngestionIndicator paused={adapter.ingestionPaused} />
               </td>
+              <td className="px-4 py-4">
+                {(() => {
+                  const { label, raw } = formatCron(adapter.schedule)
+                  return raw ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-sm text-gray-700"
+                      title={raw}
+                    >
+                      <Clock className="h-3.5 w-3.5 text-gray-400" />
+                      {label}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">Not set</span>
+                  )
+                })()}
+              </td>
               <td className="px-4 py-4 text-sm text-gray-500">
-                {formatDate(adapter.lastRunAt)}
+                {renderDateCell(adapter.lastRunAt, 'Never')}
+              </td>
+              <td className="px-4 py-4 text-sm text-gray-500">
+                {renderDateCell(adapter.nextRunAt, '-')}
               </td>
               <td className="px-4 py-4 text-sm text-gray-900">
                 {adapter.totalRuns}

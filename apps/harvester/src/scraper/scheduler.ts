@@ -17,8 +17,8 @@ import { enqueueScrapeUrl, ScrapeUrlJobData, scrapeUrlQueue, getScrapeQueueStats
 import { getAdapterRegistry } from './registry.js'
 import { checkAutoDisable, checkZeroPriceDisable, updateBaseline, computeDerivedMetrics } from './process/drift-detector.js'
 import { recordAdapterDisabled, recordQueueRejection, recordRunCompleted, recordStaleTargetsAlert } from './metrics.js'
-import type { ScrapeRunTrigger, ScrapeRunStatus, ScrapeAdapterDisableReason } from '@ironscout/db/generated/prisma'
-import type { ScrapeRunMetrics } from './types.js'
+import type { ScrapeRunTrigger, ScrapeRunStatus, ScrapeAdapterDisableReason, ScrapeCycleStatus } from '@ironscout/db/generated/prisma'
+import type { ScrapeRunMetrics, DueAdapter, CycleTarget, CycleBatchResult, ScrapeCycle, ScrapeJobTrigger } from './types.js'
 
 const log = loggers.scraper
 
@@ -209,6 +209,737 @@ export function isTargetDue(
     })
     const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000)
     return lastScrapedAt < fourHoursAgo
+  }
+}
+
+// =============================================================================
+// Adapter-Level Scheduling
+// =============================================================================
+
+/**
+ * Check if an adapter's schedule is due.
+ *
+ * An adapter is due if:
+ * 1. lastCycleStartedAt is null (never run)
+ * 2. lastCycleStartedAt is before the most recent scheduled time per cron
+ *
+ * @param schedule - Cron expression (or null to use default)
+ * @param lastCycleStartedAt - When the adapter last started a cycle
+ * @param now - Current time (for testing)
+ */
+export function isAdapterDue(
+  schedule: string | null,
+  lastCycleStartedAt: Date | null,
+  now: Date = new Date()
+): boolean {
+  // Never run = always due
+  if (!lastCycleStartedAt) return true
+
+  const cronExpr = schedule || DEFAULT_CRON_SCHEDULE
+
+  try {
+    const interval = CronParser.parse(cronExpr, {
+      currentDate: now,
+      tz: 'UTC',
+    })
+
+    const prevScheduled = interval.prev().toDate()
+    return lastCycleStartedAt < prevScheduled
+  } catch (error) {
+    log.warn('Invalid adapter cron schedule, using fallback', {
+      schedule: cronExpr,
+      error: (error as Error).message,
+    })
+    // Fallback: 4 hours since last run
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000)
+    return lastCycleStartedAt < fourHoursAgo
+  }
+}
+
+/**
+ * Check if a cycle is stuck (exceeded timeout).
+ */
+function isCycleStuck(adapter: DueAdapter, now: Date = new Date()): boolean {
+  if (!adapter.currentCycleId || !adapter.lastCycleStartedAt) return false
+  const timeoutMs = adapter.cycleTimeoutMinutes * 60 * 1000
+  return now.getTime() - adapter.lastCycleStartedAt.getTime() > timeoutMs
+}
+
+/**
+ * Get adapters that are due for scheduling.
+ *
+ * An adapter is due if:
+ * - enabled = true
+ * - ingestionPaused = false
+ * - No active cycle (currentCycleId is null) OR cycle is stuck
+ * - Schedule is due based on cron and lastCycleStartedAt
+ */
+async function getDueAdapters(): Promise<DueAdapter[]> {
+  const now = new Date()
+
+  // Get all enabled, non-paused adapters
+  const adapters = await prisma.scrape_adapter_status.findMany({
+    where: {
+      enabled: true,
+      ingestionPaused: false,
+    },
+    select: {
+      adapterId: true,
+      schedule: true,
+      lastCycleStartedAt: true,
+      currentCycleId: true,
+      cycleTimeoutMinutes: true,
+      enabled: true,
+      ingestionPaused: true,
+    },
+  })
+
+  const dueAdapters: DueAdapter[] = []
+
+  for (const adapter of adapters) {
+    // Skip if adapter is in backoff
+    if (isAdapterInBackoff(adapter.adapterId)) {
+      log.debug('Skipping adapter - in backoff', { adapterId: adapter.adapterId })
+      continue
+    }
+
+    // Check for stuck cycle
+    const stuck = isCycleStuck(adapter, now)
+    if (stuck) {
+      log.warn('Detected stuck cycle for adapter', {
+        adapterId: adapter.adapterId,
+        cycleId: adapter.currentCycleId,
+        startedAt: adapter.lastCycleStartedAt,
+        timeoutMinutes: adapter.cycleTimeoutMinutes,
+      })
+      dueAdapters.push(adapter)
+      continue
+    }
+
+    // Include adapters with active cycles so we can continue processing them
+    if (adapter.currentCycleId) {
+      log.debug('Including adapter with active cycle', {
+        adapterId: adapter.adapterId,
+        cycleId: adapter.currentCycleId,
+      })
+      dueAdapters.push(adapter)
+      continue
+    }
+
+    // Check if schedule is due for NEW cycle
+    if (isAdapterDue(adapter.schedule, adapter.lastCycleStartedAt, now)) {
+      dueAdapters.push(adapter)
+    }
+  }
+
+  return dueAdapters
+}
+
+/**
+ * Start a new cycle for an adapter.
+ */
+async function startNewCycle(
+  adapterId: string,
+  trigger: ScrapeRunTrigger
+): Promise<ScrapeCycle> {
+  const now = new Date()
+
+  // Count total targets for this adapter
+  const totalTargets = await prisma.scrape_targets.count({
+    where: {
+      adapterId,
+      enabled: true,
+      status: 'ACTIVE',
+      robotsPathBlocked: { not: true },
+      sources: {
+        scrapeEnabled: true,
+        robotsCompliant: true,
+      },
+    },
+  })
+
+  // Create cycle record
+  const cycle = await prisma.scrape_cycles.create({
+    data: {
+      adapterId,
+      status: 'RUNNING',
+      trigger,
+      startedAt: now,
+      totalTargets,
+    },
+  })
+
+  // Update adapter status with current cycle
+  await prisma.scrape_adapter_status.update({
+    where: { adapterId },
+    data: {
+      currentCycleId: cycle.id,
+      lastCycleStartedAt: now,
+    },
+  })
+
+  log.info('Started new cycle', {
+    cycleId: cycle.id,
+    adapterId,
+    trigger,
+    totalTargets,
+  })
+
+  return {
+    id: cycle.id,
+    adapterId: cycle.adapterId,
+    status: cycle.status as ScrapeCycle['status'],
+    trigger: cycle.trigger as ScrapeCycle['trigger'],
+    startedAt: cycle.startedAt,
+    completedAt: cycle.completedAt,
+    durationMs: cycle.durationMs,
+    totalTargets: cycle.totalTargets,
+    targetsCompleted: cycle.targetsCompleted,
+    targetsFailed: cycle.targetsFailed,
+    targetsSkipped: cycle.targetsSkipped,
+    lastProcessedTargetId: cycle.lastProcessedTargetId,
+    offersExtracted: cycle.offersExtracted,
+    offersValid: cycle.offersValid,
+  }
+}
+
+/**
+ * Get the current cycle for an adapter.
+ */
+async function getCurrentCycle(cycleId: string): Promise<ScrapeCycle | null> {
+  const cycle = await prisma.scrape_cycles.findUnique({
+    where: { id: cycleId },
+  })
+
+  if (!cycle) return null
+
+  return {
+    id: cycle.id,
+    adapterId: cycle.adapterId,
+    status: cycle.status as ScrapeCycle['status'],
+    trigger: cycle.trigger as ScrapeCycle['trigger'],
+    startedAt: cycle.startedAt,
+    completedAt: cycle.completedAt,
+    durationMs: cycle.durationMs,
+    totalTargets: cycle.totalTargets,
+    targetsCompleted: cycle.targetsCompleted,
+    targetsFailed: cycle.targetsFailed,
+    targetsSkipped: cycle.targetsSkipped,
+    lastProcessedTargetId: cycle.lastProcessedTargetId,
+    offersExtracted: cycle.offersExtracted,
+    offersValid: cycle.offersValid,
+  }
+}
+
+/**
+ * Get the next batch of targets for a cycle.
+ * Uses cursor-based pagination ordered by priority DESC, id ASC.
+ */
+async function getCycleTargetBatch(
+  adapterId: string,
+  lastProcessedTargetId: string | null,
+  limit: number
+): Promise<CycleTarget[]> {
+  // Build cursor condition
+  // Ordering: priority DESC, id ASC
+  // So "after cursor" means: lower priority OR (same priority AND id > cursor.id)
+  let cursorCondition: object | undefined
+
+  if (lastProcessedTargetId) {
+    // Get the cursor target to know its priority
+    const cursorTarget = await prisma.scrape_targets.findUnique({
+      where: { id: lastProcessedTargetId },
+      select: { priority: true },
+    })
+
+    if (cursorTarget) {
+      cursorCondition = {
+        OR: [
+          { priority: { lt: cursorTarget.priority } },
+          {
+            AND: [
+              { priority: cursorTarget.priority },
+              { id: { gt: lastProcessedTargetId } },
+            ],
+          },
+        ],
+      }
+    }
+  }
+
+  const targets = await prisma.scrape_targets.findMany({
+    where: {
+      adapterId,
+      enabled: true,
+      status: 'ACTIVE',
+      robotsPathBlocked: { not: true },
+      sources: {
+        scrapeEnabled: true,
+        robotsCompliant: true,
+      },
+      ...cursorCondition,
+    },
+    include: {
+      sources: {
+        select: {
+          retailerId: true,
+        },
+      },
+    },
+    orderBy: [
+      { priority: 'desc' },
+      { id: 'asc' },
+    ],
+    take: limit,
+  })
+
+  return targets.map((t) => ({
+    id: t.id,
+    url: t.url,
+    sourceId: t.sourceId,
+    retailerId: t.sources.retailerId,
+    adapterId: t.adapterId,
+    priority: t.priority,
+  }))
+}
+
+/**
+ * Process a batch of targets within a cycle.
+ * Groups by source, creates runs, and enqueues jobs.
+ */
+async function processCycleBatch(
+  cycle: ScrapeCycle,
+  batchSize: number
+): Promise<CycleBatchResult> {
+  const registry = getAdapterRegistry()
+  const adapter = registry.get(cycle.adapterId)
+
+  if (!adapter) {
+    log.error('Adapter not found for cycle', {
+      cycleId: cycle.id,
+      adapterId: cycle.adapterId,
+    })
+    return {
+      targetsProcessed: 0,
+      targetsSucceeded: 0,
+      targetsFailed: 0,
+      targetsSkipped: 0,
+      lastTargetId: null,
+      hasMore: false,
+      jobsEnqueued: 0,
+      jobsRejected: 0,
+    }
+  }
+
+  // Get next batch of targets
+  const targets = await getCycleTargetBatch(
+    cycle.adapterId,
+    cycle.lastProcessedTargetId,
+    batchSize
+  )
+
+  if (targets.length === 0) {
+    return {
+      targetsProcessed: 0,
+      targetsSucceeded: 0,
+      targetsFailed: 0,
+      targetsSkipped: 0,
+      lastTargetId: cycle.lastProcessedTargetId,
+      hasMore: false,
+      jobsEnqueued: 0,
+      jobsRejected: 0,
+    }
+  }
+
+  log.info('Processing cycle batch', {
+    cycleId: cycle.id,
+    adapterId: cycle.adapterId,
+    batchSize: targets.length,
+    cursor: cycle.lastProcessedTargetId,
+  })
+
+  // Group targets by source
+  const targetsBySource = new Map<string, CycleTarget[]>()
+  for (const target of targets) {
+    const existing = targetsBySource.get(target.sourceId) ?? []
+    existing.push(target)
+    targetsBySource.set(target.sourceId, existing)
+  }
+
+  let jobsEnqueued = 0
+  let jobsRejected = 0
+  let targetsSucceeded = 0
+  let targetsFailed = 0
+  let targetsSkipped = 0
+  let lastTargetId: string | null = null
+
+  let blockedByExistingRun = false
+  let blockedSourceId: string | null = null
+
+  // Process each source group
+  for (const [sourceId, sourceTargets] of targetsBySource) {
+    // Check if there's already a RUNNING run for this source
+    const existingRun = await prisma.scrape_runs.findFirst({
+      where: {
+        sourceId,
+        status: 'RUNNING',
+      },
+      select: { id: true, trigger: true, cycleId: true },
+    })
+
+    let runId: string | null = null
+    if (existingRun) {
+      if (
+        existingRun.trigger !== cycle.trigger ||
+        (existingRun.cycleId && existingRun.cycleId !== cycle.id)
+      ) {
+        log.debug('Deferring source - run already in progress from another context', {
+          sourceId,
+          existingRunId: existingRun.id,
+          existingTrigger: existingRun.trigger,
+          existingCycleId: existingRun.cycleId,
+          cycleId: cycle.id,
+        })
+        blockedByExistingRun = true
+        blockedSourceId = sourceId
+        break
+      }
+
+      runId = existingRun.id
+    } else {
+      // Create a run for this source within the cycle
+      const firstTarget = sourceTargets[0]
+      const run = await prisma.scrape_runs.create({
+        data: {
+          adapterId: cycle.adapterId,
+          adapterVersion: adapter.version,
+          sourceId,
+          retailerId: firstTarget.retailerId,
+          trigger: cycle.trigger as ScrapeRunTrigger,
+          cycleId: cycle.id,
+          status: 'RUNNING',
+          startedAt: new Date(),
+        },
+      })
+
+      runId = run.id
+
+      log.debug('Created run for source in cycle', {
+        runId: run.id,
+        cycleId: cycle.id,
+        sourceId,
+        targetCount: sourceTargets.length,
+      })
+    }
+
+    // Enqueue jobs for each target
+    for (const target of sourceTargets) {
+      const jobData: ScrapeUrlJobData = {
+        targetId: target.id,
+        url: target.url,
+        sourceId: target.sourceId,
+        retailerId: target.retailerId,
+        adapterId: target.adapterId,
+        runId: runId!,
+        priority: target.priority,
+        trigger: cycle.trigger as ScrapeJobTrigger,
+      }
+
+      const result = await enqueueScrapeUrl(jobData)
+
+      if (result.status === 'accepted') {
+        jobsEnqueued++
+        targetsSucceeded++
+        clearAdapterBackoff(target.adapterId)
+      } else if (result.status === 'rejected') {
+        jobsRejected++
+        targetsFailed++
+        recordQueueRejection({
+          reason: result.reason ?? 'queue_full',
+          targetId: target.id,
+          runId: runId!,
+          adapterId: target.adapterId,
+          sourceId: target.sourceId,
+          retryAfterMs: result.retryAfterMs,
+        })
+
+        if (result.retryAfterMs && (result.reason === 'adapter_full' || result.reason === 'rate_limited')) {
+          setAdapterBackoff(target.adapterId, result.retryAfterMs)
+        }
+      }
+      // deduplicated = skipped
+      else {
+        targetsSkipped++
+      }
+
+      lastTargetId = target.id
+    }
+
+    // Update run with enqueued count
+    if (runId) {
+      await prisma.scrape_runs.update({
+        where: { id: runId },
+        data: { urlsAttempted: { increment: sourceTargets.length } },
+      })
+    }
+  }
+
+  if (blockedByExistingRun) {
+    log.debug('Cycle batch deferred due to existing run', {
+      cycleId: cycle.id,
+      adapterId: cycle.adapterId,
+      sourceId: blockedSourceId,
+      cursor: lastTargetId ?? cycle.lastProcessedTargetId,
+    })
+  }
+
+  // Check if more targets remain
+  const hasMore = blockedByExistingRun
+    ? true
+    : (await getCycleTargetBatch(cycle.adapterId, lastTargetId, 1)).length > 0
+
+  return {
+    targetsProcessed: targetsSucceeded + targetsFailed + targetsSkipped,
+    targetsSucceeded,
+    targetsFailed,
+    targetsSkipped,
+    lastTargetId,
+    hasMore,
+    jobsEnqueued,
+    jobsRejected,
+  }
+}
+
+/**
+ * Finalize a cycle (mark complete or failed).
+ */
+async function finalizeCycle(
+  cycleId: string,
+  status: 'COMPLETED' | 'FAILED' | 'CANCELLED'
+): Promise<void> {
+  const cycle = await prisma.scrape_cycles.findUnique({
+    where: { id: cycleId },
+    select: { adapterId: true, startedAt: true },
+  })
+
+  if (!cycle) {
+    log.warn('Cycle not found for finalization', { cycleId })
+    return
+  }
+
+  const now = new Date()
+  const durationMs = now.getTime() - cycle.startedAt.getTime()
+
+  // Update cycle status
+  await prisma.scrape_cycles.update({
+    where: { id: cycleId },
+    data: {
+      status,
+      completedAt: now,
+      durationMs,
+    },
+  })
+
+  // Clear current cycle from adapter status
+  await prisma.scrape_adapter_status.update({
+    where: { adapterId: cycle.adapterId },
+    data: {
+      currentCycleId: null,
+    },
+  })
+
+  log.info('Finalized cycle', {
+    cycleId,
+    adapterId: cycle.adapterId,
+    status,
+    durationMs,
+  })
+}
+
+/**
+ * Handle a stuck cycle - mark as FAILED and clear.
+ */
+async function handleStuckCycle(adapter: DueAdapter): Promise<void> {
+  if (!adapter.currentCycleId) return
+
+  log.warn('Handling stuck cycle', {
+    adapterId: adapter.adapterId,
+    cycleId: adapter.currentCycleId,
+    startedAt: adapter.lastCycleStartedAt,
+  })
+
+  await finalizeCycle(adapter.currentCycleId, 'FAILED')
+}
+
+/**
+ * Execute one scheduler tick using adapter-level scheduling (V2).
+ *
+ * Algorithm:
+ * 1. Check global pause
+ * 2. Get adapters that are due (schedule matches, no active cycle, or stuck cycle)
+ * 3. For each due adapter:
+ *    a. If stuck cycle exists → mark FAILED, clear
+ *    b. Start new cycle or continue existing one
+ *    c. Process batch of targets (up to maxUrlsPerTick)
+ *    d. Update cycle cursor and progress
+ * 4. Finalize completed cycles
+ */
+async function tick(config: Required<SchedulerConfig>): Promise<void> {
+  if (isSchedulerRunning) {
+    log.debug('Scheduler tick skipped - previous tick still running')
+    return
+  }
+
+  if (isGloballyPaused()) {
+    log.debug('Scheduler tick skipped - global pause active')
+    return
+  }
+
+  isSchedulerRunning = true
+  const tickStart = Date.now()
+
+  try {
+    log.debug('Scheduler tick starting')
+
+    // Check queue capacity
+    const queueStats = await getScrapeQueueStats()
+    if (queueStats.utilizationPercent >= 90) {
+      log.warn('Scheduler tick skipped - queue at high utilization', {
+        utilization: queueStats.utilizationPercent,
+      })
+      return
+    }
+
+    // Finalize stale runs (same as V1)
+    await finalizeStaleRuns()
+
+    // Run maintenance (same as V1)
+    await runDailyMaintenance()
+
+    // Process manual runs first (same as V1)
+    await processManualRuns()
+
+    // Adjust batch size based on queue utilization
+    const adjustedBatchSize = queueStats.utilizationPercent >= 50
+      ? Math.floor(config.maxUrlsPerTick / 2)
+      : config.maxUrlsPerTick
+
+    // Get due adapters
+    const dueAdapters = await getDueAdapters()
+
+    if (dueAdapters.length === 0) {
+      log.debug('No adapters due for scheduling')
+      return
+    }
+
+    log.info('Found due adapters', { count: dueAdapters.length })
+
+    let totalEnqueued = 0
+    let totalRejected = 0
+    let maxRetryAfterMs = 0
+
+    // Process each due adapter
+    for (const adapter of dueAdapters) {
+      // Check adapter is registered
+      const registry = getAdapterRegistry()
+      const registeredAdapter = registry.get(adapter.adapterId)
+      if (!registeredAdapter) {
+        log.warn('Skipping adapter - not registered', { adapterId: adapter.adapterId })
+        continue
+      }
+
+      // Handle stuck cycle first
+      if (adapter.currentCycleId && isCycleStuck(adapter)) {
+        await handleStuckCycle(adapter)
+      }
+
+      // Start new cycle if no active one
+      let cycle: ScrapeCycle
+      if (adapter.currentCycleId && !isCycleStuck(adapter)) {
+        // Continue existing cycle
+        const existingCycle = await getCurrentCycle(adapter.currentCycleId)
+        if (!existingCycle) {
+          log.warn('Current cycle not found, starting new one', {
+            adapterId: adapter.adapterId,
+            cycleId: adapter.currentCycleId,
+          })
+          cycle = await startNewCycle(adapter.adapterId, 'SCHEDULED')
+        } else {
+          cycle = existingCycle
+        }
+      } else {
+        // Start new cycle
+        cycle = await startNewCycle(adapter.adapterId, 'SCHEDULED')
+      }
+
+      // Skip adapters with 0 targets
+      if (cycle.totalTargets === 0) {
+        log.debug('Skipping adapter - no targets', { adapterId: adapter.adapterId })
+        await finalizeCycle(cycle.id, 'COMPLETED')
+        continue
+      }
+
+      // Process batch
+      const batchResult = await processCycleBatch(cycle, adjustedBatchSize)
+
+      // Update cycle progress
+      await prisma.scrape_cycles.update({
+        where: { id: cycle.id },
+        data: {
+          targetsCompleted: { increment: batchResult.targetsSucceeded },
+          targetsFailed: { increment: batchResult.targetsFailed },
+          targetsSkipped: { increment: batchResult.targetsSkipped },
+          lastProcessedTargetId: batchResult.lastTargetId,
+        },
+      })
+
+      totalEnqueued += batchResult.jobsEnqueued
+      totalRejected += batchResult.jobsRejected
+
+      // Finalize cycle if no more targets
+      if (!batchResult.hasMore) {
+        // Refresh cycle data to get final counts
+        const finalCycle = await getCurrentCycle(cycle.id)
+        const status: ScrapeCycleStatus = finalCycle && finalCycle.targetsFailed > finalCycle.targetsCompleted
+          ? 'FAILED'
+          : 'COMPLETED'
+        await finalizeCycle(cycle.id, status)
+      }
+
+      // Stop processing adapters if too many rejections
+      if (totalRejected > totalEnqueued && totalEnqueued > 0) {
+        log.warn('Stopping adapter processing - high rejection rate', {
+          enqueued: totalEnqueued,
+          rejected: totalRejected,
+        })
+        break
+      }
+    }
+
+    // Trigger global pause if needed
+    const totalAttempted = totalEnqueued + totalRejected
+    if (totalAttempted > 0 && totalRejected > totalEnqueued) {
+      log.warn('High rejection rate - triggering global pause', {
+        enqueued: totalEnqueued,
+        rejected: totalRejected,
+      })
+      triggerGlobalPause(maxRetryAfterMs > 0 ? maxRetryAfterMs : undefined)
+    } else {
+      clearGlobalBackoff()
+    }
+
+    log.info('Scheduler tick completed', {
+      enqueuedCount: totalEnqueued,
+      rejectedCount: totalRejected,
+      durationMs: Date.now() - tickStart,
+    })
+  } catch (error) {
+    log.error('Scheduler tick failed', {
+      error: (error as Error).message,
+      durationMs: Date.now() - tickStart,
+    })
+  } finally {
+    isSchedulerRunning = false
   }
 }
 
@@ -888,255 +1619,6 @@ async function processManualRuns(): Promise<void> {
   }
 }
 
-/**
- * Execute one scheduler tick.
- */
-async function tick(config: Required<SchedulerConfig>): Promise<void> {
-  if (isSchedulerRunning) {
-    log.debug('Scheduler tick skipped - previous tick still running')
-    return
-  }
-
-  // Per spec §8.3: Check global pause before starting tick
-  if (isGloballyPaused()) {
-    log.debug('Scheduler tick skipped - global pause active')
-    return
-  }
-
-  isSchedulerRunning = true
-  const tickStart = Date.now()
-
-  try {
-    log.debug('Scheduler tick starting')
-
-    // Check queue capacity before doing work (backpressure)
-    const queueStats = await getScrapeQueueStats()
-    if (queueStats.utilizationPercent >= 90) {
-      log.warn('Scheduler tick skipped - queue at high utilization', {
-        utilization: queueStats.utilizationPercent,
-        total: queueStats.total,
-        capacity: queueStats.capacity,
-      })
-      return
-    }
-
-    // Finalize any stale runs before starting new ones
-    await finalizeStaleRuns()
-
-    // Run daily maintenance (cleanup stale URLs, broken URL recheck)
-    await runDailyMaintenance()
-
-    // Process any pending manual runs first (high priority)
-    await processManualRuns()
-
-    // Reduce batch size if queue is getting full
-    const adjustedLimit = queueStats.utilizationPercent >= 50
-      ? Math.floor(config.maxUrlsPerTick / 2)
-      : config.maxUrlsPerTick
-
-    // Get due targets for scheduled runs
-    const targets = await getDueTargets(adjustedLimit)
-
-    if (targets.length === 0) {
-      log.debug('No targets due for scraping')
-      return
-    }
-
-    log.info('Found due targets', { count: targets.length })
-
-    const registry = getAdapterRegistry()
-
-    // Group targets by adapter+source to create runs per source
-    // Key format: "adapterId|sourceId"
-    const targetsByAdapterSource = new Map<string, DueTarget[]>()
-    for (const target of targets) {
-      // Check adapter exists and is enabled
-      if (config.checkAdapterEnabled) {
-        const adapter = registry.get(target.adapterId)
-        if (!adapter) {
-          log.warn('Skipping target - adapter not registered', {
-            targetId: target.id,
-            adapterId: target.adapterId,
-          })
-          continue
-        }
-
-        // Check adapter status in database
-        const adapterStatus = await prisma.scrape_adapter_status.findUnique({
-          where: { adapterId: target.adapterId },
-          select: { enabled: true, ingestionPaused: true },
-        })
-
-        if (adapterStatus && !adapterStatus.enabled) {
-          log.debug('Skipping target - adapter disabled', {
-            targetId: target.id,
-            adapterId: target.adapterId,
-          })
-          continue
-        }
-
-        if (adapterStatus?.ingestionPaused) {
-          log.debug('Skipping target - adapter ingestion paused', {
-            targetId: target.id,
-            adapterId: target.adapterId,
-          })
-          continue
-        }
-      }
-
-      // Group by adapter+source combination (runs track metrics per source)
-      const key = `${target.adapterId}|${target.sourceId}`
-      const existing = targetsByAdapterSource.get(key) ?? []
-      existing.push(target)
-      targetsByAdapterSource.set(key, existing)
-    }
-
-    // Process each adapter+source group
-    let enqueuedCount = 0
-    let rejectedCount = 0
-    let maxRetryAfterMs = 0 // Track max retryAfterMs for global pause
-    for (const [key, sourceTargets] of targetsByAdapterSource) {
-      const [adapterId, sourceId] = key.split('|')
-      const adapter = registry.get(adapterId)
-      if (!adapter) continue
-
-      // Per spec §8.3: Check adapter backoff before scheduling
-      if (isAdapterInBackoff(adapterId)) {
-        log.debug('Skipping adapter - in backoff period', { adapterId })
-        continue
-      }
-
-      // Check if there's already a RUNNING run for this source to prevent overlap
-      const existingRun = await prisma.scrape_runs.findFirst({
-        where: {
-          sourceId,
-          status: 'RUNNING',
-        },
-        select: { id: true, startedAt: true },
-      })
-
-      if (existingRun) {
-        log.debug('Skipping source - run already in progress', {
-          sourceId,
-          adapterId,
-          existingRunId: existingRun.id,
-          runningForMs: Date.now() - existingRun.startedAt.getTime(),
-        })
-        continue
-      }
-
-      // Create a run for this source batch
-      const firstTarget = sourceTargets[0]
-      const runId = await createScrapeRun(
-        adapterId,
-        adapter.version,
-        sourceId,
-        firstTarget.retailerId,
-        'SCHEDULED'
-      )
-
-      log.info('Created scrape run', {
-        runId,
-        adapterId,
-        sourceId,
-        targetCount: sourceTargets.length,
-      })
-
-      // Enqueue jobs for each target with backpressure tracking
-      let acceptedInRun = 0
-      let rejectedInRun = 0
-
-      for (const target of sourceTargets) {
-        const jobData: ScrapeUrlJobData = {
-          targetId: target.id,
-          url: target.url,
-          sourceId: target.sourceId,
-          retailerId: target.retailerId,
-          adapterId: target.adapterId,
-          runId,
-          priority: target.priority,
-          trigger: 'SCHEDULED',
-        }
-
-        const result = await enqueueScrapeUrl(jobData)
-
-        if (result.status === 'accepted') {
-          enqueuedCount++
-          acceptedInRun++
-          // Per spec §8.3: Clear backoff on successful enqueue
-          clearAdapterBackoff(target.adapterId)
-        } else if (result.status === 'rejected') {
-          rejectedCount++
-          rejectedInRun++
-          recordQueueRejection({
-            reason: result.reason ?? 'queue_full',
-            targetId: target.id,
-            runId,
-            adapterId: target.adapterId,
-            sourceId: target.sourceId,
-            retryAfterMs: result.retryAfterMs,
-          })
-
-          // Track max retryAfterMs for global pause calculation
-          if (result.retryAfterMs && result.retryAfterMs > maxRetryAfterMs) {
-            maxRetryAfterMs = result.retryAfterMs
-          }
-
-          // Per spec §8.3: Set adapter backoff based on retryAfterMs
-          if (result.retryAfterMs && (result.reason === 'adapter_full' || result.reason === 'rate_limited')) {
-            setAdapterBackoff(target.adapterId, result.retryAfterMs)
-          }
-
-          // If >50% rejections in this run, stop enqueueing
-          if (rejectedInRun > acceptedInRun && acceptedInRun > 0) {
-            log.warn('Stopping enqueue for run - high rejection rate', {
-              runId,
-              accepted: acceptedInRun,
-              rejected: rejectedInRun,
-              reason: result.reason,
-            })
-            break
-          }
-        }
-        // deduplicated doesn't count as either
-      }
-
-      // Update run with actual enqueued count
-      await prisma.scrape_runs.update({
-        where: { id: runId },
-        data: { urlsAttempted: acceptedInRun },
-      })
-    }
-
-    // Per spec §8.3: Trigger global pause if >50% of tick was rejected
-    const totalAttempted = enqueuedCount + rejectedCount
-    if (totalAttempted > 0 && rejectedCount > enqueuedCount) {
-      log.warn('High rejection rate in tick - triggering global pause', {
-        enqueuedCount,
-        rejectedCount,
-        rejectionRate: (rejectedCount / totalAttempted * 100).toFixed(1) + '%',
-        maxRetryAfterMs,
-      })
-      triggerGlobalPause(maxRetryAfterMs > 0 ? maxRetryAfterMs : undefined)
-    } else {
-      // Successful tick without high rejection - clear global backoff
-      clearGlobalBackoff()
-    }
-
-    log.info('Scheduler tick completed', {
-      enqueuedCount,
-      rejectedCount,
-      durationMs: Date.now() - tickStart,
-    })
-  } catch (error) {
-    log.error('Scheduler tick failed', {
-      error: (error as Error).message,
-      durationMs: Date.now() - tickStart,
-    })
-  } finally {
-    isSchedulerRunning = false
-  }
-}
 
 /**
  * Start the scrape scheduler.

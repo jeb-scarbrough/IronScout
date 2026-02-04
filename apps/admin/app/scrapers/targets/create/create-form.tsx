@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createScrapeTarget } from '../../actions'
+import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
 
 interface Source {
   id: string
@@ -11,18 +12,12 @@ interface Source {
   scrapeEnabled: boolean
 }
 
-// Known adapters (could be fetched from API in the future)
-const KNOWN_ADAPTERS = [
-  { id: 'sgammo', name: 'SGAmmo', domain: 'sgammo.com' },
-]
-
 export function CreateTargetForm() {
   const router = useRouter()
   const [url, setUrl] = useState('')
   const [sourceId, setSourceId] = useState('')
   const [adapterId, setAdapterId] = useState('')
   const [priority, setPriority] = useState(0)
-  const [schedule, setSchedule] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,7 +77,6 @@ export function CreateTargetForm() {
         sourceId,
         adapterId,
         priority,
-        schedule: schedule.trim() || undefined,
         enabled,
       })
 
@@ -194,24 +188,6 @@ export function CreateTargetForm() {
         />
         <p className="mt-1 text-sm text-gray-500">
           Higher priority targets are scraped first (0-100).
-        </p>
-      </div>
-
-      {/* Schedule */}
-      <div>
-        <label htmlFor="schedule" className="block text-sm font-medium text-gray-700 mb-2">
-          Schedule (Cron)
-        </label>
-        <input
-          type="text"
-          id="schedule"
-          value={schedule}
-          onChange={(e) => setSchedule(e.target.value)}
-          placeholder="0 0,4,8,12,16,20 * * *"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-        />
-        <p className="mt-1 text-sm text-gray-500">
-          Optional cron expression (UTC). Leave blank for default 4-hour interval.
         </p>
       </div>
 

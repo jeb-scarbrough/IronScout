@@ -109,7 +109,7 @@ export function ScrapeTargetsTable({ targets }: ScrapeTargetsTableProps) {
             const isExpanded = expandedId === target.id
             const rowClass = target.status === 'BROKEN'
               ? 'bg-red-50'
-              : !target.enabled
+              : !target.enabled || !target.adapterEnabled
               ? 'bg-gray-50'
               : ''
 
@@ -151,9 +151,16 @@ export function ScrapeTargetsTable({ targets }: ScrapeTargetsTableProps) {
                     {target.sourceName}
                   </td>
                   <td className="px-4 py-4 text-sm text-gray-500">
-                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-                      {target.adapterId}
-                    </code>
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">
+                        {target.adapterId}
+                      </code>
+                      {!target.adapterEnabled && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700" title="Adapter is disabled - this target will not be scraped">
+                          Off
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-4">
                     <StatusBadge status={target.status} enabled={target.enabled} />
@@ -200,6 +207,13 @@ export function ScrapeTargetsTable({ targets }: ScrapeTargetsTableProps) {
                             {formatDate(target.createdAt)}
                           </span>
                         </div>
+                        {!target.adapterEnabled && (
+                          <div className="col-span-2 md:col-span-4">
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                              Adapter "{target.adapterId}" is disabled - this target will not be scraped until the adapter is re-enabled
+                            </span>
+                          </div>
+                        )}
                         <div className="col-span-2 md:col-span-4">
                           <span className="text-gray-500">Canonical URL:</span>
                           <code className="ml-2 text-xs bg-gray-100 px-1.5 py-0.5 rounded">

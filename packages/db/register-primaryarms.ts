@@ -106,6 +106,11 @@ async function main() {
 
     const nextScrapeConfig = {
       ...existingScrapeConfig,
+      // Primary Arms /api/items endpoint returns JSON, not HTML
+      // Must set Accept header to avoid 406 Not Acceptable errors
+      customHeaders: {
+        Accept: 'application/json',
+      },
       discovery: {
         allowlist: [DISCOVERY_LISTING_URL],
         productPathPrefix: '/',

@@ -167,6 +167,7 @@ export default async function RetailerDetailPage({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           {retailer.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- External URL from user upload
             <img
               src={retailer.logoUrl}
               alt={retailer.name}

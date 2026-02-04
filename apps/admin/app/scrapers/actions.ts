@@ -14,8 +14,28 @@ import { getAdminSession, logAdminAction } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
 import Redis from 'ioredis'
+import CronParser from 'cron-parser'
 
 const log = loggers.admin
+
+const DEFAULT_ADAPTER_CRON_SCHEDULE = '0 0,4,8,12,16,20 * * *'
+
+function computeNextAdapterRunAt(schedule: string | null, now: Date = new Date()): Date | null {
+  const cronExpr = schedule || DEFAULT_ADAPTER_CRON_SCHEDULE
+  try {
+    const interval = CronParser.parse(cronExpr, {
+      currentDate: now,
+      tz: 'UTC',
+    })
+    return interval.next().toDate()
+  } catch (error) {
+    log.warn('Invalid adapter cron schedule; next run time unavailable', {
+      schedule: cronExpr,
+      error: (error as Error).message,
+    })
+    return null
+  }
+}
 
 // =============================================================================
 // URL Canonicalization (per scraper-framework-01 Appendix A)
@@ -110,6 +130,7 @@ export interface ScrapeTargetDTO {
   sourceId: string
   sourceName: string
   adapterId: string
+  adapterEnabled: boolean
   status: string
   enabled: boolean
   priority: number
@@ -150,11 +171,13 @@ export interface AdapterStatusDTO {
   ingestionPausedReason: string | null
   ingestionPausedBy: string | null
   lastRunAt: Date | null
+  nextRunAt: Date | null
   consecutiveFailedBatches: number
   disabledAt: Date | null
   disabledReason: string | null
   totalRuns: number
   successRate: number | null
+  schedule: string | null
 }
 
 export interface CreateTargetInput {
@@ -162,7 +185,6 @@ export interface CreateTargetInput {
   sourceId: string
   adapterId: string
   priority?: number
-  schedule?: string
   enabled?: boolean
 }
 
@@ -256,6 +278,14 @@ export async function listScrapeTargets(options?: {
       prisma.scrape_targets.count({ where }),
     ])
 
+    // Get adapter enabled status for all unique adapters in the results
+    const adapterIds = [...new Set(targets.map((t) => t.adapterId))]
+    const adapterStatuses = await prisma.scrape_adapter_status.findMany({
+      where: { adapterId: { in: adapterIds } },
+      select: { adapterId: true, enabled: true },
+    })
+    const adapterEnabledMap = new Map(adapterStatuses.map((a) => [a.adapterId, a.enabled]))
+
     const dtos: ScrapeTargetDTO[] = targets.map((t) => ({
       id: t.id,
       url: t.url,
@@ -263,6 +293,7 @@ export async function listScrapeTargets(options?: {
       sourceId: t.sourceId,
       sourceName: t.sources.name,
       adapterId: t.adapterId,
+      adapterEnabled: adapterEnabledMap.get(t.adapterId) ?? true, // Default to true if no status record
       status: t.status,
       enabled: t.enabled,
       priority: t.priority,
@@ -301,6 +332,12 @@ export async function getScrapeTarget(id: string): Promise<{ success: boolean; e
       return { success: false, error: 'Target not found' }
     }
 
+    // Get adapter enabled status
+    const adapterStatus = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId: target.adapterId },
+      select: { enabled: true },
+    })
+
     return {
       success: true,
       target: {
@@ -310,6 +347,7 @@ export async function getScrapeTarget(id: string): Promise<{ success: boolean; e
         sourceId: target.sourceId,
         sourceName: target.sources.name,
         adapterId: target.adapterId,
+        adapterEnabled: adapterStatus?.enabled ?? true,
         status: target.status,
         enabled: target.enabled,
         priority: target.priority,
@@ -370,7 +408,6 @@ export async function createScrapeTarget(data: CreateTargetInput): Promise<{ suc
         sourceId: data.sourceId,
         adapterId: data.adapterId,
         priority: data.priority ?? 0,
-        schedule: data.schedule ?? null,
         enabled: data.enabled ?? true,
         status: 'ACTIVE',
       },
@@ -392,7 +429,7 @@ export async function createScrapeTarget(data: CreateTargetInput): Promise<{ suc
 
 export async function updateScrapeTarget(
   id: string,
-  data: Partial<Pick<CreateTargetInput, 'priority' | 'schedule' | 'enabled'>>
+  data: { priority?: number; schedule?: string | null; enabled?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   const session = await getAdminSession()
   if (!session) return { success: false, error: 'Unauthorized' }
@@ -636,11 +673,13 @@ export async function listAdapterStatuses(): Promise<{ success: boolean; error?:
       ingestionPausedReason: s.ingestionPausedReason,
       ingestionPausedBy: s.ingestionPausedBy,
       lastRunAt: lastRunMap.get(s.adapterId) ?? null,
+      nextRunAt: computeNextAdapterRunAt(s.schedule),
       consecutiveFailedBatches: s.consecutiveFailedBatches,
       disabledAt: s.disabledAt,
       disabledReason: s.disabledReason,
       totalRuns: runCountMap.get(s.adapterId) ?? 0,
       successRate: successRateMap.get(s.adapterId) ?? null,
+      schedule: s.schedule,
     }))
 
     return { success: true, adapters: dtos }
@@ -752,6 +791,11 @@ export interface AdapterDetailDTO extends AdapterStatusDTO {
   lastRunHadZeroPrice: boolean
   disabledBy: string | null
   targetCount: number
+  // Adapter-level scheduling fields
+  schedule: string | null
+  lastCycleStartedAt: Date | null
+  currentCycleId: string | null
+  cycleTimeoutMinutes: number
 }
 
 export async function getAdapterDetail(adapterId: string): Promise<{ success: boolean; error?: string; adapter?: AdapterDetailDTO }> {
@@ -813,6 +857,7 @@ export async function getAdapterDetail(adapterId: string): Promise<{ success: bo
         ingestionPausedReason: adapter.ingestionPausedReason,
         ingestionPausedBy: adapter.ingestionPausedBy,
         lastRunAt: lastRun?.startedAt ?? null,
+        nextRunAt: computeNextAdapterRunAt(adapter.schedule),
         consecutiveFailedBatches: adapter.consecutiveFailedBatches,
         disabledAt: adapter.disabledAt,
         disabledReason: adapter.disabledReason,
@@ -826,6 +871,11 @@ export async function getAdapterDetail(adapterId: string): Promise<{ success: bo
         lastBatchFailureRate: adapter.lastBatchFailureRate ? Number(adapter.lastBatchFailureRate) : null,
         lastRunHadZeroPrice: adapter.lastRunHadZeroPrice,
         targetCount,
+        // Adapter-level scheduling fields
+        schedule: adapter.schedule,
+        lastCycleStartedAt: adapter.lastCycleStartedAt,
+        currentCycleId: adapter.currentCycleId,
+        cycleTimeoutMinutes: adapter.cycleTimeoutMinutes,
       },
     }
   } catch (error) {
@@ -1418,5 +1468,529 @@ export async function enableScraperScheduler(): Promise<{ success: boolean; erro
   } catch (error) {
     log.error('Failed to enable scraper scheduler', {}, error instanceof Error ? error : new Error(String(error)))
     return { success: false, error: 'Failed to enable scheduler' }
+  }
+}
+
+// =============================================================================
+// Adapter-Level Scheduling
+// =============================================================================
+
+export interface CycleDTO {
+  id: string
+  adapterId: string
+  status: string
+  trigger: string
+  startedAt: Date
+  completedAt: Date | null
+  durationMs: number | null
+  totalTargets: number
+  targetsCompleted: number
+  targetsFailed: number
+  targetsSkipped: number
+  offersExtracted: number
+  offersValid: number
+  lastProcessedTargetId: string | null
+  progressPercent: number
+}
+
+/**
+ * Update an adapter's schedule.
+ */
+export async function updateAdapterSchedule(
+  adapterId: string,
+  schedule: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const existing = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+      select: { adapterId: true, schedule: true },
+    })
+
+    if (!existing) {
+      // Create adapter status if doesn't exist
+      await prisma.scrape_adapter_status.create({
+        data: {
+          adapterId,
+          enabled: true,
+          schedule,
+        },
+      })
+    } else {
+      await prisma.scrape_adapter_status.update({
+        where: { adapterId },
+        data: { schedule },
+      })
+    }
+
+    await logAdminAction(session.userId, 'UPDATE_ADAPTER_SCHEDULE', {
+      resource: 'ScrapeAdapter',
+      resourceId: adapterId,
+      oldValue: { schedule: existing?.schedule ?? null },
+      newValue: { schedule },
+    })
+
+    log.info('Adapter schedule updated', { adapterId, schedule, userId: session.userId })
+
+    revalidatePath('/scrapers/adapters')
+    revalidatePath(`/scrapers/adapters/${adapterId}`)
+
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to update adapter schedule', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to update schedule' }
+  }
+}
+
+/**
+ * Get the current cycle for an adapter (if any).
+ */
+export async function getAdapterCurrentCycle(adapterId: string): Promise<{
+  success: boolean
+  error?: string
+  cycle?: CycleDTO | null
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const adapterStatus = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+      select: { currentCycleId: true },
+    })
+
+    if (!adapterStatus?.currentCycleId) {
+      return { success: true, cycle: null }
+    }
+
+    const cycle = await prisma.scrape_cycles.findUnique({
+      where: { id: adapterStatus.currentCycleId },
+    })
+
+    if (!cycle) {
+      return { success: true, cycle: null }
+    }
+
+    const progressPercent = cycle.totalTargets > 0
+      ? Math.round(((cycle.targetsCompleted + cycle.targetsFailed + cycle.targetsSkipped) / cycle.totalTargets) * 100)
+      : 0
+
+    return {
+      success: true,
+      cycle: {
+        id: cycle.id,
+        adapterId: cycle.adapterId,
+        status: cycle.status,
+        trigger: cycle.trigger,
+        startedAt: cycle.startedAt,
+        completedAt: cycle.completedAt,
+        durationMs: cycle.durationMs,
+        totalTargets: cycle.totalTargets,
+        targetsCompleted: cycle.targetsCompleted,
+        targetsFailed: cycle.targetsFailed,
+        targetsSkipped: cycle.targetsSkipped,
+        offersExtracted: cycle.offersExtracted,
+        offersValid: cycle.offersValid,
+        lastProcessedTargetId: cycle.lastProcessedTargetId,
+        progressPercent,
+      },
+    }
+  } catch (error) {
+    log.error('Failed to get adapter current cycle', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to get current cycle' }
+  }
+}
+
+/**
+ * List cycles for an adapter.
+ */
+export async function listAdapterCycles(
+  adapterId: string,
+  options?: { limit?: number; status?: string }
+): Promise<{ success: boolean; error?: string; cycles: CycleDTO[] }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized', cycles: [] }
+
+  try {
+    const where: Prisma.scrape_cyclesWhereInput = { adapterId }
+    if (options?.status) {
+      where.status = options.status as Prisma.EnumScrapeCycleStatusFilter
+    }
+
+    const cycles = await prisma.scrape_cycles.findMany({
+      where,
+      orderBy: { startedAt: 'desc' },
+      take: options?.limit ?? 20,
+    })
+
+    const dtos: CycleDTO[] = cycles.map((c) => {
+      const progressPercent = c.totalTargets > 0
+        ? Math.round(((c.targetsCompleted + c.targetsFailed + c.targetsSkipped) / c.totalTargets) * 100)
+        : 0
+
+      return {
+        id: c.id,
+        adapterId: c.adapterId,
+        status: c.status,
+        trigger: c.trigger,
+        startedAt: c.startedAt,
+        completedAt: c.completedAt,
+        durationMs: c.durationMs,
+        totalTargets: c.totalTargets,
+        targetsCompleted: c.targetsCompleted,
+        targetsFailed: c.targetsFailed,
+        targetsSkipped: c.targetsSkipped,
+        offersExtracted: c.offersExtracted,
+        offersValid: c.offersValid,
+        lastProcessedTargetId: c.lastProcessedTargetId,
+        progressPercent,
+      }
+    })
+
+    return { success: true, cycles: dtos }
+  } catch (error) {
+    log.error('Failed to list adapter cycles', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to list cycles', cycles: [] }
+  }
+}
+
+/**
+ * Trigger a manual cycle for an adapter ("Run Now").
+ *
+ * Creates a new cycle with trigger=MANUAL. The scheduler will pick it up
+ * and process all targets for the adapter.
+ */
+export async function triggerAdapterCycle(adapterId: string): Promise<{
+  success: boolean
+  error?: string
+  cycleId?: string
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    // Verify adapter exists
+    const adapterStatus = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+    })
+
+    if (!adapterStatus) {
+      return { success: false, error: 'Adapter not found' }
+    }
+
+    if (!adapterStatus.enabled) {
+      return { success: false, error: 'Adapter is disabled' }
+    }
+
+    if (adapterStatus.ingestionPaused) {
+      return { success: false, error: 'Adapter ingestion is paused' }
+    }
+
+    // Check if there's already an active cycle
+    if (adapterStatus.currentCycleId) {
+      return { success: false, error: 'Adapter already has an active cycle' }
+    }
+
+    // Count targets for this adapter
+    const totalTargets = await prisma.scrape_targets.count({
+      where: {
+        adapterId,
+        enabled: true,
+        status: 'ACTIVE',
+        robotsPathBlocked: { not: true },
+        sources: {
+          scrapeEnabled: true,
+          robotsCompliant: true,
+        },
+      },
+    })
+
+    if (totalTargets === 0) {
+      return { success: false, error: 'No active targets for this adapter' }
+    }
+
+    // Create the manual cycle
+    const now = new Date()
+    const cycle = await prisma.scrape_cycles.create({
+      data: {
+        adapterId,
+        status: 'RUNNING',
+        trigger: 'MANUAL',
+        startedAt: now,
+        totalTargets,
+      },
+    })
+
+    // Update adapter status
+    await prisma.scrape_adapter_status.update({
+      where: { adapterId },
+      data: {
+        currentCycleId: cycle.id,
+        lastCycleStartedAt: now,
+      },
+    })
+
+    await logAdminAction(session.userId, 'TRIGGER_ADAPTER_CYCLE', {
+      resource: 'ScrapeAdapter',
+      resourceId: adapterId,
+      newValue: { cycleId: cycle.id, totalTargets },
+    })
+
+    log.info('Manual adapter cycle triggered', {
+      adapterId,
+      cycleId: cycle.id,
+      totalTargets,
+      userId: session.userId,
+    })
+
+    revalidatePath('/scrapers/adapters')
+    revalidatePath(`/scrapers/adapters/${adapterId}`)
+
+    return { success: true, cycleId: cycle.id }
+  } catch (error) {
+    log.error('Failed to trigger adapter cycle', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to trigger cycle' }
+  }
+}
+
+/**
+ * Cancel an active cycle for an adapter.
+ */
+export async function cancelAdapterCycle(adapterId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const adapterStatus = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+      select: { currentCycleId: true },
+    })
+
+    if (!adapterStatus?.currentCycleId) {
+      return { success: false, error: 'No active cycle to cancel' }
+    }
+
+    const now = new Date()
+    const cycle = await prisma.scrape_cycles.findUnique({
+      where: { id: adapterStatus.currentCycleId },
+      select: { startedAt: true },
+    })
+
+    // Update cycle status
+    await prisma.scrape_cycles.update({
+      where: { id: adapterStatus.currentCycleId },
+      data: {
+        status: 'CANCELLED',
+        completedAt: now,
+        durationMs: cycle ? now.getTime() - cycle.startedAt.getTime() : null,
+      },
+    })
+
+    // Clear current cycle from adapter status
+    await prisma.scrape_adapter_status.update({
+      where: { adapterId },
+      data: { currentCycleId: null },
+    })
+
+    await logAdminAction(session.userId, 'CANCEL_ADAPTER_CYCLE', {
+      resource: 'ScrapeAdapter',
+      resourceId: adapterId,
+      oldValue: { cycleId: adapterStatus.currentCycleId },
+      newValue: { status: 'CANCELLED' },
+    })
+
+    log.info('Adapter cycle cancelled', {
+      adapterId,
+      cycleId: adapterStatus.currentCycleId,
+      userId: session.userId,
+    })
+
+    revalidatePath('/scrapers/adapters')
+    revalidatePath(`/scrapers/adapters/${adapterId}`)
+
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to cancel adapter cycle', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to cancel cycle' }
+  }
+}
+
+/**
+ * Get adapter-level scheduling details.
+ */
+export async function getAdapterSchedulingDetails(adapterId: string): Promise<{
+  success: boolean
+  error?: string
+  details?: {
+    schedule: string | null
+    lastCycleStartedAt: Date | null
+    currentCycleId: string | null
+    cycleTimeoutMinutes: number
+    currentCycle: CycleDTO | null
+    recentCycles: CycleDTO[]
+  }
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const adapterStatus = await prisma.scrape_adapter_status.findUnique({
+      where: { adapterId },
+      select: {
+        schedule: true,
+        lastCycleStartedAt: true,
+        currentCycleId: true,
+        cycleTimeoutMinutes: true,
+      },
+    })
+
+    if (!adapterStatus) {
+      return { success: false, error: 'Adapter not found' }
+    }
+
+    // Get current cycle if any
+    let currentCycle: CycleDTO | null = null
+    if (adapterStatus.currentCycleId) {
+      const cycle = await prisma.scrape_cycles.findUnique({
+        where: { id: adapterStatus.currentCycleId },
+      })
+      if (cycle) {
+        const progressPercent = cycle.totalTargets > 0
+          ? Math.round(((cycle.targetsCompleted + cycle.targetsFailed + cycle.targetsSkipped) / cycle.totalTargets) * 100)
+          : 0
+        currentCycle = {
+          id: cycle.id,
+          adapterId: cycle.adapterId,
+          status: cycle.status,
+          trigger: cycle.trigger,
+          startedAt: cycle.startedAt,
+          completedAt: cycle.completedAt,
+          durationMs: cycle.durationMs,
+          totalTargets: cycle.totalTargets,
+          targetsCompleted: cycle.targetsCompleted,
+          targetsFailed: cycle.targetsFailed,
+          targetsSkipped: cycle.targetsSkipped,
+          offersExtracted: cycle.offersExtracted,
+          offersValid: cycle.offersValid,
+          lastProcessedTargetId: cycle.lastProcessedTargetId,
+          progressPercent,
+        }
+      }
+    }
+
+    // Get recent completed cycles
+    const recentCyclesRaw = await prisma.scrape_cycles.findMany({
+      where: {
+        adapterId,
+        status: { not: 'RUNNING' },
+      },
+      orderBy: { startedAt: 'desc' },
+      take: 10,
+    })
+
+    const recentCycles: CycleDTO[] = recentCyclesRaw.map((c) => {
+      const progressPercent = c.totalTargets > 0
+        ? Math.round(((c.targetsCompleted + c.targetsFailed + c.targetsSkipped) / c.totalTargets) * 100)
+        : 0
+      return {
+        id: c.id,
+        adapterId: c.adapterId,
+        status: c.status,
+        trigger: c.trigger,
+        startedAt: c.startedAt,
+        completedAt: c.completedAt,
+        durationMs: c.durationMs,
+        totalTargets: c.totalTargets,
+        targetsCompleted: c.targetsCompleted,
+        targetsFailed: c.targetsFailed,
+        targetsSkipped: c.targetsSkipped,
+        offersExtracted: c.offersExtracted,
+        offersValid: c.offersValid,
+        lastProcessedTargetId: c.lastProcessedTargetId,
+        progressPercent,
+      }
+    })
+
+    return {
+      success: true,
+      details: {
+        schedule: adapterStatus.schedule,
+        lastCycleStartedAt: adapterStatus.lastCycleStartedAt,
+        currentCycleId: adapterStatus.currentCycleId,
+        cycleTimeoutMinutes: adapterStatus.cycleTimeoutMinutes,
+        currentCycle,
+        recentCycles,
+      },
+    }
+  } catch (error) {
+    log.error('Failed to get adapter scheduling details', { adapterId }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to get scheduling details' }
+  }
+}
+
+/**
+ * Check if adapter-level scheduling is enabled.
+ */
+export async function isAdapterLevelSchedulingEnabled(): Promise<{
+  success: boolean
+  error?: string
+  enabled?: boolean
+}> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const setting = await prisma.system_settings.findUnique({
+      where: { key: 'ADAPTER_LEVEL_SCHEDULING' },
+    })
+
+    return {
+      success: true,
+      enabled: setting ? (setting.value === true) : false,
+    }
+  } catch (error) {
+    log.error('Failed to check adapter-level scheduling flag', {}, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to check flag' }
+  }
+}
+
+/**
+ * Toggle adapter-level scheduling feature flag.
+ */
+export async function toggleAdapterLevelScheduling(enabled: boolean): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    await prisma.system_settings.upsert({
+      where: { key: 'ADAPTER_LEVEL_SCHEDULING' },
+      create: {
+        key: 'ADAPTER_LEVEL_SCHEDULING',
+        value: enabled,
+        description: 'Enable adapter-level scheduling (V2) instead of target-level scheduling (V1)',
+        updatedBy: session.email,
+      },
+      update: {
+        value: enabled,
+        updatedBy: session.email,
+      },
+    })
+
+    await logAdminAction(session.userId, enabled ? 'ENABLE_ADAPTER_LEVEL_SCHEDULING' : 'DISABLE_ADAPTER_LEVEL_SCHEDULING', {
+      resource: 'Scraper',
+      newValue: { enabled },
+    })
+
+    log.info('Adapter-level scheduling toggled', { enabled, userId: session.userId })
+
+    revalidatePath('/scrapers')
+    revalidatePath('/settings')
+
+    return { success: true }
+  } catch (error) {
+    log.error('Failed to toggle adapter-level scheduling', { enabled }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to toggle feature' }
   }
 }

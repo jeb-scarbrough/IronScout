@@ -300,10 +300,10 @@ export interface RateLimiter {
 }
 
 export interface RateLimitConfig {
-  /** Requests per second (default: 0.5) */
+  /** Requests per second (default: 2) */
   requestsPerSecond: number
 
-  /** Minimum delay between requests in ms (default: 2000) */
+  /** Minimum delay between requests in ms (default: 500) */
   minDelayMs: number
 
   /** Maximum concurrent requests (default: 1) */
@@ -315,8 +315,8 @@ export interface RateLimitConfig {
  * Start slow, increase per-retailer after proving stability.
  */
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
-  requestsPerSecond: 0.5,
-  minDelayMs: 2000,
+  requestsPerSecond: 2,
+  minDelayMs: 500,
   maxConcurrent: 1,
 }
 
@@ -615,6 +615,97 @@ export interface DriftBaseline {
 
   /** Whether baseline is established */
   isEstablished: boolean
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Adapter-Level Scheduling Types
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Status of a scrape cycle.
+ * Mirrors ScrapeCycleStatus enum in Prisma schema.
+ */
+export type CycleStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
+/**
+ * Trigger type for scrape cycles.
+ * Uses existing ScrapeRunTrigger enum.
+ */
+export type CycleTrigger = 'SCHEDULED' | 'MANUAL'
+
+/**
+ * A scrape cycle processes all targets for an adapter in batches.
+ * Cycles can span multiple scheduler ticks for large adapters.
+ */
+export interface ScrapeCycle {
+  id: string
+  adapterId: string
+  status: CycleStatus
+  trigger: CycleTrigger
+  startedAt: Date
+  completedAt: Date | null
+  durationMs: number | null
+
+  // Progress tracking
+  totalTargets: number
+  targetsCompleted: number
+  targetsFailed: number
+  targetsSkipped: number
+
+  // Cursor for multi-tick resumption
+  lastProcessedTargetId: string | null
+
+  // Aggregate metrics
+  offersExtracted: number
+  offersValid: number
+}
+
+/**
+ * Result of processing a batch of targets within a cycle.
+ */
+export interface CycleBatchResult {
+  /** Number of targets processed in this batch */
+  targetsProcessed: number
+  /** Number of targets that succeeded */
+  targetsSucceeded: number
+  /** Number of targets that failed */
+  targetsFailed: number
+  /** Number of targets skipped (e.g., already in queue) */
+  targetsSkipped: number
+  /** ID of the last processed target (for cursor) */
+  lastTargetId: string | null
+  /** Whether more targets remain to process */
+  hasMore: boolean
+  /** Number of jobs enqueued */
+  jobsEnqueued: number
+  /** Number of jobs rejected (backpressure) */
+  jobsRejected: number
+}
+
+/**
+ * Adapter with its scheduling information for tickV2.
+ */
+export interface DueAdapter {
+  adapterId: string
+  schedule: string | null
+  lastCycleStartedAt: Date | null
+  currentCycleId: string | null
+  cycleTimeoutMinutes: number
+  enabled: boolean
+  ingestionPaused: boolean
+}
+
+/**
+ * Target ready for cycle processing.
+ * Ordered by priority DESC, id ASC for deterministic cursor pagination.
+ */
+export interface CycleTarget {
+  id: string
+  url: string
+  sourceId: string
+  retailerId: string
+  adapterId: string
+  priority: number
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

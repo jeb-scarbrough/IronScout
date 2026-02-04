@@ -28,6 +28,7 @@ scripts/
 ├── build/           # Build and verification scripts
 ├── dev/             # Development environment scripts
 ├── seeding/         # Database seeding scripts
+├── scraper/         # Scraper workflow helpers
 └── README.md
 ```
 

@@ -2,11 +2,21 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, RefreshCw, ExternalLink, AlertTriangle, CheckCircle, XCircle, PauseCircle, PlayCircle } from 'lucide-react'
+import { X, RefreshCw, ExternalLink, AlertTriangle, CheckCircle, XCircle, PauseCircle, PlayCircle, Play, Clock, Calendar, Square } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { getAdapterDetail, resetAdapterFailures, toggleAdapterEnabled, toggleAdapterIngestionPaused } from '../actions'
-import type { AdapterDetailDTO } from '../actions'
+import {
+  getAdapterDetail,
+  resetAdapterFailures,
+  toggleAdapterEnabled,
+  toggleAdapterIngestionPaused,
+  updateAdapterSchedule,
+  triggerAdapterCycle,
+  cancelAdapterCycle,
+  getAdapterSchedulingDetails,
+} from '../actions'
+import type { AdapterDetailDTO, CycleDTO } from '../actions'
+import { SCHEDULE_PRESETS, type SchedulePresetKey } from '@/lib/scraper-constants'
 
 interface AdapterEditDialogProps {
   adapterId: string
@@ -81,15 +91,37 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
   const [toggling, setToggling] = useState(false)
   const [pausing, setPausing] = useState(false)
   const [resetting, setResetting] = useState(false)
+  // Adapter-level scheduling state
+  const [currentCycle, setCurrentCycle] = useState<CycleDTO | null>(null)
+  const [updatingSchedule, setUpdatingSchedule] = useState(false)
+  const [triggeringCycle, setTriggeringCycle] = useState(false)
+  const [cancellingCycle, setCancellingCycle] = useState(false)
+  const [isCustomSchedule, setIsCustomSchedule] = useState(false)
+  const [customCron, setCustomCron] = useState('')
 
   useEffect(() => {
     async function loadAdapter() {
-      const result = await getAdapterDetail(adapterId)
-      if (result.success && result.adapter) {
-        setAdapter(result.adapter)
+      const [adapterResult, schedulingResult] = await Promise.all([
+        getAdapterDetail(adapterId),
+        getAdapterSchedulingDetails(adapterId),
+      ])
+      if (adapterResult.success && adapterResult.adapter) {
+        setAdapter(adapterResult.adapter)
+        // Check if current schedule is a custom one (not in presets)
+        const schedule = adapterResult.adapter.schedule
+        if (schedule) {
+          const isPreset = Object.values(SCHEDULE_PRESETS).some(p => p.cron === schedule)
+          if (!isPreset) {
+            setIsCustomSchedule(true)
+            setCustomCron(schedule)
+          }
+        }
       } else {
-        toast.error(result.error || 'Failed to load adapter')
+        toast.error(adapterResult.error || 'Failed to load adapter')
         onClose()
+      }
+      if (schedulingResult.success && schedulingResult.details) {
+        setCurrentCycle(schedulingResult.details.currentCycle)
       }
       setLoading(false)
     }
@@ -161,6 +193,78 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
     } finally {
       setResetting(false)
     }
+  }
+
+  const handleScheduleChange = async (newSchedule: string | null) => {
+    if (!adapter) return
+    setUpdatingSchedule(true)
+    try {
+      const result = await updateAdapterSchedule(adapterId, newSchedule)
+      if (result.success) {
+        toast.success('Schedule updated')
+        const updated = await getAdapterDetail(adapterId)
+        if (updated.success && updated.adapter) {
+          setAdapter(updated.adapter)
+        }
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to update schedule')
+      }
+    } catch {
+      toast.error('An unexpected error occurred')
+    } finally {
+      setUpdatingSchedule(false)
+    }
+  }
+
+  const handleTriggerCycle = async () => {
+    if (!adapter) return
+    setTriggeringCycle(true)
+    try {
+      const result = await triggerAdapterCycle(adapterId)
+      if (result.success) {
+        toast.success('Cycle started')
+        // Reload scheduling details
+        const schedulingResult = await getAdapterSchedulingDetails(adapterId)
+        if (schedulingResult.success && schedulingResult.details) {
+          setCurrentCycle(schedulingResult.details.currentCycle)
+        }
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to start cycle')
+      }
+    } catch {
+      toast.error('An unexpected error occurred')
+    } finally {
+      setTriggeringCycle(false)
+    }
+  }
+
+  const handleCancelCycle = async () => {
+    setCancellingCycle(true)
+    try {
+      const result = await cancelAdapterCycle(adapterId)
+      if (result.success) {
+        toast.success('Cycle cancelled')
+        setCurrentCycle(null)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to cancel cycle')
+      }
+    } catch {
+      toast.error('An unexpected error occurred')
+    } finally {
+      setCancellingCycle(false)
+    }
+  }
+
+  // Get the current schedule preset label
+  const getScheduleLabel = (cron: string | null): string => {
+    if (!cron) return 'Default (4 hours)'
+    for (const [_, preset] of Object.entries(SCHEDULE_PRESETS)) {
+      if (preset.cron === cron) return preset.label
+    }
+    return `Custom: ${cron}`
   }
 
   return (
@@ -312,6 +416,147 @@ export function AdapterEditDialog({ adapterId, onClose }: AdapterEditDialogProps
                   <span className="text-sm font-medium text-gray-900">{formatDate(adapter.baselineUpdatedAt)}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Adapter-Level Scheduling */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Adapter-Level Scheduling
+              </h3>
+
+              {/* Schedule Selector */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2">Schedule</label>
+                  <select
+                    value={isCustomSchedule ? '__custom__' : (adapter.schedule || '')}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value === '__custom__') {
+                        setIsCustomSchedule(true)
+                        setCustomCron(adapter.schedule || '')
+                      } else {
+                        setIsCustomSchedule(false)
+                        setCustomCron('')
+                        handleScheduleChange(value || null)
+                      }
+                    }}
+                    disabled={updatingSchedule}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                  >
+                    <option value="">Default (Every 4 hours)</option>
+                    {Object.entries(SCHEDULE_PRESETS).map(([key, preset]) => (
+                      <option key={key} value={preset.cron}>
+                        {preset.label}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom...</option>
+                  </select>
+
+                  {isCustomSchedule && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={customCron}
+                        onChange={(e) => setCustomCron(e.target.value)}
+                        placeholder="*/15 * * * *"
+                        className="flex-1 px-3 py-2 text-sm font-mono border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <button
+                        onClick={() => handleScheduleChange(customCron)}
+                        disabled={updatingSchedule || !customCron.trim()}
+                        className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {updatingSchedule ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    Current: {getScheduleLabel(adapter.schedule)}
+                    {isCustomSchedule && (
+                      <span className="ml-2 text-gray-400">
+                        (Format: minute hour day month weekday)
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Last Cycle Started</span>
+                  <span className="font-medium text-gray-900">{formatDate(adapter.lastCycleStartedAt)}</span>
+                </div>
+              </div>
+
+              {/* Current Cycle Status */}
+              {currentCycle ? (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                      <Clock className="h-4 w-4 animate-spin" />
+                      Cycle in Progress
+                    </span>
+                    <span className="text-xs text-blue-600">{currentCycle.trigger}</span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${currentCycle.progressPercent}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-xs text-blue-700">
+                    <span>{currentCycle.progressPercent}% complete</span>
+                    <span>{currentCycle.targetsCompleted + currentCycle.targetsFailed} / {currentCycle.totalTargets} targets</span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="text-center">
+                      <span className="block font-medium text-green-700">{currentCycle.targetsCompleted}</span>
+                      <span className="text-gray-500">Completed</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="block font-medium text-red-700">{currentCycle.targetsFailed}</span>
+                      <span className="text-gray-500">Failed</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="block font-medium text-gray-700">{currentCycle.targetsSkipped}</span>
+                      <span className="text-gray-500">Skipped</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCancelCycle}
+                    disabled={cancellingCycle}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md disabled:opacity-50"
+                  >
+                    <Square className="h-3 w-3" />
+                    {cancellingCycle ? 'Cancelling...' : 'Cancel Cycle'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleTriggerCycle}
+                  disabled={triggeringCycle || !adapter.enabled || adapter.ingestionPaused}
+                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className="h-4 w-4" />
+                  {triggeringCycle ? 'Starting...' : 'Run Now'}
+                </button>
+              )}
+              {!adapter.enabled && (
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Enable the adapter to start a cycle
+                </p>
+              )}
+              {adapter.enabled && adapter.ingestionPaused && (
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Resume ingestion to start a cycle
+                </p>
+              )}
             </div>
 
             {/* Actions */}

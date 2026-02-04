@@ -97,6 +97,7 @@ export default async function StatusPage({
             {primaryLabel}
           </Link>
           {config.showSignOut && (
+            // eslint-disable-next-line @next/next/no-html-link-for-pages -- Intentional: logout requires full navigation
             <a
               href="/api/auth/logout"
               className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

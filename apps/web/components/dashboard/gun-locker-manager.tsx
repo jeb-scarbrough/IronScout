@@ -546,6 +546,7 @@ export function GunLockerManager() {
           </DialogHeader>
           {viewingImage?.imageUrl && (
             <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- User-uploaded image */}
               <img
                 src={viewingImage.imageUrl}
                 alt={viewingImage.nickname || viewingImage.caliber}
@@ -584,6 +585,7 @@ export function GunLockerManager() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
                   {selectedGun.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- User-uploaded image
                     <img
                       src={selectedGun.imageUrl}
                       alt={selectedGun.nickname || selectedGun.caliber}
@@ -748,6 +750,7 @@ export function GunLockerManager() {
                     disabled={isSubmitting && uploadingGunId === gun.id}
                   >
                     {gun.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- User-uploaded image
                       <img
                         src={gun.imageUrl}
                         alt={gun.nickname || gun.caliber}

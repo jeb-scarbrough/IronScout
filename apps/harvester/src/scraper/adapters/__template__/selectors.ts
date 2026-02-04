@@ -6,6 +6,7 @@
  */
 
 export const SELECTORS = {
+  jsonLd: 'script[type="application/ld+json"]', // JSON-LD schema (preferred when available)
   title: '', // e.g., 'h1.product-title'
   price: '', // e.g., '.price .amount'
   inStock: '', // e.g., '.stock.in-stock'

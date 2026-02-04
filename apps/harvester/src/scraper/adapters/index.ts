@@ -14,6 +14,7 @@ import { getAdapterRegistry } from '../registry.js'
 // Import all adapters
 import { sgammoAdapter } from './sgammo/index.js'
 import { primaryarmsAdapter } from './primaryarms/index.js'
+import { midwayusaAdapter } from './midwayusa/index.js'
 
 /**
  * Register all production adapters.
@@ -26,6 +27,7 @@ export function registerAllAdapters(): void {
   registry.register(sgammoAdapter)
   registry.register(primaryarmsAdapter)
 
+  registry.register(midwayusaAdapter)
   // Future adapters register here:
   // registry.register(ammoseekAdapter)
   // registry.register(luckygunnerAdapter)
@@ -34,3 +36,4 @@ export function registerAllAdapters(): void {
 // Re-export adapters for direct access (e.g., in tests)
 export { sgammoAdapter } from './sgammo/index.js'
 export { primaryarmsAdapter } from './primaryarms/index.js'
+export { midwayusaAdapter } from './midwayusa/index.js'
