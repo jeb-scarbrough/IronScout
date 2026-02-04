@@ -29,6 +29,11 @@ concurrency:
   group: schema-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# Dummy DATABASE_URL so prisma generate succeeds during pnpm install postinstall.
+# Jobs that need a real database override this with the Postgres service URL.
+env:
+  DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+
 jobs:
   schema-drift-check:
     name: Schema Drift Detection
@@ -45,7 +50,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -96,7 +101,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -142,7 +147,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
