@@ -40,49 +40,36 @@ envVarGroups:
         value: IronScout <noreply@ironscout.ai>
       - key: OPERATIONS_EMAIL_TO
         value: IronScout <noreply@ironscout.ai>
-        sync: false
 
   - name: ironscout-secrets
     envVars:
       - key: NEXTAUTH_SECRET
-        sync: false
       - key: RESEND_API_KEY
-        sync: false
       - key: ADMIN_EMAILS
-        sync: false
 
   - name: ironscout-redis
     envVars:
       - key: REDIS_HOST
-        sync: false
       - key: REDIS_PORT
-        sync: false
 
   - name: ironscout-stripe
     envVars:
       - key: STRIPE_SECRET_KEY
-        sync: false
       - key: STRIPE_WEBHOOK_SECRET
-        sync: false
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        sync: false
 
   - name: ironscout-google
     envVars:
       - key: GOOGLE_CLIENT_ID
-        sync: false
       - key: GOOGLE_CLIENT_SECRET
-        sync: false
 
   - name: ironscout-slack
     envVars:
       - key: SLACK_DATAFEED_ALERTS_WEBHOOK_URL
-        sync: false
 
   - name: ironscout-openai
     envVars:
       - key: OPENAI_API_KEY
-        sync: false
 
 databases:
   - name: ironscout-db
