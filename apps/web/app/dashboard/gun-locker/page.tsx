@@ -9,14 +9,6 @@ export const metadata: Metadata = {
 export default function GunLockerPage() {
   return (
     <DashboardContent>
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">Gun Locker</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Add the guns you shoot to personalize your results
-        </p>
-      </div>
-
       <GunLockerManager />
     </DashboardContent>
   )

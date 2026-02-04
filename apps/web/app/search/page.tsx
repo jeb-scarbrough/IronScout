@@ -45,16 +45,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const hasQuery = Boolean(query)
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">Search</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Find and compare ammunition prices across retailers
-        </p>
-      </div>
-
-      {/* Search Hero - matches www home page style */}
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
+      {/* Search Hero */}
       <Suspense fallback={
         <div className="h-32 animate-pulse bg-muted rounded-lg" />
       }>

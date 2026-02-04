@@ -9,14 +9,6 @@ export const metadata: Metadata = {
 export default function SettingsPage() {
   return (
     <DashboardContent>
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">Settings</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Manage your account settings and preferences
-        </p>
-      </div>
-
       <UserSettings />
     </DashboardContent>
   )

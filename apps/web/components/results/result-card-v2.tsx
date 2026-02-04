@@ -18,19 +18,7 @@ import { formatPrice, formatShippingInfo } from './types'
 /** Max retailer rows to show inline */
 const MAX_INLINE_RETAILERS = 3
 
-/**
- * Get casing badge style - Brass gets warm accent, Steel gets neutral
- */
-function getCasingStyle(casing: string): string {
-  const lower = casing.toLowerCase()
-  if (lower === 'brass') {
-    return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-  }
-  if (lower === 'steel') {
-    return 'bg-muted text-muted-foreground border-border'
-  }
-  return 'bg-muted text-muted-foreground border-border'
-}
+
 
 /**
  * Format estimated total price for display
@@ -207,18 +195,8 @@ export function ResultCardV2({
           caseMaterial={caseMaterial}
         />
 
-        {/* Prices Across Retailers Section */}
+        {/* Retailer Prices */}
         <div className="mt-4 flex-1">
-          {/* Section Header */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Prices across retailers
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {retailers.length} {retailers.length === 1 ? 'retailer' : 'retailers'}
-            </span>
-          </div>
-
           {/* Retailer Rows */}
           <div className="space-y-3">
             {inlineRetailers.map((retailer, index) => (
@@ -332,7 +310,7 @@ function WatchButton({
 }
 
 /**
- * Product header - title and attributes
+ * Product header - title and inline attribute line
  */
 function ProductHeader({
   productTitle,
@@ -347,38 +325,23 @@ function ProductHeader({
   grainWeight?: number
   caseMaterial?: string
 }) {
+  const attrs = [
+    caliber,
+    grainWeight ? `${grainWeight}gr` : null,
+    bulletType,
+    caseMaterial,
+  ].filter(Boolean)
+
   return (
     <>
-      <h3 className="font-semibold text-foreground leading-tight pr-20 mb-2 line-clamp-2">
+      <h3 className="font-semibold text-foreground leading-tight pr-20 mb-1 line-clamp-2">
         {productTitle}
       </h3>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {caliber && (
-          <span className="text-sm text-muted-foreground">
-            {caliber}
-          </span>
-        )}
-        {bulletType && (
-          <span className="px-1.5 py-0.5 text-xs font-medium rounded border bg-transparent text-muted-foreground border-border">
-            {bulletType}
-          </span>
-        )}
-        {grainWeight && (
-          <span className="text-sm text-muted-foreground">
-            {grainWeight}gr
-          </span>
-        )}
-        {caseMaterial && (
-          <span
-            className={cn(
-              'px-1.5 py-0.5 text-xs font-medium rounded border',
-              getCasingStyle(caseMaterial)
-            )}
-          >
-            {caseMaterial}
-          </span>
-        )}
-      </div>
+      {attrs.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {attrs.join(' \u00b7 ')}
+        </p>
+      )}
     </>
   )
 }
@@ -393,18 +356,8 @@ export function ResultCardV2Skeleton() {
         {/* Title skeleton */}
         <div className="h-5 w-3/4 bg-muted rounded animate-pulse" />
 
-        {/* Attribute badges skeleton */}
-        <div className="flex gap-1.5 mt-2">
-          <div className="h-5 w-16 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-10 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-12 bg-muted rounded animate-pulse" />
-        </div>
-
-        {/* Section header skeleton */}
-        <div className="flex justify-between mt-4 mb-3">
-          <div className="h-3 w-32 bg-muted/50 rounded animate-pulse" />
-          <div className="h-3 w-16 bg-muted/50 rounded animate-pulse" />
-        </div>
+        {/* Attribute line skeleton */}
+        <div className="h-4 w-40 bg-muted/60 rounded animate-pulse mt-1" />
 
         {/* Retailer rows skeleton */}
         <div className="space-y-3 flex-1">

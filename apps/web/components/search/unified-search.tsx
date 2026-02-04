@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Target, Package, VolumeX, Crosshair, Circle } from 'lucide-react'
+import { Search, Sparkles, X, Loader2, SlidersHorizontal, ChevronDown, RotateCcw, Target, Package, VolumeX, Crosshair } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
 import { PremiumFilters } from '@/components/premium'
@@ -357,7 +357,6 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
             <div className="flex flex-wrap justify-center gap-2">
               {EXAMPLE_CHIPS.map((chip, i) => {
                 const Icon = chip.icon
-                const isFirst = i === 0
                 return (
                   <button
                     key={i}
@@ -365,12 +364,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                       setQuery(chip.query)
                       handleSearch(chip.query)
                     }}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0",
-                      isFirst
-                        ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                        : "bg-card text-foreground border-border hover:border-primary/50"
-                    )}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-border bg-card text-foreground text-sm font-medium shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 hover:border-primary/50 transition-all"
                   >
                     <Icon className="h-4 w-4" />
                     {chip.label}

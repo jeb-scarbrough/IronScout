@@ -11,7 +11,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+
 import {
   Select,
   SelectContent,
@@ -260,53 +260,48 @@ function RetailerRow({ retailer, productId, roundCount }: RetailerRowProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          {/* Retailer name */}
           <p className="font-medium text-foreground">
             {retailer.retailerName}
           </p>
-
-          {/* Price line */}
-          <p className="mt-1">
-            <span className="font-mono font-bold text-lg">
-              {formatPrice(retailer.pricePerRound)}/rd
-            </span>
-            <span className="text-muted-foreground text-sm ml-2">
-              {formatPrice(retailer.totalPrice)}
-              {roundCount && ` (${roundCount} rounds)`}
-            </span>
-          </p>
-
-          {/* Stock and shipping */}
-          <div className="flex items-center gap-2 mt-1.5 text-sm">
+          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
             <span
               className={cn(
                 'font-medium',
-                retailer.inStock
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-red-500 dark:text-red-400'
+                retailer.inStock ? 'text-emerald-400' : 'text-red-400'
               )}
             >
               {retailer.inStock ? 'In Stock' : 'Out of Stock'}
             </span>
             {shippingText && (
               <>
-                <span className="text-muted-foreground/50">·</span>
-                <span className="text-muted-foreground">{shippingText}</span>
+                <span className="opacity-40">·</span>
+                <span>{shippingText}</span>
               </>
             )}
           </div>
         </div>
 
-        {/* View button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="shrink-0"
-          onClick={handleViewClick}
-        >
-          View
-          <ArrowUpRight className="ml-1 h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right">
+            <span className="font-mono font-bold text-foreground">
+              {formatPrice(retailer.pricePerRound)}
+            </span>
+            <span className="text-xs text-muted-foreground ml-0.5">/ rd</span>
+            <p className="text-xs text-muted-foreground">
+              {formatPrice(retailer.totalPrice)} total
+              {roundCount ? ` · ${roundCount} rds` : ''}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={handleViewClick}
+          >
+            View
+            <ArrowUpRight className="ml-1 h-3 w-3" />
+          </Button>
+        </div>
       </div>
     </div>
   )
