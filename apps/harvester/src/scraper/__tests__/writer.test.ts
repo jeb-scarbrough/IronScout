@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     update: vi.fn(),
   },
   mockScrapeRuns: {
+    findUniqueOrThrow: vi.fn().mockResolvedValue({ startedAt: new Date('2025-01-01T00:00:00Z') }),
     update: vi.fn(),
   },
 }))

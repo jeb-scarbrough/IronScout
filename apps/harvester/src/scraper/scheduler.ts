@@ -1531,13 +1531,12 @@ async function processManualRuns(): Promise<void> {
         continue
       }
 
-      // Find or create the manual run record
+      // Find any existing RUNNING manual run for this source to avoid duplicates
       let run = await prisma.scrape_runs.findFirst({
         where: {
           sourceId: target.sourceId,
           trigger: 'MANUAL',
           status: 'RUNNING',
-          urlsAttempted: { lte: 1 }, // Not yet fully started
         },
         orderBy: { createdAt: 'desc' },
       })

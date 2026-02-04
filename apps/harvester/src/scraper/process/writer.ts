@@ -364,6 +364,16 @@ export async function finalizeRun(
 ): Promise<void> {
   const completedAt = new Date()
 
+  // Fetch the run to get startedAt for duration calculation
+  const run = await prisma.scrape_runs.findUniqueOrThrow({
+    where: { id: runId },
+    select: { startedAt: true },
+  })
+
+  const durationMs = run.startedAt
+    ? completedAt.getTime() - run.startedAt.getTime()
+    : null
+
   // Calculate derived metrics
   // OOS_NO_PRICE is already excluded from urlsFailed (neutral outcome)
   const failureRate = metrics.urlsAttempted > 0
@@ -383,7 +393,7 @@ export async function finalizeRun(
     data: {
       status,
       completedAt,
-      durationMs: completedAt.getTime() - Date.now(), // Will be recalculated
+      durationMs,
       ...metrics,
       // Prisma accepts numbers for Decimal fields
       failureRate,
