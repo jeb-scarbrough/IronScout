@@ -1,3 +1,5 @@
+@import "tailwindcss";
+@import "tw-animate-css";
 @import "@ironscout/ui/styles/globals.css";
 
 /* Tell Tailwind to scan the shared UI package for class usage */
