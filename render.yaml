@@ -38,8 +38,6 @@ envVarGroups:
     envVars:
       - key: EMAIL_FROM
         value: IronScout <noreply@ironscout.ai>
-      - key: MERCHANT_EMAIL_FROM
-        value: noreply@ironscout.ai
 
   - name: ironscout-secrets
     envVars:
@@ -180,7 +178,6 @@ services:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
-      - fromGroup: ironscout-email
       - key: DATABASE_URL
         fromDatabase:
           name: ironscout-db
