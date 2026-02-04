@@ -1,7 +1,8 @@
 # Render.com Infrastructure as Code
 # This file defines all services for the IronScout.ai application
 #
-# IMPORTANT: Redis must be created manually in Render dashboard
+# Database is managed in the Render dashboard (not in this Blueprint)
+# Redis must be created manually in Render dashboard
 # Redis cannot be defined in Blueprint files - see DEPLOYMENT.md for instructions
 
 # --------------------------------------------------------------------------
