@@ -36,11 +36,10 @@ envVarGroups:
 
   - name: ironscout-email
     envVars:
-      - key: EMAIL_FROM
-        value: IronScout <noreply@ironscout.ai>
       - key: MERCHANT_EMAIL_FROM
-        value: noreply@ironscout.ai
+        value: IronScout <noreply@ironscout.ai>
       - key: OPERATIONS_EMAIL_TO
+        value: IronScout <noreply@ironscout.ai>
         sync: false
 
   - name: ironscout-secrets
