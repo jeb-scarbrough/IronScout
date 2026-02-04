@@ -400,7 +400,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
       {query && (
         <div className="max-w-4xl mx-auto mt-4">
           <div className="flex flex-wrap items-center gap-2">
-            {/* Filters button - opens advanced panel */}
+            {/* Filters button - visible on all sizes, primary control on mobile */}
             <button
               onClick={() => setFiltersOpen(!filtersOpen)}
               className={cn(
@@ -419,75 +419,77 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
               )}
             </button>
 
-            {/* Inline dropdown filters */}
-            <select
-              value={filters.caliber}
-              onChange={(e) => handleSelectChange('caliber', e.target.value)}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.caliber ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Caliber</option>
-              {CALIBERS.map(cal => (
-                <option key={cal} value={cal}>{cal}</option>
-              ))}
-            </select>
+            {/* Inline dropdown filters — hidden on mobile, visible md+ */}
+            <div className="hidden md:contents">
+              <select
+                value={filters.caliber}
+                onChange={(e) => handleSelectChange('caliber', e.target.value)}
+                className={cn(
+                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                  filters.caliber ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+                )}
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="">Caliber</option>
+                {CALIBERS.map(cal => (
+                  <option key={cal} value={cal}>{cal}</option>
+                ))}
+              </select>
 
-            <select
-              value={filters.minGrain && filters.maxGrain ? `${filters.minGrain}-${filters.maxGrain}` : ''}
-              onChange={(e) => {
-                if (!e.target.value) {
-                  const newFilters = { ...filters, minGrain: '', maxGrain: '' }
-                  setFilters(newFilters)
-                  applyFilters(newFilters)
-                } else {
-                  const [min, max] = e.target.value.split('-').map(Number)
-                  handleGrainRange(min, max)
-                }
-              }}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.minGrain ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Grain</option>
-              {GRAIN_RANGES.map(range => (
-                <option key={range.label} value={`${range.min}-${range.max}`}>{range.label}</option>
-              ))}
-            </select>
+              <select
+                value={filters.minGrain && filters.maxGrain ? `${filters.minGrain}-${filters.maxGrain}` : ''}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    const newFilters = { ...filters, minGrain: '', maxGrain: '' }
+                    setFilters(newFilters)
+                    applyFilters(newFilters)
+                  } else {
+                    const [min, max] = e.target.value.split('-').map(Number)
+                    handleGrainRange(min, max)
+                  }
+                }}
+                className={cn(
+                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                  filters.minGrain ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+                )}
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="">Grain</option>
+                {GRAIN_RANGES.map(range => (
+                  <option key={range.label} value={`${range.min}-${range.max}`}>{range.label}</option>
+                ))}
+              </select>
 
-            <select
-              value={filters.caseMaterial}
-              onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Casing</option>
-              {CASE_MATERIALS.map(mat => (
-                <option key={mat} value={mat}>{mat}</option>
-              ))}
-            </select>
+              <select
+                value={filters.caseMaterial}
+                onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
+                className={cn(
+                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                  filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+                )}
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="">Casing</option>
+                {CASE_MATERIALS.map(mat => (
+                  <option key={mat} value={mat}>{mat}</option>
+                ))}
+              </select>
 
-            <select
-              value={filters.purpose}
-              onChange={(e) => handleSelectChange('purpose', e.target.value)}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Type</option>
-              {PURPOSES.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+              <select
+                value={filters.purpose}
+                onChange={(e) => handleSelectChange('purpose', e.target.value)}
+                className={cn(
+                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                  filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
+                )}
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="">Type</option>
+                {PURPOSES.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Spacer to push toggles to the right */}
             <div className="flex-1" />
@@ -533,6 +535,78 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                 Clear all
               </button>
             )}
+          </div>
+
+          {/* Basic filters — shown on mobile only (desktop has inline dropdowns) */}
+          <div className="md:hidden grid grid-cols-2 gap-2 mb-4">
+            <select
+              value={filters.caliber}
+              onChange={(e) => handleSelectChange('caliber', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.caliber ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Caliber</option>
+              {CALIBERS.map(cal => (
+                <option key={cal} value={cal}>{cal}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.minGrain && filters.maxGrain ? `${filters.minGrain}-${filters.maxGrain}` : ''}
+              onChange={(e) => {
+                if (!e.target.value) {
+                  const newFilters = { ...filters, minGrain: '', maxGrain: '' }
+                  setFilters(newFilters)
+                  applyFilters(newFilters)
+                } else {
+                  const [min, max] = e.target.value.split('-').map(Number)
+                  handleGrainRange(min, max)
+                }
+              }}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.minGrain ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Grain</option>
+              {GRAIN_RANGES.map(range => (
+                <option key={range.label} value={`${range.min}-${range.max}`}>{range.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.caseMaterial}
+              onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Casing</option>
+              {CASE_MATERIALS.map(mat => (
+                <option key={mat} value={mat}>{mat}</option>
+              ))}
+            </select>
+
+            <select
+              value={filters.purpose}
+              onChange={(e) => handleSelectChange('purpose', e.target.value)}
+              className={cn(
+                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
+                filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
+              )}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="">Type</option>
+              {PURPOSES.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
           </div>
 
           {/* Price Range */}
