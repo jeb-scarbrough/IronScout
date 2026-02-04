@@ -343,11 +343,20 @@ function formatError(error) {
     if (!error)
         return undefined;
     if (error instanceof Error) {
+        // Browser: only include error name (no message/stack to prevent sensitive data leaks)
+        if (isBrowser) {
+            return { name: error.name, message: '[redacted]' };
+        }
+        // Server: full error details for observability
         return {
             name: error.name,
             message: error.message,
             stack: error.stack,
         };
+    }
+    // Browser: minimal info for unknown errors
+    if (isBrowser) {
+        return { name: 'UnknownError', message: '[redacted]' };
     }
     return {
         name: 'UnknownError',
@@ -402,11 +411,11 @@ function formatPrettyBrowser(entry) {
     const componentPath = entry.component
         ? `${entry.service}:${entry.component}`
         : entry.service;
-    // Extract known fields
+    // Extract known fields - meta suppressed in browser to prevent sensitive data leaks
     const { timestamp, level, service, component, message, error, ...meta } = entry;
-    // Format metadata with redaction applied (fixes sensitive data leak)
-    const redactedMeta = isRedactionEnabled() ? redactEntry(meta) : meta;
-    const metaStr = Object.keys(redactedMeta).length > 0 ? ` ${JSON.stringify(redactedMeta)}` : '';
+    // Browser: suppress meta to prevent sensitive data leaks (use server logs for debugging)
+    // Only show count of meta keys if any exist
+    const metaStr = Object.keys(meta).length > 0 ? ` [+${Object.keys(meta).length} fields]` : '';
     // Build message with %c placeholders for styling
     const formattedMessage = `%c${timestamp} %c${levelStr} %c[${componentPath}] %c${message}${metaStr}`;
     const styles = [
@@ -500,9 +509,9 @@ function output(entry) {
                 console.error(message, ...styles);
                 break;
         }
-        // Log error separately if present
+        // Log error name only in browser - details logged server-side via requestId correlation
         if (entry.error) {
-            console.error(entry.error.stack || entry.error.message);
+            console.error(`[${entry.error.name || 'Error'}] Error occurred. Check server logs for details.`);
         }
     }
     else {
@@ -634,5 +643,80 @@ export function generateSpanId() {
     return 'xxxxxxxxxxxxxxxx'.replace(/x/g, () => {
         return ((Math.random() * 16) | 0).toString(16);
     });
+}
+// =============================================================================
+// URL Sanitization - Strip credentials from URLs before logging
+// =============================================================================
+/**
+ * Query parameters that are considered sensitive and should be redacted.
+ * Matches common patterns for credentials, tokens, and API keys.
+ */
+const SENSITIVE_QUERY_PARAMS = [
+    /^password$/i,
+    /^pass$/i,
+    /^pwd$/i,
+    /^secret$/i,
+    /^token$/i,
+    /^access[_-]?token$/i,
+    /^refresh[_-]?token$/i,
+    /^api[_-]?key$/i,
+    /^apikey$/i,
+    /^key$/i,
+    /^auth$/i,
+    /^authorization$/i,
+    /^bearer$/i,
+    /^credential/i,
+    /^session/i,
+    /^jwt$/i,
+];
+/**
+ * Sanitize a URL for safe logging by removing credentials and sensitive query params.
+ * - Strips userinfo (user:pass@host)
+ * - Redacts sensitive query parameters (password, token, key, etc.)
+ *
+ * @param url - The URL to sanitize (can be string or URL object)
+ * @returns Sanitized URL string safe for logging
+ *
+ * @example
+ * ```ts
+ * sanitizeUrlForLogging('https://user:secret@api.example.com/feed')
+ * // Returns: 'https://api.example.com/feed'
+ *
+ * sanitizeUrlForLogging('https://api.example.com/feed?token=abc123&limit=10')
+ * // Returns: 'https://api.example.com/feed?token=[REDACTED]&limit=10'
+ * ```
+ */
+export function sanitizeUrlForLogging(url) {
+    if (!url)
+        return '[no-url]';
+    try {
+        const parsed = typeof url === 'string' ? new URL(url) : new URL(url.toString());
+        // Strip credentials (userinfo)
+        parsed.username = '';
+        parsed.password = '';
+        // Redact sensitive query parameters
+        const params = new URLSearchParams(parsed.search);
+        let hasRedactions = false;
+        for (const [key] of params.entries()) {
+            if (SENSITIVE_QUERY_PARAMS.some(pattern => pattern.test(key))) {
+                params.set(key, '[REDACTED]');
+                hasRedactions = true;
+            }
+        }
+        if (hasRedactions) {
+            parsed.search = params.toString();
+        }
+        return parsed.toString();
+    }
+    catch {
+        // If URL parsing fails, try to redact credentials using regex as fallback
+        const urlStr = String(url);
+        // Remove userinfo (user:pass@)
+        let sanitized = urlStr.replace(/^(\w+:\/\/)([^:@]+:[^@]+@|[^:@]+@)/, '$1');
+        // Redact sensitive query params via regex fallback
+        sanitized = sanitized.replace(/([?&])(password|pass|pwd|secret|token|access_token|refresh_token|api_key|apikey|key|auth|authorization|bearer|credential|session|jwt)=([^&]*)/gi, '$1$2=[REDACTED]');
+        // Return truncated if still too long
+        return sanitized.length > 200 ? `${sanitized.substring(0, 200)}...` : sanitized;
+    }
 }
 //# sourceMappingURL=index.js.map
