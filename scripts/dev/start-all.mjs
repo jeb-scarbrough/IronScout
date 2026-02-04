@@ -10,12 +10,10 @@
  *   --skip-build      Skip building before starting
  *   --dev             Use dev mode (hot reload) instead of production builds
  *   --only <services> Start only specific services (comma-separated)
- *   --skip-env-check  Skip environment variable validation
  */
 
 import { spawn } from 'child_process'
-import { existsSync, mkdirSync, createWriteStream, readFileSync } from 'fs'
-import { createConnection } from 'net'
+import { createWriteStream } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import {
@@ -23,7 +21,6 @@ import {
   success,
   error,
   info,
-  warn,
   header,
   run,
   parseArgs,
@@ -31,7 +28,6 @@ import {
   sleep,
   ensureDir,
   isWindows,
-  writeJson,
 } from '../lib/utils.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -110,96 +106,7 @@ const SERVICES = [
   },
 ]
 
-const PID_FILE = resolve(PROJECT_ROOT, '.ironscout', 'pids.json')
-
-// Environment variables that should come from .env files
-const CONFLICTING_ENV_VARS = [
-  { name: 'DATABASE_URL', description: 'Database connection string' },
-  { name: 'REDIS_HOST', description: 'Redis server host' },
-  { name: 'REDIS_PORT', description: 'Redis server port' },
-  { name: 'REDIS_PASSWORD', description: 'Redis password' },
-  { name: 'NEXTAUTH_SECRET', description: 'NextAuth secret key' },
-  { name: 'STRIPE_SECRET_KEY', description: 'Stripe API key' },
-  { name: 'OPENAI_API_KEY', description: 'OpenAI API key' },
-  { name: 'RESEND_API_KEY', description: 'Resend email API key' },
-]
-
 const childProcesses = []
-let allServicesStarted = false
-
-/**
- * Check if all services have exited and exit if so
- */
-function checkAllExited() {
-  if (!allServicesStarted) return // Don't check until all services have been started
-
-  const managed = childProcesses.filter(svc => svc.process)
-  if (managed.length === 0) return
-
-  const allExited = managed.every(svc => svc.exited || svc.process.exitCode !== null)
-  if (allExited) {
-    console.log('')
-    error('All services have exited. Check logs for details.')
-    info('Logs are in: logs/*.log')
-    process.exit(1)
-  }
-}
-
-/**
- * Check for conflicting environment variables
- */
-function checkEnvVars() {
-  const conflicts = []
-
-  for (const envVar of CONFLICTING_ENV_VARS) {
-    const value = process.env[envVar.name]
-    if (value) {
-      const masked =
-        value.length > 20 ? value.slice(0, 10) + '...' + value.slice(-5) : value.slice(0, 5) + '***'
-      conflicts.push({ ...envVar, value: masked })
-    }
-  }
-
-  return conflicts
-}
-
-function loadExistingPids() {
-  if (!existsSync(PID_FILE)) return []
-  try {
-    const raw = readFileSync(PID_FILE, 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed?.services) ? parsed.services : []
-  } catch (err) {
-    warn(`Failed to read ${PID_FILE}: ${err.message}`)
-    return []
-  }
-}
-
-function isPidRunning(pid) {
-  if (!pid) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (err) {
-    return err.code === 'EPERM'
-  }
-}
-
-function isPortOpen(port, host = '127.0.0.1', timeoutMs = 500) {
-  return new Promise((resolvePort) => {
-    const socket = createConnection({ port, host })
-    const done = (result) => {
-      socket.removeAllListeners()
-      socket.destroy()
-      resolvePort(result)
-    }
-
-    socket.setTimeout(timeoutMs)
-    socket.once('connect', () => done(true))
-    socket.once('timeout', () => done(false))
-    socket.once('error', () => done(false))
-  })
-}
 
 /**
  * Start a service in a new terminal window (Windows)
@@ -207,15 +114,15 @@ function isPortOpen(port, host = '127.0.0.1', timeoutMs = 500) {
 function startServiceInTerminal(service, devMode) {
   const command = devMode ? service.devCommand : service.prodCommand
   const title = `IronScout - ${service.name}`
+  const safeTitle = title.replace(/["^]/g, '')
+  const cmdBody = `title ${safeTitle} & cd /d ${PROJECT_ROOT} && set NODE_EXTRA_CA_CERTS=${CADDY_CA_CERT} && ${command}`
 
   info(`Starting ${service.name} in new terminal...`)
   if (service.port) {
     console.log(`${colors.gray}  Port: ${service.port}${colors.reset}`)
   }
 
-  // Use Windows 'start' command to open a new terminal
-  // Set NODE_EXTRA_CA_CERTS for server-side HTTPS fetch in Next.js apps
-  const startCmd = `start "${title}" cmd /k "title ${title} & cd /d ${PROJECT_ROOT} && set NODE_EXTRA_CA_CERTS=${CADDY_CA_CERT} && ${command}"`
+  const startCmd = `start "${title}" cmd /k "${cmdBody}"`
 
   const child = spawn(startCmd, [], {
     cwd: PROJECT_ROOT,
@@ -271,8 +178,6 @@ function startService(service, devMode, logsDir, useTerminals = false) {
     if (code !== 0 && code !== null) {
       error(`${service.name} exited with code ${code}`)
     }
-    // Check if all services have exited
-    checkAllExited()
   })
 
   childProcesses.push({ name: service.name, process: child, service, exited: false })
@@ -369,27 +274,13 @@ function cleanup() {
       svc.process.kill('SIGTERM')
     }
   }
-  writeJson(PID_FILE, { services: [] })
   success('All services stopped')
-}
-
-function writePidFile(services) {
-  const pidEntries = services.map((svc) => ({
-    name: svc.name,
-    pid: svc.process?.pid ?? null,
-    terminal: !!svc.terminal,
-    startedAt: new Date().toISOString(),
-  }))
-
-  ensureDir(resolve(PROJECT_ROOT, '.ironscout'))
-  writeJson(PID_FILE, { services: pidEntries })
 }
 
 async function main() {
   const args = parseArgs()
   const skipBuild = args.flags['skip-build']
   const devMode = args.flags.dev ?? true // Default to dev mode
-  const skipEnvCheck = args.flags['skip-env-check']
   const only = args.flags.only ? args.flags.only.split(',') : null
   const useTerminals = args.flags.terminals || args.flags.t
 
@@ -398,38 +289,6 @@ async function main() {
   if (only) {
     services = SERVICES.filter((s) => only.includes(s.name))
     info(`Starting only: ${only.join(', ')}`)
-  }
-
-  const existingPids = loadExistingPids()
-
-  // Check environment variables
-  if (!skipEnvCheck) {
-    header('Checking Environment Variables')
-
-    const conflicts = checkEnvVars()
-    if (conflicts.length > 0) {
-      warn('Found environment variables that may conflict with .env files:')
-      console.log('')
-      for (const conflict of conflicts) {
-        console.log(`${colors.red}  ${conflict.name}${colors.reset} = ${colors.gray}${conflict.value}${colors.reset}`)
-        console.log(`${colors.gray}    ${conflict.description}${colors.reset}`)
-      }
-      console.log('')
-      warn('These shell environment variables will OVERRIDE values in .env files!')
-      warn('This can cause services to connect to wrong databases/services.')
-      console.log('')
-      info('To fix, unset these variables or use --skip-env-check')
-      console.log('')
-
-      // Auto-clear in non-interactive mode, or ask user
-      for (const conflict of conflicts) {
-        delete process.env[conflict.name]
-        success(`Cleared ${conflict.name}`)
-      }
-      console.log('')
-    } else {
-      success('No conflicting environment variables found')
-    }
   }
 
   // Build if not skipped and not in dev mode
@@ -471,34 +330,9 @@ async function main() {
       }
     }
 
-    if (service.healthCheck) {
-      const alreadyRunning = await healthCheck(service.healthCheck, 1000)
-      if (alreadyRunning) {
-        warn(`${service.name} already running at ${service.healthCheck}; skipping start`)
-        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
-        continue
-      }
-    } else if (service.port) {
-      const portOpen = await isPortOpen(service.port)
-      if (portOpen) {
-        warn(`${service.name} already running on port ${service.port}; skipping start`)
-        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
-        continue
-      }
-    } else {
-      const existing = existingPids.find((entry) => entry.name === service.name && entry.pid)
-      if (existing && isPidRunning(existing.pid)) {
-        warn(`${service.name} already running (pid ${existing.pid}); skipping start`)
-        childProcesses.push({ name: service.name, process: null, service, exited: false, external: true })
-        continue
-      }
-    }
-
     startService(service, devMode, logsDir, useTerminals)
     await sleep(useTerminals ? 500 : 2000) // Shorter delay for terminals
   }
-
-  writePidFile(childProcesses)
 
   header('Waiting for Services to Start')
 
@@ -540,9 +374,6 @@ async function main() {
     cleanup()
     process.exit(0)
   })
-
-  // Mark that all services have been started
-  allServicesStarted = true
 
   // Keep the process running
   await new Promise(() => {})

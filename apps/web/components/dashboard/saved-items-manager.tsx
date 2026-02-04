@@ -18,9 +18,7 @@ import { useSavedItems } from '@/hooks/use-saved-items'
 import { ProductImage } from '@/components/products/product-image'
 import { toast } from 'sonner'
 import type { SavedItem } from '@/lib/api'
-import { createLogger } from '@/lib/logger'
-
-const logger = createLogger('components:saved-items-manager')
+import { safeLogger } from '@/lib/safe-logger'
 
 /**
  * Saved Items Manager - unified view for saved products (ADR-011)
@@ -41,7 +39,7 @@ export function SavedItemsManager() {
       await remove(productId)
       toast.success('Item removed')
     } catch (err) {
-      logger.error('Failed to remove item', {}, err)
+      safeLogger.dashboard.error('Failed to remove item', {}, err)
       toast.error('Failed to remove item')
     }
   }
@@ -59,7 +57,7 @@ export function SavedItemsManager() {
         toast.success(value ? 'Notifications resumed' : 'Notifications paused')
       }
     } catch (err) {
-      logger.error('Failed to update notification preference', { field }, err)
+      safeLogger.dashboard.error('Failed to update notification preference', { field }, err)
       toast.error('Failed to update notifications')
     }
   }

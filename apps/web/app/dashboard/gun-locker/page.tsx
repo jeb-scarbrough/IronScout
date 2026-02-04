@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { GunLockerManager } from '@/components/dashboard/gun-locker-manager'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 
 export const metadata: Metadata = {
   title: 'Gun Locker',
@@ -7,16 +8,16 @@ export const metadata: Metadata = {
 
 export default function GunLockerPage() {
   return (
-    <div className="p-6 lg:p-8">
+    <DashboardContent>
       {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-semibold">Gun Locker</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Gun Locker</h1>
+        <p className="text-sm text-iron-400 mt-1">
           Add the guns you shoot to personalize your results
         </p>
       </div>
 
       <GunLockerManager />
-    </div>
+    </DashboardContent>
   )
 }

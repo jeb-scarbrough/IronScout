@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Outfit, JetBrains_Mono } from 'next/font/google'
 import Script from 'next/script'
+import { GoogleAnalytics } from '@next/third-parties/google'
 import './globals.css'
 import { Providers } from './providers'
 import { Header } from '@/components/layout/header'
@@ -72,19 +73,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${jetbrainsMono.variable}`}>
       <head>
-        {/* Google Analytics */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-1CDJQS6N90" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-1CDJQS6N90');
-            `,
-          }}
-        />
-
         {/* PWA Meta Tags */}
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
@@ -116,14 +104,16 @@ export default function RootLayout({
         {/* Microsoft Tiles */}
         <meta name="msapplication-TileColor" content="#121418" />
         <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
-        
-        {/* Third-party Scripts */}
-        <Script
-          src="https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=83b35735960abca5c62924f3fbe01e4e919343a3"
-          strategy="afterInteractive"
-        />
       </head>
       <body className="font-display antialiased">
+        {/* Third-party Scripts - AvantLink affiliate confirmation */}
+        <Script
+          {...{
+            id: 'avantlink-confirm',
+            src: 'https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=83b35735960abca5c62924f3fbe01e4e919343a3',
+            strategy: 'afterInteractive',
+          } as React.ComponentProps<typeof Script>}
+        />
         <Providers>
           <div className="min-h-screen flex flex-col safe-area-inset">
             <Header />
@@ -135,6 +125,7 @@ export default function RootLayout({
           <Toaster richColors position="top-right" />
         </Providers>
       </body>
+      <GoogleAnalytics gaId="G-1CDJQS6N90" />
     </html>
   )
 }

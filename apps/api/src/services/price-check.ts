@@ -40,12 +40,18 @@ export interface PriceCheckResult {
  * @param pricePerRound - Entered price per round in cents (e.g., 0.30 = $0.30/rd)
  * @param brand - Optional brand filter
  * @param grain - Optional grain weight filter
+ * @param roundCount - Optional round count filter
+ * @param caseMaterial - Optional case material filter
+ * @param bulletType - Optional bullet type filter
  */
 export async function checkPrice(
   caliber: string,
   pricePerRound: number,
   brand?: string,
-  grain?: number
+  grain?: number,
+  roundCount?: number,
+  caseMaterial?: string,
+  bulletType?: string
 ): Promise<PriceCheckResult> {
   // Validate caliber is canonical
   if (!isValidCaliber(caliber)) {
@@ -63,6 +69,9 @@ export async function checkPrice(
   // Build brand/grain filters
   let brandCondition = ''
   let grainCondition = ''
+  let roundCountCondition = ''
+  let caseMaterialCondition = ''
+  let bulletTypeCondition = ''
   const params: any[] = [thirtyDaysAgo, ...caliberConditions.params]
 
   if (brand) {
@@ -73,6 +82,21 @@ export async function checkPrice(
   if (grain) {
     grainCondition = `AND p."grainWeight" = $${params.length + 1}`
     params.push(grain)
+  }
+
+  if (roundCount) {
+    roundCountCondition = `AND p."roundCount" = $${params.length + 1}`
+    params.push(roundCount)
+  }
+
+  if (caseMaterial) {
+    caseMaterialCondition = `AND LOWER(p."caseMaterial") LIKE $${params.length + 1}`
+    params.push(`%${caseMaterial.toLowerCase()}%`)
+  }
+
+  if (bulletType) {
+    bulletTypeCondition = `AND p."bulletType" = $${params.length + 1}`
+    params.push(bulletType)
   }
 
   // Get daily best prices per product for the caliber in trailing 30 days
@@ -89,13 +113,45 @@ export async function checkPrice(
       SELECT
         p.id as product_id,
         DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as observed_day,
-        MIN(CASE WHEN p."roundCount" > 0 THEN pr.price / p."roundCount" ELSE pr.price END) as price_per_round
+        -- ADR-015: Apply MULTIPLIER corrections to price before aggregation
+        MIN(
+          CASE WHEN p."roundCount" > 0
+            THEN (pr.price * COALESCE((
+              SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+              FROM price_corrections pc
+              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+                AND (
+                  (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                  (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+                )
+            ), 1.0)) / p."roundCount"
+            ELSE pr.price * COALESCE((
+              SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+              FROM price_corrections pc
+              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+                AND (
+                  (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                  (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+                )
+            ), 1.0)
+          END
+        ) as price_per_round
       FROM products p
       JOIN product_links pl ON pl."productId" = p.id
       JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
       JOIN retailers r ON r.id = pr."retailerId"
       LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
       LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
+      LEFT JOIN sources s ON s.id = pr."sourceId"
+      LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
       WHERE pl.status IN ('MATCHED', 'CREATED')
         AND pr."observedAt" >= $1
         AND pr."inStock" = true
@@ -110,16 +166,47 @@ export async function checkPrice(
             AND pr."observedAt" >= pc."startTs"
             AND pr."observedAt" < pc."endTs"
             AND (
-              (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
-              (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
               (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
               (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
         )
+        -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
+        AND (
+          SELECT COUNT(*)
+          FROM price_corrections pc
+          WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+            AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+            AND (
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+            )
+        ) <= 2
+        -- ADR-021: Allow SCRAPE prices only when guardrails pass
+        AND (
+          pr."ingestionRunType" IS NULL
+          OR pr."ingestionRunType" != 'SCRAPE'
+          OR (
+            pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
+            AND s."scrapeEnabled" = true
+            AND s."robotsCompliant" = true
+            AND s."tosReviewedAt" IS NOT NULL
+            AND s."tosApprovedBy" IS NOT NULL
+            AND sas."enabled" = true
+          )
+        )
         AND (${caliberConditions.sql})
         ${brandCondition}
         ${grainCondition}
+        ${roundCountCondition}
+        ${caseMaterialCondition}
+        ${bulletTypeCondition}
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT

@@ -512,6 +512,12 @@ export async function resendVerificationEmail(merchantId: string) {
       return { success: false, error: 'Email service not configured' };
     }
 
+    const fromEmail = process.env.MERCHANT_EMAIL_FROM
+    if (!fromEmail) {
+      loggers.merchants.error('MERCHANT_EMAIL_FROM not configured', { merchantId })
+      return { success: false, error: 'Email service not configured' }
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -519,7 +525,7 @@ export async function resendVerificationEmail(merchantId: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM || 'IronScout <noreply@ironscout.ai>',
+        from: fromEmail,
         to: merchantUser.email,
         subject: 'Verify Your IronScout Merchant Account',
         html: `
@@ -623,9 +629,11 @@ export async function impersonateMerchant(merchantId: string) {
     const baseUrl = getMerchantPortalUrl();
     const redirectUrl = `${baseUrl}/api/auth/impersonate?token=${encodeURIComponent(token)}`;
 
-    loggers.merchants.debug('Impersonate URL construction', {
+    // Log only non-sensitive parts - NEVER log the token (even partially)
+    loggers.merchants.debug('Impersonate URL constructed', {
       baseUrl,
-      redirectUrlStart: redirectUrl.substring(0, 60) + '...',
+      hasToken: true,
+      tokenLength: token.length,
     });
 
     return {

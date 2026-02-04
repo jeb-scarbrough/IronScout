@@ -263,6 +263,7 @@ export default async function RetailersPage({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         {retailer.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- External URL from user upload
                           <img
                             src={retailer.logoUrl}
                             alt={retailer.name}

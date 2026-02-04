@@ -12,8 +12,11 @@ import {
 } from '@/components/ui/tooltip'
 import { trackTrackToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
-import type { ResultCardV2Props } from './types'
-import { formatPrice } from './types'
+import type { ResultCardV2Props, RetailerPrice } from './types'
+import { formatPrice, formatShippingInfo } from './types'
+
+/** Max retailer rows to show inline */
+const MAX_INLINE_RETAILERS = 3
 
 /**
  * Get casing badge style - Brass gets warm accent, Steel gets neutral
@@ -21,7 +24,7 @@ import { formatPrice } from './types'
 function getCasingStyle(casing: string): string {
   const lower = casing.toLowerCase()
   if (lower === 'brass') {
-    return 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30'
+    return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
   }
   if (lower === 'steel') {
     return 'bg-muted text-muted-foreground border-border'
@@ -30,17 +33,53 @@ function getCasingStyle(casing: string): string {
 }
 
 /**
- * ResultCardV2 - Price Summary Card
+ * Format estimated total price for display
+ */
+function formatEstTotal(retailer: RetailerPrice, roundCount?: number): string | null {
+  if (!roundCount || roundCount <= 1) return null
+  const total = retailer.totalPrice
+  // Show range if shipping unknown
+  if (retailer.shippingInfo.type === 'unknown' || retailer.shippingInfo.type === 'excluded_unknown') {
+    const minTotal = total
+    const maxTotal = total + 20 // Estimate max shipping
+    return `Est. total: $${minTotal.toFixed(0)}–$${maxTotal.toFixed(0)}`
+  }
+  if (retailer.shippingInfo.type === 'included') {
+    return `Est. total: $${total.toFixed(0)}`
+  }
+  if (retailer.shippingInfo.type === 'excluded') {
+    const withShipping = total + retailer.shippingInfo.amount
+    return `Est. total: $${withShipping.toFixed(0)}`
+  }
+  return null
+}
+
+/**
+ * Get shipping display text
+ */
+function getShippingText(retailer: RetailerPrice): string | null {
+  const info = retailer.shippingInfo
+  switch (info.type) {
+    case 'included':
+      return 'Includes shipping'
+    case 'excluded':
+      return `+$${info.amount.toFixed(0)} shipping`
+    case 'excluded_unknown':
+      return '+ shipping (varies)'
+    case 'free_over':
+      return `Free shipping over $${info.threshold}`
+    case 'pickup_only':
+      return 'Pickup only'
+    case 'unknown':
+      return '+ shipping (varies)'
+  }
+}
+
+/**
+ * ResultCardV2 - Product card with inline retailer prices
  *
- * Per UX feedback: Cards collapsed to "price summary" model for scanability.
- * Shows: Product name, best price/rd, price range, retailer count.
- * Retailer rows appear only after click (drawer/detail view).
- *
- * Invariants:
- * - No inline retailer rows (those live in RetailerPanel)
- * - No per-retailer stock state inline
- * - No recommendation language
- * - Click anywhere opens comparison drawer
+ * Shows product info, top 3 retailer prices inline,
+ * and "View retailer prices >" link to open full panel.
  */
 export function ResultCardV2({
   id,
@@ -62,26 +101,17 @@ export function ResultCardV2({
     setWatchingOptimistic(isWatched)
   }, [isWatched])
 
-  // Compute price summary from retailers
-  const priceSummary = useMemo(() => {
-    if (retailers.length === 0) {
-      return null
-    }
-
-    const prices = retailers.map((r) => r.pricePerRound)
-    const minPrice = Math.min(...prices)
-    const maxPrice = Math.max(...prices)
-    const anyInStock = retailers.some((r) => r.inStock)
-
-    return {
-      bestPrice: minPrice,
-      minPrice,
-      maxPrice,
-      hasRange: maxPrice - minPrice > 0.001, // More than $0.001 difference
-      retailerCount: retailers.length,
-      anyInStock,
-    }
+  // Sort retailers by price (in-stock first, then by price)
+  const sortedRetailers = useMemo(() => {
+    const inStock = retailers.filter((r) => r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    const outOfStock = retailers.filter((r) => !r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    return [...inStock, ...outOfStock]
   }, [retailers])
+
+  // Get top retailers for inline display
+  const inlineRetailers = sortedRetailers.slice(0, MAX_INLINE_RETAILERS)
+  const hasMoreRetailers = retailers.length > MAX_INLINE_RETAILERS
+  const anyInStock = retailers.some((r) => r.inStock)
 
   const handleWatchToggle = useCallback(
     (e: React.MouseEvent) => {
@@ -108,15 +138,19 @@ export function ResultCardV2({
     [id, watchingOptimistic, onWatchToggle]
   )
 
-  const handleCardClick = useCallback(() => {
-    onCompareClick(id)
-  }, [id, onCompareClick])
+  const handleViewPrices = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      onCompareClick(id)
+    },
+    [id, onCompareClick]
+  )
 
   // Empty state (no retailers)
-  if (!priceSummary) {
+  if (retailers.length === 0) {
     return (
       <Card className="overflow-hidden h-full flex flex-col border border-border bg-card">
-        <CardContent className="p-4 flex flex-col flex-1">
+        <CardContent className="p-4 flex flex-col flex-1 relative">
           <WatchButton
             isWatched={watchingOptimistic}
             onClick={handleWatchToggle}
@@ -151,19 +185,16 @@ export function ResultCardV2({
     )
   }
 
-  const { bestPrice, minPrice, maxPrice, hasRange, retailerCount, anyInStock } = priceSummary
-
   return (
     <Card
-      onClick={handleCardClick}
       className={cn(
-        'overflow-hidden h-full flex flex-col border bg-card cursor-pointer transition-all',
+        'overflow-hidden h-full flex flex-col border bg-card transition-all',
         anyInStock
           ? 'border-border hover:border-primary/40 hover:shadow-sm'
           : 'opacity-70 border-border'
       )}
     >
-      <CardContent className="p-4 flex flex-col flex-1">
+      <CardContent className="p-4 flex flex-col flex-1 relative">
         {/* Watch Button */}
         <WatchButton isWatched={watchingOptimistic} onClick={handleWatchToggle} />
 
@@ -176,36 +207,89 @@ export function ResultCardV2({
           caseMaterial={caseMaterial}
         />
 
-        {/* Price Summary Block */}
+        {/* Prices Across Retailers Section */}
         <div className="mt-4 flex-1">
-          {/* Best Price - Primary */}
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold font-mono text-foreground">
-              {formatPrice(bestPrice)}
+          {/* Section Header */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Prices across retailers
             </span>
-            <span className="text-sm text-muted-foreground">/rd</span>
+            <span className="text-xs text-muted-foreground">
+              {retailers.length} {retailers.length === 1 ? 'retailer' : 'retailers'}
+            </span>
           </div>
 
-          {/* Price Range - Secondary (only if range exists) */}
-          {hasRange && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {formatPrice(minPrice)} – {formatPrice(maxPrice)}
-            </p>
-          )}
+          {/* Retailer Rows */}
+          <div className="space-y-3">
+            {inlineRetailers.map((retailer, index) => (
+              <RetailerRow
+                key={`${retailer.retailerId}-${index}`}
+                retailer={retailer}
+                roundCount={roundCount}
+              />
+            ))}
+
+            {/* "No other retailers" message if only showing few */}
+            {retailers.length <= MAX_INLINE_RETAILERS && retailers.length < 3 && (
+              <p className="text-xs text-muted-foreground/60 italic">
+                No other retailers found
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Footer: Retailer count + compare hint */}
-        <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {retailerCount} {retailerCount === 1 ? 'retailer' : 'retailers'}
-          </span>
-          <span className="text-sm text-primary flex items-center gap-0.5">
-            Compare
-            <ChevronRight className="h-4 w-4" />
-          </span>
-        </div>
+        {/* Footer: View retailer prices link */}
+        <button
+          onClick={handleViewPrices}
+          className="mt-4 pt-3 border-t border-border/50 flex items-center justify-end w-full text-sm text-primary hover:text-primary/80 transition-colors"
+        >
+          View retailer prices
+          <ChevronRight className="h-4 w-4 ml-0.5" />
+        </button>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Single retailer price row
+ */
+function RetailerRow({
+  retailer,
+  roundCount,
+}: {
+  retailer: RetailerPrice
+  roundCount?: number
+}) {
+  const shippingText = getShippingText(retailer)
+  const estTotal = formatEstTotal(retailer, roundCount)
+
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <span className="text-sm font-medium text-foreground truncate block">
+          {retailer.retailerName}
+        </span>
+        {/* Shipping or est total info */}
+        {(shippingText || estTotal) && (
+          <span className="text-xs text-muted-foreground">
+            {estTotal || shippingText}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1 shrink-0">
+        <span className={cn(
+          'text-sm font-bold font-mono',
+          retailer.inStock ? 'text-primary' : 'text-muted-foreground'
+        )}>
+          {formatPrice(retailer.pricePerRound)}
+        </span>
+        <span className="text-xs text-muted-foreground">/ rd</span>
+        {!retailer.inStock && (
+          <span className="text-xs font-medium text-destructive ml-1">OOS</span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -270,24 +354,24 @@ function ProductHeader({
       </h3>
       <div className="flex flex-wrap items-center gap-1.5">
         {caliber && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-muted/50 text-foreground border-border">
+          <span className="text-sm text-muted-foreground">
             {caliber}
           </span>
         )}
         {bulletType && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-transparent text-muted-foreground border-border">
+          <span className="px-1.5 py-0.5 text-xs font-medium rounded border bg-transparent text-muted-foreground border-border">
             {bulletType}
           </span>
         )}
         {grainWeight && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded border bg-transparent text-muted-foreground border-border">
+          <span className="text-sm text-muted-foreground">
             {grainWeight}gr
           </span>
         )}
         {caseMaterial && (
           <span
             className={cn(
-              'px-2 py-0.5 text-xs font-medium rounded border',
+              'px-1.5 py-0.5 text-xs font-medium rounded border',
               getCasingStyle(caseMaterial)
             )}
           >
@@ -301,11 +385,6 @@ function ProductHeader({
 
 /**
  * ResultCardV2Skeleton - Loading placeholder
- *
- * Matches the price summary card layout:
- * - Title + attributes
- * - Price block
- * - Footer with retailer count
  */
 export function ResultCardV2Skeleton() {
   return (
@@ -316,21 +395,33 @@ export function ResultCardV2Skeleton() {
 
         {/* Attribute badges skeleton */}
         <div className="flex gap-1.5 mt-2">
-          <div className="h-5 w-12 bg-muted rounded animate-pulse" />
+          <div className="h-5 w-16 bg-muted rounded animate-pulse" />
           <div className="h-5 w-10 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-14 bg-muted rounded animate-pulse" />
+          <div className="h-5 w-12 bg-muted rounded animate-pulse" />
         </div>
 
-        {/* Price block skeleton */}
-        <div className="mt-4 flex-1">
-          <div className="h-8 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-4 w-32 bg-muted/50 rounded animate-pulse mt-2" />
+        {/* Section header skeleton */}
+        <div className="flex justify-between mt-4 mb-3">
+          <div className="h-3 w-32 bg-muted/50 rounded animate-pulse" />
+          <div className="h-3 w-16 bg-muted/50 rounded animate-pulse" />
+        </div>
+
+        {/* Retailer rows skeleton */}
+        <div className="space-y-3 flex-1">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex justify-between">
+              <div className="space-y-1">
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-20 bg-muted/50 rounded animate-pulse" />
+              </div>
+              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+            </div>
+          ))}
         </div>
 
         {/* Footer skeleton */}
-        <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
-          <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-          <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+        <div className="mt-4 pt-3 border-t border-border/50 flex justify-end">
+          <div className="h-4 w-28 bg-muted rounded animate-pulse" />
         </div>
       </CardContent>
     </Card>

@@ -4,10 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { getSavings, AuthError } from '@/lib/api'
 import type { SavingsResponse, UseSavingsResult } from '@/types/dashboard'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from './use-session-refresh'
-
-const logger = createLogger('hooks:savings')
 
 /**
  * Hook for fetching savings tracking data
@@ -61,7 +59,7 @@ export function useSavings(): UseSavingsResult {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to fetch savings', {}, err)
+      safeLogger.hooks.error('Failed to fetch savings', {}, err)
       setError(err instanceof Error ? err.message : 'Failed to load savings')
     } finally {
       setLoading(false)

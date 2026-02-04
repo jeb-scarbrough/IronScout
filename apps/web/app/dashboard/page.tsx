@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
 import { GunLockerCard, WatchingCard, MarketActivityCard } from '@/components/dashboard/loadout'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RetailerPrice, ShippingInfo } from '@/components/results/types'
 import { refreshSessionToken } from '@/hooks/use-session-refresh'
 import { env } from '@/lib/env'
+import { safeLogger } from '@/lib/safe-logger'
 
 const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
@@ -104,7 +106,7 @@ export default function DashboardPage() {
 
         setRetailers(retailerPrices)
       } catch (err) {
-        console.error('Failed to fetch retailer prices:', err)
+        safeLogger.dashboard.error('Failed to fetch retailer prices', {}, err)
         setRetailers([])
       } finally {
         setLoadingPrices(false)
@@ -155,7 +157,7 @@ export default function DashboardPage() {
   // Error state
   if (error || !data) {
     return (
-      <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+      <DashboardContent>
         <Card>
           <CardContent className="py-12">
             <p className="text-center text-destructive">
@@ -163,12 +165,20 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </DashboardContent>
     )
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <DashboardContent>
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Recon</h1>
+        <p className="text-sm text-iron-400 mt-1">
+          Personalized results based on what you shoot and watch
+        </p>
+      </div>
+
       {/* Gun Locker - Full width */}
       <GunLockerCard
         firearms={data.gunLocker.firearms}
@@ -204,7 +214,7 @@ export default function DashboardPage() {
         isWatched={isWatched}
         onWatchToggle={handleWatchToggle}
       />
-    </div>
+    </DashboardContent>
   )
 }
 
@@ -213,7 +223,7 @@ export default function DashboardPage() {
  */
 function DashboardSkeleton() {
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+    <DashboardContent>
       {/* Gun Locker skeleton */}
       <Card>
         <CardContent className="pt-6">
@@ -266,6 +276,6 @@ function DashboardSkeleton() {
           </Card>
         </div>
       </div>
-    </div>
+    </DashboardContent>
   )
 }

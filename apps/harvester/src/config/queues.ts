@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq'
+import Redis from 'ioredis'
 import { redisConnection } from './redis'
 import { getQueueHistorySettings, prisma } from '@ironscout/db'
 import { createId } from '@paralleldrive/cuid2'
@@ -20,6 +21,8 @@ export const QUEUE_NAMES = {
   QUARANTINE_REPROCESS: 'quarantine-reprocess',
   // ADR-015: Current Price Recompute queue
   CURRENT_PRICE_RECOMPUTE: 'current-price-recompute',
+  // Scraper Framework queue (scraper-framework-01 spec v0.5)
+  SCRAPE_URL: 'scrape-url',
 } as const
 
 // Job data interfaces
@@ -85,6 +88,7 @@ export async function initQueueSettings(): Promise<void> {
         'embedding-generate': true,
         'quarantine-reprocess': true,
         'current-price-recompute': true,
+        'scrape-url': true,
       },
     }
   }
@@ -592,6 +596,228 @@ export async function enqueueCurrentPriceRecompute(
   }
 }
 
+// ============================================================================
+// SCRAPER FRAMEWORK QUEUE (scraper-framework-01 spec v0.5)
+// ============================================================================
+
+/**
+ * Scrape URL job data
+ * Per spec §10.1: Single queue for surgical scraping
+ */
+export interface ScrapeUrlJobData {
+  targetId: string // scrape_targets.id
+  url: string
+  sourceId: string // For trust config, visibility
+  retailerId: string // Derived from source, included for convenience
+  adapterId: string
+  runId: string
+  priority: number
+  trigger: 'SCHEDULED' | 'MANUAL' | 'RETRY' | 'RECHECK'
+}
+
+/**
+ * Result of attempting to enqueue a scrape job.
+ * Per spec §8.1-8.3: Backpressure and queue capacity handling.
+ */
+export interface ScrapeEnqueueResult {
+  status: 'accepted' | 'rejected' | 'deduplicated'
+  jobId: string
+  reason?: 'queue_full' | 'adapter_full' | 'adapter_disabled' | 'rate_limited'
+  retryAfterMs?: number
+}
+
+/**
+ * Maximum pending jobs in the scrape queue.
+ * Per spec §8.1: Queue rejects when at capacity.
+ */
+export const MAX_SCRAPE_QUEUE_SIZE = parseInt(
+  process.env.MAX_SCRAPE_QUEUE_SIZE || '10000',
+  10
+)
+
+/**
+ * Maximum pending jobs per adapter.
+ * Per spec §8.1: Prevents one adapter from monopolizing the queue.
+ */
+export const MAX_PENDING_PER_ADAPTER = parseInt(
+  process.env.MAX_PENDING_PER_ADAPTER || '1000', // Per spec §8.1 default
+  10
+)
+
+/** Redis key prefix for per-adapter pending counts */
+const ADAPTER_PENDING_PREFIX = 'scrape:pending:adapter:'
+const ADAPTER_PENDING_TTL = 3600 // 1 hour
+
+/** Redis client for adapter tracking (lazy initialized) */
+let adapterTrackingRedis: Redis | null = null
+
+function getAdapterTrackingRedis(): Redis {
+  if (!adapterTrackingRedis) {
+    adapterTrackingRedis = new Redis(redisConnection)
+  }
+  return adapterTrackingRedis
+}
+
+/**
+ * Increment pending count for an adapter.
+ * Returns the new count.
+ */
+async function incrementAdapterPending(adapterId: string): Promise<number> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  const count = await redis.incr(key)
+  await redis.expire(key, ADAPTER_PENDING_TTL)
+  return count
+}
+
+/**
+ * Decrement pending count for an adapter.
+ * Called when job completes or fails.
+ */
+export async function decrementAdapterPending(adapterId: string): Promise<void> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  await redis.decr(key)
+}
+
+/**
+ * Get current pending count for an adapter.
+ */
+async function getAdapterPendingCount(adapterId: string): Promise<number> {
+  const redis = getAdapterTrackingRedis()
+  const key = `${ADAPTER_PENDING_PREFIX}${adapterId}`
+  const count = await redis.get(key)
+  return count ? parseInt(count, 10) : 0
+}
+
+/**
+ * Scrape URL queue
+ * Per spec §10.1:
+ * - JobId format: SCRAPE_<targetId>_<runId>
+ * - Retry: 3 attempts with exponential backoff
+ * - Priority-based processing
+ */
+export const scrapeUrlQueue = new Queue<ScrapeUrlJobData>(QUEUE_NAMES.SCRAPE_URL, {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000, // 5s, 15s, 45s
+    },
+    ...getJobOptions('scrape-url'),
+  },
+})
+
+/**
+ * Enqueue a scrape URL job with backpressure support.
+ *
+ * Per spec §8.1-8.3:
+ * - Check queue capacity before accepting
+ * - Return structured result with rejection reason
+ * - Scheduler backs off when jobs rejected
+ *
+ * @param data - Job data
+ * @returns Enqueue result with status and optional rejection reason
+ */
+export async function enqueueScrapeUrl(data: ScrapeUrlJobData): Promise<ScrapeEnqueueResult> {
+  const jobId = `SCRAPE_${data.targetId}_${data.runId}`
+
+  try {
+    // Check per-adapter capacity first (per spec §8.1)
+    const adapterPending = await getAdapterPendingCount(data.adapterId)
+    if (adapterPending >= MAX_PENDING_PER_ADAPTER) {
+      rootLogger.warn('[enqueueScrapeUrl] Adapter at capacity, rejecting job', {
+        targetId: data.targetId,
+        runId: data.runId,
+        adapterId: data.adapterId,
+        adapterPending,
+        maxPerAdapter: MAX_PENDING_PER_ADAPTER,
+      })
+      return {
+        status: 'rejected',
+        jobId,
+        reason: 'adapter_full',
+        retryAfterMs: 30000, // Suggest retry after 30 seconds for adapter-specific backoff
+      }
+    }
+
+    // Check total queue capacity (pending = waiting + active only)
+    // Per spec: capacity defined in terms of pending URLs, not including completed/failed
+    const jobCounts = await scrapeUrlQueue.getJobCounts('waiting', 'active', 'delayed')
+    const pendingCount = jobCounts.waiting + jobCounts.active + jobCounts.delayed
+    if (pendingCount >= MAX_SCRAPE_QUEUE_SIZE) {
+      rootLogger.warn('[enqueueScrapeUrl] Queue at capacity, rejecting job', {
+        targetId: data.targetId,
+        runId: data.runId,
+        pendingCount,
+        maxSize: MAX_SCRAPE_QUEUE_SIZE,
+      })
+      return {
+        status: 'rejected',
+        jobId,
+        reason: 'queue_full',
+        retryAfterMs: 60000, // Suggest retry after 1 minute
+      }
+    }
+
+    await scrapeUrlQueue.add('SCRAPE_URL', data, {
+      jobId,
+      priority: data.priority,
+    })
+
+    // Track per-adapter pending count
+    await incrementAdapterPending(data.adapterId)
+
+    return { status: 'accepted', jobId }
+  } catch (err: any) {
+    // Job already exists - this is expected deduplication
+    if (err?.message?.includes('Job already exists')) {
+      rootLogger.debug('[enqueueScrapeUrl] Job deduplicated', {
+        targetId: data.targetId,
+        runId: data.runId,
+      })
+      return { status: 'deduplicated', jobId }
+    }
+    rootLogger.error(
+      '[enqueueScrapeUrl] Failed to enqueue scrape job',
+      { targetId: data.targetId, runId: data.runId, url: data.url },
+      err
+    )
+    throw err
+  }
+}
+
+/**
+ * Get current scrape queue statistics.
+ * Useful for monitoring and backpressure decisions.
+ */
+export async function getScrapeQueueStats(): Promise<{
+  waiting: number
+  active: number
+  delayed: number
+  total: number
+  capacity: number
+  utilizationPercent: number
+}> {
+  const [waiting, active, delayed] = await Promise.all([
+    scrapeUrlQueue.getWaitingCount(),
+    scrapeUrlQueue.getActiveCount(),
+    scrapeUrlQueue.getDelayedCount(),
+  ])
+  const total = waiting + active + delayed
+  const utilizationPercent = Math.round((total / MAX_SCRAPE_QUEUE_SIZE) * 100)
+
+  return {
+    waiting,
+    active,
+    delayed,
+    total,
+    capacity: MAX_SCRAPE_QUEUE_SIZE,
+    utilizationPercent,
+  }
+}
+
 // Export all queues
 export const queues = {
   alert: alertQueue,
@@ -608,5 +834,7 @@ export const queues = {
   quarantineReprocess: quarantineReprocessQueue,
   // Current Price Recompute queue (ADR-015)
   currentPriceRecompute: currentPriceRecomputeQueue,
+  // Scraper Framework queue
+  scrapeUrl: scrapeUrlQueue,
 }
 

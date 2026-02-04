@@ -40,7 +40,7 @@ It is an operational system whose correctness directly affects trust.
 ### Data Ingestion
 
 Harvester is responsible for ingesting:
-- Affiliate sources only (v1)
+- Affiliate sources and approved SCRAPE sources (v1)
 
 Responsibilities include:
 - Fetching external data
@@ -99,7 +99,7 @@ If a **Retailer is ineligible**, its consumer-facing price events are excluded f
 Eligibility does not delete data.
 
 ### Feeds vs outputs
-In v1, affiliate feeds are the only ingestion source. Outputs are:
+In v1, affiliate feeds and approved SCRAPE sources are the only consumer ingestion sources. Outputs are:
 - Consumer prices -> `prices` (keyed by `retailerId`)
 
 Any remaining `dealer-*` pipeline names or folders are legacy naming only and must not be interpreted as “dealer == storefront.”

@@ -21,8 +21,12 @@ import {
   affiliateFeedSchedulerQueue,
 } from '../config/queues'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 
-const log = logger.affiliate
+const log = createWorkflowLogger(logger.affiliate, {
+  workflow: 'affiliate',
+  stage: 'scheduler',
+})
 
 // Run retention configuration (default 30 days)
 const RUN_RETENTION_DAYS = Number(process.env.AFFILIATE_RUN_RETENTION_DAYS ?? 30)
@@ -216,6 +220,10 @@ async function schedulerTick(): Promise<{ processed: number }> {
       log.debug('AFFILIATE_SCHEDULER_NO_FEEDS_DUE', {
         tickDurationMs: Date.now() - tickStart,
       })
+      log.debug('SCHEDULER_TICK_SKIP', {
+        reason: 'NO_FEEDS_DUE',
+        durationMs: Date.now() - tickStart,
+      })
       return { processed: 0 }
     }
 
@@ -292,6 +300,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
           continue
         }
 
+        // Use unique jobId to avoid BullMQ dedupe issues with manualRunPending follow-ups
         const jobId = `${feed.id}-manual-${Date.now()}`
         log.debug('AFFILIATE_MANUAL_FEED_ENQUEUEING', {
           feedId: feed.id,
@@ -323,6 +332,12 @@ async function schedulerTick(): Promise<{ processed: number }> {
       scheduledCount: claimedFeeds.length,
       manualCount: manualPendingFeeds.length,
       tickDurationMs: Date.now() - tickStart,
+    })
+    log.debug('SCHEDULER_TICK_END', {
+      processed,
+      scheduledCount: claimedFeeds.length,
+      manualCount: manualPendingFeeds.length,
+      durationMs: Date.now() - tickStart,
     })
 
     return { processed }

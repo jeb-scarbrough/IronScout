@@ -4,6 +4,7 @@ import { z } from 'zod'
 import Stripe from 'stripe'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger'
+import { requireAdmin } from '../middleware/auth'
 
 /**
  * V1: Premium billing endpoints are disabled.
@@ -320,7 +321,9 @@ const createMerchantCheckoutSchema = z.object({
 // Health Check Endpoint
 // =============================================================================
 
-router.get('/health', async (req: Request, res: Response) => {
+// SEC-009 FIX: Gate health endpoint behind admin auth to prevent information leak
+// Previously exposed: Stripe account ID, webhook stats, endpoint stats, config flags
+router.get('/health', requireAdmin, async (req: Request, res: Response) => {
   const startTime = Date.now()
 
   try {

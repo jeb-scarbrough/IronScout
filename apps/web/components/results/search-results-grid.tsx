@@ -11,10 +11,8 @@ import { getSavedItems, AuthError } from '@/lib/api'
 import { useSession } from 'next-auth/react'
 import { useViewPreference } from '@/hooks/use-view-preference'
 import { useSearchLoading } from '@/components/search/search-loading-context'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
-
-const logger = createLogger('search-results-grid')
 
 interface SearchResultsGridProps {
   products: Product[]
@@ -127,7 +125,7 @@ export function SearchResultsGrid({
           showSessionExpiredToast()
           return
         }
-        logger.error('Failed to load saved items', {}, error)
+        safeLogger.components.error('Failed to load saved items', {}, error)
       } finally {
         setLoadingTracked(false)
       }

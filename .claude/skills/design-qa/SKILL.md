@@ -163,8 +163,8 @@ Each finding MUST include:
 - Owner (Design / Engineering / Content)
 - Scope risk (Low / Medium / High)
 
-3) Top 3 Fixes to Raise the Bar
-- Ranked
+3) Top 3 Required Corrections (ordered by impact)
+- Ranked by impact on correctness or trust
 - Concise
 - Outcome-focused
 
@@ -181,7 +181,7 @@ AFTER ALL SCREENS (REQUIRED)
   - Owner
 
 HARD CONSTRAINTS
-- Never suggest recommendations, rankings, deal scores, urgency, or guarantees
+- Never suggest product recommendations or rankings, deal scores, urgency, or guarantees
 - Never add features to solve problems; prefer removal or simplification
 - Never soften a BLOCKER
 - Never rewrite product strategy

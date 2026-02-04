@@ -92,6 +92,10 @@ Stripe:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 
+Email:
+- `ALERTS_EMAIL_FROM` - Sender for price/availability alert emails
+- `TRANSACTIONAL_EMAIL_FROM` - Sender for account/verification emails
+
 Required behavior:
 - If tiering is reintroduced, API must not resolve tier from client-provided headers. It must use verified auth (ADR-002).
 
@@ -121,12 +125,29 @@ Optional:
 
 ---
 
+## apps/merchant (Merchant portal)
+
+Required:
+- `NEXT_PUBLIC_API_URL`
+- `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
+- `NEXTAUTH_URL`
+- `MERCHANT_EMAIL_FROM` - Sender for merchant transactional emails
+- `OPERATIONS_EMAIL_TO` - Recipient for internal merchant notifications
+
+Optional:
+- `INTERNAL_API_URL` (if server-to-server calls differ)
+- `ADMIN_EMAILS` (if admin session support is enabled)
+- `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` (only for feed refresh endpoints)
+
+---
+
 ## apps/admin
 
 Required:
 - `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 - `NEXT_PUBLIC_ADMIN_API_URL` (if admin calls API directly)
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
+ - `MERCHANT_EMAIL_FROM` - Sender for merchant-facing admin emails
 
 Important:
 - Admin impersonation must not bypass eligibility enforcement (or tier enforcement if reintroduced).
@@ -144,13 +165,18 @@ Networking:
 - `USER_AGENT` (optional)
 
 Scheduling:
-- `HARVESTER_SCHEDULER_ENABLED=true|false`
-  - Use this to enforce singleton scheduler deployments (ADR-001).
-  - Only one instance should set this true in production.
+- `HARVESTER_SCHEDULER_ENABLED` - **Controlled via admin settings only**
+  - This setting is managed through the Admin UI (Settings > Danger Zone)
+  - Database is the single source of truth (env var is ignored)
+  - Use Emergency Stop in admin to disable scheduler and clear queues
+  - Per ADR-001: Only one instance should run the scheduler
 
 Logging:
 - `LOG_ASYNC=true|1` - Enable async buffered logging with flush on shutdown (default: false)
   - Use only when graceful shutdown is enforced (no `kill -9`).
+
+Email:
+- `ALERTS_EMAIL_FROM` - Sender for consumer alert emails
 
 Safety:
 - `MAX_WRITE_BATCH_SIZE` (optional)
@@ -180,6 +206,8 @@ Bull Board (Queue Monitor):
 - `OPENAI_API_KEY` (if AI search is enabled locally)
 - `NEXTAUTH_SECRET` - Same value across all apps (api, web, dealer [legacy path], admin)
 - `NEXT_PUBLIC_API_URL` (for web/dealer [legacy path]/admin)
+- `ALERTS_EMAIL_FROM` and `TRANSACTIONAL_EMAIL_FROM` (if email flows are tested locally)
+- `MERCHANT_EMAIL_FROM` and `OPERATIONS_EMAIL_TO` (if merchant/admin email flows are tested locally)
 
 ---
 

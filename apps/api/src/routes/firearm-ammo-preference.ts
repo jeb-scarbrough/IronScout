@@ -26,6 +26,7 @@ import {
 } from '../services/firearm-ammo-preference'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { getRequestContext } from '@ironscout/logger'
 
 const log = loggers.watchlist // Use watchlist logger for user data operations
 
@@ -118,7 +119,11 @@ router.post('/:firearmId/ammo-preferences', async (req: Request, res: Response) 
     }
 
     if (err.message === 'Preference already exists for this ammo and use case') {
-      return res.status(409).json({ error: err.message })
+      return res.status(409).json({
+        errorCode: 'PREFERENCE_CONFLICT',
+        message: 'A preference already exists for this ammo and use case',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     // A6: Caliber compatibility validation (fail-closed per spec)
@@ -127,7 +132,11 @@ router.post('/:firearmId/ammo-preferences', async (req: Request, res: Response) 
       err.message.startsWith('Caliber mismatch:') ||
       err.message.startsWith('Cannot add ammo:')
     ) {
-      return res.status(400).json({ error: err.message })
+      return res.status(400).json({
+        errorCode: 'CALIBER_MISMATCH',
+        message: 'Ammunition caliber does not match firearm',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     res.status(500).json({ error: 'Failed to add ammo preference' })
@@ -168,7 +177,11 @@ router.patch('/:firearmId/ammo-preferences/:id', async (req: Request, res: Respo
     }
 
     if (err.message === 'Preference already exists for this ammo and use case') {
-      return res.status(409).json({ error: err.message })
+      return res.status(409).json({
+        errorCode: 'PREFERENCE_CONFLICT',
+        message: 'A preference already exists for this use case',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     res.status(500).json({ error: 'Failed to update ammo preference' })

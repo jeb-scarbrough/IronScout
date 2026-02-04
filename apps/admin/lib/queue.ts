@@ -270,6 +270,7 @@ export async function enqueueProductResolve(
   try {
     // Use MANUAL trigger for admin-initiated reprocessing
     // Include batchId in affiliateFeedRunId for log correlation
+    // Include batchId in jobId to allow reprocessing (otherwise deduplication blocks re-adds)
     const jobs = sourceProducts.map((sp) => ({
       name: 'RESOLVE_SOURCE_PRODUCT',
       data: {
@@ -279,8 +280,8 @@ export async function enqueueProductResolve(
         affiliateFeedRunId: batchId, // Use for log correlation
       } satisfies ProductResolveJobData,
       opts: {
-        // Use standard job ID format for deduplication
-        jobId: `RESOLVE_SOURCE_PRODUCT_${sp.id}`,
+        // Include batchId to bypass deduplication for reprocessing
+        jobId: `RESOLVE_${batchId}_${sp.id}`,
       },
     }));
 

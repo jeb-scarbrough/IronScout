@@ -24,7 +24,11 @@ export const logger = {
   embedding: rootLogger.child('embedding'),
   quarantine: rootLogger.child('quarantine'),
   currentprice: rootLogger.child('currentprice'),
+  scraper: rootLogger.child('scraper'),
 }
+
+// Alias for backwards compatibility
+export const loggers = logger
 
 // Export root logger for custom child creation
 export { rootLogger }

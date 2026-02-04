@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { env } from '@/lib/env'
-
-const logger = createLogger('components:admin:dashboard-stats')
 
 interface Stats {
   totalExecutions: number
@@ -31,7 +29,7 @@ export default function DashboardStats() {
       const data = await response.json()
       setStats(data)
     } catch (error) {
-      logger.error('Error fetching stats', {}, error)
+      safeLogger.admin.error('Error fetching stats', {}, error)
     } finally{
       setLoading(false)
     }

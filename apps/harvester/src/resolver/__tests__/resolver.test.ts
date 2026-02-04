@@ -229,7 +229,11 @@ describe('A. Inputs and Validation', () => {
 
   describe('A2. Empty/null required fields', () => {
     it('returns NEEDS_REVIEW when brand is null and no UPC', async () => {
-      const sourceProduct = createSourceProduct({ brand: null })
+      // Use a title without recognizable brand names so brand extraction also fails
+      const sourceProduct = createSourceProduct({
+        title: 'Unknown Brand 9mm 115gr FMJ',
+        brand: null,
+      })
       setupMocks({
         sourceProduct,
         trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
@@ -694,7 +698,12 @@ describe('B. Matching Logic', () => {
 
   describe('B9. Insufficient data', () => {
     it('returns NEEDS_REVIEW with INSUFFICIENT_DATA when brand is missing', async () => {
-      const sourceProduct = createSourceProduct({ brand: null })
+      // Use a title that doesn't contain any recognizable brand names
+      // so brand cannot be extracted from title either
+      const sourceProduct = createSourceProduct({
+        title: 'Mystery Ammo 9mm 115gr FMJ',
+        brand: null,
+      })
 
       setupMocks({
         sourceProduct,

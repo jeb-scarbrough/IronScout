@@ -65,14 +65,14 @@
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
     "@prisma/client-runtime-utils": "^7.3.0",
-    "pg": "^8.17.2"
+    "pg": "^8.18.0"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^10.28.0",
+    "@testcontainers/postgresql": "^11.11.0",
     "@types/pg": "^8.16.0",
     "dotenv": "^17.2.3",
     "prisma": "^7.3.0",
-    "testcontainers": "^10.28.0",
+    "testcontainers": "^11.11.0",
     "tsx": "^4.21.0",
     "vitest": "^4.0.18"
   }

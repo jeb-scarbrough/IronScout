@@ -87,7 +87,8 @@ The Harvester is trust-critical.
 
 - Scheduling must be singleton
 - Do not run multiple schedulers
-- Use `HARVESTER_SCHEDULER_ENABLED=false` by default in local dev
+- Scheduler is controlled via Admin Settings (database is single source of truth)
+- Use Emergency Stop in admin to disable scheduler and clear queues
 - Never duplicate ingestion or mutate historical data
 - Never write data for ineligible dealers
 
@@ -136,6 +137,25 @@ Key warnings:
 - Never point local dev at staging or production DB/Redis
 - Never use real billing credentials locally
 - Never run multiple Harvester schedulers
+
+---
+
+## Local Development Setup
+
+Local development uses **Caddy** as a reverse proxy with local DNS URLs:
+
+| App | Local URL | Port |
+|-----|-----------|------|
+| web | https://app.local.ironscout.ai | 3000 |
+| www | https://www.local.ironscout.ai | 3004 |
+| admin | https://admin.local.ironscout.ai | 3001 |
+| merchant | https://merchant.local.ironscout.ai | 3002 |
+| api | https://api.local.ironscout.ai | 8000 |
+
+- Caddy handles HTTPS termination and routing
+- All `.env.local` files use `*.local.ironscout.ai` URLs
+- Never use `localhost` URLs in code or configuration
+- Access apps via local DNS URLs, not localhost ports
 
 ---
 

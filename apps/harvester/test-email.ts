@@ -6,7 +6,7 @@
  *
  * Environment variables:
  *   RESEND_API_KEY - Required for sending emails
- *   FROM_EMAIL - Sender email address (default: alerts@ironscout.ai)
+ *   ALERTS_EMAIL_FROM - Sender email address for alerts
  *   LOG_FORMAT - Set to 'pretty' for colored output (default in dev)
  */
 
@@ -19,7 +19,10 @@ import { createLogger } from '@ironscout/logger'
 const log = createLogger('harvester:test-email')
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@ironscout.ai'
+const FROM_EMAIL = process.env.ALERTS_EMAIL_FROM
+if (!FROM_EMAIL) {
+  throw new Error('ALERTS_EMAIL_FROM not configured')
+}
 
 // IMPORTANT: Replace with your actual test email
 const TEST_EMAIL = 'your-email@example.com'

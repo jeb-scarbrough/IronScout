@@ -17,6 +17,64 @@ import { isLensEnabled, applyLensPipeline, InvalidLensError } from '../lens'
 
 const log = loggers.ai
 
+function toPriceNumber(value: unknown): number {
+  if (typeof value === 'number') return value
+  if (value && typeof (value as { toString?: () => string }).toString === 'function') {
+    const parsed = parseFloat((value as { toString: () => string }).toString())
+    return Number.isNaN(parsed) ? Infinity : parsed
+  }
+  return Infinity
+}
+
+function getObservedAtMs(value: unknown): number {
+  if (!value) return 0
+  if (value instanceof Date) return value.getTime()
+  const parsed = new Date(value as string | number).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function dedupeLatestByRetailer(prices: any[]): any[] {
+  const byRetailer = new Map<string, any>()
+  const unkeyed: any[] = []
+
+  for (const price of prices) {
+    const retailerId = price?.retailers?.id ?? price?.retailerId
+    if (!retailerId) {
+      unkeyed.push(price)
+      continue
+    }
+
+    const existing = byRetailer.get(retailerId)
+    if (!existing) {
+      byRetailer.set(retailerId, price)
+      continue
+    }
+
+    const existingObservedAt = getObservedAtMs(existing.observedAt)
+    const currentObservedAt = getObservedAtMs(price.observedAt)
+
+    if (currentObservedAt > existingObservedAt) {
+      byRetailer.set(retailerId, price)
+      continue
+    }
+
+    if (currentObservedAt === existingObservedAt) {
+      const currentPrice = toPriceNumber(price.price)
+      const existingPrice = toPriceNumber(existing.price)
+      if (currentPrice < existingPrice) {
+        byRetailer.set(retailerId, price)
+      }
+    }
+  }
+
+  return [...byRetailer.values(), ...unkeyed]
+}
+
+function dedupeAndSortPrices(prices: any[]): any[] {
+  const deduped = dedupeLatestByRetailer(prices)
+  return [...deduped].sort((a, b) => toPriceNumber(a.price) - toPriceNumber(b.price))
+}
+
 /**
  * Explicit filters that can override AI intent
  */
@@ -890,7 +948,7 @@ async function standardSearch(where: any, skip: number, take: number, includePre
 
   return products.map((p: { id: string }) => ({
     ...p,
-    prices: pricesMap.get(p.id) || [],
+    prices: dedupeAndSortPrices(pricesMap.get(p.id) || []),
   }))
 }
 
@@ -1043,7 +1101,7 @@ async function vectorEnhancedSearch(
 
   const products = rawProducts.map((p: { id: string }) => ({
     ...p,
-    prices: pricesMap.get(p.id) || [],
+    prices: dedupeAndSortPrices(pricesMap.get(p.id) || []),
   }))
 
   // Create similarity map and sort by similarity

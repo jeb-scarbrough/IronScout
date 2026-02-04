@@ -23,6 +23,7 @@ import { prisma } from '@ironscout/db'
 import { createHash } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import { computeUrlHash, normalizeUrl } from './parser'
 import { ProductMatcher } from './product-matcher'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
@@ -37,7 +38,10 @@ import type {
 import { ERROR_CODES, AffiliateFeedError } from './types'
 import { emitIngestRunSummary } from '../config/ingest-summary'
 
-const log = logger.affiliate
+const log = createWorkflowLogger(logger.affiliate, {
+  workflow: 'affiliate',
+  stage: 'process',
+})
 
 // Batch sizes for database operations
 // Per spec §7.3: 500-5000 rows per batch (using 1000 as default)
@@ -184,8 +188,18 @@ export async function processProducts(
 ): Promise<ProcessorResult> {
   const { feed, run, sourceId, retailerId, t0 } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
+  const procLog = log.child({
+    runId: run.id,
+    sourceId,
+    retailerId,
+    feedId: feed.id,
+  })
+  const normalizeLog = procLog.child({ stage: 'normalize' })
+  const resolveLog = procLog.child({ stage: 'resolve' })
+  const writeLog = procLog.child({ stage: 'write' })
+  const alertLog = procLog.child({ stage: 'alert' })
 
-  log.info('PROCESS_START', {
+  procLog.info('PROCESS_START', {
     runId: run.id,
     feedId: feed.id,
     sourceId,
@@ -221,13 +235,18 @@ export async function processProducts(
   // Per spec §4.2.2: "Last row wins" - only process the last occurrence
   // This avoids processing duplicates across chunks and ensures consistency.
   // ═══════════════════════════════════════════════════════════════════════════
-  log.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
+  normalizeLog.debug('NORMALIZE_START', {
+    totalRows: products.length,
+    maxRowCount,
+  })
+  const normalizeStart = Date.now()
+  procLog.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
   const prescanStart = Date.now()
   const { winningRows, totalDuplicates, totalUrlHashFallbacks } = prescanIdentities(products)
   duplicateKeyCount = totalDuplicates
   urlHashFallbackCount = totalUrlHashFallbacks
 
-  log.info('PRESCAN_OK', {
+  procLog.info('PRESCAN_OK', {
     runId: run.id,
     durationMs: Date.now() - prescanStart,
     totalRows: products.length,
@@ -237,10 +256,16 @@ export async function processProducts(
     urlHashFallbacks: totalUrlHashFallbacks,
     urlHashPercentage: products.length > 0 ? ((totalUrlHashFallbacks / products.length) * 100).toFixed(2) : 0,
   })
+  normalizeLog.debug('NORMALIZE_END', {
+    durationMs: Date.now() - normalizeStart,
+    uniqueIdentities: winningRows.size,
+    duplicatesSkipped: totalDuplicates,
+    urlHashFallbacks: totalUrlHashFallbacks,
+  })
 
   // Process in chunks
   const totalChunks = Math.ceil(products.length / BATCH_SIZE)
-  log.debug('Starting chunk processing', {
+  procLog.debug('Starting chunk processing', {
     runId: run.id,
     totalChunks,
     batchSize: BATCH_SIZE,
@@ -251,7 +276,7 @@ export async function processProducts(
     const chunkNum = Math.floor(chunkStart / BATCH_SIZE) + 1
     const chunkStartTime = Date.now()
 
-    log.debug('Processing chunk', {
+    procLog.debug('Processing chunk', {
       runId: run.id,
       chunkNum,
       totalChunks,
@@ -264,7 +289,7 @@ export async function processProducts(
       // Per spec §4.2.2: "Last row wins" - skip non-winning rows (duplicates)
       const deduped = filterToWinningRows(chunk, chunkStart, winningRows)
 
-      log.debug('Chunk deduplication complete', {
+      procLog.debug('Chunk deduplication complete', {
         runId: run.id,
         chunkNum,
         originalSize: chunk.length,
@@ -273,7 +298,7 @@ export async function processProducts(
       })
 
       if (deduped.length === 0) {
-        log.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
+        procLog.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
         continue
       }
 
@@ -292,7 +317,7 @@ export async function processProducts(
         await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine)
         productsQuarantined += toQuarantine.length
 
-        log.info('QUARANTINE_BATCH', {
+        procLog.info('QUARANTINE_BATCH', {
           runId: run.id,
           chunkNum,
           quarantinedCount: toQuarantine.length,
@@ -301,19 +326,19 @@ export async function processProducts(
       }
 
       if (validProducts.length === 0) {
-        log.debug('Chunk skipped - all quarantined', { runId: run.id, chunkNum })
+        procLog.debug('Chunk skipped - all quarantined', { runId: run.id, chunkNum })
         continue
       }
 
       // Step 2: Batch upsert SourceProducts
-      log.debug('Upserting source products', { runId: run.id, chunkNum, count: validProducts.length })
+      procLog.debug('Upserting source products', { runId: run.id, chunkNum, count: validProducts.length })
       const upsertStart = Date.now()
       const upsertedProducts = await batchUpsertSourceProducts(
         sourceId,
         validProducts,
         run.id
       )
-      log.debug('Source products upserted', {
+      procLog.debug('Source products upserted', {
         runId: run.id,
         chunkNum,
         count: upsertedProducts.length,
@@ -335,10 +360,14 @@ export async function processProducts(
         upc: identityKeyToProduct.get(sp.identityKey)?.upc ?? null,
       }))
 
-      log.debug('Matching source products to canonical products', {
+      procLog.debug('Matching source products to canonical products', {
         runId: run.id,
         chunkNum,
         count: sourceProductsForMatching.length,
+      })
+      resolveLog.debug('RESOLVE_START', {
+        chunkNum,
+        candidates: sourceProductsForMatching.length,
       })
       const matchStart = Date.now()
       const matchResults = await productMatcher.batchMatchByUpc(sourceProductsForMatching)
@@ -386,7 +415,7 @@ export async function processProducts(
             })
           )
         )
-        log.debug('RESOLVER_ENQUEUE_OK', {
+        procLog.debug('RESOLVER_ENQUEUE_OK', {
           runId: run.id,
           chunkNum,
           enqueuedCount: itemsNeedingResolver.length,
@@ -394,12 +423,18 @@ export async function processProducts(
         })
       }
 
-      log.info('MATCH_OK', {
+      procLog.info('MATCH_OK', {
         runId: run.id,
         chunkNum,
         matchedCount,
         linksWrittenCount,
         unmatchedCount: sourceProductsForMatching.length - matchedCount,
+        enqueuedForResolver: itemsNeedingResolver.length,
+        durationMs: Date.now() - matchStart,
+      })
+      resolveLog.debug('RESOLVE_END', {
+        chunkNum,
+        matchedCount,
         enqueuedForResolver: itemsNeedingResolver.length,
         durationMs: Date.now() - matchStart,
       })
@@ -409,7 +444,7 @@ export async function processProducts(
       // (e.g., due to identifier collision). Without dedup, ON CONFLICT fails with:
       // "ON CONFLICT DO UPDATE command cannot affect row a second time"
       const uniqueSourceProductIds = [...new Set(sourceProductIds)]
-      log.debug('Updating presence and seen records', {
+      procLog.debug('Updating presence and seen records', {
         runId: run.id,
         chunkNum,
         count: uniqueSourceProductIds.length,
@@ -420,7 +455,7 @@ export async function processProducts(
         batchUpdatePresence(uniqueSourceProductIds, t0),
         batchRecordSeen(run.id, uniqueSourceProductIds),
       ])
-      log.debug('Presence and seen records updated', {
+      procLog.debug('Presence and seen records updated', {
         runId: run.id,
         chunkNum,
         durationMs: Date.now() - presenceStart,
@@ -430,7 +465,7 @@ export async function processProducts(
       // Per spec §4.2.1: Only fetch for IDs not already in cache
       const uncachedIds = sourceProductIds.filter((id) => !lastPriceCache.has(id))
       if (uncachedIds.length > 0) {
-        log.debug('Fetching last prices for uncached products', {
+        procLog.debug('Fetching last prices for uncached products', {
           runId: run.id,
           chunkNum,
           uncachedCount: uncachedIds.length,
@@ -441,14 +476,14 @@ export async function processProducts(
         for (const lp of fetchedPrices) {
           lastPriceCache.set(lp.sourceProductId, lp)
         }
-        log.debug('Last prices fetched', {
+        procLog.debug('Last prices fetched', {
           runId: run.id,
           chunkNum,
           fetchedCount: fetchedPrices.length,
           durationMs: Date.now() - fetchStart,
         })
       } else {
-        log.debug('All products in cache - skipping price fetch', { runId: run.id, chunkNum })
+        procLog.debug('All products in cache - skipping price fetch', { runId: run.id, chunkNum })
       }
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -457,7 +492,7 @@ export async function processProducts(
       // than expected. The cache grows with unique products, not rows.
       // ═══════════════════════════════════════════════════════════════════════
       if (lastPriceCache.size > maxRowCount) {
-        log.error('Memory guard triggered - unique product limit exceeded', {
+        procLog.error('Memory guard triggered - unique product limit exceeded', {
           runId: run.id,
           chunkNum,
           cacheSize: lastPriceCache.size,
@@ -473,7 +508,7 @@ export async function processProducts(
       // Step 5: Decide writes in-memory and collect prices to insert
       // Per spec §4.2.1: No per-row DB reads - all decisions use cache
       // Per affiliate-feed-alerts-v1: Also returns price/stock changes for alerting
-      log.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
+      procLog.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
       const { pricesToWrite, priceChanges, stockChanges } = decidePriceWrites(
         deduped,
         upsertedProducts,
@@ -483,7 +518,7 @@ export async function processProducts(
         lastPriceCache,
         sourceProductIdToProductId
       )
-      log.debug('Price write decisions made', {
+      procLog.debug('Price write decisions made', {
         runId: run.id,
         chunkNum,
         pricesToWrite: pricesToWrite.length,
@@ -491,21 +526,43 @@ export async function processProducts(
         stockChanges: stockChanges.length,
         skipped: deduped.length - pricesToWrite.length,
       })
+      const provenanceGaps = {
+        missingRunId: pricesToWrite.filter((p) => !p.affiliateFeedRunId).length,
+        missingRetailerId: pricesToWrite.filter((p) => !p.retailerId).length,
+        missingSourceProductId: pricesToWrite.filter((p) => !p.sourceProductId).length,
+      }
+      writeLog.debug('WRITE_PROVENANCE_CHECK', {
+        chunkNum,
+        totalPlanned: pricesToWrite.length,
+        provenanceGaps,
+      })
 
       // Step 6: Bulk insert prices with ON CONFLICT DO NOTHING
       // Per spec §4.2.1: Use raw SQL with partial unique index for idempotency
       let actualInserted = 0
       if (pricesToWrite.length > 0) {
-        log.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
+        const writeStart = Date.now()
+        writeLog.debug('WRITE_START', {
+          chunkNum,
+          planned: pricesToWrite.length,
+        })
+        procLog.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
         const insertStart = Date.now()
         actualInserted = await bulkInsertPrices(pricesToWrite, t0)
-        log.debug('Prices inserted', {
+        procLog.debug('Prices inserted', {
           runId: run.id,
           chunkNum,
           requested: pricesToWrite.length,
           actualInserted,
           duplicatesRejected: pricesToWrite.length - actualInserted,
           durationMs: Date.now() - insertStart,
+        })
+        writeLog.debug('WRITE_END', {
+          chunkNum,
+          requested: pricesToWrite.length,
+          inserted: actualInserted,
+          duplicatesRejected: pricesToWrite.length - actualInserted,
+          durationMs: Date.now() - writeStart,
         })
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -514,22 +571,36 @@ export async function processProducts(
         // ═══════════════════════════════════════════════════════════════════════
         if (priceChanges.length > 0 || stockChanges.length > 0) {
           const alertStart = Date.now()
+          alertLog.debug('ALERTS_ENQUEUE_START', {
+            chunkNum,
+            priceChanges: priceChanges.length,
+            stockChanges: stockChanges.length,
+          })
           const { priceDropsEnqueued, backInStockEnqueued } = await queueAffiliateAlerts(
             priceChanges,
             stockChanges,
-            run.id
+            run.id,
+            alertLog
           )
 
           if (priceDropsEnqueued > 0 || backInStockEnqueued > 0) {
-            log.info('AFFILIATE_ALERTS_ENQUEUED', {
-              event_name: 'AFFILIATE_ALERTS_ENQUEUED',
-              runId: run.id,
+            alertLog.info('ALERTS_ENQUEUED', {
               chunkNum,
               priceDropsEnqueued,
               backInStockEnqueued,
-              durationMs: Date.now() - alertStart,
             })
           }
+          alertLog.debug('ALERTS_ENQUEUE_END', {
+            chunkNum,
+            priceDropsEnqueued,
+            backInStockEnqueued,
+            durationMs: Date.now() - alertStart,
+          })
+        } else {
+          alertLog.debug('ALERTS_ENQUEUE_SKIPPED', {
+            chunkNum,
+            reason: 'NO_CHANGES',
+          })
         }
 
         // Update cache so later chunks see these writes
@@ -551,7 +622,7 @@ export async function processProducts(
       pricesWritten += actualInserted
 
       const chunkDuration = Date.now() - chunkStartTime
-      log.info('CHUNK_OK', {
+      procLog.info('CHUNK_OK', {
         runId: run.id,
         chunkNum,
         totalChunks,
@@ -578,7 +649,7 @@ export async function processProducts(
         sample: { chunkSize: chunk.length },
       })
 
-      log.error('Chunk processing failed', {
+      procLog.error('Chunk processing failed', {
         runId: run.id,
         chunkNum,
         error: message,
@@ -590,7 +661,7 @@ export async function processProducts(
   const matcherStats = productMatcher.getStats()
   const totalDurationMs = Date.now() - t0.getTime()
 
-  log.info('Processing complete', {
+  procLog.info('Processing complete', {
     runId: run.id,
     productsUpserted,
     pricesWritten,
@@ -1670,10 +1741,12 @@ async function bulkInsertPrices(
 async function queueAffiliateAlerts(
   priceChanges: AffiliatePriceChange[],
   stockChanges: AffiliateStockChange[],
-  runId: string
+  runId: string,
+  alertLog: typeof log
 ): Promise<{ priceDropsEnqueued: number; backInStockEnqueued: number }> {
   let priceDropsEnqueued = 0
   let backInStockEnqueued = 0
+  let enqueueErrors = 0
 
   // Queue price drop alerts
   for (const change of priceChanges) {
@@ -1688,8 +1761,8 @@ async function queueAffiliateAlerts(
       await alertQueue.add('PRICE_DROP', jobData)
       priceDropsEnqueued++
     } catch (err) {
-      log.error('AFFILIATE_ALERTS_QUEUE_FAILED', {
-        event_name: 'AFFILIATE_ALERTS_QUEUE_FAILED',
+      enqueueErrors++
+      alertLog.error('ALERTS_QUEUE_FAILED', {
         runId,
         alertType: 'PRICE_DROP',
         productId: change.productId,
@@ -1711,8 +1784,8 @@ async function queueAffiliateAlerts(
       await alertQueue.add('BACK_IN_STOCK', jobData)
       backInStockEnqueued++
     } catch (err) {
-      log.error('AFFILIATE_ALERTS_QUEUE_FAILED', {
-        event_name: 'AFFILIATE_ALERTS_QUEUE_FAILED',
+      enqueueErrors++
+      alertLog.error('ALERTS_QUEUE_FAILED', {
         runId,
         alertType: 'BACK_IN_STOCK',
         productId: change.productId,
@@ -1721,6 +1794,15 @@ async function queueAffiliateAlerts(
       // Continue - alerts are best-effort per spec
     }
   }
+
+  alertLog.debug('ALERTS_QUEUE_SUMMARY', {
+    runId,
+    requestedPriceDrops: priceChanges.length,
+    requestedBackInStock: stockChanges.length,
+    priceDropsEnqueued,
+    backInStockEnqueued,
+    enqueueErrors,
+  })
 
   return { priceDropsEnqueued, backInStockEnqueued }
 }

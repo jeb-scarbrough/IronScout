@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 
 export const metadata: Metadata = {
   title: 'Billing',
@@ -11,9 +12,15 @@ export const metadata: Metadata = {
  */
 export default function BillingPage() {
   return (
-    <div className="p-6 lg:p-8">
+    <DashboardContent>
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Billing</h1>
+        <p className="text-sm text-iron-400 mt-1">
+          Manage your subscription and payment methods
+        </p>
+      </div>
+
       <div className="max-w-md">
-        <h1 className="text-2xl font-bold mb-4">Billing</h1>
         <p className="text-muted-foreground mb-6">
           Billing and subscription management is not currently available.
           All features are free during our launch period.
@@ -25,6 +32,6 @@ export default function BillingPage() {
           Return to dashboard
         </Link>
       </div>
-    </div>
+    </DashboardContent>
   )
 }

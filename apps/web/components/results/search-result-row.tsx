@@ -6,10 +6,8 @@ import type { Product } from '@/lib/api'
 import { saveItem, unsaveItem, AuthError } from '@/lib/api'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
-
-const logger = createLogger('search-result-row')
 
 interface SearchResultRowProps {
   product: Product
@@ -80,7 +78,7 @@ export function SearchResultRow({
           showSessionExpiredToast()
           return
         }
-        logger.error('Failed to remove item', {}, error)
+        safeLogger.components.error('Failed to remove item', {}, error)
         toast.error('Failed to remove item')
       }
     } else {
@@ -93,7 +91,7 @@ export function SearchResultRow({
           showSessionExpiredToast()
           return
         }
-        logger.error('Failed to save item', {}, error)
+        safeLogger.components.error('Failed to save item', {}, error)
         toast.error('Failed to save item')
       }
     }

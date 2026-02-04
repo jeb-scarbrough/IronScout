@@ -1,6 +1,6 @@
 'use client'
 
-import { Sparkles, SlidersHorizontal, Info } from 'lucide-react'
+import { Sparkles, SlidersHorizontal, Info, RefreshCw } from 'lucide-react'
 import { ExplicitFilters } from '@/lib/api'
 import { SearchControls } from './search-controls'
 import {
@@ -31,6 +31,7 @@ interface SearchIntent {
 interface SearchHeaderProps {
   query: string
   resultCount?: number
+  priceCount?: number
   intent?: SearchIntent
   processingTimeMs?: number
   vectorSearchUsed?: boolean
@@ -41,6 +42,7 @@ interface SearchHeaderProps {
 export function SearchHeader({
   query,
   resultCount,
+  priceCount,
   intent,
   explicitFilters,
 }: SearchHeaderProps) {
@@ -131,12 +133,21 @@ export function SearchHeader({
     <div className="pb-1">
       {/* Main Control Bar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Left: Result count + AI chip */}
+        {/* Left: Result count + prices + updated time */}
         <div className="flex items-center gap-3">
           {resultCount !== undefined && (
-            <span className="text-base font-medium text-foreground">
-              {resultCount.toLocaleString()} {resultCount === 1 ? 'result' : 'results'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-medium text-foreground">
+                {resultCount.toLocaleString()} {resultCount === 1 ? 'product' : 'products'}
+                {priceCount !== undefined && (
+                  <span className="text-muted-foreground"> · {priceCount.toLocaleString()} {priceCount === 1 ? 'price' : 'prices'}</span>
+                )}
+              </span>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <RefreshCw className="h-3 w-3" />
+                Updated just now
+              </span>
+            </div>
           )}
 
           {/* AI Confirmation - icon with tooltip */}

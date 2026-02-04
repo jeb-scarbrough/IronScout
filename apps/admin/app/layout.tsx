@@ -26,9 +26,10 @@ export default async function RootLayout({
   const headersList = await headers();
   const pathname = headersList.get('x-pathname') || headersList.get('x-invoke-path') || '';
   const isAuthRoute = pathname.startsWith('/auth') || pathname.startsWith('/api/auth');
+  const isStatusRoute = pathname.startsWith('/status');
 
-  // Auth routes don't require session - render children directly
-  if (isAuthRoute) {
+  // Auth + status routes don't require session - render children directly
+  if (isAuthRoute || isStatusRoute) {
     return (
       <html lang="en">
         <body className={inter.className}>
@@ -42,7 +43,7 @@ export default async function RootLayout({
 
   // If not logged in as admin, redirect to signin page
   if (!session) {
-    redirect('/auth/signin');
+    redirect('/status/401');
   }
   
   return (

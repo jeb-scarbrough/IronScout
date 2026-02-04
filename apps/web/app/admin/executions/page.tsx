@@ -5,10 +5,8 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { env } from '@/lib/env'
-
-const logger = createLogger('app:admin:executions')
 
 interface Execution {
   id: string
@@ -54,7 +52,7 @@ export default function ExecutionsPage() {
       setExecutions(data.executions)
       setTotalPages(data.pagination.totalPages)
     } catch (error) {
-      logger.error('Error fetching executions', {}, error)
+      safeLogger.admin.error('Error fetching executions', {}, error)
     } finally {
       setLoading(false)
     }

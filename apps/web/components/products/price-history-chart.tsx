@@ -13,10 +13,8 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TrendingDown, TrendingUp, Minus } from 'lucide-react'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { env } from '@/lib/env'
-
-const logger = createLogger('price-history-chart')
 
 interface PriceHistoryProps {
   productId: string
@@ -72,7 +70,7 @@ export function PriceHistoryChart({ productId }: PriceHistoryProps) {
       setData(history)
     } catch (err) {
       setError('Failed to load price history')
-      logger.error('Price history error', {}, err)
+      safeLogger.components.error('Price history error', {}, err)
     } finally {
       setLoading(false)
     }

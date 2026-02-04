@@ -42,12 +42,22 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map(e => e.trim().toLowerCase())
   .filter(Boolean);
-const SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
-  ? '__Secure-authjs.session-token'
-  : 'authjs.session-token';
+// Admin session cookie name (uses 'admin-' prefix to avoid conflicts with web app)
+const ADMIN_SESSION_COOKIE_NAME = process.env.NODE_ENV === 'production'
+  ? '__Secure-authjs.admin-session-token'
+  : 'authjs.admin-session-token';
 
 const SESSION_COOKIE = 'merchant-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+// CRITICAL: Fail-fast if E2E bypass is enabled in production
+// This prevents accidental deployment with auth bypass enabled
+if (process.env.NODE_ENV === 'production' && process.env.E2E_AUTH_BYPASS === 'true') {
+  throw new Error(
+    'FATAL: E2E_AUTH_BYPASS cannot be enabled in production. ' +
+    'This would bypass all authentication. Aborting startup.'
+  );
+}
 
 const E2E_AUTH_BYPASS = process.env.E2E_AUTH_BYPASS === 'true';
 const E2E_MERCHANT_ID = process.env.E2E_MERCHANT_ID || 'e2e-merchant';
@@ -309,17 +319,17 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     const cookieStore = await cookies();
     const headerStore = await headers();
 
-    let token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    let token = cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value;
 
     // Fallback: parse raw cookie header if cookieStore misses it
     if (!token) {
       const rawCookieHeader = headerStore.get('cookie');
-      const match = rawCookieHeader?.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+      const match = rawCookieHeader?.match(new RegExp(`${ADMIN_SESSION_COOKIE_NAME}=([^;]+)`));
       token = match?.[1];
     }
 
     if (!token) {
-      logger.debug('No admin session cookie found', { cookieName: SESSION_COOKIE_NAME });
+      logger.debug('No admin session cookie found', { cookieName: ADMIN_SESSION_COOKIE_NAME });
       return null;
     }
 

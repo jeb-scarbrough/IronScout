@@ -44,7 +44,8 @@ export default async function AdminSignInPage({
           <form
             action={async () => {
               'use server'
-              await signIn('google', { redirectTo: callbackUrl })
+              // Force Google to show account picker (don't auto-select cached account)
+              await signIn('google', { redirectTo: callbackUrl }, { prompt: 'select_account' })
             }}
           >
             <button

@@ -1,76 +1,79 @@
-/**
- * Auth Error Page
- * Displays authentication errors
- */
-
-import { Shield, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
-export default async function AuthErrorPage({
+const ERROR_COPY: Record<string, { title: string; description: string; steps: string[] }> = {
+  AccessDenied: {
+    title: 'Access denied',
+    description: 'This account is not authorized for admin access.',
+    steps: [
+      'Try a different account.',
+      'If you believe this is a mistake, contact support.',
+    ],
+  },
+  OAuthAccountNotLinked: {
+    title: 'Account already exists',
+    description: 'This email is linked to a different sign-in method.',
+    steps: [
+      'Use the sign-in method you originally used.',
+      'Contact support if you no longer have access.',
+    ],
+  },
+  Configuration: {
+    title: 'Sign-in unavailable',
+    description: 'A configuration issue is blocking sign-in.',
+    steps: [
+      'Try again in a few minutes.',
+      'Contact support if the issue persists.',
+    ],
+  },
+  Verification: {
+    title: 'Verification failed',
+    description: 'We couldn’t complete the verification step.',
+    steps: [
+      'Try signing in again.',
+      'Ensure cookies are enabled in your browser.',
+    ],
+  },
+}
+
+export default function AuthErrorPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>
+  searchParams: { error?: string }
 }) {
-  const { error } = await searchParams
-
-  const getErrorMessage = (error?: string) => {
-    switch (error) {
-      case 'Configuration':
-        return 'There is a problem with the server configuration.'
-      case 'AccessDenied':
-        return 'You do not have permission to sign in. Your email must be authorized for admin access.'
-      case 'Verification':
-        return 'The sign in link is no longer valid. It may have already been used.'
-      default:
-        return 'An error occurred during authentication. Please try again.'
-    }
+  const errorKey = searchParams.error || 'AccessDenied'
+  const config = ERROR_COPY[errorKey] ?? {
+    title: 'Sign-in error',
+    description: 'We couldn’t complete the sign-in request.',
+    steps: [
+      'Try again using the sign-in page.',
+      'Contact support if the issue continues.',
+    ],
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
-            <AlertCircle className="h-8 w-8 text-red-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Authentication Error
-          </h1>
-          <p className="text-gray-600">
-            {getErrorMessage(error)}
-          </p>
-        </div>
-
-        {error === 'AccessDenied' && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm text-yellow-800">
-              <strong>Admin Access Required</strong>
-              <br />
-              Contact your administrator to request admin access.
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-3">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+      <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">AUTH</div>
+        <h1 className="mt-3 text-2xl font-semibold text-gray-900">{config.title}</h1>
+        <p className="mt-2 text-sm text-gray-600">{config.description}</p>
+        <ul className="mt-5 space-y-2 text-sm text-gray-700">
+          {config.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ul>
+        <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/auth/signin"
-            className="block w-full text-center bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
-            Try Again
+            Back to sign in
           </Link>
-
-          <Link
-            href="/"
-            className="block w-full text-center border border-gray-300 text-gray-700 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors"
+          <a
+            href="mailto:support@ironscout.ai"
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            Go to Main Site
-          </Link>
-        </div>
-
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            Error code: {error || 'Unknown'}
-          </p>
+            Contact support
+          </a>
         </div>
       </div>
     </div>

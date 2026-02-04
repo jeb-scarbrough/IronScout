@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { getUserAlerts } from '@/lib/api'
-import { createLogger } from '@/lib/logger'
-
-const logger = createLogger('hooks:dashboard-stats')
+import { safeLogger } from '@/lib/safe-logger'
 
 export interface DashboardStats {
   activeAlerts: number
@@ -62,7 +60,7 @@ export function useDashboardStats(): UseDashboardStatsResult {
         potentialSavings: savings
       })
     } catch (err) {
-      logger.error('Failed to fetch stats', {}, err)
+      safeLogger.hooks.error('Failed to fetch stats', {}, err)
       setError('Failed to load dashboard stats')
     } finally {
       setLoading(false)

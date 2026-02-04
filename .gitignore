@@ -120,3 +120,4 @@ packages/db/generated/
 e2e/.storage/
 # Local project state
 .ironscout/
+*.tsbuildinfo

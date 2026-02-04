@@ -48,7 +48,7 @@ IronScout promises that consumers can:
 - Compare prices across retailers in a consistent format
 - Track price and availability changes over time
 - Receive alerts when prices or availability change
-- In v1, pricing data is sourced from affiliate feeds only
+- In v1, pricing data is sourced from affiliate feeds and/or approved scraped sources; coverage varies by source
 
 IronScout does **not** promise:
 - The lowest price

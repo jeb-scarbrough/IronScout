@@ -12,9 +12,13 @@ import { gunzipSync } from 'zlib'
 import { decryptSecret } from '@ironscout/crypto'
 import { isPlainFtpAllowed } from '@ironscout/db'
 import { logger } from '../config/logger'
+import { createWorkflowLogger } from '../config/structured-log'
 import type { AffiliateFeed, DownloadResult } from './types'
 
-const log = logger.affiliate
+const log = createWorkflowLogger(logger.affiliate, {
+  workflow: 'affiliate',
+  stage: 'fetch',
+})
 
 // Default limits
 const DEFAULT_MAX_FILE_SIZE = 500 * 1024 * 1024 // 500 MB
@@ -22,8 +26,23 @@ const DEFAULT_MAX_FILE_SIZE = 500 * 1024 * 1024 // 500 MB
 /**
  * Download feed file with change detection
  */
-export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult> {
-  const feedLog = log.child({ feedId: feed.id })
+export async function downloadFeed(
+  feed: AffiliateFeed,
+  logContext?: { runId?: string; retailerId?: string }
+): Promise<DownloadResult> {
+  const feedLog = log.child({
+    feedId: feed.id,
+    sourceId: feed.sourceId,
+    runId: logContext?.runId,
+    retailerId: logContext?.retailerId,
+  })
+  const fetchStart = Date.now()
+
+  feedLog.debug('FETCH_START', {
+    transport: feed.transport,
+    host: feed.host,
+    port: feed.port ?? (feed.transport === 'SFTP' ? 22 : 21),
+  })
 
   feedLog.debug('DOWNLOAD_START', {
     phase: 'init',
@@ -91,22 +110,30 @@ export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult>
   const downloadStart = Date.now()
   let result: DownloadResult
 
-  if (feed.transport === 'SFTP') {
-    feedLog.debug('DOWNLOAD_TRANSPORT_SELECTED', {
-      phase: 'connect',
-      transport: 'SFTP',
-      host: feed.host,
-      port: feed.port || 22,
-    })
-    result = await downloadViaSftp(feed, password, maxFileSize, feedLog)
-  } else {
-    feedLog.debug('DOWNLOAD_TRANSPORT_SELECTED', {
-      phase: 'connect',
-      transport: 'FTP',
-      host: feed.host,
-      port: feed.port || 21,
-    })
-    result = await downloadViaFtp(feed, password, maxFileSize, feedLog)
+  try {
+    if (feed.transport === 'SFTP') {
+      feedLog.debug('DOWNLOAD_TRANSPORT_SELECTED', {
+        phase: 'connect',
+        transport: 'SFTP',
+        host: feed.host,
+        port: feed.port || 22,
+      })
+      result = await downloadViaSftp(feed, password, maxFileSize, feedLog)
+    } else {
+      feedLog.debug('DOWNLOAD_TRANSPORT_SELECTED', {
+        phase: 'connect',
+        transport: 'FTP',
+        host: feed.host,
+        port: feed.port || 21,
+      })
+      result = await downloadViaFtp(feed, password, maxFileSize, feedLog)
+    }
+  } catch (err) {
+    feedLog.error('FETCH_ERROR', {
+      durationMs: Date.now() - fetchStart,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    }, err as Error)
+    throw err
   }
 
   const downloadDuration = Date.now() - downloadStart
@@ -118,6 +145,10 @@ export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult>
       skippedReason: result.skippedReason,
       changeDetectionMethod: result.skippedReason === 'UNCHANGED_MTIME' ? 'mtime_size' : 'content_hash',
     })
+    feedLog.debug('FETCH_SKIP', {
+      durationMs: Date.now() - fetchStart,
+      skippedReason: result.skippedReason,
+    })
   } else {
     feedLog.info('DOWNLOAD_COMPLETE', {
       phase: 'complete',
@@ -127,6 +158,11 @@ export async function downloadFeed(feed: AffiliateFeed): Promise<DownloadResult>
       contentHashPrefix: result.contentHash?.slice(0, 16),
       compressionApplied: feed.compression === 'GZIP',
       throughputMBps: downloadDuration > 0 ? ((result.content.length / 1024 / 1024) / (downloadDuration / 1000)).toFixed(2) : null,
+    })
+    feedLog.debug('FETCH_END', {
+      durationMs: Date.now() - fetchStart,
+      contentBytes: result.content.length,
+      contentHashPrefix: result.contentHash?.slice(0, 16),
     })
   }
 
@@ -187,7 +223,6 @@ async function downloadViaSftp(
             // FILE_NOT_FOUND is an expected condition (file not yet published, being regenerated)
             // Return as skip instead of error to avoid failure cascade
             feedLog.warn('SFTP_FILE_NOT_FOUND', {
-              event_name: 'SFTP_FILE_NOT_FOUND',
               phase: 'stat',
               path: feed.path,
               errorMessage: statErr.message,
@@ -400,7 +435,7 @@ async function downloadViaSftp(
       phase: 'connect',
       host: feed.host,
       port: feed.port || 22,
-      username: feed.username,
+      usernameSet: !!feed.username,
       readyTimeoutMs: 30000,
     })
 
@@ -444,7 +479,7 @@ async function downloadViaFtp(
       phase: 'connect',
       host: feed.host,
       port: feed.port || 21,
-      username: feed.username,
+      usernameSet: !!feed.username,
     })
 
     await client.access({
@@ -609,7 +644,6 @@ async function downloadViaFtp(
 
     if (isFileNotFound) {
       feedLog.warn('FTP_FILE_NOT_FOUND', {
-        event_name: 'FTP_FILE_NOT_FOUND',
         phase: 'stat',
         path: feed.path,
         errorMessage,
@@ -626,7 +660,6 @@ async function downloadViaFtp(
     }
 
     feedLog.error('FTP_ERROR', {
-      event_name: 'FTP_ERROR',
       phase: 'error',
       errorMessage,
       errorName: err instanceof Error ? err.name : 'Unknown',

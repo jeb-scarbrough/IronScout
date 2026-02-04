@@ -76,12 +76,15 @@ pnpm dev
 
 ### Harvester
 
-⚠️ Scheduler must be singleton.
+⚠️ Scheduler must be singleton (controlled via Admin Settings).
 
 ```bash
 cd apps/harvester
-HARVESTER_SCHEDULER_ENABLED=false pnpm dev
+pnpm dev
 ```
+
+Note: Scheduler enabled/disabled state is controlled via Admin UI (Settings > Danger Zone).
+For local dev, the database setting typically defaults to `false`. Use Admin UI to toggle.
 
 ---
 
@@ -101,6 +104,23 @@ Access at: `http://localhost:3939/admin/queues`
 - Run behind firewall or VPN only
 - Use strong, unique credentials
 - See `context/02_monitoring_and_observability.md` for full documentation
+
+---
+
+## Scraper Workflow
+
+```bash
+pnpm scraper:bootstrap --id <adapterId> --domain <domain>
+pnpm scraper:new --id <adapterId> --domain <domain> --version 0.1.0
+pnpm scraper:discover --source-id <sourceId> --listing <url> --product-path-prefix /ammo/ --dry-run
+pnpm scraper:dry-run --source-id <sourceId> --limit 10
+```
+
+Note: `scraper:dry-run` uses the harvester dist build. If it is missing, run:
+
+```bash
+pnpm --filter @ironscout/harvester build
+```
 
 ---
 

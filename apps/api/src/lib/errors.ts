@@ -415,6 +415,67 @@ export function formatErrorForLog(classified: ClassifiedError): Record<string, u
 }
 
 /**
+ * User-safe error messages (never expose internal details)
+ */
+const SAFE_MESSAGES: Record<string, string> = {
+  // Validation
+  VALIDATION_FAILED: 'Please check your input and try again',
+  INVALID_INPUT: 'Invalid input provided',
+  MISSING_REQUIRED_FIELD: 'Required information is missing',
+  INVALID_FORMAT: 'Invalid format provided',
+
+  // Auth
+  UNAUTHORIZED: 'Please sign in to continue',
+  FORBIDDEN: "You don't have permission for this action",
+  TOKEN_EXPIRED: 'Your session has expired. Please sign in again',
+  TOKEN_INVALID: 'Invalid authentication. Please sign in again',
+  SESSION_EXPIRED: 'Your session has expired. Please sign in again',
+
+  // Not Found
+  NOT_FOUND: 'The requested resource was not found',
+  RESOURCE_NOT_FOUND: 'The requested resource was not found',
+  USER_NOT_FOUND: 'User not found',
+  PRODUCT_NOT_FOUND: 'Product not found',
+
+  // Rate Limit
+  RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment',
+  QUOTA_EXCEEDED: 'Usage limit reached. Please try again later',
+
+  // Database (never expose internal DB details)
+  DB_CONNECTION_ERROR: 'Service temporarily unavailable. Please try again',
+  DB_QUERY_ERROR: 'An error occurred. Please try again',
+  DB_CONSTRAINT_VIOLATION: 'This operation could not be completed',
+  DB_TIMEOUT: 'Request timed out. Please try again',
+
+  // External
+  EXTERNAL_SERVICE_ERROR: 'An external service error occurred',
+  EXTERNAL_TIMEOUT: 'Request timed out. Please try again',
+  EXTERNAL_UNAVAILABLE: 'Service temporarily unavailable',
+  NETWORK_ERROR: 'Network error occurred. Please try again',
+
+  // Internal (never expose internal details)
+  INTERNAL_ERROR: 'Something went wrong. Please try again',
+  UNEXPECTED_ERROR: 'An unexpected error occurred',
+  CONFIGURATION_ERROR: 'Service configuration error',
+
+  // Timeout
+  OPERATION_TIMEOUT: 'Operation timed out. Please try again',
+  REQUEST_TIMEOUT: 'Request timed out. Please try again',
+
+  // Conflict
+  CONFLICT: 'A conflict occurred. Please refresh and try again',
+  DUPLICATE_ENTRY: 'This item already exists',
+  CONCURRENT_MODIFICATION: 'The item was modified. Please refresh and try again',
+}
+
+/**
+ * Get a user-safe message for an error code (never expose internal details)
+ */
+export function getSafeMessage(classified: ClassifiedError): string {
+  return SAFE_MESSAGES[classified.code] || 'An error occurred'
+}
+
+/**
  * Create a custom operational error
  */
 export function createOperationalError(

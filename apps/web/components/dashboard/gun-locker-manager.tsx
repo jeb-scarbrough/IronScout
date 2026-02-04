@@ -45,6 +45,7 @@ import {
   updateAmmoPreferenceUseCase,
 } from '@/lib/api'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
+import { safeLogger } from '@/lib/safe-logger'
 import { Package, ExternalLink, ChevronDown } from 'lucide-react'
 import {
   Popover,
@@ -166,7 +167,7 @@ export function GunLockerManager() {
         const data = await getGunLocker(authToken)
         setGuns(data.guns || [])
       } catch (error) {
-        console.error('Failed to fetch guns:', error)
+        safeLogger.dashboard.error('Failed to fetch guns', {}, error)
         toast.error('Failed to load your guns')
       } finally {
         setIsLoading(false)
@@ -328,7 +329,7 @@ export function GunLockerManager() {
       const data = await getFirearmAmmoPreferences(token, gun.id)
       setAmmoPreferences(data.groups)
     } catch (error) {
-      console.error('Failed to fetch ammo preferences:', error)
+      safeLogger.dashboard.error('Failed to fetch ammo preferences', {}, error)
       toast.error('Failed to load ammo preferences')
     } finally {
       setIsLoadingPreferences(false)
@@ -545,6 +546,7 @@ export function GunLockerManager() {
           </DialogHeader>
           {viewingImage?.imageUrl && (
             <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- User-uploaded image */}
               <img
                 src={viewingImage.imageUrl}
                 alt={viewingImage.nickname || viewingImage.caliber}
@@ -583,6 +585,7 @@ export function GunLockerManager() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-3">
                   {selectedGun.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- User-uploaded image
                     <img
                       src={selectedGun.imageUrl}
                       alt={selectedGun.nickname || selectedGun.caliber}
@@ -735,18 +738,19 @@ export function GunLockerManager() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {guns.map((gun) => (
             <Card key={gun.id} className="group relative overflow-hidden">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
                   {/* Image or placeholder */}
                   <button
                     onClick={() => gun.imageUrl ? setViewingImage(gun) : handleImageUploadClick(gun.id)}
-                    className="relative flex-shrink-0 h-16 w-16 rounded-lg overflow-hidden bg-muted hover:opacity-80 transition-opacity"
+                    className="relative flex-shrink-0 h-20 w-20 rounded-lg overflow-hidden bg-muted hover:opacity-80 transition-opacity"
                     disabled={isSubmitting && uploadingGunId === gun.id}
                   >
                     {gun.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- User-uploaded image
                       <img
                         src={gun.imageUrl}
                         alt={gun.nickname || gun.caliber}
@@ -758,8 +762,8 @@ export function GunLockerManager() {
                           <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
-                            <Camera className="h-5 w-5 mb-1" />
-                            <span className="text-[10px]">Add Photo</span>
+                            <Camera className="h-6 w-6 mb-1" />
+                            <span className="text-xs">Add Photo</span>
                           </>
                         )}
                       </div>
@@ -771,11 +775,11 @@ export function GunLockerManager() {
                     onClick={() => handleOpenGunDetail(gun)}
                     className="flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
                   >
-                    <p className="font-medium truncate">{getCaliberLabel(gun.caliber)}</p>
+                    <p className="font-semibold text-base">{getCaliberLabel(gun.caliber)}</p>
                     {gun.nickname && (
-                      <p className="text-sm text-muted-foreground truncate">{gun.nickname}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{gun.nickname}</p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-1">View ammo preferences →</p>
+                    <p className="text-xs text-muted-foreground mt-2">View ammo preferences →</p>
                   </button>
 
                   {/* Action buttons */}

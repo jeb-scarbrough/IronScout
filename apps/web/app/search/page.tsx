@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { Metadata } from 'next'
 import { SearchResults } from '@/components/search/search-results'
-import { UnifiedSearch } from '@/components/search/unified-search'
+import { SearchHero } from '@/components/search/search-hero'
 import { SearchLoadingOverlay } from '@/components/search/search-loading-overlay'
 
 export const metadata: Metadata = {
@@ -42,33 +42,42 @@ interface SearchPageProps {
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams
   const query = params.q || ''
+  const hasQuery = Boolean(query)
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      {/* Unified Search Interface - Suspense required for useSearchParams */}
-      <div className="mb-4">
-        <Suspense fallback={
-          <div className="h-16 animate-pulse bg-muted rounded-2xl" />
-        }>
-          <UnifiedSearch initialQuery={query} />
-        </Suspense>
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Search</h1>
+        <p className="text-sm text-iron-400 mt-1">
+          Find and compare ammunition prices across retailers
+        </p>
       </div>
 
-      {/* Results */}
-      <div className="relative flex flex-col">
-        <SearchLoadingOverlay />
-        <Suspense fallback={
-          <div className="text-center py-12">
-            <div className="animate-pulse flex flex-col items-center">
-              <div className="w-12 h-12 bg-gray-200 rounded-full mb-4"></div>
-              <div className="h-4 w-48 bg-gray-200 rounded mb-2"></div>
-              <div className="h-3 w-32 bg-gray-200 rounded"></div>
+      {/* Search Hero - matches www home page style */}
+      <Suspense fallback={
+        <div className="h-32 animate-pulse bg-muted rounded-lg" />
+      }>
+        <SearchHero initialQuery={query} compact={hasQuery} />
+      </Suspense>
+
+      {/* Results - only show when there's a query */}
+      {hasQuery && (
+        <div className="relative flex flex-col">
+          <SearchLoadingOverlay />
+          <Suspense fallback={
+            <div className="text-center py-12">
+              <div className="animate-pulse flex flex-col items-center">
+                <div className="w-12 h-12 bg-muted rounded-full mb-4"></div>
+                <div className="h-4 w-48 bg-muted rounded mb-2"></div>
+                <div className="h-3 w-32 bg-muted rounded"></div>
+              </div>
             </div>
-          </div>
-        }>
-          <SearchResults searchParams={params} />
-        </Suspense>
-      </div>
+          }>
+            <SearchResults searchParams={params} />
+          </Suspense>
+        </div>
+      )}
     </div>
   )
 }

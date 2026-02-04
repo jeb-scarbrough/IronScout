@@ -135,7 +135,7 @@ function validateEnv(): ValidatedEnv {
 
     // In production on server, this should also alert to Slack
     if (isServer && process.env.NODE_ENV === 'production') {
-      alertMissingEnvVars(missing).catch(console.error)
+      alertMissingEnvVars(missing).catch(err => logger.error('Failed to send env var alert', {}, err))
     }
 
     // Throw to prevent app startup
@@ -152,7 +152,7 @@ function validateEnv(): ValidatedEnv {
 async function alertMissingEnvVars(missing: string[]): Promise<void> {
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL
   if (!slackWebhookUrl) {
-    console.error('[CRITICAL] Missing env vars and no Slack webhook configured')
+    logger.error('[CRITICAL] Missing env vars and no Slack webhook configured', { missing })
     return
   }
 
@@ -183,7 +183,7 @@ async function alertMissingEnvVars(missing: string[]): Promise<void> {
       }),
     })
   } catch (error) {
-    console.error('[CRITICAL] Failed to send Slack alert for missing env vars:', error)
+    logger.error('[CRITICAL] Failed to send Slack alert for missing env vars', { missing }, error)
   }
 }
 

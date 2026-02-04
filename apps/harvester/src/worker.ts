@@ -12,7 +12,7 @@
  */
 
 // Load environment variables first, before any other imports
-import 'dotenv/config'
+import './env'
 
 import {
   prisma,
@@ -63,6 +63,18 @@ import {
   stopCurrentPriceScheduler,
 } from './currentprice'
 
+// Scrape URL Worker (scraper-framework-01 spec v0.5)
+import {
+  startScrapeWorker,
+  stopScrapeWorker,
+} from './scraper/worker'
+import {
+  startScrapeScheduler,
+  stopScrapeScheduler,
+} from './scraper/scheduler'
+import { registerAllAdapters } from './scraper/adapters/index'
+import { getAdapterRegistry } from './scraper/registry'
+
 import type { Worker } from 'bullmq'
 
 // Create affiliate workers (lazy initialization)
@@ -81,12 +93,15 @@ let quarantineReprocessWorker: Worker | null = null
 // Current price recompute worker (ADR-015, lazy initialization)
 let currentPriceRecomputeWorker: Worker | null = null
 
+// Scrape URL worker (scraper-framework-01, lazy initialization)
+let scrapeWorker: Worker | null = null
+
 /**
- * Scheduler enabled flags (set during startup from database/env)
+ * Scheduler enabled flags (set during startup from database)
  *
  * IMPORTANT (ADR-001): Only ONE harvester instance should run schedulers.
- * Enable via admin settings or HARVESTER_SCHEDULER_ENABLED env var on exactly one instance.
- * All other instances should leave disabled or omit the variable.
+ * Enable/disable via Admin Settings (Danger Zone) - database is single source of truth.
+ * Emergency Stop in admin UI will disable scheduler and clear all queues.
  *
  * Running multiple schedulers causes duplicate ingestion and data corruption.
  */
@@ -196,6 +211,7 @@ log.info('Starting IronScout.ai Harvester Workers', {
     'embedding',
     'quarantine-reprocess',
     'current-price-recompute',
+    'scrape-url',
   ],
   retailerWorkers: [
     'feed-ingest',
@@ -208,6 +224,16 @@ log.info('Starting IronScout.ai Harvester Workers', {
 
 // Warm up Redis and database connections before starting workers
 async function startup() {
+  // Log brand/URL configuration prominently for debugging
+  const wwwUrl = process.env.NEXT_PUBLIC_WWW_URL || '(not set - using production default)'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '(not set - using production default)'
+  console.log('\n' + '='.repeat(60))
+  console.log('  HARVESTER - BRAND CONFIG')
+  console.log('='.repeat(60))
+  console.log(`  APP_URL: ${appUrl}`)
+  console.log(`  WWW_URL: ${wwwUrl}`)
+  console.log('='.repeat(60) + '\n')
+
   // Redis must be available for BullMQ workers to function
   const redisConnected = await warmupRedis()
   if (!redisConnected) {
@@ -261,6 +287,16 @@ async function startup() {
   log.info('Starting current price recompute worker')
   currentPriceRecomputeWorker = await startCurrentPriceRecomputeWorker({ concurrency: 5 })
 
+  // Register scrape adapters before starting worker/scheduler
+  // This ensures the registry is populated for all components
+  registerAllAdapters()
+  log.info('Registered scrape adapters', { count: getAdapterRegistry().size() })
+
+  // Start scrape URL worker (scraper-framework-01 - always on)
+  // Worker processes jobs regardless of scheduler state (supports manual triggers)
+  log.info('Starting scrape URL worker')
+  scrapeWorker = await startScrapeWorker({ concurrency: 3 })
+
   // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
   log.info('Starting product resolver sweeper')
   startProcessingSweeper()
@@ -274,6 +310,11 @@ async function startup() {
     // Per ADR-001: Only one scheduler instance should run
     log.info('Starting current price recompute scheduler')
     startCurrentPriceScheduler()
+
+    // Start scrape URL scheduler (scraper-framework-01)
+    // Per ADR-001: Only one scheduler instance should run
+    log.info('Starting scrape URL scheduler')
+    startScrapeScheduler()
   }
 
   // Start affiliate feed scheduler only if enabled
@@ -313,6 +354,9 @@ const shutdown = async (signal: string) => {
 
       log.info('Stopping current price recompute scheduler')
       stopCurrentPriceScheduler()
+
+      log.info('Stopping scrape URL scheduler')
+      stopScrapeScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)
@@ -336,6 +380,8 @@ const shutdown = async (signal: string) => {
       stopQuarantineReprocessWorker(),
       // Current price recompute worker (ADR-015)
       stopCurrentPriceRecomputeWorker(),
+      // Scrape URL worker (scraper-framework-01)
+      stopScrapeWorker(),
     ])
     log.info('All workers closed')
 

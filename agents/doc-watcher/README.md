@@ -32,8 +32,15 @@ Register in your Codex config as:
 - PowerShell helper (with optional Slack + interval): `./start-watcher.ps1 [-IntervalSeconds 90] [-SlackWebhook <url>] [-NoSlack]`
 
 ## Git hooks (optional)
-Copy `.githooks/post-commit.sample` and/or `.githooks/post-merge.sample` to `.git/hooks/` and `chmod +x` to run the watcher after commits/merges.
-Copy `.githooks/pre-push.sample` to `.git/hooks/pre-push` and `chmod +x` to block pushes when drift is unacknowledged.
+Enable versioned hooks with:
+```
+git config core.hooksPath .githooks
+```
+Then ensure scripts are executable:
+```
+chmod +x .githooks/post-commit.sample .githooks/post-merge.sample .githooks/pre-push
+```
+The pre-push hook blocks pushes if doc drift is unacknowledged and runs preflight checks.
 
 ## Slack notifications (optional)
 - Create a Slack app with the "Incoming Webhooks" feature (from Slack's marketplace link), enable it, add a webhook to your channel, and set `DOC_WATCHER_SLACK_WEBHOOK` to that URL.

@@ -6,9 +6,7 @@ import { Search, Sparkles, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSearchSuggestions } from '@/lib/api'
 import { QuickCaliberFilters } from './quick-caliber-filters'
-import { createLogger } from '@/lib/logger'
-
-const logger = createLogger('components:dashboard-hero-search')
+import { safeLogger } from '@/lib/safe-logger'
 
 const exampleQueries = [
   "9mm for home defense",
@@ -63,7 +61,7 @@ export function DashboardHeroSearch({
         const results = await getSearchSuggestions(query)
         setSuggestions(results.slice(0, 5))
       } catch (error) {
-        logger.error('Failed to fetch suggestions', {}, error)
+        safeLogger.dashboard.error('Failed to fetch suggestions', {}, error)
       }
     }, 200)
 

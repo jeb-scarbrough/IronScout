@@ -7,10 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Bell, ExternalLink, Trash2 } from 'lucide-react'
 import { getUserAlerts, deleteAlert, AuthError, type Alert } from '@/lib/api'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
-
-const logger = createLogger('components:recent-alerts')
 
 export function RecentAlerts() {
   const { data: session, status } = useSession()
@@ -78,7 +76,7 @@ export function RecentAlerts() {
         return
       }
       setError('Failed to load alerts')
-      logger.error('Failed to load alerts', {}, err)
+      safeLogger.dashboard.error('Failed to load alerts', {}, err)
     } finally {
       setLoading(false)
     }
@@ -96,7 +94,7 @@ export function RecentAlerts() {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to delete alert', {}, err)
+      safeLogger.dashboard.error('Failed to delete alert', {}, err)
     }
   }
 

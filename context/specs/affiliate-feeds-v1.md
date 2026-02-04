@@ -2608,11 +2608,12 @@ This is visibility only; no new state is stored.
 
 ### 13.1 Active Product Query (Fail-Closed for Affiliates)
 
-**Important scoping note:** This query applies to `SourceProduct` records only. In v1, only affiliate feeds create `SourceProduct` records. DIRECT sources use the existing product pipeline (DealerSku, etc.) which has its own query patterns.
+**Important scoping note:** This query applies to `SourceProduct` records only. In v1, affiliate feeds **and approved SCRAPE sources** create `SourceProduct` records. DIRECT sources use the existing product pipeline (DealerSku, etc.) which has its own query patterns.
 
-> **⚠️ V1 ASSUMPTION:** Only AFFILIATE sources produce `SourceProduct` records.
+> **⚠️ V1 ASSUMPTION:** Only AFFILIATE + SCRAPE sources produce `SourceProduct` records.
 > If DIRECT sources are migrated to `SourceProduct` in the future, the INNER JOIN
-> on `affiliate_feeds` will silently hide DIRECT products. This query MUST change.
+> on `affiliate_feeds` will silently hide DIRECT **and SCRAPE** products. This query MUST change or be replaced
+> with a unified visibility predicate that includes SCRAPE when ADR-021 guardrails are met.
 
 **Affiliate SourceProduct query (fail-closed):**
 

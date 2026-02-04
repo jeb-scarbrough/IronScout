@@ -28,6 +28,7 @@ import {
 } from '../services/gun-locker'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { getRequestContext } from '@ironscout/logger'
 
 const log = loggers.watchlist // Use watchlist logger for user data operations
 
@@ -112,7 +113,11 @@ router.post('/', async (req: Request, res: Response) => {
     log.error('Add gun error', { message: err.message }, err)
 
     if (err.message.startsWith('Invalid caliber')) {
-      return res.status(400).json({ error: err.message })
+      return res.status(400).json({
+        errorCode: 'INVALID_CALIBER',
+        message: 'Invalid caliber specified',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     res.status(500).json({ error: 'Failed to add gun' })
@@ -216,7 +221,11 @@ router.post('/:id/image', async (req: Request, res: Response) => {
     }
 
     if (err.message.includes('Invalid image') || err.message.includes('Image too large')) {
-      return res.status(400).json({ error: err.message })
+      return res.status(400).json({
+        errorCode: 'IMAGE_VALIDATION_FAILED',
+        message: 'Invalid image format or size',
+        requestId: getRequestContext()?.requestId,
+      })
     }
 
     res.status(500).json({ error: 'Failed to upload image' })

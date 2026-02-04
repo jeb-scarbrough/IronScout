@@ -4,6 +4,7 @@ import { prisma } from '@ironscout/db';
 import type { FeedFormatType } from '@ironscout/db';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -57,6 +58,24 @@ export async function POST(request: Request) {
     }
 
     const startTime = Date.now();
+
+    // SSRF Protection: Validate feed URL before fetching
+    if (feed.url) {
+      const isFtpAccess = feed.accessType === 'FTP' || feed.accessType === 'SFTP';
+      const ssrfResult = await validateUrlForSSRF(feed.url, { allowFTP: isFtpAccess });
+
+      if (!ssrfResult.safe) {
+        reqLogger.warn('Feed URL blocked by SSRF guard', {
+          retailerId,
+          feedId: feed.id,
+          error: ssrfResult.error,
+        });
+        return NextResponse.json(
+          { error: `Feed URL validation failed: ${ssrfResult.error}` },
+          { status: 400 }
+        );
+      }
+    }
 
     // Fetch feed content
     let content: string;

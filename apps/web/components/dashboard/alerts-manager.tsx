@@ -10,10 +10,8 @@ import { Bell, ExternalLink, Trash2, Edit2, Check, X, Filter } from 'lucide-reac
 import { getUserAlerts, updateAlert, deleteAlert, AuthError, type Alert as AlertType } from '@/lib/api'
 import { ProductImage } from '@/components/products/product-image'
 import { toast } from 'sonner'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
-
-const logger = createLogger('components:alerts-manager')
 
 export function AlertsManager() {
   const { data: session, status } = useSession()
@@ -89,7 +87,7 @@ export function AlertsManager() {
         return
       }
       setError('Failed to load alerts')
-      logger.error('Failed to load alerts', {}, err)
+      safeLogger.dashboard.error('Failed to load alerts', {}, err)
     } finally {
       setLoading(false)
     }
@@ -126,7 +124,7 @@ export function AlertsManager() {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to delete alert', {}, err)
+      safeLogger.dashboard.error('Failed to delete alert', {}, err)
       toast.error('Failed to delete alert')
     }
   }
@@ -146,7 +144,7 @@ export function AlertsManager() {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to toggle alert', {}, err)
+      safeLogger.dashboard.error('Failed to toggle alert', {}, err)
       toast.error('Failed to update alert')
     }
   }
@@ -184,7 +182,7 @@ export function AlertsManager() {
         showSessionExpiredToast()
         return
       }
-      logger.error('Failed to update alert', {}, err)
+      safeLogger.dashboard.error('Failed to update alert', {}, err)
       toast.error('Failed to update alert')
     }
   }

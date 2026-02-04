@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { SavedItemsManager } from '@/components/dashboard/saved-items-manager'
+import { DashboardContent } from '@/components/dashboard/dashboard-content'
 
 export const metadata: Metadata = {
   title: 'Watchlist',
@@ -7,13 +8,16 @@ export const metadata: Metadata = {
 
 export default function WatchlistPage() {
   return (
-    <div className="p-6 lg:p-8">
-      {/* Page Header - management-oriented, not awareness */}
-      <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-semibold">Watchlist</h1>
+    <DashboardContent>
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold italic text-white">Watchlist</h1>
+        <p className="text-sm text-iron-400 mt-1">
+          Products you're tracking for price changes
+        </p>
       </div>
 
       <SavedItemsManager />
-    </div>
+    </DashboardContent>
   )
 }

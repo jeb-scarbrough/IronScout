@@ -1,5 +1,19 @@
 import type { Metadata } from 'next';
+import { Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+
+// Use same fonts as web app for consistency across all IronScout properties
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '900'],
+  variable: '--font-display',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-mono',
+});
 
 export const metadata: Metadata = {
   title: 'IronScout - AI-Powered Ammunition Search',
@@ -31,17 +45,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        {/* Google Fonts - Oswald for display, Source Sans for body */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link 
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" 
-          rel="stylesheet" 
-        />
-      </head>
-      <body className="min-h-screen grid-bg">
+    <html lang="en" className={`dark ${outfit.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-screen grid-bg font-display antialiased">
         <div className="noise-overlay" />
         {children}
       </body>

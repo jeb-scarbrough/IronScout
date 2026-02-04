@@ -4,8 +4,10 @@
  * CI Preflight Checks
  *
  * Fast validation script that runs before tests to catch common issues early:
+ * - "use server" export violations (non-async exports)
  * - Lint errors (including ESLint config issues)
  * - TypeScript errors (including Next.js 16 breaking changes)
+ * - Prisma schema/database drift
  * - Build failures
  * - Package export issues
  *
@@ -14,6 +16,8 @@
  *   pnpm preflight:quick  # Skip build (faster, for local dev)
  *
  * These checks would have caught:
+ * - "use server" files exporting const/let (use-server-exports)
+ * - Prisma schema drift / missing migrations (schema-drift)
  * - Next.js 16 async searchParams (type-check)
  * - ESLint config issues (lint)
  * - ESM export resolution (build)
@@ -44,11 +48,15 @@ function runCommand(name, command, args = []) {
     const start = performance.now()
     log(`\n▶ ${name}...`, colors.blue)
 
+    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command
+
     if (VERBOSE) {
-      log(`  ${colors.dim}$ ${command} ${args.join(' ')}${colors.reset}`)
+      log(`  ${colors.dim}$ ${fullCommand}${colors.reset}`)
     }
 
-    const proc = spawn(command, args, {
+    // Use shell: true with the full command string to avoid DEP0190 deprecation warning
+    // (passing args separately with shell: true is deprecated in Node.js)
+    const proc = spawn(fullCommand, [], {
       stdio: VERBOSE ? 'inherit' : 'pipe',
       shell: true,
       cwd: process.cwd(),
@@ -90,14 +98,20 @@ async function main() {
   const totalStart = performance.now()
 
   const checks = [
-    // 1. Lint - catches ESLint config issues, code quality
+    // 1. "use server" exports - catches non-async exports before build
+    { name: 'Use Server Exports', command: 'node', args: ['scripts/check-use-server-exports.mjs'] },
+
+    // 2. Lint - catches ESLint config issues, code quality
     { name: 'Lint', command: 'pnpm', args: ['lint'] },
 
-    // 2. Type Check - catches TS errors, Next.js 16 breaking changes
+    // 3. Type Check - catches TS errors, Next.js 16 breaking changes
     { name: 'Type Check', command: 'pnpm', args: ['type-check'] },
 
-    // 3. Prisma Generate - ensures schema is valid and client is fresh
+    // 4. Prisma Generate - ensures schema is valid and client is fresh
     { name: 'Prisma Generate', command: 'pnpm', args: ['db:generate'] },
+
+    // 5. Schema Drift - catches database/schema mismatches
+    { name: 'Schema Drift Check', command: 'pnpm', args: ['db:check:drift'] },
   ]
 
   // 4. Build (optional) - catches build-time errors, ESM issues

@@ -4,10 +4,8 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { createLogger } from '@/lib/logger'
+import { safeLogger } from '@/lib/safe-logger'
 import { env } from '@/lib/env'
-
-const logger = createLogger('app:admin:sources')
 
 interface Source {
   id: string
@@ -38,7 +36,7 @@ export default function SourcesPage() {
       const data = await response.json()
       setSources(data)
     } catch (error) {
-      logger.error('Error fetching sources', {}, error)
+      safeLogger.admin.error('Error fetching sources', {}, error)
     } finally {
       setLoading(false)
     }
@@ -54,7 +52,7 @@ export default function SourcesPage() {
         fetchSources()
       }
     } catch (error) {
-      logger.error('Error toggling source', {}, error)
+      safeLogger.admin.error('Error toggling source', {}, error)
     }
   }
 
@@ -70,7 +68,7 @@ export default function SourcesPage() {
         fetchSources()
       }
     } catch (error) {
-      logger.error('Error deleting source', {}, error)
+      safeLogger.admin.error('Error deleting source', {}, error)
     }
   }
 
@@ -88,7 +86,7 @@ export default function SourcesPage() {
         fetchSources()
       }
     } catch (error) {
-      logger.error('Error triggering crawl', {}, error)
+      safeLogger.admin.error('Error triggering crawl', {}, error)
     }
   }
 
@@ -211,7 +209,7 @@ function AddSourceForm({ onSuccess }: { onSuccess: () => void }) {
         alert(`Error: ${error.error}`)
       }
     } catch (error) {
-      logger.error('Error creating source', {}, error)
+      safeLogger.admin.error('Error creating source', {}, error)
       alert('Failed to create source')
     }
   }

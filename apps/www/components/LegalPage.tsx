@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown'
 import Link from 'next/link'
+import { Header } from '@/app/components/Header'
 
 interface LegalPageProps {
   content: string
@@ -9,20 +10,10 @@ interface LegalPageProps {
 export function LegalPage({ content, lastUpdated }: LegalPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-iron-800">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <Link
-            href="/"
-            className="text-brass-500 hover:text-brass-400 transition-colors"
-          >
-            &larr; Back to IronScout
-          </Link>
-        </div>
-      </header>
+      <Header />
 
       {/* Content */}
-      <main className="max-w-4xl mx-auto px-6 py-12">
+      <main className="max-w-4xl mx-auto px-6 py-12 pt-24">
         <article className="prose prose-invert prose-iron max-w-none">
           <Markdown
             components={{
@@ -64,7 +55,7 @@ export function LegalPage({ content, lastUpdated }: LegalPageProps) {
               a: ({ href, children }) => (
                 <a
                   href={href}
-                  className="text-brass-500 hover:text-brass-400 underline transition-colors"
+                  className="text-primary hover:text-primary/80 underline transition-colors"
                 >
                   {children}
                 </a>

@@ -3,7 +3,7 @@
 **Status:** Draft (Decisions Resolved, All Feedback Incorporated)
 **Owner:** Engineering (Harvester)
 **Created:** 2026-01-29
-**Updated:** 2026-01-29
+**Updated:** 2026-02-01
 **Depends on:** ADR-015 (Price Corrections), ADR-019 (Product Resolver)
 **Blocks:** Scraper development
 
@@ -13,17 +13,18 @@
 
 Build a surgical, URL-driven price monitoring framework that:
 - Scrapes specific product URLs (not site-wide crawling)
+- Allows optional discovery seeding **outside the framework** per ADR-022
 - Enables rapid onboarding of new retailer targets via thin adapters
 - Follows the unified ingestion pattern (source_products → resolver → products)
 - Preserves all trust invariants (append-only, fail-closed, server-side enforcement)
-- Remains invisible to consumers until explicitly enabled per ADR scope rules
+ - Remains consumer-visible only when ADR-021 guardrails are met (otherwise excluded)
 
 ---
 
 ## 2. Non-Goals (v1)
 
-- No site-wide crawling or product discovery
-- No consumer visibility for scraped prices
+- No autonomous site-wide crawling; discovery seeding limited to allowlisted sitemaps/listing pages (ADR-022)
+- No consumer visibility for scraped prices without ADR-021 guardrails
 - No real-time guarantees or SLAs
 - No proxy rotation or anti-bot evasion (defer to later phases)
 - No distributed crawling across multiple nodes
@@ -40,6 +41,7 @@ Unlike traditional crawlers that discover URLs via pagination, this framework sc
 - Admin portal input
 - CSV/bulk import
 - Affiliate feed URLs (refresh prices for known products)
+- Discovery seeding (sitemap/listing pages, ADR-022)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -54,6 +56,7 @@ Unlike traditional crawlers that discover URLs via pagination, this framework sc
 │     • Admin portal       │                                                   │
 │     • CSV import         │                                                   │
 │     • Affiliate feed URLs│                                                   │
+│     • Discovery seeding  │                                                   │
 └──────────────────────────┼───────────────────────────────────────────────────┘
                            │
                            ▼
@@ -95,7 +98,7 @@ Unlike traditional crawlers that discover URLs via pagination, this framework sc
 |--------|---------------|-------------------------------|
 | URL source | Adapter discovers via pagination | Database (`scrape_targets`) |
 | Volume | Thousands of pages | Tens to hundreds of URLs |
-| Discovery | Finds new products | Only monitors known products |
+| Discovery | Finds new products | Optional seeding via allowlisted sources (ADR-022) |
 | Adapter complexity | High (pagination, dedup) | Low (single page extraction) |
 | Risk profile | Higher ToS exposure | Lower, more controlled |
 
@@ -1166,7 +1169,7 @@ SCRAPE_URL Worker
 - `observedAt` from the offer
 - `inStock` mapped from availability (see below)
 
-This enables the price corrections overlay to work correctly and ensures scraped prices are excluded from consumer queries until explicitly enabled.
+This enables the price corrections overlay to work correctly and ensures scraped prices are gated by ADR-021 guardrails for consumer visibility.
 
 **Availability to inStock Mapping:**
 
@@ -1201,11 +1204,73 @@ function mapAvailability(availability: Availability): boolean {
 - `BACKORDER` → `false`: Treat as unavailable for alerts (user can't buy immediately)
 - Alerts trigger on `inStock` transitions, so this mapping determines alert behavior
 
+### 10.3 Skip-to-Disable Feedback Loop
+
+When an operator marks a scraped product as `SKIP` in the admin review queue, the system should offer to disable the associated scrape target to prevent re-scraping non-ammunition products.
+
+**Workflow:**
+
+```
+Operator marks product_link as SKIP (e.g., "not ammo")
+       │
+       ▼
+System checks: Does this source_product have an associated scrape_target?
+       │
+       ├── No → Done (no scrape target to disable)
+       │
+       └── Yes → Prompt operator:
+           "This product came from a scrape target. Disable future scraping of this URL?"
+           │
+           ├── [Yes] → Set scrape_targets.enabled = FALSE, status = 'PAUSED'
+           │           Log: SCRAPE_TARGET_DISABLED_BY_REVIEW { targetId, reason, operator }
+           │
+           └── [No]  → Keep scrape_target unchanged
+```
+
+**Implementation notes:**
+
+1. **Association lookup:** `source_products.id` → `scrape_targets.source_product_id`
+2. **Skip reasons that should trigger prompt:**
+   - "not ammo" / "not ammunition"
+   - "accessory"
+   - "non-product" (MREs, apparel, etc.)
+3. **Audit trail:** Log all skip-to-disable actions for compliance review
+4. **Bulk operations:** When bulk-skipping, aggregate prompt: "N products have scrape targets. Disable all?"
+
+**Rationale:** Manual review decisions should propagate back to the scrape pipeline to prevent repeatedly ingesting and reviewing the same non-ammunition products. This creates an operational feedback loop that improves data quality over time.
+
 ---
 
-## 11. Observability
+## 11. Observability (v1: Log-Only)
 
-### 11.1 Metrics
+Prometheus is **not** in use for v1. Observability is log-driven with
+structured events and basic admin summaries pulled from the database.
+
+### 11.1 Log Events (v1)
+
+Emitted as structured log events (JSON):
+
+- `SCRAPER_RUN_COMPLETED` (run metrics snapshot)
+- `SCRAPER_QUEUE_REJECTED` (backpressure rejection)
+- `SCRAPER_ADAPTER_DISABLED` (auto-disable)
+- `SCRAPER_ALERT_HIGH_FAILURE_RATE` (failureRate > 0.5)
+- `SCRAPER_ALERT_STALE_TARGETS` (stale target threshold exceeded)
+- `SCRAPER_ALERT_ZERO_PRICE` (zero price quarantined)
+
+### 11.2 Alerts (v1)
+
+Alerts are log events only (no paging integration in v1):
+
+| Alert | Condition | Severity | Action |
+|-------|-----------|----------|--------|
+| Adapter auto-disabled | `SCRAPER_ADAPTER_DISABLED` emitted | P1 | Log-only |
+| High failure rate | `SCRAPER_ALERT_HIGH_FAILURE_RATE` emitted | P2 | Log-only |
+| Queue rejection spike | `SCRAPER_QUEUE_REJECTED` spike | P2 | Log-only |
+| Stale URLs accumulating | `SCRAPER_ALERT_STALE_TARGETS` emitted | P3 | Log-only |
+
+### 11.3 Future (v1.1+): Prometheus Metrics
+
+When Prometheus is enabled, implement these metrics:
 
 ```typescript
 // Counters
@@ -1232,44 +1297,48 @@ scrape_extract_duration_ms{adapter_id}
 scrape_rate_limit_wait_ms{domain}
 ```
 
-### 11.2 Alerts
-
-| Alert | Condition | Severity | Action |
-|-------|-----------|----------|--------|
-| Adapter auto-disabled | `scrape_adapter_enabled == 0` | P1 | Page on-call |
-| High failure rate | `failure_rate > 0.5` for 1 batch | P2 | Slack alert |
-| Queue rejection spike | `scrape_queue_rejected_total` increase | P2 | Slack alert |
-| Stale URLs accumulating | `scrape_targets_stale > 100` | P3 | Slack alert |
-
 ---
 
 ## 12. Visibility Enforcement
 
-### 12.1 Consumer Exclusion (Mandatory)
+### 12.1 Consumer Visibility (Guarded)
 
-Scraped prices MUST be excluded from consumer-facing queries until explicitly enabled:
+Per ADR-021, SCRAPE data may be consumer-visible only when guardrails are met.
+If guardrails are not met, SCRAPE outputs MUST be excluded (fail closed).
 
 ```typescript
-// In all consumer-facing price queries
-{
-  ingestionRunType: { notIn: ['SCRAPE'] }
-}
+// In all consumer-facing price queries (conceptual)
+OR: [
+  { ingestionRunType: null },
+  { ingestionRunType: { not: 'SCRAPE' } },
+  {
+    ingestionRunType: 'SCRAPE',
+    source: {
+      scrapeEnabled: true,       // allowlist gate
+      robotsCompliant: true,     // robots.txt / legal gate
+      tosReviewedAt: not null,   // ToS approval recorded
+      tosApprovedBy: not null,
+      adapterEnabled: true       // scrape_adapter_status.enabled
+    }
+  }
+]
 ```
 
 ### 12.2 Audit Checklist
 
 Before enabling any scrape adapter for production:
 
-- [ ] `apps/api/src/services/ai-search/price-resolver.ts` excludes SCRAPE
-- [ ] `apps/api/src/services/saved-items.ts` excludes SCRAPE
-- [ ] `apps/api/src/services/market-deals.ts` excludes SCRAPE
-- [ ] `current_visible_prices` recompute excludes SCRAPE
-- [ ] Raw SQL queries audited for SCRAPE exclusion
+- [ ] Allowlist + ToS/robots approval recorded
+- [ ] SSRF guard enforced on all fetches
+- [ ] Drift detection + auto-disable enabled
+- [ ] Operational kill switch available (disable adapter/targets)
+- [ ] All consumer queries audited for visibility + corrections (no silent bypass)
 
 ### 12.3 Source Defaults
 
 New scrape sources MUST default to:
-- `visibilityStatus = 'INELIGIBLE'`
+- `visibilityStatus = 'PENDING'` for new retailers awaiting admin review
+- `visibilityStatus = 'INELIGIBLE'` only when explicitly disqualified
 - `upcTrusted = false` in `source_trust_config`
 
 ---
@@ -1357,7 +1426,7 @@ apps/harvester/src/scraper/
 - [ ] Drift detector + auto-disable (with OOS_NO_PRICE exclusion)
 - [ ] Scheduler for due targets
 - [ ] Metrics emission
-- [ ] Visibility audit (SCRAPE exclusion)
+- [ ] Visibility audit (SCRAPE guardrails)
 
 **Exit criteria:** Framework functional, can process URLs (no adapter yet).
 
@@ -1381,6 +1450,7 @@ apps/harvester/src/scraper/
 - [ ] Admin portal: enable/disable adapters
 - [ ] Admin portal: toggle `sources.scrape_enabled` (allowlist gate)
 - [ ] Admin portal: manual enqueue with backpressure feedback
+- [ ] Admin portal: skip-to-disable feedback loop (see §10.3)
 - [ ] Grafana dashboard for scraper metrics
 - [ ] Runbook for drift alerts
 - [ ] Runbook for adapter re-enable
@@ -1410,8 +1480,8 @@ apps/harvester/src/scraper/
 - [ ] Validator rejects offers missing required fields
 - [ ] Drift detector auto-disables adapter after 2 consecutive failed batches
 - [ ] OOS_NO_PRICE drops are tracked but excluded from drift calculations
-- [ ] SCRAPE runs excluded from all consumer queries (audited)
-- [ ] Metrics emitted for all key operations
+- [ ] SCRAPE consumer-visibility guardrails audited (ADR-021)
+- [ ] Log events emitted for all key operations (v1 log-only observability)
 - [ ] Queue rejects new URLs when at capacity
 - [ ] Scheduler only queries sources with `scrape_enabled=TRUE AND robots_compliant=TRUE`
 - [ ] robots_compliant auto-updates based on robots.txt policy (3 consecutive blocks → FALSE)
@@ -1432,7 +1502,8 @@ apps/harvester/src/scraper/
 
 - [ ] Ops can add/remove/pause scrape_targets via admin portal
 - [ ] Ops can enable/disable adapters via admin portal
-- [ ] Drift alerts fire correctly in staging
+- [ ] Skip-to-disable feedback loop works (marking product as SKIP prompts to disable scrape target)
+- [ ] Drift alert log events emitted correctly in staging
 - [ ] Auto-disable triggers and recovers correctly
 - [ ] Runbooks documented and reviewed
 

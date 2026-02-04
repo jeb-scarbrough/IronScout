@@ -148,5 +148,23 @@ export declare function generateTraceId(): string;
  * Generate a span ID (shorter identifier for individual operations)
  */
 export declare function generateSpanId(): string;
+/**
+ * Sanitize a URL for safe logging by removing credentials and sensitive query params.
+ * - Strips userinfo (user:pass@host)
+ * - Redacts sensitive query parameters (password, token, key, etc.)
+ *
+ * @param url - The URL to sanitize (can be string or URL object)
+ * @returns Sanitized URL string safe for logging
+ *
+ * @example
+ * ```ts
+ * sanitizeUrlForLogging('https://user:secret@api.example.com/feed')
+ * // Returns: 'https://api.example.com/feed'
+ *
+ * sanitizeUrlForLogging('https://api.example.com/feed?token=abc123&limit=10')
+ * // Returns: 'https://api.example.com/feed?token=[REDACTED]&limit=10'
+ * ```
+ */
+export declare function sanitizeUrlForLogging(url: string | URL | null | undefined): string;
 export {};
 //# sourceMappingURL=index.d.ts.map

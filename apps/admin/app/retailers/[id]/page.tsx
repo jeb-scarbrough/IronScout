@@ -21,6 +21,7 @@ import { EditRetailerForm } from './edit-form';
 import { VisibilityActions } from './visibility-actions';
 import { MerchantLinkSection } from './merchant-link-section';
 import { SourceTrustConfigSection } from './source-trust-config-section';
+import { SourceScrapeConfigSection } from './source-scrape-config-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,9 @@ export default async function RetailerDetailPage({
           name: true,
           sourceKind: true,
           source_trust_config: true,
+          scrapeEnabled: true,
+          adapterId: true,
+          robotsCompliant: true,
         },
         orderBy: { name: 'asc' },
       },
@@ -163,6 +167,7 @@ export default async function RetailerDetailPage({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           {retailer.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- External URL from user upload
             <img
               src={retailer.logoUrl}
               alt={retailer.name}
@@ -340,6 +345,19 @@ export default async function RetailerDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Scrape Configuration Section */}
+      {retailer.sources.length > 0 && (
+        <SourceScrapeConfigSection
+          sources={retailer.sources.map((s) => ({
+            id: s.id,
+            name: s.name,
+            scrapeEnabled: s.scrapeEnabled ?? false,
+            adapterId: s.adapterId,
+            robotsCompliant: s.robotsCompliant ?? true,
+          }))}
+        />
+      )}
 
       {/* Trust Configuration Section */}
       {retailer.sources.length > 0 && (

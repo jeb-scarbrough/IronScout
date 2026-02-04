@@ -289,7 +289,7 @@ export function nonIgnoredRunPriceWhere(): Prisma.pricesWhereInput {
 
 /**
  * Visibility filter for historical price reads.
- * Applies retailer eligibility + listing and ignored-run exclusion.
+ * Applies retailer eligibility + listing, ignored-run exclusion, and SCRAPE guardrails.
  * Does NOT apply current-price lookback.
  */
 export function visibleHistoricalPriceWhere(): Prisma.pricesWhereInput {
@@ -297,6 +297,7 @@ export function visibleHistoricalPriceWhere(): Prisma.pricesWhereInput {
     AND: [
       visibleRetailerPriceWhere(),
       nonIgnoredRunPriceWhere(),
+      scrapeVisibilityPriceWhere(),
     ],
   }
 }
@@ -332,9 +333,44 @@ export function priceLookbackWhere(): Prisma.pricesWhereInput {
 }
 
 /**
+ * Prisma where clause to gate SCRAPE prices behind ADR-021 guardrails.
+ * Scrape prices are only visible when allowlist + robots + ToS + adapter enabled.
+ * Non-SCRAPE prices always remain visible (subject to other predicates).
+ */
+export function scrapeVisibilityPriceWhere(): Prisma.pricesWhereInput {
+  return {
+    OR: [
+      { ingestionRunType: null },
+      { ingestionRunType: { not: 'SCRAPE' } },
+      {
+        AND: [
+          { ingestionRunType: 'SCRAPE' },
+          {
+            sources: {
+              is: {
+                adapterId: { not: null },
+                scrapeEnabled: true,
+                robotsCompliant: true,
+                tosReviewedAt: { not: null },
+                tosApprovedBy: { not: null },
+                scrape_adapter_status: {
+                  is: {
+                    enabled: true,
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+    ],
+  }
+}
+
+/**
  * Complete visibility filter for consumer-facing price queries.
- * Combines ADR-005 (retailer visibility), ADR-015 (run ignore), and
- * search-lens-v1.md (price lookback).
+ * Combines ADR-005 (retailer visibility), ADR-015 (run ignore),
+ * search-lens-v1.md (price lookback), and ADR-021 SCRAPE guardrails.
  */
 export function visiblePriceWhere(): Prisma.pricesWhereInput {
   return {
@@ -342,6 +378,7 @@ export function visiblePriceWhere(): Prisma.pricesWhereInput {
       visibleRetailerPriceWhere(),
       nonIgnoredRunPriceWhere(),
       priceLookbackWhere(),
+      scrapeVisibilityPriceWhere(),
     ],
   }
 }
@@ -362,6 +399,7 @@ export function visiblePriceWhere(): Prisma.pricesWhereInput {
  * - MULTIPLIER corrections applied to visiblePrice
  * - Ignored runs excluded
  * - Retailer visibility applied
+ * - SCRAPE guardrails applied (ADR-021)
  *
  * This helper only needs to apply the lookback filter.
  */

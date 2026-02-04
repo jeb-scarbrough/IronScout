@@ -18,40 +18,54 @@ import {
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 import { signOut } from 'next-auth/react'
-import { BRAND_NAME } from '@/lib/brand'
+import { BRAND_NAME, BRAND } from '@/lib/brand'
 
 interface SidebarNavProps {
   userName?: string
 }
 
 // V1 Navigation items - no premium gating
-const navItems = [
+type NavItem = {
+  title: string
+  href: string
+  icon: typeof Search
+  exact?: boolean
+}
+
+type NavSeparator = {
+  separator: true
+}
+
+const navItems: (NavItem | NavSeparator)[] = [
   {
-    title: 'Search',
+    title: 'Ammo Search',
     href: '/search',
     icon: Search,
   },
   {
-    title: 'My Loadout',
+    title: 'Recon',
     href: '/dashboard',
     icon: LayoutDashboard,
     exact: true,
   },
-  {
-    title: 'Watchlist',
-    href: '/dashboard/saved',
-    icon: Bookmark,
-  },
+  { separator: true },
   {
     title: 'Gun Locker',
     href: '/dashboard/gun-locker',
     icon: Crosshair,
   },
   {
-    title: 'Mobile Price Scanner',
-    href: '/price-check',
+    title: 'Watchlist',
+    href: '/dashboard/saved',
+    icon: Bookmark,
+  },
+  { separator: true },
+  {
+    title: 'In-Store Price Check',
+    href: '/dashboard/price-check',
     icon: ScanLine,
   },
+  { separator: true },
   {
     title: 'Settings',
     href: '/dashboard/settings',
@@ -63,18 +77,22 @@ export function SidebarNav({ userName }: SidebarNavProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
-  const isActive = (item: typeof navItems[0]) => {
+  const isActive = (item: NavItem) => {
     if (item.exact) {
       return pathname === item.href
     }
     return pathname.startsWith(item.href)
   }
 
+  const isSeparator = (item: NavItem | NavSeparator): item is NavSeparator => {
+    return 'separator' in item
+  }
+
   const SidebarContent = () => (
     <>
-      {/* Logo */}
+      {/* Logo - links to www site */}
       <div className="flex items-center gap-2 px-3 py-4 border-b">
-        <Link href="/" className="flex items-center gap-2">
+        <a href={BRAND.website} className="flex items-center gap-2">
           <Image
             src="/logo-dark.svg"
             alt="IronScout"
@@ -83,7 +101,7 @@ export function SidebarNav({ userName }: SidebarNavProps) {
             className="flex-shrink-0"
           />
           <span className="text-lg font-bold">{BRAND_NAME}</span>
-        </Link>
+        </a>
       </div>
 
       {/* User Info */}
@@ -97,7 +115,12 @@ export function SidebarNav({ userName }: SidebarNavProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {navItems.map((item, index) => {
+          if (isSeparator(item)) {
+            return (
+              <div key={`sep-${index}`} className="my-2 mx-3 border-t border-border" />
+            )
+          }
           const active = isActive(item)
           return (
             <Link

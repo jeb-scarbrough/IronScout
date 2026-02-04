@@ -7,7 +7,7 @@
  *   pnpm --filter harvester tsx src/cli/trigger-recompute.ts --scope RETAILER --scopeId abc123
  */
 
-import 'dotenv/config'
+import '../env'
 import { enqueueCurrentPriceRecompute } from '../config/queues'
 
 async function main() {

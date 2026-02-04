@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { Header } from './components/Header';
+import { IronScoutLogo } from '@ironscout/ui/components';
+import { BRAND } from '../lib/brand';
 
-const APP_URL = 'https://app.ironscout.ai';
+const APP_URL = BRAND.appUrl;
 
 const exampleQueries = [
   '9mm hollow point',
@@ -68,60 +71,17 @@ export default function Home() {
 
   return (
     <div className="relative">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-iron-950/80 backdrop-blur-md border-b border-iron-800/50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
-                <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-6">
-              <a
-                href="/about"
-                className="text-iron-400 hover:text-white text-sm font-medium transition-colors hidden sm:block"
-              >
-                About
-              </a>
-              <a
-                href="/retailers"
-                className="text-iron-400 hover:text-white text-sm font-medium transition-colors hidden sm:block"
-              >
-                For Retailers
-              </a>
-              <a
-                href={`${APP_URL}/login`}
-                className="text-iron-300 hover:text-white text-sm font-medium transition-colors"
-              >
-                Sign In
-              </a>
-              <a
-                href={`${APP_URL}/register`}
-                className="btn-primary text-sm py-2"
-              >
-                Get Started
-              </a>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Header currentPage="home" />
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center pt-16">
+      <section className="relative pt-32 pb-16">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-brass-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
           <div className="absolute bottom-1/4 -left-64 w-[500px] h-[500px] bg-gunmetal-500/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
             {/* Headline */}
             <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-4">
@@ -146,12 +106,12 @@ export default function Home() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by caliber, use case, or intent..."
                   className="w-full pl-12 pr-32 py-4 text-lg bg-iron-900 border-2 border-iron-700 rounded-2xl
-                           focus:border-brass-500 focus:ring-4 focus:ring-brass-500/20
+                           focus:border-primary focus:ring-4 focus:ring-primary/20
                            transition-all text-iron-100 placeholder:text-iron-500"
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 px-6 py-2.5 bg-brass-500 hover:bg-brass-400
+                  className="absolute right-2 px-6 py-2.5 bg-primary hover:bg-primary/80
                            text-iron-950 font-semibold rounded-xl transition-all
                            flex items-center gap-2"
                 >
@@ -172,8 +132,8 @@ export default function Home() {
                     key={i}
                     onClick={() => handleExampleClick(example)}
                     className="text-sm px-3 py-1.5 rounded-full border border-iron-700
-                             hover:border-brass-500 hover:bg-brass-500/10
-                             transition-colors text-iron-400 hover:text-brass-400"
+                             hover:border-primary hover:bg-primary/10
+                             transition-colors text-iron-400 hover:text-primary"
                   >
                     {example}
                   </button>
@@ -187,7 +147,7 @@ export default function Home() {
                 Tell us what you shoot. We'll alert you to price drops and back-in-stock items.
               </p>
               <a
-                href={`${APP_URL}/register`}
+                href={`${APP_URL}/auth/signup`}
                 className="btn-primary inline-flex items-center"
               >
                 Create Free Account Today
@@ -245,7 +205,7 @@ export default function Home() {
               },
             ].map((feature, i) => (
               <div key={i} className="card group hover:border-iron-600 transition-colors">
-                <div className="w-12 h-12 bg-brass-500/10 rounded-lg flex items-center justify-center text-brass-400 mb-4 group-hover:bg-brass-500/20 transition-colors">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:bg-primary/20 transition-colors">
                   {feature.icon}
                 </div>
                 <h3 className="font-display text-xl font-semibold mb-2">{feature.title}</h3>
@@ -362,7 +322,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </a>
-            <a href={`${APP_URL}/register`} className="btn-secondary text-lg px-8 py-4">
+            <a href={`${APP_URL}/auth/signup`} className="btn-secondary text-lg px-8 py-4">
               Create Free Account
             </a>
           </div>
@@ -374,13 +334,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-brass-500 rounded flex items-center justify-center">
-                <svg className="w-5 h-5 text-iron-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
+              <IronScoutLogo className="w-8 h-8" />
               <span className="font-display text-xl font-semibold tracking-tight">
-                Iron<span className="text-brass-400">Scout</span>
+                Iron<span className="text-primary">Scout</span>
               </span>
             </div>
 
