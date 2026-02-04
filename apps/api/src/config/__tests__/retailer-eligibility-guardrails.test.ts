@@ -18,7 +18,7 @@
  * 3. Assert consumer reads depend on retailer eligibility
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
 import { visibleRetailerPriceWhere } from '../tiers'
@@ -100,11 +100,7 @@ describe('Retailer Eligibility Guardrails', () => {
       expect(matches).toEqual([])
     })
 
-    it.skip('should NOT fabricate merchant IDs from retailer IDs in harvester (PENDING: remove harvester_${retailerId} pattern)', () => {
-      // This test is SKIPPED until benchmark.ts is refactored.
-      // The pattern `harvester_${retailerId}` creates fake merchant IDs,
-      // conflating Merchant vs Retailer concepts.
-
+    it('should NOT fabricate merchant IDs from retailer IDs in harvester', () => {
       const files = findTsFiles(HARVESTER_SRC_ROOT)
       const matches = grepFiles(files, /harvester_\$\{?retailerId\}?|`harvester_\$\{/)
 
@@ -341,50 +337,189 @@ describe('Retailer Eligibility Guardrails', () => {
 })
 
 /**
- * Integration test placeholder for consumer price query correctness.
- * This will be a full integration test once the refactor is complete.
+ * Consumer Price Query Integration Tests
+ *
+ * These verify that visibleRetailerPriceWhere correctly enforces
+ * retailer eligibility (not merchant subscription) against a real database.
+ *
+ * Requires: TEST_DATABASE_URL environment variable
  */
-describe('Consumer Price Query Integration (PENDING)', () => {
-  it.skip('should filter prices by retailer eligibility, not merchant subscription', () => {
-    // This integration test will:
-    // 1. Create a retailer with INELIGIBLE status
-    // 2. Create a merchant with ACTIVE subscription
-    // 3. Link retailer to merchant
-    // 4. Create prices for the retailer
-    // 5. Query consumer API and verify prices are NOT returned
-    //
-    // This catches the semantic correctness: eligibility is retailer-level,
-    // not merchant-level.
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
+const describeIntegration = TEST_DATABASE_URL ? describe : describe.skip
 
-    expect(true).toBe(false) // Placeholder - will fail until implemented
+describeIntegration('Consumer Price Query Integration', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaClient } = require('@ironscout/db/generated/prisma')
+  const { randomUUID } = require('crypto')
+
+  let prisma: InstanceType<typeof PrismaClient>
+  let createdRetailerIds: string[] = []
+  let createdMerchantIds: string[] = []
+  let createdProductIds: string[] = []
+  let createdPriceIds: string[] = []
+
+  beforeAll(async () => {
+    prisma = new PrismaClient()
+    await prisma.$connect()
   })
 
-  it.skip('should return prices from ELIGIBLE retailer even if merchant is EXPIRED', () => {
-    // This integration test will:
-    // 1. Create a retailer with ELIGIBLE status
-    // 2. Create a merchant with EXPIRED subscription
-    // 3. Link retailer to merchant
-    // 4. Create prices for the retailer
-    // 5. Query consumer API and verify prices ARE returned
-    //
-    // This ensures merchant subscription doesn't wrongly hide eligible retailers.
-
-    expect(true).toBe(false) // Placeholder - will fail until implemented
+  afterAll(async () => {
+    await prisma.$disconnect()
   })
 
-  it.skip('Option A acceptance: crawl-only retailer with zero merchant_retailers appears in results', () => {
-    // Acceptance test per user story:
-    // "Retailer with visibilityStatus=ELIGIBLE and zero merchant_retailers
-    //  appears in results and triggers alerts."
-    //
-    // This integration test will:
-    // 1. Create a retailer with ELIGIBLE status and NO merchant_retailers links
-    // 2. Create prices for the retailer (simulating affiliate/crawl data)
-    // 3. Query consumer API and verify prices ARE returned
-    // 4. Trigger alert check and verify alert fires
-    //
-    // This validates Option A: crawl-only retailers are consumer-visible.
+  afterEach(async () => {
+    if (createdPriceIds.length > 0) {
+      await prisma.prices.deleteMany({ where: { id: { in: createdPriceIds } } })
+      createdPriceIds = []
+    }
+    if (createdMerchantIds.length > 0 && createdRetailerIds.length > 0) {
+      await prisma.merchant_retailers.deleteMany({
+        where: {
+          merchantId: { in: createdMerchantIds },
+          retailerId: { in: createdRetailerIds },
+        },
+      })
+    }
+    if (createdRetailerIds.length > 0) {
+      await prisma.retailers.deleteMany({ where: { id: { in: createdRetailerIds } } })
+      createdRetailerIds = []
+    }
+    if (createdMerchantIds.length > 0) {
+      await prisma.merchants.deleteMany({ where: { id: { in: createdMerchantIds } } })
+      createdMerchantIds = []
+    }
+    if (createdProductIds.length > 0) {
+      await prisma.products.deleteMany({ where: { id: { in: createdProductIds } } })
+      createdProductIds = []
+    }
+  })
 
-    expect(true).toBe(false) // Placeholder - will fail until implemented
+  async function createRetailer(visibility: string) {
+    const retailer = await prisma.retailers.create({
+      data: {
+        id: randomUUID(),
+        name: `Test Retailer ${visibility} ${Date.now()}`,
+        website: `https://test-${visibility}-${Date.now()}.example.com`,
+        visibilityStatus: visibility,
+        updatedAt: new Date(),
+      },
+    })
+    createdRetailerIds.push(retailer.id)
+    return retailer
+  }
+
+  async function createMerchant(subscriptionStatus: string) {
+    const merchant = await prisma.merchants.create({
+      data: {
+        id: randomUUID(),
+        businessName: `Test Merchant ${subscriptionStatus} ${Date.now()}`,
+        websiteUrl: `https://test-${subscriptionStatus}-${Date.now()}.example.com`,
+        contactFirstName: 'Test',
+        contactLastName: 'User',
+        subscriptionStatus,
+        updatedAt: new Date(),
+      },
+    })
+    createdMerchantIds.push(merchant.id)
+    return merchant
+  }
+
+  async function createProduct() {
+    const product = await prisma.products.create({
+      data: {
+        id: randomUUID(),
+        name: `Test Product ${Date.now()}`,
+        category: 'ammunition',
+        updatedAt: new Date(),
+      },
+    })
+    createdProductIds.push(product.id)
+    return product
+  }
+
+  async function createPrice(productId: string, retailerId: string) {
+    const price = await prisma.prices.create({
+      data: {
+        id: randomUUID(),
+        productId,
+        retailerId,
+        price: 19.99,
+        currency: 'USD',
+        url: `https://test.example.com/product-${Date.now()}`,
+        inStock: true,
+      },
+    })
+    createdPriceIds.push(price.id)
+    return price
+  }
+
+  async function hasVisiblePrice(productId: string): Promise<boolean> {
+    const price = await prisma.prices.findFirst({
+      where: {
+        productId,
+        ...visibleRetailerPriceWhere(),
+      },
+      select: { id: true },
+    })
+    return price !== null
+  }
+
+  it('should filter prices by retailer eligibility, not merchant subscription', async () => {
+    // INELIGIBLE retailer + ACTIVE merchant subscription → prices hidden
+    const retailer = await createRetailer('INELIGIBLE')
+    const merchant = await createMerchant('ACTIVE')
+    const product = await createProduct()
+    await createPrice(product.id, retailer.id)
+
+    await prisma.merchant_retailers.create({
+      data: {
+        id: randomUUID(),
+        merchantId: merchant.id,
+        retailerId: retailer.id,
+        status: 'ACTIVE',
+        listingStatus: 'LISTED',
+        updatedAt: new Date(),
+      },
+    })
+
+    const isVisible = await hasVisiblePrice(product.id)
+    expect(isVisible).toBe(false)
+  })
+
+  it('should return prices from ELIGIBLE retailer even if merchant is EXPIRED', async () => {
+    // ELIGIBLE retailer + EXPIRED merchant subscription → prices visible
+    const retailer = await createRetailer('ELIGIBLE')
+    const merchant = await createMerchant('EXPIRED')
+    const product = await createProduct()
+    await createPrice(product.id, retailer.id)
+
+    await prisma.merchant_retailers.create({
+      data: {
+        id: randomUUID(),
+        merchantId: merchant.id,
+        retailerId: retailer.id,
+        status: 'ACTIVE',
+        listingStatus: 'LISTED',
+        updatedAt: new Date(),
+      },
+    })
+
+    const isVisible = await hasVisiblePrice(product.id)
+    expect(isVisible).toBe(true)
+  })
+
+  it('crawl-only retailer with zero merchant_retailers appears in results', async () => {
+    // ELIGIBLE retailer + no merchant_retailers → prices visible (crawl-only)
+    const retailer = await createRetailer('ELIGIBLE')
+    const product = await createProduct()
+    await createPrice(product.id, retailer.id)
+
+    const mrCount = await prisma.merchant_retailers.count({
+      where: { retailerId: retailer.id },
+    })
+    expect(mrCount).toBe(0)
+
+    const isVisible = await hasVisiblePrice(product.id)
+    expect(isVisible).toBe(true)
   })
 })

@@ -26,17 +26,6 @@ export default async function DashboardLayout({
 
   return (
     <SearchLoadingProvider>
-      {/* Hide parent header/footer and take over the full viewport */}
-      <style>{`
-        body > div > header,
-        body > div > footer {
-          display: none !important;
-        }
-        body > div > main {
-          flex: none !important;
-        }
-      `}</style>
-
       <div className="fixed inset-0 bg-background">
         <SidebarNav userName={userName} />
 

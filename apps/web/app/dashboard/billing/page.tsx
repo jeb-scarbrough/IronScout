@@ -13,13 +13,6 @@ export const metadata: Metadata = {
 export default function BillingPage() {
   return (
     <DashboardContent>
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">Billing</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Manage your subscription and payment methods
-        </p>
-      </div>
-
       <div className="max-w-md">
         <p className="text-muted-foreground mb-6">
           Billing and subscription management is not currently available.

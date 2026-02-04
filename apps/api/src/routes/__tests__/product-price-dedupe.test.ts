@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('@ironscout/db', () => ({ prisma: {} }))
+vi.mock('../../config/tiers', () => ({ hasPriceHistoryAccess: vi.fn(), getPriceHistoryDays: vi.fn(), shapePriceHistory: vi.fn(), visibleHistoricalPriceWhere: vi.fn() }))
+vi.mock('../../middleware/auth', () => ({ getUserTier: vi.fn() }))
+vi.mock('../../config/logger', () => ({ loggers: { products: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } } }))
+vi.mock('../../services/ai-search/price-resolver', () => ({ batchGetPricesViaProductLinks: vi.fn(), getPricesViaProductLinks: vi.fn() }))
+vi.mock('../../services/upc-lookup', () => ({ lookupByUpc: vi.fn() }))
+
 import { dedupeLatestByRetailer } from '../products'
 
 describe('dedupeLatestByRetailer', () => {

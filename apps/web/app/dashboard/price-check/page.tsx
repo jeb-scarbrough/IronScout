@@ -20,13 +20,6 @@ export default function DashboardPriceCheckPage() {
 
   return (
     <DashboardContent>
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">In-Store Price Check</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Scan a barcode or enter details to check if a price is normal
-        </p>
-      </div>
-
       <PriceCheckContent accessToken={token} />
     </DashboardContent>
   )

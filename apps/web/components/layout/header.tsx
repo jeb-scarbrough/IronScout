@@ -4,8 +4,6 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Menu, X, User, Bookmark, Settings, LayoutDashboard, ChevronDown, Search, LogOut } from 'lucide-react'
 import { IronScoutLogo } from '@ironscout/ui/components'
 import { BRAND } from '@/lib/brand'
@@ -16,8 +14,9 @@ export function Header() {
   const { data: session } = useSession()
   const pathname = usePathname()
 
-  // Don't render main header on pages that use MarketingHeader
-  if (pathname?.startsWith('/auth') || pathname === '/price-check') {
+  // Don't render main header on auth pages (uses MarketingHeader)
+  // or dashboard pages (uses SidebarNav)
+  if (pathname?.startsWith('/auth') || pathname?.startsWith('/dashboard') || pathname === '/price-check') {
     return null
   }
 

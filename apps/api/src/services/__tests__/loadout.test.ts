@@ -106,7 +106,7 @@ describe('loadout ADR-015 compliance', () => {
     await getLoadoutData('user-123')
 
     const queries = mockPrisma.$queryRaw.mock.calls.map(getQueryText)
-    const lowestQuery = queries.find((q) => q.includes('MIN(pr.price)'))
+    const lowestQuery = queries.find((q) => q.includes('"lowestPrice"'))
 
     expect(lowestQuery).toBeTruthy()
     expectIgnoredRunFilter(lowestQuery!)

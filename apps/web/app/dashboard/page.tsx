@@ -171,14 +171,6 @@ export default function DashboardPage() {
 
   return (
     <DashboardContent>
-      {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold italic text-white">Recon</h1>
-        <p className="text-sm text-iron-400 mt-1">
-          Personalized results based on what you shoot and watch
-        </p>
-      </div>
-
       {/* Gun Locker - Full width */}
       <GunLockerCard
         firearms={data.gunLocker.firearms}

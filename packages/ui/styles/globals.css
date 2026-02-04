@@ -3,9 +3,10 @@
    =========================================== */
 
 :root {
-  /* Font variables */
-  --font-display: 'Oswald', system-ui, sans-serif;
-  --font-body: 'Source Sans 3', system-ui, sans-serif;
+  /* Font variables — canonical pairing set by next/font in layout.tsx */
+  /* Outfit: display + body | JetBrains Mono: code/data */
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* 🌤️ Light Mode - Hybrid Scout Theme */
