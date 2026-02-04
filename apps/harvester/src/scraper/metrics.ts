@@ -42,7 +42,7 @@ export function recordRunCompleted(payload: RunCompletedPayload): void {
   })
 
   if (payload.urlsAttempted >= MIN_URLS_FOR_ALERT && payload.failureRate > FAILURE_RATE_ALERT_THRESHOLD) {
-    log.warn('SCRAPER_ALERT_HIGH_FAILURE_RATE', {
+    log.error('SCRAPER_ALERT_HIGH_FAILURE_RATE', {
       event_name: 'SCRAPER_ALERT_HIGH_FAILURE_RATE',
       runId: payload.runId,
       adapterId: payload.adapterId,
@@ -72,7 +72,7 @@ export function recordAdapterDisabled(payload: {
   reason: string
   consecutiveFailedBatches: number
 }): void {
-  log.warn('SCRAPER_ADAPTER_DISABLED', {
+  log.error('SCRAPER_ADAPTER_DISABLED', {
     event_name: 'SCRAPER_ADAPTER_DISABLED',
     ...payload,
   })
