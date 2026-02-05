@@ -24,6 +24,7 @@ import { z } from 'zod'
 import { authRateLimits } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { verifyGoogleIdToken } from '../services/auth/google-token'
+import { getRedisClient } from '../config/redis'
 
 const log = loggers.auth
 
@@ -85,21 +86,67 @@ const oauthSigninSchema = z.object({
 // HELPERS
 // ============================================================================
 
-function generateTokens(userId: string, email: string) {
+// Refresh token TTL in seconds (must match REFRESH_TOKEN_EXPIRY)
+const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days
+const REFRESH_TOKEN_KEY_PREFIX = 'rt:'
+
+async function generateTokens(userId: string, email: string) {
+  const jti = randomUUID()
+
   const accessToken = jwt.sign({ sub: userId, email, type: 'access' }, JWT_SECRET!, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
   })
 
-  const refreshToken = jwt.sign({ sub: userId, email, type: 'refresh' }, JWT_SECRET!, {
+  const refreshToken = jwt.sign({ sub: userId, email, type: 'refresh', jti }, JWT_SECRET!, {
     expiresIn: REFRESH_TOKEN_EXPIRY,
   })
+
+  // Store JTI in Redis for rotation/revocation
+  const redis = getRedisClient()
+  await redis.set(`${REFRESH_TOKEN_KEY_PREFIX}${jti}`, userId, 'EX', REFRESH_TOKEN_TTL_SECONDS)
 
   return { accessToken, refreshToken }
 }
 
-function verifyToken(token: string): { sub: string; email: string; type: string } | null {
+/** Revoke a specific refresh token by JTI */
+async function revokeRefreshToken(jti: string): Promise<void> {
+  const redis = getRedisClient()
+  await redis.del(`${REFRESH_TOKEN_KEY_PREFIX}${jti}`)
+}
+
+/** Revoke all refresh tokens for a user (logout everywhere) */
+async function revokeAllUserRefreshTokens(userId: string): Promise<void> {
+  const redis = getRedisClient()
+  const keys = await redis.keys(`${REFRESH_TOKEN_KEY_PREFIX}*`)
+  if (keys.length === 0) return
+
+  // Pipeline scan + delete for tokens belonging to this user
+  const pipeline = redis.pipeline()
+  for (const key of keys) {
+    pipeline.get(key)
+  }
+  const values = await pipeline.exec()
+
+  const keysToDelete: string[] = []
+  if (values) {
+    for (let i = 0; i < keys.length; i++) {
+      const [err, val] = values[i] || []
+      if (!err && val === userId) {
+        keysToDelete.push(keys[i])
+      }
+    }
+  }
+
+  if (keysToDelete.length > 0) {
+    await redis.del(...keysToDelete)
+  }
+}
+
+interface DecodedToken { sub: string; email: string; type: string; jti?: string }
+
+function verifyToken(token: string): DecodedToken | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as { sub: string; email: string; type: string }
+    return jwt.verify(token, JWT_SECRET!) as DecodedToken
   } catch {
     return null
   }
@@ -174,7 +221,7 @@ router.post('/signup', authRateLimits.signup, async (req: Request, res: Response
     })
 
     // Generate tokens
-    const tokens = generateTokens(user.id, user.email)
+    const tokens = await generateTokens(user.id, user.email)
 
     return res.status(201).json({
       message: 'User created successfully',
@@ -253,7 +300,7 @@ router.post('/signin', authRateLimits.signin, async (req: Request, res: Response
     }
 
     // Generate tokens
-    const tokens = generateTokens(user.id, user.email)
+    const tokens = await generateTokens(user.id, user.email)
 
     // Return user without password
     const { password: _, status, deletionScheduledFor, ...userWithoutPassword } = user
@@ -378,7 +425,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
       }
 
       // User exists, return tokens
-      const tokens = generateTokens(existingUser.id, existingUser.email)
+      const tokens = await generateTokens(existingUser.id, existingUser.email)
       const isAdmin = ADMIN_EMAILS.includes(existingUser.email.toLowerCase())
 
       return res.json({
@@ -449,7 +496,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
         },
       })
 
-      const tokens = generateTokens(user.id, user.email)
+      const tokens = await generateTokens(user.id, user.email)
       const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase())
 
       return res.json({
@@ -503,7 +550,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
       },
     })
 
-    const tokens = generateTokens(newUser.id, newUser.email)
+    const tokens = await generateTokens(newUser.id, newUser.email)
     const isAdmin = ADMIN_EMAILS.includes(newUser.email.toLowerCase())
 
     return res.status(201).json({
@@ -716,6 +763,24 @@ router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Respon
       return res.status(401).json({ error: 'Invalid or expired refresh token' })
     }
 
+    // Token rotation: verify JTI exists in Redis and revoke it (#175)
+    if (decoded.jti) {
+      const redis = getRedisClient()
+      const stored = await redis.get(`${REFRESH_TOKEN_KEY_PREFIX}${decoded.jti}`)
+      if (!stored) {
+        // Token was already rotated or revoked — possible replay attack
+        log.warn('Refresh token reuse detected (revoked or rotated)', {
+          userId: decoded.sub,
+          jti: decoded.jti,
+        })
+        // Revoke all tokens for this user as a precaution
+        await revokeAllUserRefreshTokens(decoded.sub)
+        return res.status(401).json({ error: 'Token has been revoked' })
+      }
+      // Revoke the old token
+      await revokeRefreshToken(decoded.jti)
+    }
+
     // Verify user still exists and is active
     const user = await prisma.users.findUnique({
       where: { id: decoded.sub },
@@ -726,8 +791,8 @@ router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Respon
       return res.status(401).json({ error: 'Account is not active' })
     }
 
-    // Generate new tokens (allow PENDING_DELETION so users can cancel)
-    const tokens = generateTokens(user.id, user.email)
+    // Issue rotated tokens (allow PENDING_DELETION so users can cancel)
+    const tokens = await generateTokens(user.id, user.email)
 
     return res.json(tokens)
   } catch (error) {
@@ -735,6 +800,30 @@ router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Respon
     return res.status(500).json({
       error: 'An error occurred while refreshing token',
     })
+  }
+})
+
+// ============================================================================
+// LOGOUT - Revoke refresh token (#175)
+// ============================================================================
+
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body
+    if (!refreshToken) {
+      // No token to revoke — still a successful logout
+      return res.json({ message: 'Logged out' })
+    }
+
+    const decoded = verifyToken(refreshToken)
+    if (decoded?.type === 'refresh' && decoded.jti) {
+      await revokeRefreshToken(decoded.jti)
+    }
+
+    return res.json({ message: 'Logged out' })
+  } catch (error) {
+    log.error('Logout error', {}, error)
+    return res.json({ message: 'Logged out' })
   }
 })
 
