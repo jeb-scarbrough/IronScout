@@ -3,6 +3,7 @@ import { getSession, requireRetailerContext, requireRetailerPermission, Retailer
 import { prisma } from '@ironscout/db';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
+import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -158,6 +159,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // SECURITY: Validate URL against SSRF before persisting
+    if (url) {
+      const allowFTP = accessType === 'FTP' || accessType === 'SFTP'
+      const ssrfResult = await validateUrlForSSRF(url, { allowFTP })
+      if (!ssrfResult.safe) {
+        reqLogger.warn('Feed URL blocked by SSRF guard', { url, error: ssrfResult.error })
+        return NextResponse.json(
+          { error: `Invalid feed URL: ${ssrfResult.error}` },
+          { status: 400 }
+        )
+      }
+    }
+
     reqLogger.info('Creating new feed', {
       retailerId,
       accessType,
@@ -268,6 +282,19 @@ export async function PUT(request: Request) {
         { error: 'Feed not found' },
         { status: 404 }
       );
+    }
+
+    // SECURITY: Validate URL against SSRF before persisting
+    if (url) {
+      const allowFTP = accessType === 'FTP' || accessType === 'SFTP'
+      const ssrfResult = await validateUrlForSSRF(url, { allowFTP })
+      if (!ssrfResult.safe) {
+        reqLogger.warn('Feed URL blocked by SSRF guard', { url, error: ssrfResult.error })
+        return NextResponse.json(
+          { error: `Invalid feed URL: ${ssrfResult.error}` },
+          { status: 400 }
+        )
+      }
     }
 
     reqLogger.info('Updating feed', {
