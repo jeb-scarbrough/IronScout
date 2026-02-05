@@ -1,7 +1,8 @@
 /**
  * Price Check Routes
  *
- * Per mobile_price_check_v1_spec.md:
+ * Spec reference: mobile_price_check_v1_spec.md (deferred to v1.1).
+ * This route implements current v1 behavior. Internal analytics (user-linked) are handled elsewhere.
  * - Mobile route for instant price sanity checks
  * - Answers: "Is this price normal, high, or unusually low right now?"
  * - No verdicts or recommendations
@@ -18,6 +19,7 @@ import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { getRequestContext } from '@ironscout/logger'
 import { BULLET_TYPE_LABELS, type BulletType } from '../types/product-metadata'
+import { logPriceCheckQuery } from '../services/query-analytics'
 
 const log = loggers.dashboard // Use dashboard logger for user-facing features
 
@@ -79,6 +81,27 @@ router.post('/', async (req: Request, res: Response) => {
       // Could be added later for "Add to Gun Locker" prompt
       hasGunLocker = false
     }
+
+    // Fire-and-forget: log successful price check for internal analytics.
+    // Note: This is internal user-linked analytics, distinct from the PriceCheckEvent
+    // defined in the spec (§Intent Signal) which is privacy-restricted consumer telemetry.
+    // Internal analytics are governed by DSAR/ops policy (anonymized on account deletion).
+    void logPriceCheckQuery({
+      userId,
+      caliber,
+      pricePerRound,
+      brand: brand ?? null,
+      grain: grain ?? null,
+      roundCount: roundCount ?? null,
+      caseMaterial: caseMaterial ?? null,
+      bulletType: bulletType ?? null,
+      classification: result.classification,
+      pricePointCount: result.context.pricePointCount,
+      daysWithData: result.context.daysWithData,
+      medianPrice: result.context.medianPrice,
+      referrer: req.headers.referer ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    })
 
     res.json({
       ...result,

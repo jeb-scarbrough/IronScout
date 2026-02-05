@@ -6,6 +6,8 @@ import { prisma, isAiSearchEnabled, isVectorSearchEnabled } from '@ironscout/db'
 import { requireAdmin, rateLimit, redisRateLimit } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { InvalidLensError, VALID_LENS_IDS, isLensEnabled } from '../services/lens'
+import { getAuthenticatedUserId } from '../middleware/auth'
+import { logSearchQuery } from '../services/query-analytics'
 
 const log = loggers.search
 
@@ -108,6 +110,28 @@ router.post('/semantic', redisRateLimit({
       userTier: 'PREMIUM',
       lensId,
       requestId,
+    })
+
+    // Fire-and-forget: log successful search for internal analytics
+    const userId = getAuthenticatedUserId(req)
+    void logSearchQuery({
+      query,
+      userId,
+      sortBy,
+      page,
+      lensId: result.lens?.id ?? null,
+      intentCalibers: result.intent.calibers ?? [],
+      intentPurpose: result.intent.purpose ?? null,
+      intentBrands: result.intent.brands ?? [],
+      intentConfidence: result.intent.confidence ?? null,
+      filtersApplied: filters ?? null,
+      resultCount: result.pagination.total,
+      returnedCount: result.products.length,
+      vectorSearchUsed: result.searchMetadata.vectorSearchUsed,
+      responseTimeMs: result.searchMetadata.processingTimeMs,
+      timingBreakdown: result.searchMetadata.timing ?? null,
+      referrer: req.headers.referer ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
     })
 
     res.json(result)
