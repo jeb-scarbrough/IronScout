@@ -95,10 +95,14 @@ async function generateTokens(userId: string, email: string) {
 
   const accessToken = jwt.sign({ sub: userId, email, type: 'access' }, JWT_SECRET!, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
+    issuer: 'ironscout-api',
+    audience: 'ironscout-api',
   })
 
   const refreshToken = jwt.sign({ sub: userId, email, type: 'refresh', jti }, JWT_SECRET!, {
     expiresIn: REFRESH_TOKEN_EXPIRY,
+    issuer: 'ironscout-api',
+    audience: 'ironscout-api',
   })
 
   // Store JTI in Redis for rotation/revocation
@@ -146,7 +150,7 @@ interface DecodedToken { sub: string; email: string; type: string; jti?: string 
 
 function verifyToken(token: string): DecodedToken | null {
   try {
-    return jwt.verify(token, JWT_SECRET!) as DecodedToken
+    return jwt.verify(token, JWT_SECRET!, { audience: 'ironscout-api' }) as DecodedToken
   } catch {
     return null
   }

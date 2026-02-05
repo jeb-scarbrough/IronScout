@@ -608,6 +608,8 @@ export async function impersonateMerchant(merchantId: string) {
       impersonatedAt: new Date().toISOString(),
     })
       .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer('ironscout-admin')
+      .setAudience('ironscout-merchant')
       .setIssuedAt()
       .setExpirationTime('5m') // Short expiry - only used for initial redirect
       .sign(JWT_SECRET);

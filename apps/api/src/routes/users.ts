@@ -49,7 +49,7 @@ async function requireAuth(req: AuthenticatedRequest, res: Response, next: () =>
       return res.status(500).json({ error: 'Server configuration error' })
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; email: string }
+    const decoded = jwt.verify(token, JWT_SECRET, { audience: 'ironscout-api' }) as { sub: string; email: string }
 
     // Verify user exists and is not deleted
     const user = await prisma.users.findUnique({

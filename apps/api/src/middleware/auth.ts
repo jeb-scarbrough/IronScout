@@ -52,7 +52,7 @@ function verifyAuthToken(token: string): JwtPayload | null {
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
+    const payload = jwt.verify(token, JWT_SECRET, { audience: 'ironscout-api' }) as JwtPayload
     return payload
   } catch (err) {
     // Log specific JWT errors for debugging

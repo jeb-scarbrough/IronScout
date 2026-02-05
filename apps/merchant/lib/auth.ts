@@ -219,6 +219,8 @@ export async function createMerchantToken(merchantUser: MerchantUserWithMerchant
     tier: merchantUser.merchants.tier,
   })
     .setProtectedHeader({ alg: 'HS256' })
+    .setIssuer('ironscout-merchant')
+    .setAudience('ironscout-merchant')
     .setIssuedAt()
     .setExpirationTime('7d')
     .sign(getJWT_SECRET());
@@ -227,7 +229,9 @@ export async function createMerchantToken(merchantUser: MerchantUserWithMerchant
 export async function verifyMerchantToken(token: string): Promise<MerchantSession | null> {
   try {
     logger.debug('Verifying merchant JWT token');
-    const { payload } = await jwtVerify(token, getJWT_SECRET());
+    const { payload } = await jwtVerify(token, getJWT_SECRET(), {
+      audience: 'ironscout-merchant',
+    });
 
     const merchantUserId = payload.merchantUserId as string;
     const merchantId = payload.merchantId as string;

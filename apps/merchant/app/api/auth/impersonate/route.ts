@@ -73,7 +73,9 @@ export async function GET(request: NextRequest) {
 
   try {
     // Verify the impersonation token
-    const { payload } = await jwtVerify(token, getJwtSecret());
+    const { payload } = await jwtVerify(token, getJwtSecret(), {
+      audience: 'ironscout-merchant',
+    });
 
     // Check if this is an impersonation token
     if (!payload.isImpersonating) {
@@ -110,6 +112,8 @@ export async function GET(request: NextRequest) {
       impersonatedAt: payload.impersonatedAt,
     })
       .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer('ironscout-merchant')
+      .setAudience('ironscout-merchant')
       .setIssuedAt()
       .setExpirationTime('4h')
       .sign(getJwtSecret());
