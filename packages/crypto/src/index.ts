@@ -2,7 +2,7 @@
  * @ironscout/crypto
  *
  * Cryptographic utilities for IronScout.
- * Currently provides credential encryption for affiliate feeds.
+ * Provides credential encryption for affiliate and retailer feeds.
  */
 
 export {
@@ -12,4 +12,6 @@ export {
   encryptSecret,
   decryptSecret,
   buildFeedCredentialAAD,
+  encryptFeedPassword,
+  decryptFeedPassword,
 } from './secrets'

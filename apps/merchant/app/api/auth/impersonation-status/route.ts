@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const session = await getSession();
 
-  if (!session || !session.isImpersonating) {
+  if (!session || session.type !== 'merchant' || !session.isImpersonating) {
     return NextResponse.json({ active: false });
   }
 

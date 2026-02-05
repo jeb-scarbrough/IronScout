@@ -5,6 +5,7 @@ import type { FeedFormatType } from '@ironscout/db';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { validateUrlForSSRF } from '@/lib/ssrf-guard';
+import { decryptFeedPassword } from '@ironscout/crypto';
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -83,7 +84,8 @@ export async function POST(request: Request) {
       const headers: Record<string, string> = {};
 
       if (feed.accessType === 'AUTH_URL' && feed.username && feed.password) {
-        const auth = Buffer.from(`${feed.username}:${feed.password}`).toString('base64');
+        const plainPassword = decryptFeedPassword(feed.password);
+        const auth = Buffer.from(`${feed.username}:${plainPassword}`).toString('base64');
         headers['Authorization'] = `Basic ${auth}`;
       }
 

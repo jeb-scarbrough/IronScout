@@ -21,6 +21,7 @@
  */
 
 import { prisma } from '@ironscout/db'
+import { decryptFeedPassword } from '@ironscout/crypto'
 import { Worker, Job, Queue } from 'bullmq'
 import { redisConnection } from '../config/redis'
 import {
@@ -216,7 +217,7 @@ export async function scheduleRetailerFeeds(): Promise<number> {
           formatType: feed.formatType,
           url: feed.url || undefined,
           username: feed.username || undefined,
-          password: feed.password || undefined,
+          password: feed.password ? decryptFeedPassword(feed.password) : undefined,
         },
         {
           attempts: 3,

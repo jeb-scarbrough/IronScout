@@ -3,6 +3,7 @@ import { getSession, requireRetailerContext, RetailerContextError } from '@/lib/
 import { prisma } from '@ironscout/db';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
+import { decryptFeedPassword } from '@ironscout/crypto';
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
         formatType: feed.formatType,
         url: feed.url || undefined,
         username: feed.username || undefined,
-        password: feed.password || undefined,
+        password: feed.password ? decryptFeedPassword(feed.password) : undefined,
       },
       {
         attempts: 3,

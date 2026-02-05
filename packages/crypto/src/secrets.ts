@@ -150,3 +150,31 @@ export function decryptSecret(payload: Buffer, aad?: string): string {
 export function buildFeedCredentialAAD(feedId: string, secretVersion: number): string {
   return `feed:${feedId}:v${secretVersion}`
 }
+
+// ============================================================================
+// Retailer Feed Password Helpers (String-based storage)
+// ============================================================================
+
+const ENCRYPTED_PREFIX = 'enc:v1:'
+
+/**
+ * Encrypt a feed password for storage in a database String field.
+ * Returns a prefixed base64 string: "enc:v1:<base64 payload>"
+ */
+export function encryptFeedPassword(plaintext: string): string {
+  const buf = encryptSecret(plaintext)
+  return ENCRYPTED_PREFIX + buf.toString('base64')
+}
+
+/**
+ * Decrypt a feed password from storage.
+ * Handles both encrypted ("enc:v1:...") and legacy plaintext values transparently.
+ */
+export function decryptFeedPassword(stored: string): string {
+  if (stored.startsWith(ENCRYPTED_PREFIX)) {
+    const buf = Buffer.from(stored.slice(ENCRYPTED_PREFIX.length), 'base64')
+    return decryptSecret(buf)
+  }
+  // Legacy plaintext — return as-is
+  return stored
+}

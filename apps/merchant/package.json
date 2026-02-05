@@ -11,6 +11,7 @@
     "test:integration": "vitest run"
   },
   "dependencies": {
+    "@ironscout/crypto": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",

@@ -4,6 +4,13 @@ import { prisma } from '@ironscout/db';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { validateUrlForSSRF } from '@/lib/ssrf-guard';
+import { encryptFeedPassword } from '@ironscout/crypto';
+
+/** Strip password from feed before returning to client. Never expose encrypted blobs. */
+function sanitizeFeed<T extends { password?: string | null }>(feed: T): Omit<T, 'password'> & { hasPassword: boolean } {
+  const { password, ...rest } = feed;
+  return { ...rest, hasPassword: !!password };
+}
 
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
@@ -86,7 +93,7 @@ export async function GET(request: Request) {
       found: !!feed
     });
 
-    return NextResponse.json({ feed, retailerContext });
+    return NextResponse.json({ feed: feed ? sanitizeFeed(feed) : null, retailerContext });
   } catch (error) {
     if (error instanceof RetailerContextError) {
       reqLogger.warn('Retailer context error', { code: error.code, message: error.message });
@@ -191,7 +198,7 @@ export async function POST(request: Request) {
         formatType,
         url: url || null,
         username: username || null,
-        password: password || null, // TODO: Encrypt at app layer
+        password: password ? encryptFeedPassword(password) : null,
         scheduleMinutes,
         status: 'PENDING',
       },
@@ -204,7 +211,7 @@ export async function POST(request: Request) {
       formatType
     });
 
-    return NextResponse.json({ success: true, feed, retailerContext });
+    return NextResponse.json({ success: true, feed: sanitizeFeed(feed), retailerContext });
   } catch (error) {
     if (error instanceof RetailerContextError) {
       reqLogger.warn('Retailer context error', { code: error.code, message: error.message });
@@ -316,15 +323,15 @@ export async function PUT(request: Request) {
         formatType,
         url: url || null,
         username: username || null,
-        // Only update password if provided (non-empty)
-        ...(password ? { password } : {}),
+        // Only update password if provided (non-empty); encrypt before storage
+        ...(password ? { password: encryptFeedPassword(password) } : {}),
         scheduleMinutes,
       },
     });
 
     reqLogger.info('Feed updated successfully', { feedId: feed.id });
 
-    return NextResponse.json({ success: true, feed, retailerContext });
+    return NextResponse.json({ success: true, feed: sanitizeFeed(feed), retailerContext });
   } catch (error) {
     if (error instanceof RetailerContextError) {
       reqLogger.warn('Retailer context error', { code: error.code, message: error.message });
