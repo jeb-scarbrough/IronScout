@@ -11,6 +11,16 @@ import { logger } from './logger';
 // Initialize Resend client (lazy to avoid issues during build)
 let resendClient: Resend | null = null;
 
+/** Escape HTML special characters to prevent XSS/malformed email bodies. */
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function getResendClient(): Resend {
   if (!resendClient) {
     const apiKey = process.env.RESEND_API_KEY;
@@ -88,7 +98,7 @@ export async function sendVerificationEmail(
   </div>
 
   <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
-    <h2 style="color: #111; font-size: 20px; margin: 0 0 15px 0;">Welcome, ${businessName}!</h2>
+    <h2 style="color: #111; font-size: 20px; margin: 0 0 15px 0;">Welcome, ${escapeHtml(businessName)}!</h2>
     <p style="margin: 0 0 20px 0;">Thank you for registering for the IronScout Merchant Program. Please verify your email address to continue.</p>
 
     <div style="text-align: center; margin: 30px 0;">
@@ -193,7 +203,7 @@ export async function sendPasswordResetEmail(
 
   <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
     <h2 style="color: #111; font-size: 20px; margin: 0 0 15px 0;">Password Reset Request</h2>
-    <p style="margin: 0 0 20px 0;">Hi ${businessName}, we received a request to reset your password. Click the button below to choose a new password.</p>
+    <p style="margin: 0 0 20px 0;">Hi ${escapeHtml(businessName)}, we received a request to reset your password. Click the button below to choose a new password.</p>
 
     <div style="text-align: center; margin: 30px 0;">
       <a href="${resetUrl}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; padding: 14px 30px; border-radius: 6px; font-weight: 600; font-size: 16px;">Reset Password</a>
@@ -287,7 +297,7 @@ export async function sendApprovalEmail(
   </div>
 
   <div style="background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
-    <h2 style="color: #065f46; font-size: 20px; margin: 0 0 15px 0;">🎉 Congratulations, ${businessName}!</h2>
+    <h2 style="color: #065f46; font-size: 20px; margin: 0 0 15px 0;">🎉 Congratulations, ${escapeHtml(businessName)}!</h2>
     <p style="margin: 0 0 20px 0; color: #047857;">Your IronScout Merchant account has been approved.</p>
   </div>
 
@@ -387,7 +397,7 @@ export async function sendAdminNewMerchantNotification(
     const { data, error } = await resend.emails.send({
       from: getFromEmail(),
       to: notificationEmail,
-      subject: `🆕 New Merchant Registration: ${businessName}`,
+      subject: `🆕 New Merchant Registration: ${businessName.replace(/[<>]/g, '')}`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -406,12 +416,12 @@ export async function sendAdminNewMerchantNotification(
   </div>
 
   <div style="background: #f9fafb; border-radius: 8px; padding: 25px; margin: 20px 0;">
-    <h2 style="color: #111; font-size: 18px; margin: 0 0 20px 0;">${businessName}</h2>
+    <h2 style="color: #111; font-size: 18px; margin: 0 0 20px 0;">${escapeHtml(businessName)}</h2>
 
     <table style="width: 100%; border-collapse: collapse;">
       <tr>
         <td style="padding: 8px 0; color: #666; width: 120px;">Contact:</td>
-        <td style="padding: 8px 0; color: #111;">${contactName}</td>
+        <td style="padding: 8px 0; color: #111;">${escapeHtml(contactName)}</td>
       </tr>
       <tr>
         <td style="padding: 8px 0; color: #666;">Email:</td>
@@ -514,7 +524,7 @@ export async function sendTeamInviteEmail(
     const { data, error } = await resend.emails.send({
       from: getFromEmail(),
       to: email,
-      subject: `You've been invited to join ${businessName} on IronScout`,
+      subject: `You've been invited to join ${businessName.replace(/[<>]/g, '')} on IronScout`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -531,7 +541,7 @@ export async function sendTeamInviteEmail(
 
   <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
     <h2 style="color: #0369a1; font-size: 20px; margin: 0 0 15px 0;">You're invited!</h2>
-    <p style="margin: 0 0 10px 0; color: #0c4a6e;">${invitedByName} has invited you to join <strong>${businessName}</strong> as a <strong>${role}</strong> on IronScout.</p>
+    <p style="margin: 0 0 10px 0; color: #0c4a6e;">${escapeHtml(invitedByName)} has invited you to join <strong>${escapeHtml(businessName)}</strong> as a <strong>${escapeHtml(role)}</strong> on IronScout.</p>
   </div>
 
   <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
