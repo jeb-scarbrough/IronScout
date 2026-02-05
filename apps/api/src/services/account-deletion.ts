@@ -306,6 +306,16 @@ export async function finalizeAccountDeletion(userId: string): Promise<{ success
       data: { userId: null }
     })
 
+    // 4a. Anonymize query analytics (preserve rows for aggregate analytics)
+    await tx.search_query_logs.updateMany({
+      where: { userId },
+      data: { userId: null, userAgent: null, referrer: null, gunLockerCalibers: [] }
+    })
+    await tx.price_check_query_logs.updateMany({
+      where: { userId },
+      data: { userId: null, userAgent: null, referrer: null, gunLockerCalibers: [] }
+    })
+
     // 5. Delete consumer subscriptions (keep Stripe customer intact per requirements)
     await tx.subscriptions.deleteMany({
       where: { userId, type: 'USER_PREMIUM' }

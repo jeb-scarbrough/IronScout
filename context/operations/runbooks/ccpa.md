@@ -232,7 +232,16 @@ Use this checklist for **Right to Know / Access** requests. Export only data tie
   * Include: `id`, `plan`, `status`, `rateLimit`, `createdAt`, `updatedAt`
   * Exclude or mask: `apiKey`
 
-#### Event tables (only if you consider them “user-linked” in v1)
+#### Query analytics (user-linked)
+
+* `search_query_logs` (where `userId = users.id`)
+
+  * Include: `id`, `queryHash`, `queryLength`, `queryPiiFlag`, `queryNormRedacted`, `lensId`, `intentCalibers`, `resultCount`, `responseTimeMs`, `referrer`, `userAgent`, `gunLockerCalibers`, `createdAt`
+* `price_check_query_logs` (where `userId = users.id`)
+
+  * Include: `id`, `caliber`, `pricePerRound`, `classification`, `referrer`, `userAgent`, `gunLockerCalibers`, `createdAt`
+
+#### Event tables (only if you consider them "user-linked" in v1)
 
 * `click_events`
 
@@ -265,6 +274,12 @@ Use this checklist for **Right to Know / Access** requests. Export only data tie
 * User account data is deleted or anonymized on verified request
 * Alerts and saved items are removed
 * Identifiers are scrubbed
+
+### Query Analytics Anonymization
+
+* `search_query_logs` and `price_check_query_logs`: `userId`, `userAgent`, `referrer`, `gunLockerCalibers` anonymized on account deletion. Rows preserved for aggregate analytics.
+* `queryNormRedacted` retained as-is (already PII-redacted at write time).
+* Retention: 1 year, then automated purge (implementation deferred).
 
 ### Retention Exceptions
 
@@ -366,6 +381,8 @@ Use this checklist when fulfilling **Right to Know / Access** requests. Export i
 
 * Event records tied to `userId` (names, timestamps, object references)
 * Last login / access timestamps
+* `search_query_logs` (search query analytics, by `userId`)
+* `price_check_query_logs` (price check analytics, by `userId`)
 
 ### Support & Communications
 

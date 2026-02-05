@@ -219,6 +219,16 @@ Exact retention periods are flexible, but:
 
 ---
 
+## Query Analytics Retention
+
+`search_query_logs` and `price_check_query_logs` store internal product analytics (search patterns, caliber demand, zero-result queries).
+
+- **Retention:** 1 year
+- **Purge cadence:** Automated monthly job deletes rows older than 365 days (implementation deferred — see GitHub issue)
+- **DSAR:** `userId`, `userAgent`, `referrer`, `gunLockerCalibers` nullified on account deletion; rows preserved for aggregate analytics
+
+---
+
 ## Non-Negotiables
 
 - Trust-critical paths must be observable
