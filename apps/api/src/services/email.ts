@@ -13,7 +13,7 @@ function requireEnv(name: string): string {
 }
 
 const ALERTS_EMAIL_FROM = () => requireEnv('ALERTS_EMAIL_FROM')
-const TRANSACTIONAL_EMAIL_FROM = () => requireEnv('TRANSACTIONAL_EMAIL_FROM')
+const NOREPLY_EMAIL_FROM = () => requireEnv('NOREPLY_EMAIL_FROM')
 
 interface PriceDropEmailData {
   userName: string
@@ -322,7 +322,7 @@ export async function sendAccountDeletionEmail(
 
   try {
     await resend.emails.send({
-      from: `IronScout.ai <${TRANSACTIONAL_EMAIL_FROM()}>`,
+      from: `IronScout.ai <${NOREPLY_EMAIL_FROM()}>`,
       to: [to],
       subject: 'Account Deletion Request Received',
       html

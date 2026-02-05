@@ -93,8 +93,9 @@ Stripe:
 - `STRIPE_WEBHOOK_SECRET`
 
 Email:
-- `ALERTS_EMAIL_FROM` - Sender for price/availability alert emails
-- `TRANSACTIONAL_EMAIL_FROM` - Sender for account/verification emails
+- `RESEND_API_KEY` - Resend API key for email delivery
+- `ALERTS_EMAIL_FROM` - Sender for consumer price/availability alert emails (alerts@ironscout.ai)
+- `NOREPLY_EMAIL_FROM` - Sender for transactional account emails (noreply@ironscout.ai)
 
 Required behavior:
 - If tiering is reintroduced, API must not resolve tier from client-provided headers. It must use verified auth (ADR-002).

@@ -48,13 +48,14 @@ When the harvester detects price changes:
 **API (apps/api/.env):**
 ```env
 RESEND_API_KEY="re_6hZmLKHD_B9EGENv5LGXa6YxxKF8atQEG"
-FROM_EMAIL="alerts@ironscout.ai"
+ALERTS_EMAIL_FROM="alerts@ironscout.ai"
+NOREPLY_EMAIL_FROM="noreply@ironscout.ai"
 ```
 
 **Harvester (apps/harvester/.env):**
 ```env
 RESEND_API_KEY="re_6hZmLKHD_B9EGENv5LGXa6YxxKF8atQEG"
-FROM_EMAIL="alerts@ironscout.ai"
+ALERTS_EMAIL_FROM="alerts@ironscout.ai"
 FRONTEND_URL="http://localhost:3000"
 ```
 
