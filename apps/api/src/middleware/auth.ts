@@ -1,9 +1,16 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { timingSafeEqual } from 'crypto'
 import { prisma } from '@ironscout/db'
 import type { UserTier } from '../config/tiers'
 import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
+
+/** Constant-time string comparison to prevent timing attacks on API key checks. */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
 
 const log = loggers.auth
 
@@ -113,7 +120,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   const adminKey = req.headers['x-admin-key'] as string
   const expectedKey = process.env.ADMIN_API_KEY
   
-  if (adminKey && expectedKey && adminKey === expectedKey) {
+  if (adminKey && expectedKey && safeCompare(adminKey, expectedKey)) {
     // Valid admin API key
     return next()
   }
@@ -173,7 +180,7 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction) {
     })
   }
 
-  if (apiKey && apiKey === expectedKey) {
+  if (apiKey && expectedKey && safeCompare(apiKey, expectedKey)) {
     return next()
   }
 
