@@ -2,6 +2,8 @@ import type { MetadataRoute } from 'next'
 import { BRAND } from '@/lib/brand'
 import { getContentSlugs } from '@/lib/content'
 
+export const dynamic = 'force-static'
+
 const baseUrl = BRAND.wwwUrl.replace(/\/$/, '')
 
 function buildUrl(path: string): string {
