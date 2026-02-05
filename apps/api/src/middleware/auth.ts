@@ -213,11 +213,9 @@ function cleanupExpiredEntries(): void {
 // Start cleanup interval (only runs if this module is loaded)
 const cleanupInterval = setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL_MS)
 
-// Allow graceful shutdown to clear the interval
-if (typeof process !== 'undefined') {
-  process.on('beforeExit', () => {
-    clearInterval(cleanupInterval)
-  })
+/** Clear the rate-limit cleanup interval. Called during graceful shutdown. */
+export function clearRateLimitCleanup(): void {
+  clearInterval(cleanupInterval)
 }
 
 export function rateLimit(options: {

@@ -7,6 +7,8 @@
 
 import { app, prisma } from './app.js'
 import { loggers } from './config/logger'
+import { disconnectRedis } from './config/redis.js'
+import { clearRateLimitCleanup } from './middleware/auth.js'
 
 const log = loggers.server
 const PORT = process.env.PORT || 8000
@@ -40,7 +42,10 @@ const shutdown = async (signal: string) => {
   log.info('Starting graceful shutdown', { signal })
 
   try {
-    // 1. Stop accepting new connections
+    // 1. Clear background timers
+    clearRateLimitCleanup()
+
+    // 2. Stop accepting new connections
     log.info('Closing HTTP server')
     await new Promise<void>((resolve, reject) => {
       server.close((err) => {
@@ -50,9 +55,13 @@ const shutdown = async (signal: string) => {
     })
     log.info('HTTP server closed')
 
-    // 2. Disconnect from database
+    // 3. Disconnect from database
     log.info('Disconnecting from database')
     await prisma.$disconnect()
+
+    // 4. Disconnect Redis (if initialized)
+    log.info('Disconnecting Redis')
+    await disconnectRedis()
 
     const durationMs = Date.now() - shutdownStart
     log.info('Graceful shutdown complete', { durationMs })
@@ -65,5 +74,19 @@ const shutdown = async (signal: string) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
+
+process.on('uncaughtException', (error) => {
+  log.fatal('Uncaught exception — initiating shutdown', {}, error)
+  shutdown('uncaughtException')
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.fatal(
+    'Unhandled rejection — initiating shutdown',
+    {},
+    reason instanceof Error ? reason : new Error(String(reason)),
+  )
+  shutdown('unhandledRejection')
+})
 
 export default app

@@ -34,3 +34,14 @@ export function getRedisClient(): Redis {
 export function createRedisClient(): Redis {
   return new Redis(redisConnection)
 }
+
+/**
+ * Gracefully disconnect the singleton Redis client (if initialized).
+ * Safe to call even if no client was ever created.
+ */
+export async function disconnectRedis(): Promise<void> {
+  if (redisClient) {
+    await redisClient.quit()
+    redisClient = null
+  }
+}
