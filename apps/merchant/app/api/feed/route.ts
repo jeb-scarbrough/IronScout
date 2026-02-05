@@ -6,6 +6,20 @@ import { logger } from '@/lib/logger';
 import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 import { encryptFeedPassword } from '@ironscout/crypto';
 
+/** Strip userinfo (user:pass) from a URL for safe logging. */
+function redactUrlCredentials(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.username || parsed.password) {
+      parsed.username = '';
+      parsed.password = '';
+    }
+    return parsed.toString();
+  } catch {
+    return '[invalid URL]';
+  }
+}
+
 /** Strip password from feed before returning to client. Never expose encrypted blobs. */
 function sanitizeFeed<T extends { password?: string | null }>(feed: T): Omit<T, 'password'> & { hasPassword: boolean } {
   const { password, ...rest } = feed;
@@ -175,7 +189,7 @@ export async function POST(request: Request) {
       const allowFTP = accessType === 'FTP' || accessType === 'SFTP'
       const ssrfResult = await validateUrlForSSRF(url, { allowFTP })
       if (!ssrfResult.safe) {
-        reqLogger.warn('Feed URL blocked by SSRF guard', { url, error: ssrfResult.error })
+        reqLogger.warn('Feed URL blocked by SSRF guard', { url: redactUrlCredentials(url), error: ssrfResult.error })
         return NextResponse.json(
           { error: `Invalid feed URL: ${ssrfResult.error}` },
           { status: 400 }
@@ -300,7 +314,7 @@ export async function PUT(request: Request) {
       const allowFTP = accessType === 'FTP' || accessType === 'SFTP'
       const ssrfResult = await validateUrlForSSRF(url, { allowFTP })
       if (!ssrfResult.safe) {
-        reqLogger.warn('Feed URL blocked by SSRF guard', { url, error: ssrfResult.error })
+        reqLogger.warn('Feed URL blocked by SSRF guard', { url: redactUrlCredentials(url), error: ssrfResult.error })
         return NextResponse.json(
           { error: `Invalid feed URL: ${ssrfResult.error}` },
           { status: 400 }
