@@ -13,8 +13,8 @@
  * This telemetry is internal-only and does not alter consumer-facing behavior.
  */
 
-import { createHash } from 'crypto'
 import type { LensEvalTelemetry, LensId, ReasonCode, IntentStatus, AggregatedProduct, LensSelectionResult, OrderingRule } from './types'
+import { hashQuery, normalizeQuery, hasPii, redactPii } from '../../lib/pii'
 import { LENS_SPEC_VERSION } from './definitions'
 import { loggers, LOG_EVENTS } from '../../config/logger'
 import { signalsToArray, SignalExtractionResult } from './signal-extractor'
@@ -114,49 +114,6 @@ function parseExtractorVersion(modelId: string): string {
   return modelId
 }
 
-/**
- * Hash a query string for PII-safe logging.
- * Uses SHA-256.
- */
-function hashQuery(query: string): string {
-  return createHash('sha256')
-    .update(normalizeQuery(query))
-    .digest('hex')
-}
-
-/**
- * Normalize a query for consistent hashing.
- * Lowercases and trims whitespace.
- */
-function normalizeQuery(query: string): string {
-  return query.toLowerCase().trim().replace(/\s+/g, ' ')
-}
-
-/**
- * Check if a query likely contains PII.
- * Simple heuristic check for emails, phone numbers, etc.
- */
-function hasPii(query: string): boolean {
-  const piiPatterns = [
-    /\b[\w.-]+@[\w.-]+\.\w{2,}\b/i,  // Email
-    /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/,  // Phone
-    /\b\d{3}[-]?\d{2}[-]?\d{4}\b/,   // SSN
-    /\b\d{5}(-\d{4})?\b/,            // ZIP code
-  ]
-
-  return piiPatterns.some(pattern => pattern.test(query))
-}
-
-/**
- * Redact PII from a query string.
- */
-function redactPii(query: string): string {
-  return query
-    .replace(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/gi, '[EMAIL]')
-    .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE]')
-    .replace(/\b\d{3}[-]?\d{2}[-]?\d{4}\b/g, '[SSN]')
-    .replace(/\b\d{5}(-\d{4})?\b/g, '[ZIP]')
-}
 
 /**
  * Get the most common filter reason from filtered reasons.

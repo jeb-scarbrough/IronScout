@@ -1689,6 +1689,66 @@ model watchlist_items {
   @@index([intentType], map: "watchlist_items_intent_type_idx")
 }
 
+/// Search query analytics log (append-only, 1-year retention)
+/// No FK on userId — plain string for DSAR anonymization
+model search_query_logs {
+  id                String   @id @default(cuid())
+  userId            String?
+  queryHash         String
+  queryLength       Int
+  queryPiiFlag      Boolean
+  queryNormRedacted String?  @db.VarChar(250)
+  lensId            String?
+  sortBy            String?
+  page              Int
+  intentCalibers    String[]
+  intentPurpose     String?
+  intentBrands      String[]
+  intentConfidence  Decimal? @db.Decimal(3, 2)
+  filtersApplied    Json?
+  resultCount       Int
+  returnedCount     Int
+  vectorSearchUsed  Boolean
+  responseTimeMs    Int
+  timingBreakdown   Json?
+  isAuthenticated   Boolean
+  gunLockerCalibers String[]
+  referrer          String?
+  userAgent         String?  @db.VarChar(200)
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([queryHash])
+}
+
+/// Price check query analytics log (append-only, 1-year retention)
+/// No FK on userId — plain string for DSAR anonymization
+model price_check_query_logs {
+  id                String   @id @default(cuid())
+  userId            String?
+  caliber           String
+  pricePerRound     Decimal  @db.Decimal(10, 4)
+  brand             String?
+  grain             Int?
+  roundCount        Int?
+  caseMaterial      String?
+  bulletType        String?
+  classification    String?
+  pricePointCount   Int?
+  daysWithData      Int?
+  medianPrice       Decimal? @db.Decimal(10, 4)
+  isAuthenticated   Boolean
+  gunLockerCalibers String[]
+  referrer          String?
+  userAgent         String?  @db.VarChar(200)
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([caliber, createdAt])
+}
+
 // DELETED: AdType enum (unused after advertisements model removed)
 
 enum AffiliateFeedRunStatus {
