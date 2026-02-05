@@ -63,53 +63,25 @@ export async function checkPrice(
   const thirtyDaysAgo = new Date(now)
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  // Normalize caliber for database query (handle aliases)
-  // caliber is validated as CaliberValue on line 51
-  const caliberConditions = getCaliberConditions(caliber as CaliberValue)
+  // Normalize caliber for database query (handle aliases, all lowercased)
+  const caliberAliases = getCaliberAliases(caliber as CaliberValue)
 
-  // Build brand/grain filters
-  let brandCondition = ''
-  let grainCondition = ''
-  let roundCountCondition = ''
-  let caseMaterialCondition = ''
-  let bulletTypeCondition = ''
-  const params: any[] = [thirtyDaysAgo, ...caliberConditions.params]
-
-  if (brand) {
-    brandCondition = `AND LOWER(p.brand) LIKE $${params.length + 1}`
-    params.push(`%${brand.toLowerCase()}%`)
-  }
-
-  if (grain) {
-    grainCondition = `AND p."grainWeight" = $${params.length + 1}`
-    params.push(grain)
-  }
-
-  if (roundCount) {
-    roundCountCondition = `AND p."roundCount" = $${params.length + 1}`
-    params.push(roundCount)
-  }
-
-  if (caseMaterial) {
-    caseMaterialCondition = `AND LOWER(p."caseMaterial") LIKE $${params.length + 1}`
-    params.push(`%${caseMaterial.toLowerCase()}%`)
-  }
-
-  if (bulletType) {
-    bulletTypeCondition = `AND p."bulletType" = $${params.length + 1}`
-    params.push(bulletType)
-  }
+  // Prepare optional filter values (null = no filter applied)
+  const brandPattern = brand ? `%${brand.toLowerCase()}%` : null
+  const grainValue = grain ?? null
+  const roundCountValue = roundCount ?? null
+  const caseMaterialPattern = caseMaterial ? `%${caseMaterial.toLowerCase()}%` : null
+  const bulletTypeValue = bulletType ?? null
 
   // Get daily best prices per product for the caliber in trailing 30 days
   // Per spec: "One daily best price per product per caliber (lowest visible offer price on a given UTC calendar day)"
   // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
-  const priceData = await prisma.$queryRawUnsafe<
+  const priceData = await prisma.$queryRaw<
     Array<{
       pricePerRound: any
       observedDate: Date
     }>
-  >(
-    `
+  >`
     WITH daily_best AS (
       SELECT
         p.id as product_id,
@@ -154,7 +126,7 @@ export async function checkPrice(
       LEFT JOIN sources s ON s.id = pr."sourceId"
       LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
       WHERE pl.status IN ('MATCHED', 'CREATED')
-        AND pr."observedAt" >= $1
+        AND pr."observedAt" >= ${thirtyDaysAgo}
         AND pr."inStock" = true
         AND r."visibilityStatus" = 'ELIGIBLE'
         AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
@@ -202,12 +174,12 @@ export async function checkPrice(
             AND sas."enabled" = true
           )
         )
-        AND (${caliberConditions.sql})
-        ${brandCondition}
-        ${grainCondition}
-        ${roundCountCondition}
-        ${caseMaterialCondition}
-        ${bulletTypeCondition}
+        AND LOWER(p.caliber) = ANY(${caliberAliases})
+        AND (${brandPattern} IS NULL OR LOWER(p.brand) LIKE ${brandPattern})
+        AND (${grainValue} IS NULL OR p."grainWeight" = ${grainValue})
+        AND (${roundCountValue} IS NULL OR p."roundCount" = ${roundCountValue})
+        AND (${caseMaterialPattern} IS NULL OR LOWER(p."caseMaterial") LIKE ${caseMaterialPattern})
+        AND (${bulletTypeValue} IS NULL OR p."bulletType" = ${bulletTypeValue})
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT
@@ -215,9 +187,7 @@ export async function checkPrice(
       observed_day as "observedDate"
     FROM daily_best
     ORDER BY observed_day DESC
-  `,
-    ...params
-  )
+  `
 
   const pricePointCount = priceData.length
   const uniqueDays = new Set(priceData.map((p) => p.observedDate.toISOString().split('T')[0]))
@@ -305,10 +275,9 @@ export async function checkPrice(
 }
 
 /**
- * Get SQL conditions for caliber matching (handles aliases)
+ * Get lowercased caliber aliases for database matching
  */
-function getCaliberConditions(caliber: CaliberValue): { sql: string; params: string[] } {
-  // Map canonical caliber to possible database values
+function getCaliberAliases(caliber: CaliberValue): string[] {
   const aliasGroups: Record<CaliberValue, string[]> = {
     '9mm': ['9mm', '9mm luger', '9mm parabellum', '9x19', '9x19mm'],
     '.38 Special': ['.38 special', '38 special', '.38 spl', '38 spl'],
@@ -340,12 +309,7 @@ function getCaliberConditions(caliber: CaliberValue): { sql: string; params: str
   }
 
   const aliases = aliasGroups[caliber] || [caliber]
-  const placeholders = aliases.map((_, i) => `LOWER(p.caliber) = LOWER($${i + 2})`).join(' OR ')
-
-  return {
-    sql: placeholders,
-    params: aliases,
-  }
+  return aliases.map(a => a.toLowerCase())
 }
 
 /**
