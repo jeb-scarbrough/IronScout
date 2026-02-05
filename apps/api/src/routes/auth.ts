@@ -401,6 +401,7 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
         tier: true,
         image: true,
         status: true,
+        emailVerified: true,
         deletionScheduledFor: true,
       },
     })
@@ -413,7 +414,28 @@ router.post('/oauth/signin', authRateLimits.oauth, async (req: Request, res: Res
         })
       }
 
-      // Link OAuth account to existing user (re-links after pending deletion)
+      // SECURITY: Prevent pre-registration account takeover (#195)
+      // An unverified credentials account has no proven email ownership.
+      // The OAuth user (with a verified Google token) has the stronger claim.
+      // Evict the squatter and fall through to create a fresh OAuth user.
+      if (!user.emailVerified) {
+        log.warn('Evicting unverified credentials account for verified OAuth user', {
+          squatterId: user.id,
+          email: emailLower,
+          provider,
+        })
+        await prisma.$transaction(async (tx) => {
+          // Delete firearm_ammo_preferences first (NoAction FK constraint)
+          await tx.firearm_ammo_preferences.deleteMany({ where: { userId: user!.id } })
+          // Cascade handles: Account, Session, alerts, user_guns, watchlist, etc.
+          await tx.users.delete({ where: { id: user!.id } })
+        })
+        user = null
+      }
+    }
+
+    if (user) {
+      // Link OAuth account to existing verified user (re-links after pending deletion)
       await prisma.account.create({
         data: {
           id: randomUUID(),
