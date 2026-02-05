@@ -15,7 +15,7 @@ import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { checkPrice } from '../services/price-check'
 import { CANONICAL_CALIBERS, isValidCaliber } from '../services/gun-locker'
-import { getAuthenticatedUserId } from '../middleware/auth'
+import { getAuthenticatedUserId, redisRateLimit } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { getRequestContext } from '@ironscout/logger'
 import { BULLET_TYPE_LABELS, type BulletType } from '../types/product-metadata'
@@ -50,7 +50,12 @@ const priceCheckSchema = z.object({
 // POST /api/price-check - Check a price against recent market data
 // ============================================================================
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', redisRateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyPrefix: 'rl:price-check:',
+  endpoint: 'price-check',
+}), async (req: Request, res: Response) => {
   try {
     const parsed = priceCheckSchema.safeParse(req.body)
     if (!parsed.success) {
