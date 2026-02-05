@@ -1030,6 +1030,15 @@ async function vectorEnhancedSearch(
 
   const whereClause = conditions.join(' AND ')
 
+  // Append embedding, limit, and offset as positional parameters
+  // SECURITY: Never interpolate these values into the SQL string
+  const embeddingParamIdx = params.length + 1
+  params.push(embeddingStr)
+  const limitParamIdx = params.length + 1
+  params.push(limit + skip)
+  const offsetParamIdx = params.length + 1
+  params.push(skip)
+
   log.debug('SEARCH_VECTOR_SQL', { whereClause, paramCount: params.length })
 
   // Execute vector search
@@ -1037,12 +1046,12 @@ async function vectorEnhancedSearch(
   const productIds = await prisma.$queryRawUnsafe<Array<{ id: string; similarity: number }>>(`
     SELECT
       id,
-      1 - (embedding <=> '${embeddingStr}'::vector) as similarity
+      1 - (embedding <=> $${embeddingParamIdx}::vector) as similarity
     FROM products
     WHERE ${whereClause}
-    ORDER BY embedding <=> '${embeddingStr}'::vector
-    LIMIT ${limit + skip}
-    OFFSET ${skip}
+    ORDER BY embedding <=> $${embeddingParamIdx}::vector
+    LIMIT $${limitParamIdx}
+    OFFSET $${offsetParamIdx}
   `, ...params)
   const vectorDuration = Date.now() - vectorStart
 
@@ -1467,4 +1476,5 @@ export const _testExports = {
   reRankProducts,
   formatProduct,
   addCondition,
+  vectorEnhancedSearch,
 }

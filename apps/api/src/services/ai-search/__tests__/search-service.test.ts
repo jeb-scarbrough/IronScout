@@ -109,6 +109,7 @@ const {
   reRankProducts,
   formatProduct,
   addCondition,
+  vectorEnhancedSearch,
 } = _testExports
 
 // =============================================
@@ -1189,5 +1190,83 @@ describe('Real-World Query Scenarios', () => {
       // Grain weights should not be applied (they were for 9mm)
       expect(where.grainWeight).toBeUndefined()
     })
+  })
+})
+
+// =============================================
+// SECURITY: Vector search parameterization tests (#171)
+// =============================================
+
+describe('vectorEnhancedSearch SQL parameterization', () => {
+  let mockQueryRawUnsafe: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    const { prisma } = await import('@ironscout/db')
+    mockQueryRawUnsafe = prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>
+    mockQueryRawUnsafe.mockResolvedValue([])
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('should pass embedding as a SQL parameter, not interpolated in query string', async () => {
+    const intent = createBaseIntent({ calibers: ['9mm'] })
+    const filters: ExplicitFilters = {}
+
+    await vectorEnhancedSearch('9mm ammo', intent, filters, { skip: 0, limit: 20 }, false)
+
+    expect(mockQueryRawUnsafe).toHaveBeenCalledTimes(1)
+
+    const [sql, ...params] = mockQueryRawUnsafe.mock.calls[0]
+
+    // The SQL string must NOT contain a raw embedding array like '[0,0,0,...'
+    expect(sql).not.toMatch(/\[0,0,0/)
+    expect(sql).not.toMatch(/'\[/)
+
+    // The SQL string must use $N::vector parameter placeholders
+    expect(sql).toMatch(/\$\d+::vector/)
+
+    // The embedding string must be in the params array
+    const embeddingParam = params.find((p: unknown) => typeof p === 'string' && p.startsWith('['))
+    expect(embeddingParam).toBeDefined()
+    expect(embeddingParam).toMatch(/^\[[\d.,e-]+\]$/)
+  })
+
+  it('should pass limit and offset as SQL parameters, not interpolated', async () => {
+    const intent = createBaseIntent({ calibers: ['9mm'] })
+    const filters: ExplicitFilters = {}
+
+    await vectorEnhancedSearch('9mm ammo', intent, filters, { skip: 5, limit: 20 }, false)
+
+    expect(mockQueryRawUnsafe).toHaveBeenCalledTimes(1)
+
+    const [sql, ...params] = mockQueryRawUnsafe.mock.calls[0]
+
+    // SQL should use $N for LIMIT and OFFSET, not literal numbers
+    expect(sql).toMatch(/LIMIT\s+\$\d+/)
+    expect(sql).toMatch(/OFFSET\s+\$\d+/)
+
+    // Params should include the limit (20 + 5 = 25) and offset (5)
+    expect(params).toContain(25)
+    expect(params).toContain(5)
+  })
+
+  it('should not be vulnerable to SQL injection via malformed embedding', async () => {
+    // Override the embedding mock to return something that could be dangerous if interpolated
+    const { generateEmbedding } = await import('../embedding-service')
+    const mockGenerateEmbedding = generateEmbedding as ReturnType<typeof vi.fn>
+    mockGenerateEmbedding.mockResolvedValueOnce([1, 2, 3])
+
+    const intent = createBaseIntent({ calibers: ['9mm'] })
+    const filters: ExplicitFilters = {}
+
+    await vectorEnhancedSearch('test', intent, filters, { skip: 0, limit: 10 }, false)
+
+    const [sql] = mockQueryRawUnsafe.mock.calls[0]
+
+    // Even with a short embedding, the SQL must use parameter placeholders
+    expect(sql).not.toContain("'[1,2,3]'")
+    expect(sql).toMatch(/\$\d+::vector/)
   })
 })
