@@ -46,7 +46,6 @@ export default function DashboardPage() {
     roundCount?: number
   } | null>(null)
   const [retailers, setRetailers] = useState<RetailerPrice[]>([])
-  const [isWatched, setIsWatched] = useState(false)
   const [loadingPrices, setLoadingPrices] = useState(false)
 
   // Handle "Compare prices" click - fetch retailer data and open panel
@@ -62,10 +61,6 @@ export default function DashboardPage() {
         grainWeight: item.grainWeight || undefined,
         roundCount: item.roundCount || undefined,
       })
-
-      // Check if item is watched
-      const watchedItem = 'productId' in item
-      setIsWatched(watchedItem)
 
       setLoadingPrices(true)
       setPanelOpen(true)
@@ -136,12 +131,6 @@ export default function DashboardPage() {
     [router]
   )
 
-  // Handle watch toggle (placeholder - would need proper API integration)
-  const handleWatchToggle = useCallback((productId: string) => {
-    setIsWatched((prev) => !prev)
-    // TODO: Integrate with watchlist API
-  }, [])
-
   // Handle panel close
   const handlePanelClose = useCallback(() => {
     setPanelOpen(false)
@@ -203,8 +192,6 @@ export default function DashboardPage() {
         onClose={handlePanelClose}
         product={selectedProduct}
         retailers={loadingPrices ? [] : retailers}
-        isWatched={isWatched}
-        onWatchToggle={handleWatchToggle}
       />
     </DashboardContent>
   )

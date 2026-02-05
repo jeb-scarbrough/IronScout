@@ -68,7 +68,7 @@ export function RetailerPanel({
   const allFiltered = hideOutOfStock && displayRetailers.length === 0
 
   const handleWatchToggle = useCallback(() => {
-    if (product) {
+    if (product && onWatchToggle) {
       onWatchToggle(product.id)
     }
   }, [product, onWatchToggle])
@@ -100,21 +100,23 @@ export function RetailerPanel({
               <ArrowLeft className="h-4 w-4" />
               <span>Back</span>
             </button>
-            <button
-              onClick={handleWatchToggle}
-              className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded text-sm font-medium transition-colors',
-                isWatched
-                  ? 'text-primary bg-primary/10 hover:bg-primary/20'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              )}
-              aria-label={isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
-            >
-              <Bookmark
-                className={cn('h-4 w-4', isWatched && 'fill-current')}
-              />
-              <span>{isWatched ? 'Watching' : 'Watch'}</span>
-            </button>
+            {onWatchToggle && (
+              <button
+                onClick={handleWatchToggle}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded text-sm font-medium transition-colors',
+                  isWatched
+                    ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}
+                aria-label={isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
+              >
+                <Bookmark
+                  className={cn('h-4 w-4', isWatched && 'fill-current')}
+                />
+                <span>{isWatched ? 'Watching' : 'Watch'}</span>
+              </button>
+            )}
           </div>
           <div className="pt-4">
             <SheetTitle className="text-left">{product.name}</SheetTitle>
@@ -176,7 +178,7 @@ export function RetailerPanel({
               <p className="text-sm text-muted-foreground/70 mt-2 max-w-[240px]">
                 We haven't found this product at any tracked retailer recently.
               </p>
-              {!isWatched && (
+              {onWatchToggle && !isWatched && (
                 <Button
                   variant="outline"
                   size="sm"

@@ -151,8 +151,8 @@ export interface RetailerPanelProps {
     roundCount?: number
   } | null
   retailers: RetailerPrice[]
-  isWatched: boolean
-  onWatchToggle: (productId: string) => void
+  isWatched?: boolean
+  onWatchToggle?: (productId: string) => void
 }
 
 /**
