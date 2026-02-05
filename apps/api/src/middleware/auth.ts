@@ -392,14 +392,17 @@ export function redisRateLimit(options: RedisRateLimitOptions = {}) {
         .exec()
 
       if (!results) {
-        // Redis error - fail open (allow request)
+        // Redis error - fail closed (reject request)
         logRateLimitEvent('ERROR', 'RATE_LIMIT_REDIS_ERROR', {
           endpoint,
           ip,
           error: 'multi exec returned null',
-          action: 'fail_open',
+          action: 'fail_closed',
         })
-        return next()
+        return res.status(503).json({
+          error: 'Service temporarily unavailable',
+          message: 'Rate limiting service unavailable. Please retry shortly.',
+        })
       }
 
       const [[incrErr, count], [ttlErr, ttl]] = results as [[Error | null, number], [Error | null, number]]
@@ -409,9 +412,12 @@ export function redisRateLimit(options: RedisRateLimitOptions = {}) {
           endpoint,
           ip,
           error: String(incrErr || ttlErr),
-          action: 'fail_open',
+          action: 'fail_closed',
         })
-        return next()
+        return res.status(503).json({
+          error: 'Service temporarily unavailable',
+          message: 'Rate limiting service unavailable. Please retry shortly.',
+        })
       }
 
       // Set expiry if this is a new key (TTL will be -1)
@@ -470,14 +476,17 @@ export function redisRateLimit(options: RedisRateLimitOptions = {}) {
 
       next()
     } catch (error) {
-      // On Redis failure, fail open (allow request) but log the error
+      // On Redis failure, fail closed (reject request)
       logRateLimitEvent('ERROR', 'RATE_LIMIT_REDIS_ERROR', {
         endpoint,
         ip,
         error: error instanceof Error ? error.message : String(error),
-        action: 'fail_open',
+        action: 'fail_closed',
       })
-      next()
+      res.status(503).json({
+        error: 'Service temporarily unavailable',
+        message: 'Rate limiting service unavailable. Please retry shortly.',
+      })
     }
   }
 }
