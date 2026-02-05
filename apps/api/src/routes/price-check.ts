@@ -100,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
       daysWithData: result.context.daysWithData,
       medianPrice: result.context.medianPrice,
       referrer: req.headers.referer ?? null,
-      userAgent: req.headers['user-agent'] ?? null,
+      userAgent: [req.headers['user-agent']].flat()[0] ?? null,
     })
 
     res.json({

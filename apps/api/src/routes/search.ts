@@ -131,7 +131,7 @@ router.post('/semantic', redisRateLimit({
       responseTimeMs: result.searchMetadata.processingTimeMs,
       timingBreakdown: result.searchMetadata.timing ?? null,
       referrer: req.headers.referer ?? null,
-      userAgent: req.headers['user-agent'] ?? null,
+      userAgent: [req.headers['user-agent']].flat()[0] ?? null,
     })
 
     res.json(result)

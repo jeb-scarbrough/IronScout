@@ -224,7 +224,7 @@ Exact retention periods are flexible, but:
 `search_query_logs` and `price_check_query_logs` store internal product analytics (search patterns, caliber demand, zero-result queries).
 
 - **Retention:** 1 year
-- **Purge cadence:** Automated monthly job deletes rows older than 365 days (implementation deferred — see GitHub issue)
+- **Purge cadence:** Monthly job to delete rows older than 365 days (deferred to [GitHub issue #150](https://github.com/jeb-scarbrough/IronScout/issues/150); not required for v1)
 - **DSAR:** `userId`, `userAgent`, `referrer`, `gunLockerCalibers` nullified on account deletion; rows preserved for aggregate analytics
 
 ---

@@ -80,7 +80,7 @@ async function _logSearchQueryAsync(input: SearchQueryLogInput): Promise<void> {
     data: {
       userId: input.userId,
       queryHash: hashQuery(input.query),
-      queryLength: input.query.length,
+      queryLength: input.query.length, // UTF-16 code units (JS string .length)
       queryPiiFlag: piiFlag,
       queryNormRedacted: piiFlag ? null : redactPii(normalizeQuery(input.query)).slice(0, 250),
       lensId: input.lensId,
