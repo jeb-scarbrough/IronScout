@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession, logAdminAction } from '@/lib/auth';
 import { prisma } from '@ironscout/db';
+import { notifyMerchantSuspended } from '@ironscout/notifications';
 import { headers } from 'next/headers';
 import { logger } from '@/lib/logger';
 
@@ -76,7 +77,24 @@ export async function POST(
       userAgent: headersList.get('user-agent') || undefined,
     });
 
-    // TODO: Send suspension email to merchant
+    // Send suspension email to merchant (fire-and-forget)
+    const primaryUser = await prisma.merchant_users.findFirst({
+      where: { merchantId, role: 'ADMIN' },
+      select: { email: true, name: true },
+    });
+
+    if (primaryUser) {
+      notifyMerchantSuspended({
+        id: merchantId,
+        email: primaryUser.email,
+        businessName: merchant.businessName,
+        contactName: primaryUser.name,
+      }).catch((err) => {
+        reqLogger.warn('Failed to send suspension email', { error: (err as Error).message });
+      });
+    } else {
+      reqLogger.warn('No admin user found for suspension notification', { merchantId });
+    }
 
     return NextResponse.json({
       success: true,

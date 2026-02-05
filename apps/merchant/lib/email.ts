@@ -487,6 +487,109 @@ IronScout Merchant Management
   }
 }
 
+/**
+ * Send team invite email
+ */
+export async function sendTeamInviteEmail(
+  email: string,
+  businessName: string,
+  role: string,
+  inviteToken: string,
+  invitedByName: string
+): Promise<SendEmailResult> {
+  const emailLogger = logger.child({
+    action: 'sendTeamInviteEmail',
+    email,
+    businessName,
+    role,
+  });
+
+  emailLogger.info('Sending team invite email');
+
+  const acceptUrl = `${BASE_URL}/accept-invite?token=${inviteToken}`;
+
+  try {
+    const resend = getResendClient();
+
+    const { data, error } = await resend.emails.send({
+      from: getFromEmail(),
+      to: email,
+      subject: `You've been invited to join ${businessName} on IronScout`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Invitation</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #111; font-size: 24px; margin: 0;">IronScout</h1>
+    <p style="color: #666; font-size: 14px; margin: 5px 0 0 0;">Merchant Portal</p>
+  </div>
+
+  <div style="background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
+    <h2 style="color: #0369a1; font-size: 20px; margin: 0 0 15px 0;">You're invited!</h2>
+    <p style="margin: 0 0 10px 0; color: #0c4a6e;">${invitedByName} has invited you to join <strong>${businessName}</strong> as a <strong>${role}</strong> on IronScout.</p>
+  </div>
+
+  <div style="background: #f9fafb; border-radius: 8px; padding: 30px; margin-bottom: 30px;">
+    <p style="margin: 0 0 20px 0;">Click the button below to create your account and join the team.</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${acceptUrl}" style="display: inline-block; background: #111; color: #fff; text-decoration: none; padding: 14px 30px; border-radius: 6px; font-weight: 600; font-size: 16px;">Accept Invitation</a>
+    </div>
+
+    <p style="margin: 0; font-size: 14px; color: #666;">Or copy and paste this link into your browser:</p>
+    <p style="margin: 10px 0 0 0; font-size: 12px; color: #888; word-break: break-all;">${acceptUrl}</p>
+  </div>
+
+  <div style="text-align: center; color: #888; font-size: 12px;">
+    <p style="margin: 0;">This invitation expires in 7 days.</p>
+    <p style="margin: 10px 0 0 0;">If you weren't expecting this invitation, you can safely ignore this email.</p>
+  </div>
+
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+  <div style="text-align: center; color: #888; font-size: 12px;">
+    <p style="margin: 0;">&copy; ${new Date().getFullYear()} IronScout. All rights reserved.</p>
+  </div>
+</body>
+</html>
+      `,
+      text: `You're invited to join ${businessName} on IronScout!
+
+${invitedByName} has invited you to join ${businessName} as a ${role}.
+
+Accept your invitation by clicking the link below:
+${acceptUrl}
+
+This invitation expires in 7 days.
+
+If you weren't expecting this invitation, you can safely ignore this email.
+
+---
+IronScout Merchant Portal
+      `.trim(),
+    });
+
+    if (error) {
+      emailLogger.error('Failed to send team invite email', { error: error.message }, error);
+      return { success: false, error: error.message };
+    }
+
+    emailLogger.info('Team invite email sent successfully', { messageId: data?.id });
+    return { success: true, messageId: data?.id };
+  } catch (error) {
+    emailLogger.error('Error sending team invite email', {}, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
 // Legacy alias
 /** @deprecated Use sendAdminNewMerchantNotification instead */
 export const sendAdminNewDealerNotification = sendAdminNewMerchantNotification;

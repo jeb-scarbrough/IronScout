@@ -15,6 +15,7 @@ import { cookies, headers } from 'next/headers';
 import { prisma } from '@ironscout/db';
 import type { merchants, merchant_users, MerchantStatus, MerchantUserRole, MerchantRetailerStatus, MerchantRetailerListingStatus, MerchantRetailerRole } from '@ironscout/db';
 import { logger } from './logger';
+import { sendTeamInviteEmail } from './email';
 
 // =============================================
 // Configuration
@@ -731,7 +732,23 @@ export async function inviteTeamMember(
 
     inviteLogger.info('Invite created successfully', { inviteToken });
 
-    // TODO: Send invite email
+    // Send invite email (fire-and-forget)
+    const [inviter, merchant] = await Promise.all([
+      prisma.merchant_users.findUnique({ where: { id: invitedById }, select: { name: true } }),
+      prisma.merchants.findUnique({ where: { id: merchantId }, select: { businessName: true } }),
+    ]);
+
+    if (merchant) {
+      sendTeamInviteEmail(
+        email.toLowerCase(),
+        merchant.businessName,
+        role,
+        inviteToken,
+        inviter?.name || 'A team member',
+      ).catch((err) => {
+        inviteLogger.warn('Failed to send invite email', { error: (err as Error).message });
+      });
+    }
 
     return { success: true, inviteToken };
   } catch (error) {
