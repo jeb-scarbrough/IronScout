@@ -357,63 +357,6 @@ function formatPrice(price: number): string {
   return price.toFixed(2)
 }
 
-/**
- * PriceCheckEvent (consumer telemetry) per mobile_price_check_v1_spec.md (deferred to v1.1)
- *
- * Intent signal for analytics (internal only)
- *
- * PRIVACY RULES (ENFORCED for consumer telemetry):
- * - NO individual-level persistence: Raw enteredPrice must not be stored in user-linked records
- * - Aggregation (recommended): Aggregate to caliber-level statistics for long-term analytics
- * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
- * - No user linking: Events must not be joinable to user identity after aggregation
- *
- * Internal, user-linked analytics tables are out-of-scope for this event and are handled elsewhere.
- */
-export interface PriceCheckEvent {
-  caliber: CaliberValue
-  enteredPrice: number
-  classification: PriceClassification
-  hasGunLocker: boolean
-  clickedOffer: boolean
-  timestamp: Date
-}
-
-/**
- * Emit a PriceCheckEvent for consumer telemetry
- *
- * ⚠️ NON-COMPLIANT STUB: Aggregation pipeline not yet implemented
- *
- * Per mobile_price_check_v1_spec.md Privacy Rules (consumer telemetry only):
- * - NO individual-level persistence of raw enteredPrice
- * - Aggregation (recommended): Aggregate to caliber-level statistics for long-term analytics
- * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
- * - No user linking: Events must not be joinable to user identity
- *
- * CURRENT STATE: This stub only logs aggregate-safe fields (no enteredPrice).
- * Full compliance requires implementing the aggregation pipeline.
- *
- * @param event - The PriceCheckEvent data (without user identity)
- */
-export function emitPriceCheckEvent(event: PriceCheckEvent): void {
-  // PRIVACY: This function must NEVER receive or store user IDs
-  // Any caller providing user identity would violate spec privacy rules
-
-  // PRIVACY: Do NOT log enteredPrice - only aggregate-safe fields
-  // enteredPrice is accepted in the interface for future aggregation but NOT logged
-  console.log('[PriceCheckEvent]', JSON.stringify({
-    caliber: event.caliber,
-    classification: event.classification,
-    hasGunLocker: event.hasGunLocker,
-    clickedOffer: event.clickedOffer,
-    timestamp: event.timestamp.toISOString(),
-    // NOTE: enteredPrice intentionally omitted from logs per privacy rules
-  }))
-
-  // TODO: Implement compliant analytics storage pipeline
-  // Recommended approach:
-  // 1. Bucket enteredPrice into ranges (e.g., $0.20-0.25, $0.25-0.30) before aggregation
-  // 2. Aggregate to caliber-level counts (e.g., "9mm: 150 checks, 45 LOWER, 80 TYPICAL, 25 HIGHER")
-  // 3. Store only aggregated statistics for long-term retention when possible
-  // 4. Purge raw event logs after the short-term retention window
-}
+// Consumer-facing PriceCheckEvent telemetry (aggregation pipeline) is deferred
+// to v1.1 per mobile_price_check_v1_spec.md. Internal analytics are handled by
+// price_check_query_logs via query-analytics.ts.
