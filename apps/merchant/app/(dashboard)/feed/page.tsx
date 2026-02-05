@@ -18,7 +18,7 @@ import { FeedStatusActions } from './feed-status-actions';
 
 export default async function FeedPage() {
   const session = await getSession();
-  const isE2E = process.env.E2E_TEST_MODE === 'true';
+  const isE2E = process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
   if (!session || session.type !== 'merchant') {
     redirect('/login');

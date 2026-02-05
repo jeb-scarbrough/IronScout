@@ -47,7 +47,7 @@ export async function updateMerchant(merchantId: string, data: UpdateMerchantDat
     return { success: false, error: 'Unauthorized' };
   }
 
-  if (process.env.E2E_TEST_MODE === 'true') {
+  if (process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production') {
     return {
       success: true,
       merchant: {

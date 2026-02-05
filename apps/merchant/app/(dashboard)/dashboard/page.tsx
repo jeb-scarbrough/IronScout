@@ -12,7 +12,7 @@ import { PlanSummary } from '@/components/plan-summary';
 
 export default async function DashboardPage() {
   const session = await getSession();
-  const isE2E = process.env.E2E_TEST_MODE === 'true';
+  const isE2E = process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
   if (!session) {
     redirect('/login');

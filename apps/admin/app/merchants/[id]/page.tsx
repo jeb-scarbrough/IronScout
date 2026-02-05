@@ -34,7 +34,7 @@ export default async function MerchantDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const isE2E = process.env.E2E_TEST_MODE === 'true';
+  const isE2E = process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
   const merchant = isE2E
     ? {

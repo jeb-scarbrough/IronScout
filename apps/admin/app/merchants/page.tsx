@@ -19,7 +19,7 @@ const tierConfig: Record<string, { label: string; color: string }> = {
   ENTERPRISE: { label: 'Enterprise', color: 'bg-indigo-100 text-indigo-700' },
 };
 
-const isE2E = process.env.E2E_TEST_MODE === 'true';
+const isE2E = process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
 const mockMerchants = [
   {
     id: 'e2e-merchant',

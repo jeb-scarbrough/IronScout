@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   
   reqLogger.info('Feed test request received');
 
-  if (process.env.E2E_TEST_MODE === 'true') {
+  if (process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production') {
     return NextResponse.json({
       success: true,
       rowCount: 3,

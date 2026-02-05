@@ -8,7 +8,11 @@ import { validateUrlForSSRF } from '@/lib/ssrf-guard';
 // Force dynamic rendering - this route uses cookies for auth
 export const dynamic = 'force-dynamic';
 
-const isE2E = process.env.E2E_TEST_MODE === 'true';
+// SECURITY: E2E bypass must NEVER be active in production (#162)
+if (process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: E2E_TEST_MODE must not be enabled in production');
+}
+const isE2E = process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
 const e2eRetailerContext = {
   retailerId: 'e2e-retailer',

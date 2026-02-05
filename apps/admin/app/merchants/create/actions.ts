@@ -24,7 +24,7 @@ export async function createMerchant(data: CreateMerchantInput) {
     return { success: false, error: 'Unauthorized' };
   }
 
-  if (process.env.E2E_TEST_MODE === 'true') {
+  if (process.env.E2E_TEST_MODE === 'true' && process.env.NODE_ENV !== 'production') {
     return {
       success: true,
       merchant: {
