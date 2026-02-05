@@ -11,9 +11,13 @@ const log = loggers.products
 
 const router: any = Router()
 
-/** Validate that an ID looks like a CUID (alphanumeric, starts with letter, 8+ chars). */
+/**
+ * Validate that an ID looks like a Prisma CUID v1.
+ * Format: starts with 'c', 25-30 lowercase alphanumeric characters.
+ * See: https://github.com/prisma/prisma/issues/10332
+ */
 function isValidCuid(id: string): boolean {
-  return /^[a-z][a-z0-9]{7,}$/.test(id)
+  return /^c[a-z0-9]{24,29}$/.test(id)
 }
 
 export function getObservedAtMs(value: unknown): number {
