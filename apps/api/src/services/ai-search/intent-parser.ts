@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { z } from 'zod'
 import {
   PLATFORM_CALIBER_MAP,
   PURPOSE_SYNONYMS,
@@ -121,6 +122,37 @@ export type SafetyConstraint =
   | 'low-recoil'            // Follow-up shots, smaller shooters
   | 'barrier-blind'         // Duty use, car doors
   | 'frangible'             // Training, steel targets
+
+// Zod schema for validating OpenAI intent response (#182)
+const aiIntentResponseSchema = z.object({
+  calibers: z.array(z.string()).optional(),
+  purpose: z.string().optional(),
+  grainWeights: z.array(z.number()).optional(),
+  caseMaterials: z.array(z.string()).optional(),
+  brands: z.array(z.string()).optional(),
+  minPrice: z.number().optional(),
+  maxPrice: z.number().optional(),
+  inStockOnly: z.boolean().optional(),
+  qualityLevel: z.enum(['budget', 'standard', 'premium', 'match-grade']).optional(),
+  rangePreference: z.enum(['short', 'medium', 'long']).optional(),
+  keywords: z.array(z.string()).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  premiumIntent: z.object({
+    environment: z.enum(['indoor', 'outdoor', 'both']).optional(),
+    barrelLength: z.enum(['short', 'standard', 'long']).optional(),
+    suppressorUse: z.boolean().optional(),
+    safetyConstraints: z.array(z.enum(['low-overpenetration', 'low-flash', 'low-recoil', 'barrier-blind', 'frangible'])).optional(),
+    priorityFocus: z.enum(['performance', 'value', 'balanced']).optional(),
+    preferredBulletTypes: z.array(z.string()).optional(),
+    explanation: z.string().optional(),
+    reasoning: z.object({
+      environmentReason: z.string().optional(),
+      barrelReason: z.string().optional(),
+      safetyReason: z.string().optional(),
+      bulletTypeReason: z.string().optional(),
+    }).optional(),
+  }).optional(),
+}).passthrough()
 
 /**
  * Parse options including user tier
@@ -441,9 +473,18 @@ async function parseWithAI(query: string, userTier: 'FREE' | 'PREMIUM'): Promise
     throw new Error('No response from OpenAI')
   }
 
-  // Parse JSON response
-  const parsed = JSON.parse(content)
-  
+  // Parse and validate JSON response (#182: schema-validate AI output)
+  const raw = JSON.parse(content)
+  const validated = aiIntentResponseSchema.safeParse(raw)
+  if (!validated.success) {
+    log.warn('OpenAI response failed schema validation, using fallback', {
+      query,
+      errors: validated.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+    })
+    return { originalQuery: query, confidence: 0, keywords: query.split(/\s+/) }
+  }
+  const parsed = validated.data
+
   // Build the intent object
   const intent: SearchIntent = {
     calibers: parsed.calibers,
@@ -458,7 +499,7 @@ async function parseWithAI(query: string, userTier: 'FREE' | 'PREMIUM'): Promise
     qualityLevel: parsed.qualityLevel,
     rangePreference: parsed.rangePreference,
     keywords: parsed.keywords,
-    confidence: parsed.confidence || 0.7,
+    confidence: parsed.confidence ?? 0.7,
     originalQuery: query,
   }
   
