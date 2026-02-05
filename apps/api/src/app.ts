@@ -15,6 +15,7 @@ import express, { Express, Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import { prisma, isMaintenanceMode } from '@ironscout/db'
+import { getRedisClient } from './config/redis'
 import { loggers } from './config/logger'
 
 const log = loggers.server
@@ -122,8 +123,21 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }))
 // JSON body parsing for all other routes
 app.use(express.json())
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+app.get('/health', async (_req, res) => {
+  const timeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))])
+
+  const [dbOk, redisOk] = await Promise.all([
+    timeout(prisma.$queryRaw`SELECT 1`.then(() => true), 3000).catch(() => false),
+    timeout(getRedisClient().ping().then(() => true), 3000).catch(() => false),
+  ])
+
+  const healthy = dbOk && redisOk
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    dependencies: { db: dbOk, redis: redisOk },
+  })
 })
 
 // Maintenance mode middleware - allows health check and admin routes through
