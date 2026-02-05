@@ -200,22 +200,22 @@ services:
         value: 1; mode=block
     # NOTE: No rewrite rule - Next.js static export generates proper index.html files for each route
 
-# --------------------------------------------------------------------------
-# NOTE: Harvester worker commented out - requires paid plan
-# --------------------------------------------------------------------------
-# - type: worker
-#   name: ironscout-harvester
-#   runtime: node
-#   region: ohio
-#   plan: starter  # Workers require paid plan
-#   buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
-#   startCommand: cd apps/harvester && pnpm worker
-#   envVars:
-#     - fromGroup: ironscout-common
-#     - fromGroup: ironscout-urls
-#     - fromGroup: ironscout-secrets
-#     - fromGroup: ironscout-redis
-#     - fromGroup: ironscout-slack
-#     - fromGroup: ironscout-email
-#     - key: DATABASE_URL
-#       sync: false
+  # --------------------------------------------------------------------------
+  # Harvester Worker (background ingestion — requires paid plan)
+  # --------------------------------------------------------------------------
+  - type: worker
+    name: ironscout-harvester
+    runtime: node
+    region: ohio
+    plan: starter  # Workers require paid plan
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    startCommand: cd apps/harvester && pnpm worker
+    envVars:
+      - fromGroup: ironscout-common
+      - fromGroup: ironscout-urls
+      - fromGroup: ironscout-secrets
+      - fromGroup: ironscout-redis
+      - fromGroup: ironscout-slack
+      - fromGroup: ironscout-email
+      - key: DATABASE_URL
+        sync: false
