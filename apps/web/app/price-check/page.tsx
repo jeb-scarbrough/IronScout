@@ -1,8 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useTheme } from 'next-themes'
 import { MarketingHeader } from '@ironscout/ui/components/marketing-header'
 import { BRAND } from '@/lib/brand'
 import { PriceCheckContent } from '@/components/price-check/price-check-content'
@@ -16,18 +14,7 @@ import { PriceCheckContent } from '@/components/price-check/price-check-content'
  * For logged-in users within the app, see /dashboard/price-check which has sidebar nav.
  */
 
-// Force dark theme for price-check to match www marketing site
-function useForceDarkTheme() {
-  const { setTheme } = useTheme()
-
-  useEffect(() => {
-    setTheme('dark')
-  }, [setTheme])
-}
-
 export default function PriceCheckPage() {
-  // Force dark theme to match www app styling
-  useForceDarkTheme()
 
   const { data: session } = useSession()
 

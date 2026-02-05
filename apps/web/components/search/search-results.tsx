@@ -243,9 +243,9 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
       <>
         <SearchHeader query={query} />
         <div className="text-center py-12 mt-6 space-y-2">
-          <p className="text-muted-foreground font-semibold">Unable to load search results</p>
+          <p className="text-muted-foreground font-semibold">We hit a snag loading your results</p>
           <p className="text-sm text-muted-foreground">
-            Something went wrong. Please try again in a moment.
+            Give it another shot — we're still scouting.
           </p>
           <div className="flex justify-center gap-3 pt-4 text-sm">
             <a className="text-primary underline" href="/search">Try again</a>

@@ -43,4 +43,4 @@ IronScout is not intended for users under 18.
 We may update this Privacy Policy. Material changes will be posted clearly.
 
 ## 12. Contact
-Questions may be directed to legal@ironscout.com.
+Questions may be directed to legal@ironscout.ai.
