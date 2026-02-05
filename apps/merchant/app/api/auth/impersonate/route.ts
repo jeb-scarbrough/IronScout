@@ -132,13 +132,11 @@ export async function GET(request: NextRequest) {
       path: '/',
     });
 
-    // Set impersonation indicator cookie (readable by client)
+    // Set impersonation indicator cookie (httpOnly — no admin email exposed) (#177)
     response.cookies.set('merchant-impersonation', JSON.stringify({
-      adminEmail: payload.impersonatedBy,
-      merchantName: merchantUser.merchants.businessName,
-      startedAt: payload.impersonatedAt,
+      active: true,
     }), {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 4,

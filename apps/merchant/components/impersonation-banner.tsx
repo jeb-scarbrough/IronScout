@@ -4,39 +4,30 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ImpersonationData {
-  adminEmail: string;
+  active: boolean;
   merchantName?: string;
-  startedAt: string;
 }
 
 export function ImpersonationBanner() {
   const [impersonation, setImpersonation] = useState<ImpersonationData | null>(null);
 
   useEffect(() => {
-    // Check for impersonation cookie
-    const cookieValue = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('merchant-impersonation='))
-      ?.split('=')[1];
-
-    if (cookieValue) {
-      try {
-        const data = JSON.parse(decodeURIComponent(cookieValue));
-        setImpersonation(data);
-      } catch {
-        // Invalid cookie data
-      }
-    }
+    // Fetch impersonation status from httpOnly session cookie via API (#177)
+    fetch('/api/auth/impersonation-status')
+      .then(res => res.json())
+      .then((data: ImpersonationData) => {
+        if (data.active) {
+          setImpersonation(data);
+        }
+      })
+      .catch(() => {
+        // Ignore errors — banner just won't show
+      });
   }, []);
 
   const handleEndImpersonation = async () => {
-    // Clear impersonation cookies
-    document.cookie = 'merchant-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.ironscout.ai';
-    document.cookie = 'merchant-impersonation=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.ironscout.ai';
-    document.cookie = 'merchant-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = 'merchant-impersonation=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-
-    // Redirect to admin portal or close window
+    // Call logout API to clear httpOnly cookies server-side
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     window.location.href = '/login';
   };
 
@@ -50,10 +41,9 @@ export function ImpersonationBanner() {
         <div className="flex items-center gap-3">
           <AlertTriangle className="h-5 w-5" />
           <span className="text-sm font-medium">
-            Admin Impersonation Mode: You are viewing as <strong>{impersonation.merchantName}</strong>
-          </span>
-          <span className="text-xs opacity-75">
-            (by {impersonation.adminEmail})
+            Admin Impersonation Mode{impersonation.merchantName && (
+              <>: You are viewing as <strong>{impersonation.merchantName}</strong></>
+            )}
           </span>
         </div>
         <button
