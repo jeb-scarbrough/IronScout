@@ -58,7 +58,7 @@ export const V1_CAPABILITIES = {
 
     // AI Insights
     aiExplanations: true,
-    pricePositionIndex: true,
+    pricePositionIndex: false, // Disabled until calculation is implemented (see #184)
     reliabilityInsights: true,
 
     // Advanced Features
