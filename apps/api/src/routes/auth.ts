@@ -678,17 +678,19 @@ router.get('/session', async (req: Request, res: Response) => {
         name: true,
         tier: true,
         image: true,
+        status: true,
       },
     })
 
-    if (!user) {
+    if (!user || user.status === 'DELETED') {
       return res.status(401).json({ error: 'User not found' })
     }
 
     const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase())
+    const { status, ...userWithoutStatus } = user
 
     return res.json({
-      user: { ...user, isAdmin },
+      user: { ...userWithoutStatus, isAdmin },
     })
   } catch (error) {
     log.error('Session error', {}, error)
@@ -714,17 +716,17 @@ router.post('/refresh', authRateLimits.refresh, async (req: Request, res: Respon
       return res.status(401).json({ error: 'Invalid or expired refresh token' })
     }
 
-    // Verify user still exists
+    // Verify user still exists and is active
     const user = await prisma.users.findUnique({
       where: { id: decoded.sub },
-      select: { id: true, email: true },
+      select: { id: true, email: true, status: true },
     })
 
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' })
+    if (!user || user.status === 'DELETED') {
+      return res.status(401).json({ error: 'Account is not active' })
     }
 
-    // Generate new tokens
+    // Generate new tokens (allow PENDING_DELETION so users can cancel)
     const tokens = generateTokens(user.id, user.email)
 
     return res.json(tokens)
