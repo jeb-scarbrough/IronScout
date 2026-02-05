@@ -7,6 +7,9 @@
 
 import { prisma } from '@ironscout/db'
 import { randomUUID } from 'crypto'
+import { loggers } from '../config/logger'
+
+const log = loggers.server
 import { cascadeFirearmDeletion } from './firearm-ammo-preference'
 
 /**
@@ -228,7 +231,7 @@ export async function getGuns(userId: string): Promise<Gun[]> {
       const caliber = normalizeCaliber(g.caliber)
       if (!caliber) {
         // Log warning for data quality monitoring, but don't expose non-canonical data
-        console.warn('[GunLocker] Excluding gun with unmapped caliber', {
+        log.warn('Excluding gun with unmapped caliber', {
           gunId: g.id,
           rawCaliber: g.caliber,
         })

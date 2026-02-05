@@ -16,15 +16,11 @@ const PORT = process.env.PORT || 8000
 const server = app.listen(PORT, () => {
   log.info('API server started', { port: PORT })
 
-  // Log brand/URL configuration prominently for debugging
-  const wwwUrl = process.env.NEXT_PUBLIC_WWW_URL || '(not set - using production default)'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '(not set - using production default)'
-  console.log('\n' + '='.repeat(60))
-  console.log('  BRAND CONFIG')
-  console.log('='.repeat(60))
-  console.log(`  APP_URL: ${appUrl}`)
-  console.log(`  WWW_URL: ${wwwUrl}`)
-  console.log('='.repeat(60) + '\n')
+  // Log brand/URL configuration for debugging
+  log.info('Brand configuration', {
+    appUrl: process.env.NEXT_PUBLIC_APP_URL || '(not set - using production default)',
+    wwwUrl: process.env.NEXT_PUBLIC_WWW_URL || '(not set - using production default)',
+  })
 })
 
 // Track if shutdown is in progress

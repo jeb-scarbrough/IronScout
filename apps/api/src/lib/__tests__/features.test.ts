@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { logFeatureStatus } from '../features'
+import { loggers } from '../../config/logger'
 
 describe('Features logging', () => {
   afterEach(() => {
@@ -7,12 +8,12 @@ describe('Features logging', () => {
   })
 
   it('logs v1 full-capabilities message', () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    const infoSpy = vi.spyOn(loggers.server, 'info').mockImplementation(() => undefined as any)
 
     logFeatureStatus()
 
-    expect(logSpy).toHaveBeenCalledWith(
-      '[Features] V1 mode: All users receive full capabilities'
+    expect(infoSpy).toHaveBeenCalledWith(
+      'V1 mode: All users receive full capabilities'
     )
   })
 })

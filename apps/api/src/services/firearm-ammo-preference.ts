@@ -67,7 +67,7 @@ async function resolveSupersededSku(productId: string): Promise<string> {
   // Follow supersession chain (with cycle protection)
   while (true) {
     if (visited.has(currentId)) {
-      console.warn('[AmmoPreference] Supersession cycle detected', { productId, visited: Array.from(visited) })
+      log.warn('Supersession cycle detected', { productId, visited: Array.from(visited) })
       break
     }
     visited.add(currentId)

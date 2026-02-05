@@ -16,9 +16,13 @@
  * ============================================================================
  */
 
+import { loggers } from '../config/logger'
+
+const log = loggers.server
+
 /**
  * Log feature status on startup (v1: minimal output)
  */
 export function logFeatureStatus(): void {
-  console.log('[Features] V1 mode: All users receive full capabilities')
+  log.info('V1 mode: All users receive full capabilities')
 }

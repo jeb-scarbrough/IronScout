@@ -12,6 +12,9 @@
  */
 
 import type { Lens, LensId } from './types'
+import { loggers } from '../../config/logger'
+
+const log = loggers.server
 
 /**
  * Current lens spec version.
@@ -273,7 +276,7 @@ export function validateAndLogLensDefinitions(): boolean {
     return true
   } catch (error) {
     // Log but don't throw - caller decides how to handle
-    console.error('[LENS] Definition validation failed:', error)
+    log.error('Lens definition validation failed', {}, error instanceof Error ? error : new Error(String(error)))
     return false
   }
 }
