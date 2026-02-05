@@ -1720,6 +1720,7 @@ model search_query_logs {
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([queryHash])
+  @@index([intentCalibers], type: Gin)
 }
 
 /// Price check query analytics log (write-only: append + DSAR anonymization + retention purge, 1-year retention)

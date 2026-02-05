@@ -17,7 +17,7 @@
  * - 1-year retention (purge job deferred to separate issue)
  */
 
-import { prisma } from '@ironscout/db'
+import { prisma, Prisma } from '@ironscout/db'
 import { hashQuery, normalizeQuery, hasPii, redactPii } from '../lib/pii'
 import { getUserCalibers } from './gun-locker'
 import { loggers } from '../config/logger'
@@ -90,12 +90,12 @@ async function _logSearchQueryAsync(input: SearchQueryLogInput): Promise<void> {
       intentPurpose: input.intentPurpose,
       intentBrands: input.intentBrands,
       intentConfidence: input.intentConfidence,
-      filtersApplied: input.filtersApplied ?? undefined,
+      filtersApplied: (input.filtersApplied ?? undefined) as Prisma.InputJsonValue | undefined,
       resultCount: input.resultCount,
       returnedCount: input.returnedCount,
       vectorSearchUsed: input.vectorSearchUsed,
       responseTimeMs: input.responseTimeMs,
-      timingBreakdown: input.timingBreakdown ?? undefined,
+      timingBreakdown: (input.timingBreakdown ?? undefined) as Prisma.InputJsonValue | undefined,
       isAuthenticated: input.userId != null,
       gunLockerCalibers,
       referrer: input.referrer,
