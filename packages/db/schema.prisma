@@ -197,7 +197,9 @@ model alerts {
 
   @@unique([userId, productId, ruleType], map: "alerts_userid_productid_ruletype_key")
   @@index([productId])
-  // REMOVED: @@index([userId]) - redundant, covered by unique([userId, productId, ruleType])
+  @@index([userId])
+  @@index([userId, productId, ruleType])
+  @@index([createdAt])
   @@index([suppressedAt])
   @@index([watchlistItemId])
 }
@@ -559,7 +561,10 @@ model execution_logs {
 
   @@index([event])
   @@index([executionId])
+  @@index([executionId, level])
+  @@index([executionId, timestamp])
   @@index([level])
+  @@index([timestamp])
 }
 
 model executions {
@@ -585,6 +590,10 @@ model executions {
   sources        sources          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
   @@index([ignoredAt])
+  @@index([sourceId])
+  @@index([sourceId, startedAt])
+  @@index([sourceId, status])
+  @@index([status])
 }
 
 model feed_corrections {
@@ -678,14 +687,16 @@ model prices {
 
   @@index([inStock])
   @@index([productId])
+  @@index([productId, retailerId, createdAt])
+  @@index([price, inStock])
   @@index([retailerId])
   @@index([sourceProductId])
   @@index([merchantId])
   @@index([sourceId])
   @@index([retailerSkuId])
-  // REMOVED: @@index([ingestionRunType]) - unused, no query filtering on this column
   @@index([ingestionRunId])
   @@index([observedAt])
+  @@index([createdAt])
 }
 
 // DELETED: pricing_snapshots model (benchmark subsystem removed for v1)
@@ -880,10 +891,16 @@ model products {
   firearm_ammo_preferences firearm_ammo_preferences[]
 
   @@index([bulletType])
+  @@index([brand])
   @@index([caliber])
+  @@index([category])
+  @@index([createdAt])
+  @@index([description])
   @@index([isSubsonic])
+  @@index([name])
   @@index([pressureRating])
   @@index([purpose])
+  @@index([updatedAt])
   @@index([brandNorm, caliberNorm])
 }
 
@@ -942,6 +959,9 @@ model retailers {
   scrape_runs        scrape_runs[]
 
   @@index([visibilityStatus])
+  @@index([tier])
+  @@index([tier, name])
+  @@index([website])
 }
 
 model source_product_presence {
@@ -1304,6 +1324,8 @@ model sources {
   // Composite unique for FK validation from scrape_targets
   @@unique([id, adapterId], map: "sources_id_adapter_id_unique")
   @@index([retailerId], map: "sources_retailer_id_idx")
+  @@index([type])
+  @@index([updatedAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1538,6 +1560,9 @@ model subscriptions {
   stripeId   String?            @unique
   retailers  retailers?         @relation(fields: [retailerId], references: [id], onDelete: Cascade)
   users      users?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId])
 }
 
 model system_settings {
@@ -1571,6 +1596,9 @@ model users {
   watchlist_collections    watchlist_collections[]
   watchlist_items          watchlist_items[]
   firearm_ammo_preferences firearm_ammo_preferences[]
+
+  @@index([email])
+  @@index([tier])
 }
 
 /// Gun Locker - stores guns a user owns for deal personalization
