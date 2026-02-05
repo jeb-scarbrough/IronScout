@@ -11,6 +11,11 @@ const log = loggers.products
 
 const router: any = Router()
 
+/** Validate that an ID looks like a CUID (alphanumeric, starts with letter, 8+ chars). */
+function isValidCuid(id: string): boolean {
+  return /^[a-z][a-z0-9]{7,}$/.test(id)
+}
+
 export function getObservedAtMs(value: unknown): number {
   if (!value) return 0
   const timestamp = new Date(value as any).getTime()
@@ -325,6 +330,9 @@ router.get('/lookup/upc/:upc', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string
+    if (!isValidCuid(id)) {
+      return res.status(400).json({ error: 'Invalid product ID format' })
+    }
 
     // Per Spec v1.2 §0.0: Get prices through product_links
     const product = await prisma.products.findUnique({
@@ -382,6 +390,9 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.get('/:id/prices', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string
+    if (!isValidCuid(id)) {
+      return res.status(400).json({ error: 'Invalid product ID format' })
+    }
 
     // Per Spec v1.2 §0.0: Get prices through product_links
     const product = await prisma.products.findUnique({
@@ -473,6 +484,9 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
 router.get('/:id/history', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string
+    if (!isValidCuid(id)) {
+      return res.status(400).json({ error: 'Invalid product ID format' })
+    }
     const { days = '30', retailerId } = req.query
 
     const product = await prisma.products.findUnique({
