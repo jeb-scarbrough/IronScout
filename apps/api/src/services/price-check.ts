@@ -1,7 +1,8 @@
 /**
  * Price Check Service
  *
- * Per mobile_price_check_v1_spec.md:
+ * Spec reference: mobile_price_check_v1_spec.md (deferred to v1.1).
+ * This service implements current v1 behavior. Internal analytics (user-linked) are handled elsewhere.
  * - Answers: "Is this price normal, high, or unusually low right now?"
  * - Classification requires ≥5 price points in trailing 30 days
  * - No verdicts or recommendations
@@ -393,15 +394,17 @@ function formatPrice(price: number): string {
 }
 
 /**
- * PriceCheckEvent per mobile_price_check_v1_spec.md
+ * PriceCheckEvent (consumer telemetry) per mobile_price_check_v1_spec.md (deferred to v1.1)
  *
  * Intent signal for analytics (internal only)
  *
- * PRIVACY RULES (ENFORCED):
+ * PRIVACY RULES (ENFORCED for consumer telemetry):
  * - NO individual-level persistence: Raw enteredPrice must not be stored in user-linked records
- * - Aggregation only: Events aggregated to caliber-level statistics before long-term storage
+ * - Aggregation (recommended): Aggregate to caliber-level statistics for long-term analytics
  * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
  * - No user linking: Events must not be joinable to user identity after aggregation
+ *
+ * Internal, user-linked analytics tables are out-of-scope for this event and are handled elsewhere.
  */
 export interface PriceCheckEvent {
   caliber: CaliberValue
@@ -413,13 +416,13 @@ export interface PriceCheckEvent {
 }
 
 /**
- * Emit a PriceCheckEvent for analytics
+ * Emit a PriceCheckEvent for consumer telemetry
  *
  * ⚠️ NON-COMPLIANT STUB: Aggregation pipeline not yet implemented
  *
- * Per mobile_price_check_v1_spec.md Privacy Rules (ENFORCED):
+ * Per mobile_price_check_v1_spec.md Privacy Rules (consumer telemetry only):
  * - NO individual-level persistence of raw enteredPrice
- * - Aggregation only: Events must be aggregated to caliber-level statistics
+ * - Aggregation (recommended): Aggregate to caliber-level statistics for long-term analytics
  * - Retention: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
  * - No user linking: Events must not be joinable to user identity
  *
@@ -443,11 +446,10 @@ export function emitPriceCheckEvent(event: PriceCheckEvent): void {
     // NOTE: enteredPrice intentionally omitted from logs per privacy rules
   }))
 
-  // TODO: Implement compliant aggregation pipeline
-  // Requirements per spec:
+  // TODO: Implement compliant analytics storage pipeline
+  // Recommended approach:
   // 1. Bucket enteredPrice into ranges (e.g., $0.20-0.25, $0.25-0.30) before aggregation
   // 2. Aggregate to caliber-level counts (e.g., "9mm: 150 checks, 45 LOWER, 80 TYPICAL, 25 HIGHER")
-  // 3. Store only aggregated statistics for long-term retention
+  // 3. Store only aggregated statistics for long-term retention when possible
   // 4. Purge raw event logs after the short-term retention window
-  // 5. Ensure no join path to user identity after aggregation
 }

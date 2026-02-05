@@ -1,5 +1,12 @@
 # Mobile Price Check v1 Spec
 
+## Status
+Deferred to v1.1. This spec does not govern v1 implementation details unless explicitly referenced.
+
+Note: Internal, user-linked analytics for Price Check may be implemented in v1.
+The privacy rules below apply specifically to the **consumer-facing PriceCheckEvent** telemetry,
+not to internal product analytics tables.
+
 ## Purpose
 Support high-intent buyers by providing instant price sanity checks at the moment of decision.
 
@@ -91,10 +98,14 @@ PriceCheckEvent {
 ```
 
 ### Privacy Rules (Enforced)
+These rules apply to the **consumer-facing PriceCheckEvent telemetry** only.
+
 - **No individual-level persistence**: Raw `enteredPrice` values must not be stored in user-linked records
 - **Aggregation only**: Events are aggregated to caliber-level statistics before long-term storage
 - **Retention**: Raw event logs retained only for short-term debugging per ops policy, then purged or aggregated
 - **No user linking**: Events must not be joinable to user identity after aggregation
+
+Internal, user-linked analytics tables are governed by operational policy and DSAR handling.
 
 **Implementation note (v1):** If event telemetry is emitted before aggregation is implemented,
 it must remain short-lived and must not be stored in any user-linked system.
