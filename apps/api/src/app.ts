@@ -78,21 +78,19 @@ app.use(requestContextMiddleware)
 app.use(requestLoggerMiddleware)
 
 // CORS configuration to support multiple domains
-// CORS_ORIGINS env var takes precedence (comma-separated list)
+// Production origins are hardcoded. All other origins (local dev, staging,
+// preview deployments) must be configured via CORS_ORIGINS env var or
+// per-app FRONTEND_URL / ADMIN_URL / MERCHANT_URL env vars.
 const corsOriginsFromEnv = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean) || []
 const allowedOrigins = [
   ...corsOriginsFromEnv,
-  'http://localhost:3000',
-  'http://localhost:3002', // Admin app
-  'http://localhost:3003', // Merchant app
-  'https://ironscout-web.onrender.com',
-  'https://ironscout-admin.onrender.com',
-  'https://ironscout-merchant.onrender.com',
+  // Production domains only
   'https://www.ironscout.ai',
   'https://ironscout.ai',
   'https://app.ironscout.ai',
   'https://admin.ironscout.ai',
   'https://merchant.ironscout.ai',
+  // Per-app URL overrides (staging, preview)
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
   process.env.MERCHANT_URL,
