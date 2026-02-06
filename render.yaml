@@ -178,6 +178,10 @@ services:
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-email
       - fromGroup: ironscout-google
+      - key: NEXTAUTH_URL
+        value: https://admin.ironscout.ai
+      - key: AUTH_TRUST_HOST
+        value: true
 
   # --------------------------------------------------------------------------
   # Marketing Site (static) - www.ironscout.ai
