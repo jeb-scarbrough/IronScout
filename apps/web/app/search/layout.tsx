@@ -1,6 +1,8 @@
 import { auth } from '@/lib/auth'
 import { SidebarNav } from '@/components/layout/sidebar-nav'
 import { SearchLoadingProvider } from '@/components/search/search-loading-context'
+import { MarketingHeader } from '@ironscout/ui/components/marketing-header'
+import { BRAND } from '@/lib/brand'
 
 export default async function SearchLayout({
   children,
@@ -9,9 +11,33 @@ export default async function SearchLayout({
 }) {
   const session = await auth()
 
-  // If not authenticated, show without sidebar (public access)
+  // If not authenticated, show with MarketingHeader (consistent with price-check, auth pages)
   if (!session) {
-    return <SearchLoadingProvider>{children}</SearchLoadingProvider>
+    return (
+      <SearchLoadingProvider>
+        {/* Hide parent header and use MarketingHeader for consistency */}
+        <style>{`
+          body > div > header,
+          body > div > footer {
+            display: none !important;
+          }
+          body > div > main {
+            flex: none !important;
+          }
+        `}</style>
+
+        <div className="min-h-screen bg-background">
+          <MarketingHeader
+            currentPage="search"
+            websiteUrl={BRAND.website}
+            appUrl={BRAND.appUrl}
+          />
+          <main className="pt-16">
+            {children}
+          </main>
+        </div>
+      </SearchLoadingProvider>
+    )
   }
 
   const userName = session.user?.name || session.user?.email || 'User'
