@@ -54,37 +54,37 @@ envVarGroups:
   - name: ironscout-redis
     envVars:
       - key: REDIS_HOST
-        sync: false
+        value: ""  # Set in dashboard from Redis instance
       - key: REDIS_PORT
-        sync: false
+        value: ""  # Set in dashboard from Redis instance
       - key: REDIS_PASSWORD
-        sync: false
+        value: ""  # Set in dashboard from Redis instance
 
   - name: ironscout-stripe
     envVars:
       - key: STRIPE_SECRET_KEY
-        sync: false
+        value: ""  # Set in dashboard
       - key: STRIPE_WEBHOOK_SECRET
-        sync: false
+        value: ""  # Set in dashboard
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        sync: false
+        value: ""  # Set in dashboard
 
   - name: ironscout-google
     envVars:
       - key: GOOGLE_CLIENT_ID
-        sync: false
+        value: ""  # Set in dashboard
       - key: GOOGLE_CLIENT_SECRET
-        sync: false
+        value: ""  # Set in dashboard
 
   - name: ironscout-slack
     envVars:
       - key: SLACK_DATAFEED_ALERTS_WEBHOOK_URL
-        sync: false
+        value: ""  # Set in dashboard
 
   - name: ironscout-openai
     envVars:
       - key: OPENAI_API_KEY
-        sync: false
+        value: ""  # Set in dashboard
 
 services:
   # --------------------------------------------------------------------------
