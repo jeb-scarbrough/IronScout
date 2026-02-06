@@ -182,22 +182,9 @@ services:
         value: "true"
 
   # --------------------------------------------------------------------------
-  # Marketing Site (static) - www.ironscout.ai
+  # Marketing Site (www) - TEMPORARILY REMOVED for Blueprint sync
+  # Will be added back after other services are updated
   # --------------------------------------------------------------------------
-  - type: web
-    name: ironscout-www
-    runtime: node
-    region: ohio
-    plan: free
-    buildCommand: npx pnpm@10.28.1 install --filter @ironscout/www... && npx pnpm@10.28.1 --filter @ironscout/www build
-    startCommand: npx serve apps/www/out -l 3000
-    healthCheckPath: /
-    envVars:
-      - fromGroup: ironscout-common
-      - key: PORT
-        value: 3000
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Harvester Worker (background ingestion — requires paid plan)
