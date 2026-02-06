@@ -93,8 +93,9 @@ async function processScrapeJob(job: Job<ScrapeUrlJobData>): Promise<void> {
   })
 
   if (!target) {
-    jobLogger.error('Scrape target not found', { targetId })
-    throw new Error(`Target '${targetId}' not found`)
+    // Target was deleted after job was queued - gracefully skip
+    jobLogger.info('Scrape target no longer exists, skipping', { targetId })
+    return
   }
 
   // Check URL-level robots block
