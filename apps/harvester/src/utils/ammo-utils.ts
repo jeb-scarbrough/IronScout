@@ -731,6 +731,24 @@ export function deriveShotgunLoadType(
     return /buck/i.test(productName) ? `${shotWeight} Buck` : `${shotWeight} Shot`
   }
 
+  // Less-lethal / specialty loads: "1 Ball Rubber", "2 Ball", "Bean Bag", etc.
+  const ballMatch = productName.match(/\b(\d+)\s*ball(?:\s*(rubber|lead))?\b/i)
+  if (ballMatch) {
+    const count = ballMatch[1]
+    const material = ballMatch[2] ? ` ${ballMatch[2].charAt(0).toUpperCase()}${ballMatch[2].slice(1).toLowerCase()}` : ''
+    return `${count} Ball${material}`
+  }
+
+  // Bean bag rounds
+  if (/\bbean\s*bag\b/i.test(productName)) {
+    return 'Bean Bag'
+  }
+
+  // Rubber buckshot (without ball count)
+  if (/\brubber\s*buck(?:shot)?\b/i.test(productName)) {
+    return 'Rubber Buck'
+  }
+
   return null
 }
 

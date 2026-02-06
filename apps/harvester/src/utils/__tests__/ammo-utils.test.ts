@@ -109,4 +109,23 @@ describe('deriveShotgunLoadType', () => {
   it('returns slug when weight is missing', () => {
     expect(deriveShotgunLoadType('Hornady 12 Gauge Slug - 25 Round Box')).toBe('Slug')
   })
+
+  it('extracts rubber ball rounds', () => {
+    expect(deriveShotgunLoadType('Sellier & Bellot 12 Gauge 1 Ball Rubber Ammunition')).toBe('1 Ball Rubber')
+    expect(deriveShotgunLoadType('S&B 12ga 2 Ball Rubber')).toBe('2 Ball Rubber')
+  })
+
+  it('extracts ball rounds without material', () => {
+    expect(deriveShotgunLoadType('12 Gauge 1 Ball Round')).toBe('1 Ball')
+  })
+
+  it('extracts bean bag rounds', () => {
+    expect(deriveShotgunLoadType('Defense Technology 12ga Bean Bag Round')).toBe('Bean Bag')
+    expect(deriveShotgunLoadType('Less Lethal Beanbag 12 Gauge')).toBe('Bean Bag')
+  })
+
+  it('extracts rubber buckshot', () => {
+    expect(deriveShotgunLoadType('12 Gauge Rubber Buckshot')).toBe('Rubber Buck')
+    expect(deriveShotgunLoadType('Rubber Buck 12ga Round')).toBe('Rubber Buck')
+  })
 })
