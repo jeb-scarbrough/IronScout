@@ -178,25 +178,16 @@ services:
   # --------------------------------------------------------------------------
   - type: web
     name: ironscout-www
-    runtime: static
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/www build
-    staticPublishPath: apps/www/out
+    runtime: node
+    region: ohio
+    plan: free
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
+    startCommand: npx serve apps/www/out -l 3000
+    healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: Referrer-Policy
-        value: strict-origin-when-cross-origin
-      - path: /*
-        name: X-XSS-Protection
-        value: 1; mode=block
-    # NOTE: No rewrite rule - Next.js static export generates proper index.html files for each route
+      - key: PORT
+        value: 3000
 
   # --------------------------------------------------------------------------
   # Harvester Worker (background ingestion — requires paid plan)
