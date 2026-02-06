@@ -179,7 +179,7 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/www build
+    buildCommand: set -x && npm install -g pnpm@10.28.1 && which pnpm && pnpm --version && ls -la && pnpm install 2>&1 || { echo "FAILED with exit code $?"; cat /tmp/*.log 2>/dev/null || true; exit 1; }
     staticPublishPath: apps/www/out
     envVars:
       - fromGroup: ironscout-common
