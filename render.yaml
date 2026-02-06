@@ -54,38 +54,38 @@ envVarGroups:
   - name: ironscout-redis
     envVars:
       - key: REDIS_URL
-        value: ""  # Set in dashboard - copy "Internal Key Value URL" from Redis instance
+        sync: false  # Set manually in dashboard - copy "Internal Key Value URL" from Redis instance
 
   - name: ironscout-stripe
     envVars:
       - key: STRIPE_SECRET_KEY
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
       - key: STRIPE_WEBHOOK_SECRET
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
 
   - name: ironscout-google
     envVars:
       - key: GOOGLE_CLIENT_ID
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
       - key: GOOGLE_CLIENT_SECRET
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
 
   - name: ironscout-slack
     envVars:
       - key: SLACK_DATAFEED_ALERTS_WEBHOOK_URL
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
 
   - name: ironscout-openai
     envVars:
       - key: OPENAI_API_KEY
-        value: ""  # Set in dashboard
+        sync: false  # Set manually in dashboard
 
   - name: ironscout-database
     envVars:
       - key: DATABASE_URL
-        value: ""  # Set in dashboard - copy "Internal Database URL" from PostgreSQL instance
+        sync: false  # Set manually in dashboard - copy "Internal Database URL" from PostgreSQL instance
 
 services:
   # --------------------------------------------------------------------------
@@ -179,7 +179,7 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    buildCommand: echo "Node:" && node -v && echo "pnpm:" && npm install -g pnpm@10.28.1 && pnpm -v && echo "Installing..." && pnpm install || (echo "pnpm install failed" && exit 1)
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/www build
     staticPublishPath: apps/www/out
     envVars:
       - fromGroup: ironscout-common
