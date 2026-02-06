@@ -165,6 +165,7 @@ const SAFE_FIELDS = new Set([
   // Standard log fields
   'timestamp', 'ts', 'level', 'service', 'component', 'message', 'msg',
   'event', 'event_name', 'env', 'environment', 'version',
+  'status', 'state', 'mode', 'kind', 'type', 'trigger',
   // Request correlation
   'requestId', 'request_id', 'traceId', 'trace_id', 'spanId', 'span_id',
   'correlationId', 'correlation_id',
@@ -176,6 +177,9 @@ const SAFE_FIELDS = new Set([
   // Identifiers (non-sensitive)
   'userId', 'user_id', 'productId', 'product_id', 'orderId', 'order_id',
   'jobId', 'job_id', 'sourceProductId', 'sourceKind',
+  'sourceId', 'source_id', 'adapterId', 'adapter_id', 'runId', 'run_id',
+  'executionId', 'execution_id', 'feedId', 'feed_id', 'retailerId', 'retailer_id',
+  'merchantId', 'merchant_id', 'sourceName', 'retailerName',
   // Error fields
   'error', 'errorType', 'error_type', 'errorCode', 'error_code',
   'errorMessage', 'error_message', 'errorName', 'error_name',
@@ -185,6 +189,16 @@ const SAFE_FIELDS = new Set([
   'caliber', 'brand', 'category', 'purpose', 'tier',
   'count', 'total', 'page', 'limit', 'offset',
   'query', 'sortBy', 'sort_by', 'filter', 'filters',
+  // Scheduling / worker metrics
+  'intervalMs', 'timeoutMs', 'maxAttempts', 'attempt', 'attempts',
+  'concurrency', 'queueName', 'resolverVersion', 'workflow', 'stage',
+  'schedulerTick', 'cleanup', 'retentionDays', 'cronPattern',
+  'tickIntervalMs', 'maxUrlsPerTick', 'schedulingWindow',
+  'feedsEvaluated', 'scheduledCount', 'skippedCount', 'notDueCount',
+  'aliasCount', 'lastRefreshAt', 'lastRefreshDurationMs',
+  'feedSchedule', 'benchmarkSchedule', 'openaiConfigured',
+  'totalStale', 'markedStale', 'deletedBroken', 'brokenRechecked',
+  'brokenReactivated', 'staleQueueRemoved',
   // Metrics
   'attemptsMade', 'willRetry', 'isFinalAttempt',
   'processed', 'skipped', 'errors', 'success',
