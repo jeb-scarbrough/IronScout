@@ -134,7 +134,7 @@ services:
       - fromGroup: ironscout-stripe
       - fromGroup: ironscout-google
       - key: NEXTAUTH_URL
-        value: https://ironscout.ai
+        value: https://www.ironscout.ai
       - key: AUTH_TRUST_HOST
         value: true
       - key: COOKIE_DOMAIN
