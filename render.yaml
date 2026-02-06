@@ -82,6 +82,11 @@ envVarGroups:
       - key: OPENAI_API_KEY
         value: ""  # Set in dashboard
 
+  - name: ironscout-database
+    envVars:
+      - key: DATABASE_URL
+        value: ""  # Set in dashboard - copy "Internal Database URL" from PostgreSQL instance
+
 services:
   # --------------------------------------------------------------------------
   # API Backend Service
@@ -98,6 +103,7 @@ services:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
+      - fromGroup: ironscout-database
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-stripe
       - fromGroup: ironscout-slack
@@ -105,8 +111,6 @@ services:
       - fromGroup: ironscout-email
       - key: PORT
         value: 8000
-      - key: DATABASE_URL
-        sync: false
 
   # --------------------------------------------------------------------------
   # Next.js Web Frontend
@@ -147,10 +151,9 @@ services:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
+      - fromGroup: ironscout-database
       - fromGroup: ironscout-email
       - fromGroup: ironscout-redis
-      - key: DATABASE_URL
-        sync: false
 
   # --------------------------------------------------------------------------
   # Admin Portal (internal administration)
@@ -167,9 +170,8 @@ services:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
+      - fromGroup: ironscout-database
       - fromGroup: ironscout-email
-      - key: DATABASE_URL
-        sync: false
 
   # --------------------------------------------------------------------------
   # Marketing Site (static) - www.ironscout.ai
@@ -212,8 +214,7 @@ services:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
+      - fromGroup: ironscout-database
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-slack
       - fromGroup: ironscout-email
-      - key: DATABASE_URL
-        sync: false
