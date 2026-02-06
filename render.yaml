@@ -179,7 +179,7 @@ services:
   - type: web
     name: ironscout-www
     runtime: static
-    buildCommand: pnpm install && pnpm --filter @ironscout/www build
+    buildCommand: npm install -g pnpm && pnpm install && pnpm --filter @ironscout/www build
     staticPublishPath: apps/www/out
     envVars:
       - fromGroup: ironscout-common
