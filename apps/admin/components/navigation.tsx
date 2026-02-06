@@ -14,6 +14,7 @@ import {
   Tags,
   AlertTriangle,
   Bot,
+  Database,
 } from 'lucide-react';
 import type { AdminSession } from '@/lib/auth';
 
@@ -24,6 +25,7 @@ interface NavigationProps {
 const navItems = [
   { name: 'Merchants', href: '/merchants', icon: Users },
   { name: 'Retailers', href: '/retailers', icon: Store },
+  { name: 'Sources', href: '/sources', icon: Database },
   { name: 'Affiliate Feeds', href: '/affiliate-feeds', icon: Rss },
   { name: 'Scrapers', href: '/scrapers', icon: Bot },
   { name: 'Quarantine', href: '/quarantine', icon: AlertTriangle },
