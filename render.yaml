@@ -96,7 +96,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
     envVars:
@@ -120,7 +120,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/web build
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/web build
     startCommand: cd apps/web && pnpm start
     healthCheckPath: /
     envVars:
@@ -144,7 +144,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
     startCommand: cd apps/merchant && pnpm start
     healthCheckPath: /
     envVars:
@@ -163,7 +163,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
     envVars:
@@ -206,7 +206,7 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
       - fromGroup: ironscout-common
