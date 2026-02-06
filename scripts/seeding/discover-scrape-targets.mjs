@@ -14,10 +14,14 @@
  *     [--max-urls 1000] \
  *     [--dry-run] \
  *     [--count-only] \
- *     [--notes "optional note"]
+ *     [--notes "optional note"] \
+ *     [--output <path>] \
+ *     [--no-sql]
  */
 
 import { promises as dns } from 'dns'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import { loadEnv } from '../lib/load-env.mjs'
@@ -50,6 +54,7 @@ async function main() {
 
   const startedAt = Date.now()
   const runId = new Date().toISOString()
+  const projectRoot = process.cwd()
 
   let prisma = null
   let source = null
@@ -145,7 +150,7 @@ async function main() {
       fail(`adapterId mismatch: source=${source.adapterId} input=${opts.adapterId}`)
     }
 
-    if (!opts.dryRun) {
+    if (opts.accept) {
       source = await ensureSourceGates(source, prisma)
     }
   } else if (opts.accept) {
@@ -335,12 +340,31 @@ async function main() {
     return
   }
 
+  const shouldWriteSql = !opts.noSql && !opts.countOnly
+  let sqlFilePath = null
+  if (shouldWriteSql) {
+    if (!source) {
+      fail('SQL output requires --source-id')
+    }
+    sqlFilePath = writeSqlFile({
+      projectRoot,
+      source,
+      method,
+      runId,
+      records,
+      createdBy,
+      notes,
+      outputPath: opts.output,
+    })
+    console.log(`sqlFile=${sqlFilePath}`)
+  }
+
   if (opts.dryRun || opts.countOnly) {
     return
   }
 
   if (!opts.accept) {
-    console.log('Not accepted. No writes performed. Re-run with --accept to write.')
+    console.log('DB write skipped. Re-run with --accept to write to database.')
     return
   }
 
@@ -527,6 +551,8 @@ function parseArgs(argv) {
     autoSitemap: false,
     notes: null,
     logUrls: false,
+    output: null,
+    noSql: false,
   }
 
   for (let i = 0; i < argv.length; i++) {
@@ -574,6 +600,10 @@ function parseArgs(argv) {
       out.notes = argv[++i]
     } else if (arg === '--log-urls') {
       out.logUrls = true
+    } else if (arg === '--output') {
+      out.output = argv[++i]
+    } else if (arg === '--no-sql') {
+      out.noSql = true
     } else {
       fail(`Unknown arg: ${arg}`)
     }
@@ -596,10 +626,12 @@ function printHelp() {
   console.log('  --max-urls 500 (default; capped by scrapeConfig.discovery.maxUrls)')
   console.log('  --dry-run')
   console.log('  --count-only (scan and report totals; no writes)')
-  console.log('  --accept (required to write to scrape_targets)')
+  console.log('  --accept (required to write directly to scrape_targets)')
   console.log('  --auto-sitemap (discover sitemap via robots.txt or /sitemap.xml)')
   console.log('  --notes "optional note"')
   console.log('  --log-urls (print per-URL status as discovery runs)')
+  console.log('  --output <path> (write SQL file to this path)')
+  console.log('  --no-sql (skip SQL output file)')
 }
 
 function fail(message) {
@@ -625,6 +657,55 @@ function buildNotes(runId, method, note) {
   const base = `discovery:${runId} method:${method}`
   if (!note) return base
   return `${base} ${note}`
+}
+
+function sqlEscape(value) {
+  return String(value).replace(/'/g, "''")
+}
+
+function sanitizeFilename(value) {
+  return String(value).replace(/[^0-9A-Za-z._-]/g, '-')
+}
+
+function writeSqlFile({ projectRoot, source, method, runId, records, createdBy, notes, outputPath }) {
+  const safeRunId = sanitizeFilename(runId)
+  const safeSource = sanitizeFilename(source.id)
+  const defaultDir = resolve(projectRoot, 'tmp', 'scrape-discovery')
+  const dir = outputPath ? resolve(projectRoot, outputPath) : defaultDir
+  const filePath = outputPath ? dir : resolve(dir, `discovery-${safeSource}-${safeRunId}.sql`)
+
+  if (!outputPath) {
+    mkdirSync(dir, { recursive: true })
+  } else {
+    const parentDir = resolve(filePath, '..')
+    mkdirSync(parentDir, { recursive: true })
+  }
+
+  const header = [
+    '-- IronScout scrape discovery SQL',
+    `-- sourceId=${source.id}`,
+    `-- adapterId=${source.adapterId}`,
+    `-- method=${method}`,
+    `-- runId=${runId}`,
+    `-- discovered=${records.length}`,
+    '',
+    'BEGIN;',
+    'INSERT INTO scrape_targets ("url", "canonicalUrl", "sourceId", "adapterId", "createdBy", "notes") VALUES',
+  ]
+
+  const values = records.map(record => {
+    return `  ('${sqlEscape(record.url)}', '${sqlEscape(record.canonicalUrl)}', '${sqlEscape(record.sourceId)}', '${sqlEscape(record.adapterId)}', '${sqlEscape(record.createdBy)}', '${sqlEscape(record.notes)}')`
+  })
+
+  const footer = [
+    'ON CONFLICT ("sourceId", "canonicalUrl") DO NOTHING;',
+    'COMMIT;',
+    '',
+  ]
+
+  const sql = [...header, values.join(',\n'), ...footer].join('\n')
+  writeFileSync(filePath, sql, 'utf8')
+  return filePath
 }
 
 function normalizePrefix(prefix) {
