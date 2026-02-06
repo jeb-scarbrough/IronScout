@@ -188,6 +188,8 @@ services:
       - fromGroup: ironscout-common
       - key: PORT
         value: 3000
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Harvester Worker (background ingestion — requires paid plan)
