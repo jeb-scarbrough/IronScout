@@ -1,18 +1,36 @@
-import Redis from 'ioredis'
+import Redis, { RedisOptions } from 'ioredis'
 import { logger } from './logger'
 
 const log = logger.child('redis')
 
-const redisHost = process.env.REDIS_HOST || 'localhost'
-const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10)
-const redisPassword = process.env.REDIS_PASSWORD || undefined
+// Support REDIS_URL (Render-style) or individual HOST/PORT/PASSWORD (local dev)
+// Parse URL into components for consistent interface with BullMQ
+function parseRedisConfig(): RedisOptions {
+  const redisUrl = process.env.REDIS_URL
 
-export const redisConnection = {
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
-  maxRetriesPerRequest: null,
+  if (redisUrl) {
+    try {
+      const url = new URL(redisUrl)
+      return {
+        host: url.hostname,
+        port: parseInt(url.port || '6379', 10),
+        password: url.password || undefined,
+        maxRetriesPerRequest: null,
+      }
+    } catch {
+      log.warn('Failed to parse REDIS_URL, falling back to defaults')
+    }
+  }
+
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+    maxRetriesPerRequest: null,
+  }
 }
+
+export const redisConnection: RedisOptions = parseRedisConfig()
 
 let redisClient: Redis | null = null
 

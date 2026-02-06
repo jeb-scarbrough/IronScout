@@ -11,23 +11,23 @@ export const SELECTORS = {
   jsonLd: 'script[type="application/ld+json"]',
 
   // Product title
-  title: 'h1.product_title',
+  title: 'h1.sgammo-content-single-product__title, h1.product_title, h1.entry-title',
 
-  // Price (WooCommerce standard)
-  price: '.woocommerce-Price-amount.amount',
+  // Price (SGAmmo custom layout + WooCommerce fallback)
+  price: '.sgammo-content-single-product__details__right__price .woocommerce-Price-amount.amount, .woocommerce-Price-amount.amount',
 
   // Stock status
   inStock: '.stock.in-stock',
   outOfStock: '.stock.out-of-stock',
 
   // SKU
-  sku: '.sku',
+  sku: '.sgammo-content-single-product__details__right__sku, .sku',
 
   // Product image
-  image: 'img.wp-post-image',
+  image: '.sgammo-content-single-product__details__left__main-img img, .woocommerce-product-gallery__image img, img.wp-post-image',
 
   // Product gallery (backup for image)
-  gallery: '.woocommerce-product-gallery__image img',
+  gallery: '.sgammo-content-single-product__details__left__thumbnails img, .woocommerce-product-gallery__image img',
 
   // Add to cart form (contains product ID)
   addToCartForm: 'form.cart',

@@ -99,6 +99,11 @@ describe('extractRoundCount', () => {
     expect(extractRoundCount('Test ammo 3 rounds')).toBeNull() // too small
     expect(extractRoundCount('Test ammo 15000 rounds')).toBeNull() // too large
   })
+
+  it('extracts "X Per Box" pattern', () => {
+    expect(extractRoundCount('Barnes Defense 12 Gauge 00 Buck Shot - 5 Per Box')).toBe(5)
+    expect(extractRoundCount('Federal 9mm 25 per box')).toBe(25)
+  })
 })
 
 describe('deriveShotgunLoadType', () => {
@@ -127,5 +132,6 @@ describe('deriveShotgunLoadType', () => {
   it('extracts rubber buckshot', () => {
     expect(deriveShotgunLoadType('12 Gauge Rubber Buckshot')).toBe('Rubber Buck')
     expect(deriveShotgunLoadType('Rubber Buck 12ga Round')).toBe('Rubber Buck')
+    expect(deriveShotgunLoadType('Sellier & Bellot Rubber 12 Gauge Buck Shot Ammunition')).toBe('Rubber Buck')
   })
 })

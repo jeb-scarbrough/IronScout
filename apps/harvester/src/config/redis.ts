@@ -1,20 +1,23 @@
-import Redis from 'ioredis'
+import Redis, { RedisOptions } from 'ioredis'
 import { logger } from './logger'
 
 const log = logger.redis
 
+// Support REDIS_URL (Render-style) or individual HOST/PORT/PASSWORD (local dev)
+const redisUrl = process.env.REDIS_URL
 const redisHost = process.env.REDIS_HOST || 'localhost'
 const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10)
 const redisPassword = process.env.REDIS_PASSWORD || undefined
+
+// For logging purposes, extract host info from URL if using URL mode
+const redisLogInfo = redisUrl ? redisUrl.replace(/\/\/:[^@]+@/, '//***@') : `${redisHost}:${redisPort}`
 
 // Circuit breaker state for reducing log spam during prolonged outages
 let consecutiveFailures = 0
 let lastCircuitBreakerLog = 0
 
-export const redisConnection = {
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
+// Base connection options (used for both URL and host/port modes)
+const baseOptions: RedisOptions = {
   maxRetriesPerRequest: null,
   // Keepalive to prevent idle connection drops (ECONNRESET)
   // Sends TCP keepalive probes every 10 seconds
@@ -39,8 +42,7 @@ export const redisConnection = {
         lastCircuitBreakerLog = now
         log.error('Redis circuit breaker: prolonged outage', {
           attempts: times,
-          host: redisHost,
-          port: redisPort,
+          connection: redisLogInfo,
         })
       }
       return 30000 // Cap at 30s, keep trying
@@ -72,8 +74,15 @@ export const redisConnection = {
   },
 }
 
+// Export connection config - either URL string or options object
+export const redisConnection: RedisOptions = redisUrl
+  ? { ...baseOptions }  // URL passed separately to constructor
+  : { ...baseOptions, host: redisHost, port: redisPort, password: redisPassword }
+
 export const createRedisClient = () => {
-  return new Redis(redisConnection)
+  return redisUrl
+    ? new Redis(redisUrl, redisConnection)
+    : new Redis(redisConnection)
 }
 
 /**
@@ -81,17 +90,18 @@ export const createRedisClient = () => {
  * Similar to database warmup - ensures Redis is available before starting workers
  */
 export async function warmupRedis(maxAttempts = 5): Promise<boolean> {
+  const warmupOptions: RedisOptions = {
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null, // Disable retries for warmup check
+    connectTimeout: 5000,
+  }
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      log.info('Connection attempt', { attempt, maxAttempts, host: redisHost, port: redisPort })
-      const client = new Redis({
-        host: redisHost,
-        port: redisPort,
-        password: redisPassword,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null, // Disable retries for warmup check
-        connectTimeout: 5000,
-      })
+      log.info('Connection attempt', { attempt, maxAttempts, connection: redisLogInfo })
+      const client = redisUrl
+        ? new Redis(redisUrl, warmupOptions)
+        : new Redis({ ...warmupOptions, host: redisHost, port: redisPort, password: redisPassword })
 
       await client.ping()
       await client.quit()

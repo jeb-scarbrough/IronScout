@@ -53,12 +53,8 @@ envVarGroups:
 
   - name: ironscout-redis
     envVars:
-      - key: REDIS_HOST
-        value: ""  # Set in dashboard from Redis instance
-      - key: REDIS_PORT
-        value: ""  # Set in dashboard from Redis instance
-      - key: REDIS_PASSWORD
-        value: ""  # Set in dashboard from Redis instance
+      - key: REDIS_URL
+        value: ""  # Set in dashboard - copy "Internal Key Value URL" from Redis instance
 
   - name: ironscout-stripe
     envVars:

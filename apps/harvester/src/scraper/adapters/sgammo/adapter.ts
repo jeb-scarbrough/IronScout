@@ -27,13 +27,20 @@ interface JsonLdProduct {
   name?: string
   sku?: string
   image?: string | string[]
-  offers?: {
-    '@type': 'Offer'
-    price?: string | number
-    priceCurrency?: string
-    availability?: string
-    url?: string
-  }
+  offers?: JsonLdOffer | JsonLdOffer[]
+}
+
+interface JsonLdOffer {
+  '@type'?: 'Offer' | string
+  price?: string | number
+  priceCurrency?: string
+  availability?: string
+  url?: string
+  priceSpecification?: JsonLdPriceSpecification | JsonLdPriceSpecification[]
+}
+
+interface JsonLdPriceSpecification {
+  price?: string | number
 }
 
 /**
@@ -49,6 +56,22 @@ function extractJsonLd($: cheerio.CheerioAPI): JsonLdProduct | null {
 
     try {
       const data = JSON.parse(content)
+
+      // Handle array root
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          if (item && item['@graph'] && Array.isArray(item['@graph'])) {
+            const product = item['@graph'].find(
+              (graphItem: { '@type'?: string }) => graphItem['@type'] === 'Product'
+            )
+            if (product) return product as JsonLdProduct
+          }
+
+          if (item && item['@type'] === 'Product') {
+            return item as JsonLdProduct
+          }
+        }
+      }
 
       // Handle @graph array (WooCommerce often wraps in graph)
       if (data['@graph'] && Array.isArray(data['@graph'])) {
@@ -69,6 +92,39 @@ function extractJsonLd($: cheerio.CheerioAPI): JsonLdProduct | null {
   }
 
   return null
+}
+
+function normalizeJsonLdOffers(offers: JsonLdProduct['offers']): JsonLdOffer[] {
+  if (!offers) return []
+  return Array.isArray(offers) ? offers : [offers]
+}
+
+function extractPriceFromJsonLdOffers(offers: JsonLdOffer[]): number | null {
+  for (const offer of offers) {
+    const priceFromOffer = parsePriceToCents(offer.price)
+    if (priceFromOffer !== null) return priceFromOffer
+
+    if (offer.priceSpecification) {
+      const specs = Array.isArray(offer.priceSpecification)
+        ? offer.priceSpecification
+        : [offer.priceSpecification]
+
+      for (const spec of specs) {
+        const priceFromSpec = parsePriceToCents(spec?.price)
+        if (priceFromSpec !== null) return priceFromSpec
+      }
+    }
+  }
+
+  return null
+}
+
+function extractAvailabilityFromJsonLdOffers(offers: JsonLdOffer[]): string | undefined {
+  for (const offer of offers) {
+    if (offer.availability) return offer.availability
+  }
+
+  return undefined
 }
 
 /**
@@ -173,9 +229,11 @@ export const sgammoAdapter: ScrapeAdapter = {
 
     if (jsonLd) {
       // Extract from JSON-LD
+      const offers = normalizeJsonLdOffers(jsonLd.offers)
+
       title = jsonLd.name?.trim()
-      priceCents = parsePriceToCents(jsonLd.offers?.price)
-      availability = mapSchemaAvailability(jsonLd.offers?.availability)
+      priceCents = extractPriceFromJsonLdOffers(offers)
+      availability = mapSchemaAvailability(extractAvailabilityFromJsonLdOffers(offers))
       sku = jsonLd.sku?.trim()
 
       // Image can be string or array

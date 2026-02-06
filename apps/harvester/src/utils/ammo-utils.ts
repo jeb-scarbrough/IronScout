@@ -165,7 +165,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   // .300 variants
   { pattern: /(?:^|\s|\W)\.?\s?300\s?(?:aac\s*)?blk\b|300\s?(?:aac\s*)?blackout\b/i, normalized: '.300 Blackout' },
   { pattern: /(?:^|\s|\W)\.?\s?300\s?win\s?mag\b|300\s?winchester\s?mag(?:num)?\b/i, normalized: '.300 Winchester Magnum' },
-  { pattern: /(?:^|\s|\W)\.?\s?300\s?wsm\b|300\s?win(?:chester)?\s?short\s?mag\b/i, normalized: '.300 WSM' },
+  { pattern: /(?:^|\s|\W)\.?\s?300\s?wsm\b|300\s?win(?:chester)?\s?short\s?mag(?:num)?\b/i, normalized: '.300 WSM' },
   { pattern: /(?:^|\s|\W)\.?\s?300\s?wby\b|300\s?weatherby\b/i, normalized: '.300 Weatherby' },
   { pattern: /(?:^|\s|\W)\.?\s?300\s?prc\b/i, normalized: '.300 PRC' },
   { pattern: /(?:^|\s|\W)\.?\s?300\s?rum\b|300\s?rem(?:ington)?\s?ultra\s?mag\b/i, normalized: '.300 RUM' },
@@ -488,6 +488,8 @@ export function extractRoundCount(productName: string): number | null {
     /(\d+)\s?-?\s?pack\b/i,                 // "20-pack", "20 pack"
     /qty[:\s]*(\d+)/i,                      // "qty 20", "qty: 20"
     /\((\d+)\)\s*$/,                        // "(50)" at end of title
+    /(\d+)\s?per\s?box\b/i,                 // "5 Per Box", "5 per box"
+    /(\d+)\s?per\s?case\b/i,                // "25 Per Case"
   ]
 
   for (const pattern of patterns) {
@@ -579,6 +581,8 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bwinchester\b/i, normalized: 'Winchester' },
   { pattern: /\bwolf\b/i, normalized: 'Wolf' },
   { pattern: /\bzqi\b/i, normalized: 'ZQI' },
+  { pattern: /\bigman\b/i, normalized: 'Igman' },
+  { pattern: /\bsaltech\b/i, normalized: 'Saltech' },
 
   // Product line names that indicate brand
   { pattern: /\bgold\s*dot\b/i, normalized: 'Speer' },
@@ -610,6 +614,14 @@ export function extractBrand(productName: string): string | null {
     if (pattern.test(productName)) {
       return normalized
     }
+  }
+
+  // Fallback: extract brand from "Made by X" or "Manufactured by X" patterns
+  const madeByMatch = productName.match(/\b(?:made|manufactured|produced)\s+by\s+([A-Z][a-zA-Z]+)\b/i)
+  if (madeByMatch) {
+    // Capitalize first letter
+    const brand = madeByMatch[1]
+    return brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase()
   }
 
   return null
@@ -744,8 +756,13 @@ export function deriveShotgunLoadType(
     return 'Bean Bag'
   }
 
-  // Rubber buckshot (without ball count)
-  if (/\brubber\s*buck(?:shot)?\b/i.test(productName)) {
+  // Rubber buckshot - handles various orderings:
+  // "Rubber Buckshot", "Rubber Buck Shot", "Rubber 12 Gauge Buck Shot"
+  if (/\brubber\b/i.test(productName) && /\bbuck\s*shot\b/i.test(productName)) {
+    return 'Rubber Buck'
+  }
+  // Adjacent "Rubber Buck" without "shot"
+  if (/\brubber\s*buck\b/i.test(productName)) {
     return 'Rubber Buck'
   }
 
