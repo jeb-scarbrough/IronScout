@@ -57,6 +57,8 @@ envVarGroups:
         sync: false
       - key: REDIS_PORT
         sync: false
+      - key: REDIS_PASSWORD
+        sync: false
 
   - name: ironscout-stripe
     envVars:
