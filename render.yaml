@@ -100,6 +100,7 @@ services:
     runtime: node
     region: ohio
     plan: free
+    autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
@@ -124,6 +125,7 @@ services:
     runtime: node
     region: ohio
     plan: free
+    autoDeploy: false
     buildCommand: pnpm install --filter @ironscout/web... && pnpm --filter @ironscout/web build
     startCommand: cd apps/web && pnpm start
     healthCheckPath: /
@@ -148,6 +150,7 @@ services:
     runtime: node
     region: ohio
     plan: free
+    autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
     startCommand: cd apps/merchant && pnpm start
     healthCheckPath: /
@@ -167,6 +170,7 @@ services:
     runtime: node
     region: ohio
     plan: free
+    autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
@@ -191,6 +195,7 @@ services:
     runtime: node
     region: ohio
     plan: free
+    autoDeploy: false
     buildCommand: pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
     startCommand: npx serve apps/www/out -l 3000
     healthCheckPath: /
@@ -207,6 +212,7 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
+    autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
