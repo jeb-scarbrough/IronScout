@@ -28,6 +28,7 @@
     "@ironscout/crypto": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
+    "@ironscout/redis": "workspace:*",
     "@ironscout/notifications": "workspace:*",
     "@paralleldrive/cuid2": "^3.3.0",
     "axios": "^1.13.4",

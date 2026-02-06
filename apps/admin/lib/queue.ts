@@ -2,25 +2,14 @@
  * BullMQ Queue Client for Admin App
  *
  * Allows admin to directly enqueue jobs to harvester queues.
- * Uses the same Redis connection as the harvester.
+ * Uses the shared @ironscout/redis package for consistent connection handling.
  */
 
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
+import { Redis, redisConnection, getRedisConnectionInfo } from '@ironscout/redis';
 
-const redisHost = process.env.REDIS_HOST || 'localhost';
-const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
-const redisPassword = process.env.REDIS_PASSWORD || undefined;
-
-// Log Redis config on module load (avoid leaking host/secret)
-console.log('[Redis Queue] Configured Redis connection', { passwordSet: !!redisPassword });
-
-const redisConnection = {
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
-  maxRetriesPerRequest: null,
-};
+// Log Redis config on module load
+console.log('[Redis Queue] Configured Redis connection:', getRedisConnectionInfo());
 
 // ============================================================================
 // BRAND ALIAS CACHE INVALIDATION (Pub/Sub)
@@ -33,9 +22,7 @@ let pubClient: Redis | null = null;
 function getPubClient(): Redis {
   if (!pubClient) {
     pubClient = new Redis({
-      host: redisHost,
-      port: redisPort,
-      password: redisPassword,
+      ...redisConnection,
       lazyConnect: true,
     });
     pubClient.on('error', (err) => {

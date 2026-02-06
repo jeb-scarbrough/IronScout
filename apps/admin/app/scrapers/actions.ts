@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { getAdminSession, logAdminAction } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
-import Redis from 'ioredis'
+import { createRedisClient } from '@ironscout/redis'
 import CronParser from 'cron-parser'
 
 const log = loggers.admin
@@ -1337,11 +1337,7 @@ export async function emergencyStopScraper(confirmationCode: string): Promise<{
     // 3. Clear Redis queues
     let queuesCleared = 0
     try {
-      const redis = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-        password: process.env.REDIS_PASSWORD || undefined,
-      })
+      const redis = createRedisClient()
 
       // Find and delete all scraper-related BullMQ keys
       // Queue names: scrape-url, product-resolve (from queues.ts QUEUE_NAMES)

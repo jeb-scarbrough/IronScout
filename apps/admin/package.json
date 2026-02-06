@@ -16,6 +16,7 @@
     "@ironscout/crypto": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
+    "@ironscout/redis": "workspace:*",
     "@ironscout/notifications": "workspace:*",
     "basic-ftp": "^5.1.0",
     "bullmq": "^5.67.3",

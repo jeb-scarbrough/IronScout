@@ -17,6 +17,8 @@ envVarGroups:
         value: 25.5.0
       - key: PNPM_VERSION
         value: 10.28.1
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   - name: ironscout-urls
     envVars:
@@ -98,7 +100,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
     envVars:
@@ -113,8 +115,6 @@ services:
       - fromGroup: ironscout-email
       - key: PORT
         value: 8000
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Next.js Web Frontend
@@ -139,8 +139,6 @@ services:
         value: true
       - key: COOKIE_DOMAIN
         value: .ironscout.ai
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Merchant Portal (B2B retailer interface)
@@ -160,8 +158,6 @@ services:
       - fromGroup: ironscout-database
       - fromGroup: ironscout-email
       - fromGroup: ironscout-redis
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Admin Portal (internal administration)
@@ -171,7 +167,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
     envVars:
@@ -179,10 +175,9 @@ services:
       - fromGroup: ironscout-urls
       - fromGroup: ironscout-secrets
       - fromGroup: ironscout-database
+      - fromGroup: ironscout-redis
       - fromGroup: ironscout-email
       - fromGroup: ironscout-google
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Marketing Site (static) - www.ironscout.ai
@@ -199,8 +194,6 @@ services:
       - fromGroup: ironscout-common
       - key: PORT
         value: 3000
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
 
   # --------------------------------------------------------------------------
   # Harvester Worker (background ingestion — requires paid plan)
@@ -210,7 +203,7 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
       - fromGroup: ironscout-common
@@ -220,5 +213,3 @@ services:
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-slack
       - fromGroup: ironscout-email
-      - key: SKIP_INSTALL_DEPS
-        value: "true"
