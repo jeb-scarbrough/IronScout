@@ -96,8 +96,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/api type-check
-    startCommand: cd apps/api && npx pnpm@10.28.1 start
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
+    startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
     envVars:
       - fromGroup: ironscout-common
@@ -122,8 +122,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/web build
-    startCommand: cd apps/web && npx pnpm@10.28.1 start
+    buildCommand: pnpm install --filter @ironscout/web... && pnpm --filter @ironscout/web build
+    startCommand: cd apps/web && pnpm start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -148,8 +148,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/crypto build && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/merchant build
-    startCommand: cd apps/merchant && npx pnpm@10.28.1 start
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
+    startCommand: cd apps/merchant && pnpm start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -169,8 +169,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/crypto build && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/admin build
-    startCommand: cd apps/admin && npx pnpm@10.28.1 start
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
+    startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -182,9 +182,22 @@ services:
         value: "true"
 
   # --------------------------------------------------------------------------
-  # Marketing Site (www) - TEMPORARILY REMOVED for Blueprint sync
-  # Will be added back after other services are updated
+  # Marketing Site (static) - www.ironscout.ai
   # --------------------------------------------------------------------------
+  - type: web
+    name: ironscout-www
+    runtime: node
+    region: ohio
+    plan: free
+    buildCommand: pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
+    startCommand: npx serve apps/www/out -l 3000
+    healthCheckPath: /
+    envVars:
+      - fromGroup: ironscout-common
+      - key: PORT
+        value: 3000
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Harvester Worker (background ingestion — requires paid plan)
@@ -194,8 +207,8 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
-    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/harvester build
-    startCommand: cd apps/harvester && npx pnpm@10.28.1 worker
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    startCommand: cd apps/harvester && pnpm worker
     envVars:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
