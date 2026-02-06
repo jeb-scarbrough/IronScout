@@ -96,8 +96,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
-    startCommand: cd apps/api && pnpm start
+    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/api type-check
+    startCommand: cd apps/api && npx pnpm@10.28.1 start
     healthCheckPath: /health
     envVars:
       - fromGroup: ironscout-common
@@ -122,8 +122,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/web build
-    startCommand: cd apps/web && pnpm start
+    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/web build
+    startCommand: cd apps/web && npx pnpm@10.28.1 start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -148,8 +148,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
-    startCommand: cd apps/merchant && pnpm start
+    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/crypto build && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/merchant build
+    startCommand: cd apps/merchant && npx pnpm@10.28.1 start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -169,8 +169,8 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
-    startCommand: cd apps/admin && pnpm start
+    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/crypto build && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/admin build
+    startCommand: cd apps/admin && npx pnpm@10.28.1 start
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
@@ -189,7 +189,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
+    buildCommand: npx pnpm@10.28.1 install --filter @ironscout/www... && npx pnpm@10.28.1 --filter @ironscout/www build
     startCommand: npx serve apps/www/out -l 3000
     healthCheckPath: /
     envVars:
@@ -207,8 +207,8 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
-    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
-    startCommand: cd apps/harvester && pnpm worker
+    buildCommand: npx pnpm@10.28.1 install && npx pnpm@10.28.1 --filter @ironscout/db db:generate && npx pnpm@10.28.1 --filter @ironscout/notifications build && npx pnpm@10.28.1 --filter @ironscout/harvester build
+    startCommand: cd apps/harvester && npx pnpm@10.28.1 worker
     envVars:
       - fromGroup: ironscout-common
       - fromGroup: ironscout-urls
