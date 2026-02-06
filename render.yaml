@@ -96,7 +96,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
     envVars:
@@ -111,6 +111,8 @@ services:
       - fromGroup: ironscout-email
       - key: PORT
         value: 8000
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Next.js Web Frontend
@@ -120,7 +122,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/web build
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/web build
     startCommand: cd apps/web && pnpm start
     healthCheckPath: /
     envVars:
@@ -135,6 +137,8 @@ services:
         value: true
       - key: COOKIE_DOMAIN
         value: .ironscout.ai
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Merchant Portal (B2B retailer interface)
@@ -144,7 +148,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/merchant build
     startCommand: cd apps/merchant && pnpm start
     healthCheckPath: /
     envVars:
@@ -154,6 +158,8 @@ services:
       - fromGroup: ironscout-database
       - fromGroup: ironscout-email
       - fromGroup: ironscout-redis
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Admin Portal (internal administration)
@@ -163,7 +169,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start
     healthCheckPath: /
     envVars:
@@ -172,6 +178,8 @@ services:
       - fromGroup: ironscout-secrets
       - fromGroup: ironscout-database
       - fromGroup: ironscout-email
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
 
   # --------------------------------------------------------------------------
   # Marketing Site (static) - www.ironscout.ai
@@ -181,7 +189,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
     startCommand: npx serve apps/www/out -l 3000
     healthCheckPath: /
     envVars:
@@ -199,7 +207,7 @@ services:
     runtime: node
     region: ohio
     plan: starter  # Workers require paid plan
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.1 --activate && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    buildCommand: npm install -g pnpm@10.28.1 && pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
       - fromGroup: ironscout-common
@@ -209,3 +217,5 @@ services:
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-slack
       - fromGroup: ironscout-email
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
