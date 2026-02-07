@@ -187,7 +187,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 border-t border-iron-800/50">
+      <section id="features" className="pt-14 pb-24 border-t border-iron-800/50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="section-heading mb-4">
@@ -243,7 +243,7 @@ export default function Home() {
       </section>
 
       {/* Why IronScout Section - Accordion */}
-      <section className="py-24 bg-iron-900/30 border-y border-iron-800/50">
+      <section className="pt-16 pb-24 bg-iron-900/30 border-y border-iron-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="section-heading mb-4">
@@ -288,7 +288,7 @@ export default function Home() {
       </section>
 
       {/* How It Works */}
-      <section className="py-24">
+      <section className="pt-16 pb-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="section-heading mb-4">How It Works</h2>
