@@ -2,33 +2,40 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
 import { BRAND } from '@/lib/brand'
-import { getContentSlugs, readMarkdownContent } from '@/lib/content'
+import { getNestedContentSlugs, readNestedMarkdownContent } from '@/lib/content'
 
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  return getContentSlugs('calibers').map((slug) => ({ slug }))
+  return getNestedContentSlugs('caliber-types').map(({ parent, child }) => ({
+    slug: parent,
+    type: child,
+  }))
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const content = readMarkdownContent('calibers', params.slug)
+export function generateMetadata({
+  params,
+}: {
+  params: { slug: string; type: string }
+}): Metadata {
+  const content = readNestedMarkdownContent('caliber-types', params.slug, params.type)
   if (!content) {
-    return { title: 'Caliber Not Found | IronScout' }
+    return { title: 'Not Found | IronScout' }
   }
 
-  const title = content.frontmatter.title || 'Ammo Prices by Caliber | IronScout'
+  const title = content.frontmatter.title || 'Ammo Prices | IronScout'
   const description = content.frontmatter.description
 
   return {
     title,
     description,
     alternates: {
-      canonical: `${BRAND.wwwUrl}/caliber/${params.slug}/`,
+      canonical: `${BRAND.wwwUrl}/caliber/${params.slug}/${params.type}/`,
     },
     openGraph: {
       title,
       description,
-      url: `${BRAND.wwwUrl}/caliber/${params.slug}/`,
+      url: `${BRAND.wwwUrl}/caliber/${params.slug}/${params.type}/`,
       siteName: 'IronScout',
       type: 'website',
     },
@@ -40,13 +47,17 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   }
 }
 
-export default function CaliberPage({ params }: { params: { slug: string } }) {
-  const content = readMarkdownContent('calibers', params.slug)
+export default function CaliberTypePage({
+  params,
+}: {
+  params: { slug: string; type: string }
+}) {
+  const content = readNestedMarkdownContent('caliber-types', params.slug, params.type)
   if (!content) {
     notFound()
   }
 
-  const heading = content.frontmatter.heading || 'Ammo Prices by Caliber'
+  const heading = content.frontmatter.heading || 'Ammo Prices'
   const subheading = content.frontmatter.subheading
   const primaryCta = content.frontmatter.ctaPrimaryLabel && content.frontmatter.ctaPrimaryPath
     ? {

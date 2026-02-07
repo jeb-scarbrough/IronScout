@@ -47,6 +47,48 @@ export function getContentSlugs(section: string): string[] {
     .map((file) => file.replace(/\.md$/, ''))
 }
 
+/**
+ * Get all nested content paths for a section with subdirectories.
+ * Returns arrays of [parent, child] slug pairs.
+ * E.g., content/caliber-types/9mm/fmj.md → { parent: '9mm', child: 'fmj' }
+ */
+export function getNestedContentSlugs(section: string): Array<{ parent: string; child: string }> {
+  const directory = join(CONTENT_ROOT, section)
+  if (!existsSync(directory)) return []
+
+  const results: Array<{ parent: string; child: string }> = []
+  const entries = readdirSync(directory, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const subDir = join(directory, entry.name)
+      const files = readdirSync(subDir).filter((f) => f.endsWith('.md'))
+      for (const file of files) {
+        results.push({ parent: entry.name, child: file.replace(/\.md$/, '') })
+      }
+    }
+  }
+
+  return results
+}
+
+/**
+ * Read markdown content from a nested path: section/parent/child.md
+ */
+export function readNestedMarkdownContent(
+  section: string,
+  parent: string,
+  child: string
+): MarkdownContent | null {
+  const filePath = join(CONTENT_ROOT, section, parent, `${child}.md`)
+  if (!existsSync(filePath)) {
+    return null
+  }
+
+  const raw = readFileSync(filePath, 'utf8')
+  return parseFrontmatter(raw)
+}
+
 export function readMarkdownContent(section: string, slug: string): MarkdownContent | null {
   const filePath = join(CONTENT_ROOT, section, `${slug}.md`)
   if (!existsSync(filePath)) {
