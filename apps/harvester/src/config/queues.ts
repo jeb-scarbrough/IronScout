@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq'
 import Redis from 'ioredis'
-import { redisConnection } from './redis'
+import { getSharedBullMQConnection, createRedisClient } from './redis'
 import { getQueueHistorySettings, prisma } from '@ironscout/db'
 import { createId } from '@paralleldrive/cuid2'
 import { rootLogger } from './logger'
@@ -99,7 +99,7 @@ export async function initQueueSettings(): Promise<void> {
 // =============================================================================
 
 export const alertQueue = new Queue<AlertJobData>(QUEUE_NAMES.ALERT, {
-  connection: redisConnection,
+  connection: getSharedBullMQConnection(),
   defaultJobOptions: getJobOptions('alert'),
 })
 
@@ -125,7 +125,7 @@ export interface RetailerFeedIngestJobData {
 
 export const retailerFeedIngestQueue = new Queue<RetailerFeedIngestJobData>(
   QUEUE_NAMES.RETAILER_FEED_INGEST,
-  { connection: redisConnection, defaultJobOptions: getJobOptions('retailer-feed-ingest') }
+  { connection: getSharedBullMQConnection(), defaultJobOptions: getJobOptions('retailer-feed-ingest') }
 )
 
 // Note: retailerSkuMatchQueue, retailerBenchmarkQueue, retailerInsightQueue removed for v1
@@ -150,7 +150,7 @@ export interface AffiliateFeedSchedulerJobData {
 export const affiliateFeedQueue = new Queue<AffiliateFeedJobData>(
   QUEUE_NAMES.AFFILIATE_FEED,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -165,7 +165,7 @@ export const affiliateFeedQueue = new Queue<AffiliateFeedJobData>(
 export const affiliateFeedSchedulerQueue = new Queue<AffiliateFeedSchedulerJobData>(
   QUEUE_NAMES.AFFILIATE_FEED_SCHEDULER,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: getJobOptions('affiliate-feed-scheduler'),
   }
 )
@@ -196,7 +196,7 @@ export interface ProductResolveJobData {
 export const productResolveQueue = new Queue<ProductResolveJobData>(
   QUEUE_NAMES.PRODUCT_RESOLVE,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -364,7 +364,7 @@ export interface EmbeddingGenerateJobData {
 export const embeddingGenerateQueue = new Queue<EmbeddingGenerateJobData>(
   QUEUE_NAMES.EMBEDDING_GENERATE,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -451,7 +451,7 @@ export interface QuarantineReprocessJobData {
 export const quarantineReprocessQueue = new Queue<QuarantineReprocessJobData>(
   QUEUE_NAMES.QUARANTINE_REPROCESS,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: {
       attempts: 2,
       backoff: {
@@ -531,7 +531,7 @@ export interface CurrentPriceRecomputeJobData {
 export const currentPriceRecomputeQueue = new Queue<CurrentPriceRecomputeJobData>(
   QUEUE_NAMES.CURRENT_PRICE_RECOMPUTE,
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -653,7 +653,7 @@ let adapterTrackingRedis: Redis | null = null
 
 function getAdapterTrackingRedis(): Redis {
   if (!adapterTrackingRedis) {
-    adapterTrackingRedis = new Redis(redisConnection)
+    adapterTrackingRedis = createRedisClient()
   }
   return adapterTrackingRedis
 }
@@ -698,7 +698,7 @@ async function getAdapterPendingCount(adapterId: string): Promise<number> {
  * - Priority-based processing
  */
 export const scrapeUrlQueue = new Queue<ScrapeUrlJobData>(QUEUE_NAMES.SCRAPE_URL, {
-  connection: redisConnection,
+  connection: getSharedBullMQConnection(),
   defaultJobOptions: {
     attempts: 3,
     backoff: {

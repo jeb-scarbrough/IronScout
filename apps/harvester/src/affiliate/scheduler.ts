@@ -13,7 +13,7 @@
 
 import { Worker, Job } from 'bullmq'
 import { prisma, isAffiliateSchedulerEnabled } from '@ironscout/db'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   AffiliateFeedSchedulerJobData,
@@ -55,7 +55,7 @@ export function createAffiliateFeedScheduler() {
       return schedulerTick()
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency: 1, // Only one scheduler tick at a time
     }
   )

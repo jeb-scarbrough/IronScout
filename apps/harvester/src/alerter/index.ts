@@ -1,7 +1,6 @@
 import { Worker, Job, Queue } from 'bullmq'
 import { prisma, isAlertProcessingEnabled, isEmailNotificationsEnabled } from '@ironscout/db'
-import { redisConnection } from '../config/redis'
-import { createRedisClient } from '../config/redis'
+import { getSharedBullMQConnection, createRedisClient } from '../config/redis'
 import { logger } from '../config/logger'
 import { createWorkflowLogger } from '../config/structured-log'
 import { AlertJobData } from '../config/queues'
@@ -60,7 +59,7 @@ const delayedNotificationQueue = new Queue<{
   triggerReason: string
   executionId: string
   jobCreatedAt: string // ISO timestamp for idempotency guard
-}>('delayed-notification', { connection: redisConnection })
+}>('delayed-notification', { connection: getSharedBullMQConnection() })
 
 // Rate limit constants (alerts_policy_v1)
 const USER_LIMIT_6H = 1
@@ -731,7 +730,7 @@ export const alerterWorker = new Worker<AlertJobData>(
     }
   },
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     concurrency: 5,
   }
 )
@@ -934,7 +933,7 @@ export const delayedNotificationWorker = new Worker<{
     }
   },
   {
-    connection: redisConnection,
+    connection: getSharedBullMQConnection(),
     concurrency: 5,
   }
 )

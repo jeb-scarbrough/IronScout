@@ -42,6 +42,7 @@ vi.mock('../../config/queues', () => ({
 
 vi.mock('../../config/redis', () => ({
   redisConnection: {},
+  getSharedBullMQConnection: vi.fn(() => ({})),
 }))
 
 vi.mock('bullmq', () => ({

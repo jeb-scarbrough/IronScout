@@ -16,7 +16,7 @@ import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { createId } from '@paralleldrive/cuid2'
 import { createHash } from 'crypto'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   QuarantineReprocessJobData,
@@ -373,7 +373,7 @@ export async function startQuarantineReprocessWorker(options?: {
       return processReprocessJob(job)
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency,
     }
   )

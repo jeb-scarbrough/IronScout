@@ -11,7 +11,7 @@ import { createHash } from 'crypto'
 import { Worker, Job } from 'bullmq'
 import { prisma, Prisma } from '@ironscout/db'
 import type { FeedFormatType } from '@ironscout/db'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   RetailerFeedIngestJobData,
@@ -949,7 +949,7 @@ function getMostCommonErrorCode(errorCodes: Record<string, number>): string | nu
 // ============================================================================
 
 export const retailerFeedIngestWorker = new Worker(QUEUE_NAMES.RETAILER_FEED_INGEST, processFeedIngest, {
-  connection: redisConnection,
+  connection: getSharedBullMQConnection(),
   concurrency: 5,
 })
 

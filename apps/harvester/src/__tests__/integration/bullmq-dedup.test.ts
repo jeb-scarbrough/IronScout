@@ -75,6 +75,7 @@ vi.mock('../../affiliate/lock', () => ({
 
 vi.mock('../../config/redis', () => ({
   redisConnection: {},
+  getSharedBullMQConnection: vi.fn(() => ({})),
 }))
 
 vi.mock('../../config/logger', () => ({

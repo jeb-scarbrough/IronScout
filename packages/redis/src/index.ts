@@ -192,6 +192,77 @@ export function getRedisClient(): Redis {
   return singletonClient
 }
 
+// =============================================================================
+// BullMQ Shared Connection (Connection Pool)
+// =============================================================================
+
+/**
+ * Shared Redis connection for BullMQ workers.
+ *
+ * BullMQ workers normally create 2-3 connections each. With many workers,
+ * this can exhaust Redis connection limits on free/low tiers.
+ *
+ * By passing a shared connection, all workers reuse the same connection,
+ * dramatically reducing total connection count.
+ *
+ * IMPORTANT: When using shared connections:
+ * - Workers share I/O, which may slightly reduce throughput
+ * - Workers must be closed before the shared connection
+ * - Don't call quit() on shared connection until all workers are closed
+ */
+let sharedBullMQConnection: Redis | null = null
+
+/**
+ * Get a shared Redis connection for BullMQ workers.
+ *
+ * Use this with BullMQ Worker/Queue constructors to reduce connection count:
+ * ```
+ * const worker = new Worker('queue', processor, {
+ *   connection: getSharedBullMQConnection(),
+ * })
+ * ```
+ *
+ * @returns Shared Redis connection configured for BullMQ
+ */
+export function getSharedBullMQConnection(): Redis {
+  if (!sharedBullMQConnection) {
+    sharedBullMQConnection = new Redis({
+      ...redisConnection,
+      // BullMQ requires maxRetriesPerRequest: null
+      maxRetriesPerRequest: null,
+      // Enable ready check to ensure connection is established
+      enableReadyCheck: true,
+    })
+
+    sharedBullMQConnection.on('error', (err) => {
+      console.error('[redis:bullmq] Shared connection error:', err.message)
+    })
+
+    sharedBullMQConnection.on('connect', () => {
+      console.info('[redis:bullmq] Shared connection established to', redisLogInfo)
+    })
+
+    sharedBullMQConnection.on('close', () => {
+      console.warn('[redis:bullmq] Shared connection closed')
+    })
+  }
+  return sharedBullMQConnection
+}
+
+/**
+ * Close the shared BullMQ connection.
+ *
+ * IMPORTANT: Only call this after ALL BullMQ workers/queues are closed.
+ * Call this during graceful shutdown after worker.close() calls complete.
+ */
+export async function closeSharedBullMQConnection(): Promise<void> {
+  if (sharedBullMQConnection) {
+    console.info('[redis:bullmq] Closing shared connection')
+    await sharedBullMQConnection.quit()
+    sharedBullMQConnection = null
+  }
+}
+
 /**
  * Gracefully disconnect the singleton Redis client.
  *

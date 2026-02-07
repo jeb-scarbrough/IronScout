@@ -16,7 +16,7 @@
 import { Worker, Job } from 'bullmq'
 import { prisma } from '@ironscout/db'
 import { loggers } from '../config/logger.js'
-import { redisConnection } from '../config/redis.js'
+import { getSharedBullMQConnection } from '../config/redis.js'
 import { QUEUE_NAMES, ScrapeUrlJobData, enqueueProductResolve, decrementAdapterPending } from '../config/queues.js'
 import { RESOLVER_VERSION } from '../resolver/index.js'
 import { getAdapterRegistry } from './registry.js'
@@ -490,7 +490,7 @@ export async function startScrapeWorker(options?: { concurrency?: number }): Pro
       }
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency,
     }
   )

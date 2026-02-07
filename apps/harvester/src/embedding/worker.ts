@@ -13,7 +13,7 @@
 import { Worker, Job } from 'bullmq'
 import OpenAI from 'openai'
 import { prisma, buildProductText } from '@ironscout/db'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import { QUEUE_NAMES, EmbeddingGenerateJobData } from '../config/queues'
 import { logger } from '../config/logger'
 
@@ -163,7 +163,7 @@ export async function startEmbeddingWorker(options?: {
       return processEmbeddingJob(job)
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency,
     }
   )

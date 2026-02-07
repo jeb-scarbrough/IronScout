@@ -40,6 +40,26 @@ export declare function createRedisClient(): Redis;
  */
 export declare function getRedisClient(): Redis;
 /**
+ * Get a shared Redis connection for BullMQ workers.
+ *
+ * Use this with BullMQ Worker/Queue constructors to reduce connection count:
+ * ```
+ * const worker = new Worker('queue', processor, {
+ *   connection: getSharedBullMQConnection(),
+ * })
+ * ```
+ *
+ * @returns Shared Redis connection configured for BullMQ
+ */
+export declare function getSharedBullMQConnection(): Redis;
+/**
+ * Close the shared BullMQ connection.
+ *
+ * IMPORTANT: Only call this after ALL BullMQ workers/queues are closed.
+ * Call this during graceful shutdown after worker.close() calls complete.
+ */
+export declare function closeSharedBullMQConnection(): Promise<void>;
+/**
  * Gracefully disconnect the singleton Redis client.
  *
  * Safe to call even if no client was ever created.

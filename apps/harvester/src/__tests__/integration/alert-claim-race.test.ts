@@ -38,6 +38,7 @@ vi.mock('@ironscout/db', () => ({
 
 vi.mock('../../config/redis', () => ({
   redisConnection: {},
+  getSharedBullMQConnection: vi.fn(() => ({})),
   createRedisClient: () => ({
     get: vi.fn(),
     set: vi.fn(),

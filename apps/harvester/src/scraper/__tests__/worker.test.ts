@@ -136,6 +136,7 @@ vi.mock('../../resolver/index.js', () => ({
 
 vi.mock('../../config/redis.js', () => ({
   redisConnection: {},
+  getSharedBullMQConnection: vi.fn(() => ({})),
 }))
 
 vi.mock('../../config/logger.js', () => {

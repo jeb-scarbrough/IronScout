@@ -13,7 +13,7 @@
  */
 
 import { Worker, Job } from 'bullmq'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import { QUEUE_NAMES, CurrentPriceRecomputeJobData } from '../config/queues'
 import { logger } from '../config/logger'
 import { recomputeCurrentPrices, getRecomputeStatus } from './recompute'
@@ -109,7 +109,7 @@ export async function startCurrentPriceRecomputeWorker(options?: {
       return processRecomputeJob(job)
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency,
     }
   )

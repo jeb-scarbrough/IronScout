@@ -10,7 +10,7 @@
 import { Worker, Job } from 'bullmq'
 import { randomUUID } from 'crypto'
 import { prisma, Prisma, isCircuitBreakerBypassed } from '@ironscout/db'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   AffiliateFeedJobData,
@@ -52,7 +52,7 @@ export function createAffiliateFeedWorker() {
       return processAffiliateFeedJob(job)
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency: 2, // Process up to 2 feeds concurrently (limited by SFTP server connection limit)
       limiter: {
         max: 10,

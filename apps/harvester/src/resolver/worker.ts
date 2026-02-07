@@ -14,7 +14,7 @@
 import { Worker, Job } from 'bullmq'
 import { prisma, isAutoEmbeddingEnabled } from '@ironscout/db'
 import type { SourceKind } from '@ironscout/db/generated/prisma'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   ProductResolveJobData,
@@ -92,7 +92,7 @@ export async function startProductResolverWorker(options?: {
       return processResolveJob(job)
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency,
       maxStalledCount,
     }

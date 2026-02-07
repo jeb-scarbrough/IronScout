@@ -22,7 +22,7 @@ import {
   getHarvesterLogLevelOptional,
 } from '@ironscout/db'
 import { setLogLevel, type LogLevel, flushLogs } from '@ironscout/logger'
-import { warmupRedis } from './config/redis'
+import { warmupRedis, closeSharedBullMQConnection } from './config/redis'
 import { initQueueSettings } from './config/queues'
 import { logger } from './config/logger'
 import { alerterWorker, delayedNotificationWorker } from './alerter'
@@ -385,7 +385,11 @@ const shutdown = async (signal: string) => {
     ])
     log.info('All workers closed')
 
-    // 3. Disconnect from database
+    // 3. Close shared Redis connection (after all workers)
+    log.info('Closing shared Redis connection')
+    await closeSharedBullMQConnection()
+
+    // 4. Disconnect from database
     log.info('Disconnecting from database')
     await prisma.$disconnect()
 

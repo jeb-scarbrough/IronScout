@@ -29,6 +29,7 @@ vi.mock('ioredis', () => ({
 
 vi.mock('../config/redis', () => ({
   redisConnection: { host: 'localhost', port: 6379 },
+  getSharedBullMQConnection: vi.fn(() => ({})),
 }))
 
 vi.mock('@ironscout/notifications', () => ({

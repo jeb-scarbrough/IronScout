@@ -23,7 +23,7 @@
 import { prisma } from '@ironscout/db'
 import { decryptFeedPassword } from '@ironscout/crypto'
 import { Worker, Job, Queue } from 'bullmq'
-import { redisConnection } from '../config/redis'
+import { getSharedBullMQConnection } from '../config/redis'
 import {
   retailerFeedIngestQueue,
   QUEUE_NAMES,
@@ -487,7 +487,7 @@ export interface RetailerSchedulerJobData {
 // Create the scheduler queue
 export const retailerSchedulerQueue = new Queue<RetailerSchedulerJobData>(
   RETAILER_SCHEDULER_QUEUE,
-  { connection: redisConnection }
+  { connection: getSharedBullMQConnection() }
 )
 
 // Scheduler worker - processes repeatable scheduler jobs
@@ -524,7 +524,7 @@ export async function startRetailerScheduler(): Promise<void> {
       }
     },
     {
-      connection: redisConnection,
+      connection: getSharedBullMQConnection(),
       concurrency: 1, // Process one scheduler job at a time
     }
   )
