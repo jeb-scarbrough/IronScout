@@ -223,3 +223,4 @@ services:
       - fromGroup: ironscout-redis
       - fromGroup: ironscout-slack
       - fromGroup: ironscout-email
+      - fromGroup: ironscout-openai
