@@ -242,6 +242,74 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Browse Ammo Prices Section — SEO internal links */}
+      <section className="pt-16 pb-24 border-t border-iron-800/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <h2 className="section-heading mb-4">
+              Browse <span className="text-gradient">Ammo Prices</span>
+            </h2>
+            <p className="text-iron-400 text-lg max-w-2xl mx-auto">
+              Compare prices across retailers by caliber and category.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'Handgun Ammo', href: '/ammo/handgun' },
+              { label: 'Rifle Ammo', href: '/ammo/rifle' },
+              { label: 'Rimfire Ammo', href: '/ammo/rimfire' },
+              { label: 'Shotgun Ammo', href: '/ammo/shotgun' },
+            ].map((cat) => (
+              <a
+                key={cat.href}
+                href={cat.href}
+                className="card text-center group hover:border-iron-600 transition-colors py-6"
+              >
+                <span className="font-display text-lg font-semibold text-iron-200 group-hover:text-primary transition-colors">
+                  {cat.label}
+                </span>
+              </a>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            {[
+              { label: '9mm', href: '/caliber/9mm' },
+              { label: '5.56 NATO', href: '/caliber/556-nato' },
+              { label: '.308 Win', href: '/caliber/308-winchester' },
+              { label: '.22 LR', href: '/caliber/22-lr' },
+              { label: '.45 ACP', href: '/caliber/45-acp' },
+              { label: '12 Gauge', href: '/caliber/12-gauge' },
+              { label: '.300 BLK', href: '/caliber/300-blackout' },
+              { label: '6.5 Creedmoor', href: '/caliber/65-creedmoor' },
+              { label: '7.62x39', href: '/caliber/762x39' },
+              { label: '.223 Rem', href: '/caliber/223-remington' },
+              { label: '.380 ACP', href: '/caliber/380-acp' },
+              { label: '.40 S&W', href: '/caliber/40-sw' },
+              { label: '10mm Auto', href: '/caliber/10mm-auto' },
+              { label: '.30-06', href: '/caliber/30-06-springfield' },
+            ].map((cal) => (
+              <a
+                key={cal.href}
+                href={cal.href}
+                className="flex items-center justify-center rounded-lg border border-iron-800 px-3 py-2.5
+                         hover:border-iron-600 hover:bg-iron-900/30 transition-all
+                         text-sm text-iron-400 hover:text-iron-200 font-medium"
+              >
+                {cal.label}
+              </a>
+            ))}
+          </div>
+
+          <div className="text-center mt-6">
+            <a href="/calibers" className="text-sm text-iron-500 hover:text-primary transition-colors">
+              View all calibers →
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* Why IronScout Section - Accordion */}
       <section className="pt-16 pb-24 bg-iron-900/30 border-y border-iron-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -366,7 +434,13 @@ export default function Home() {
               </span>
             </div>
 
-            <div className="flex items-center gap-8 text-sm text-iron-400">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-iron-400">
+              <a href="/calibers" className="hover:text-white transition-colors">All Calibers</a>
+              <a href="/ammo/handgun" className="hover:text-white transition-colors">Handgun</a>
+              <a href="/ammo/rifle" className="hover:text-white transition-colors">Rifle</a>
+              <a href="/ammo/rimfire" className="hover:text-white transition-colors">Rimfire</a>
+              <a href="/ammo/shotgun" className="hover:text-white transition-colors">Shotgun</a>
+              <span className="text-iron-700">|</span>
               <a href="/about" className="hover:text-white transition-colors">About</a>
               <a href="/retailers" className="hover:text-white transition-colors">For Retailers</a>
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
