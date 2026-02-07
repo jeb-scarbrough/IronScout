@@ -114,6 +114,7 @@ services:
       - fromGroup: ironscout-slack
       - fromGroup: ironscout-openai
       - fromGroup: ironscout-email
+      - fromGroup: ironscout-google
       - key: PORT
         value: 8000
 
