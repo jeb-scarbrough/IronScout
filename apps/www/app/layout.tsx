@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Outfit, JetBrains_Mono } from 'next/font/google';
+import { OrganizationJsonLd, WebSiteJsonLd } from '@/components/JsonLd';
 import './globals.css';
 
 // Use same fonts as web app for consistency across all IronScout properties
@@ -47,6 +48,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${outfit.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen grid-bg font-display antialiased">
+        <OrganizationJsonLd />
+        <WebSiteJsonLd />
         <div className="noise-overlay" />
         {children}
       </body>

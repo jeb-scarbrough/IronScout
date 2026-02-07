@@ -97,6 +97,8 @@ export default function HandgunCategoryPage() {
       title="Handgun ammo prices"
       description="Compare prices across retailers for every major handgun caliber — from budget 9mm range ammo to premium 10mm woods carry loads."
       calibers={calibers}
+      breadcrumbName="Handgun"
+      breadcrumbHref="/ammo/handgun"
     />
   )
 }

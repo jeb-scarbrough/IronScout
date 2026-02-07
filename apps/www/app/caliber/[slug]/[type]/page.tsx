@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
-import { getNestedContentSlugs, readNestedMarkdownContent } from '@/lib/content'
+import { getNestedContentSlugs, readNestedMarkdownContent, readMarkdownContent } from '@/lib/content'
 
 export const dynamicParams = false
 
@@ -13,12 +14,13 @@ export function generateStaticParams() {
   }))
 }
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: { slug: string; type: string }
-}): Metadata {
-  const content = readNestedMarkdownContent('caliber-types', params.slug, params.type)
+  params: Promise<{ slug: string; type: string }>
+}): Promise<Metadata> {
+  const { slug, type } = await params
+  const content = readNestedMarkdownContent('caliber-types', slug, type)
   if (!content) {
     return { title: 'Not Found | IronScout' }
   }
@@ -30,12 +32,12 @@ export function generateMetadata({
     title,
     description,
     alternates: {
-      canonical: `${BRAND.wwwUrl}/caliber/${params.slug}/${params.type}/`,
+      canonical: `${BRAND.wwwUrl}/caliber/${slug}/${type}/`,
     },
     openGraph: {
       title,
       description,
-      url: `${BRAND.wwwUrl}/caliber/${params.slug}/${params.type}/`,
+      url: `${BRAND.wwwUrl}/caliber/${slug}/${type}/`,
       siteName: 'IronScout',
       type: 'website',
     },
@@ -47,12 +49,13 @@ export function generateMetadata({
   }
 }
 
-export default function CaliberTypePage({
+export default async function CaliberTypePage({
   params,
 }: {
-  params: { slug: string; type: string }
+  params: Promise<{ slug: string; type: string }>
 }) {
-  const content = readNestedMarkdownContent('caliber-types', params.slug, params.type)
+  const { slug, type } = await params
+  const content = readNestedMarkdownContent('caliber-types', slug, type)
   if (!content) {
     notFound()
   }
@@ -72,13 +75,28 @@ export default function CaliberTypePage({
       }
     : undefined
 
+  // Get parent caliber name for breadcrumb
+  const parentContent = readMarkdownContent('calibers', slug)
+  const parentName = parentContent?.frontmatter.heading || slug
+  const typeName = content.frontmatter.heading || type
+
   return (
-    <MarketingMarkdownPage
-      heading={heading}
-      subheading={subheading}
-      content={content.body}
-      primaryCta={primaryCta}
-      secondaryCta={secondaryCta}
-    />
+    <>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', href: '/' },
+          { name: 'Calibers', href: '/calibers' },
+          { name: parentName, href: `/caliber/${slug}` },
+          { name: typeName, href: `/caliber/${slug}/${type}` },
+        ]}
+      />
+      <MarketingMarkdownPage
+        heading={heading}
+        subheading={subheading}
+        content={content.body}
+        primaryCta={primaryCta}
+        secondaryCta={secondaryCta}
+      />
+    </>
   )
 }

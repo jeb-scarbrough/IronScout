@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 import { getContentSlugs, readMarkdownContent } from '@/lib/content'
 
@@ -10,8 +11,13 @@ export function generateStaticParams() {
   return getContentSlugs('ammo').map((slug) => ({ slug }))
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const content = readMarkdownContent('ammo', params.slug)
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}): Promise<Metadata> {
+  const { slug } = await params
+  const content = readMarkdownContent('ammo', slug)
   if (!content) {
     return { title: 'Product Not Found | IronScout' }
   }
@@ -23,12 +29,12 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
     title,
     description,
     alternates: {
-      canonical: `${BRAND.wwwUrl}/ammo/${params.slug}/`,
+      canonical: `${BRAND.wwwUrl}/ammo/${slug}/`,
     },
     openGraph: {
       title,
       description,
-      url: `${BRAND.wwwUrl}/ammo/${params.slug}/`,
+      url: `${BRAND.wwwUrl}/ammo/${slug}/`,
       siteName: 'IronScout',
       type: 'website',
     },
@@ -40,8 +46,13 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   }
 }
 
-export default function AmmoProductPage({ params }: { params: { slug: string } }) {
-  const content = readMarkdownContent('ammo', params.slug)
+export default async function AmmoProductPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  const content = readMarkdownContent('ammo', slug)
   if (!content) {
     notFound()
   }
@@ -61,13 +72,31 @@ export default function AmmoProductPage({ params }: { params: { slug: string } }
       }
     : undefined
 
+  const displayName = content.frontmatter.heading || slug
+  const caliberSlug = content.frontmatter.caliber
+  const breadcrumbs = [
+    { name: 'Home', href: '/' },
+    { name: 'Calibers', href: '/calibers' },
+  ]
+  if (caliberSlug) {
+    const caliberContent = readMarkdownContent('calibers', caliberSlug)
+    breadcrumbs.push({
+      name: caliberContent?.frontmatter.heading || caliberSlug,
+      href: `/caliber/${caliberSlug}`,
+    })
+  }
+  breadcrumbs.push({ name: displayName, href: `/ammo/${slug}` })
+
   return (
-    <MarketingMarkdownPage
-      heading={heading}
-      subheading={subheading}
-      content={content.body}
-      primaryCta={primaryCta}
-      secondaryCta={secondaryCta}
-    />
+    <>
+      <BreadcrumbJsonLd items={breadcrumbs} />
+      <MarketingMarkdownPage
+        heading={heading}
+        subheading={subheading}
+        content={content.body}
+        primaryCta={primaryCta}
+        secondaryCta={secondaryCta}
+      />
+    </>
   )
 }

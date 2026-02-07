@@ -45,6 +45,8 @@ export default function ShotgunCategoryPage() {
       title="Shotgun ammo prices"
       description="Compare 12 gauge prices across retailers — target loads for clay shooting, buckshot for defense, and slugs for deer hunting."
       calibers={calibers}
+      breadcrumbName="Shotgun"
+      breadcrumbHref="/ammo/shotgun"
     />
   )
 }

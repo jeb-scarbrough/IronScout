@@ -128,6 +128,8 @@ export default function RifleCategoryPage() {
       title="Rifle ammo prices"
       description="Compare prices across retailers for every major rifle caliber — from budget 5.56 range ammo to precision 6.5 Creedmoor match loads."
       calibers={calibers}
+      breadcrumbName="Rifle"
+      breadcrumbHref="/ammo/rifle"
     />
   )
 }

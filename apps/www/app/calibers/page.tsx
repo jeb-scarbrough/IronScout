@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Header } from '@/app/components/Header'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 
 export const metadata: Metadata = {
@@ -70,6 +71,12 @@ const categories = [
 export default function CalibersHubPage() {
   return (
     <div className="min-h-screen bg-background">
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', href: '/' },
+          { name: 'All Calibers', href: '/calibers' },
+        ]}
+      />
       <Header />
 
       <main className="max-w-5xl mx-auto px-6 py-12 pt-28">

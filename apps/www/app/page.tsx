@@ -423,6 +423,25 @@ export default function Home() {
         </div>
       </section>
 
+      {/* FAQ JSON-LD for Why IronScout accordion */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: whyIronScoutItems.map((item) => ({
+              '@type': 'Question',
+              name: item.question,
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: item.answer,
+              },
+            })),
+          }),
+        }}
+      />
+
       {/* Footer */}
       <footer className="py-12 border-t border-iron-800/50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

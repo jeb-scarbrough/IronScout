@@ -45,6 +45,8 @@ export default function RimfireCategoryPage() {
       title="Rimfire ammo prices"
       description="Compare .22 LR prices across retailers — from bulk plinking bricks to match-grade target ammo and suppressor-friendly subsonic loads."
       calibers={calibers}
+      breadcrumbName="Rimfire"
+      breadcrumbHref="/ammo/rimfire"
     />
   )
 }

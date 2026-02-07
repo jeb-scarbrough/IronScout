@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Header } from '@/app/components/Header'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 
 export interface CategoryCaliber {
@@ -15,15 +16,26 @@ interface CategoryPageLayoutProps {
   title: string
   description: string
   calibers: CategoryCaliber[]
+  breadcrumbName: string
+  breadcrumbHref: string
 }
 
 export function CategoryPageLayout({
   title,
   description,
   calibers,
+  breadcrumbName,
+  breadcrumbHref,
 }: CategoryPageLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', href: '/' },
+          { name: 'Calibers', href: '/calibers' },
+          { name: breadcrumbName, href: breadcrumbHref },
+        ]}
+      />
       <Header />
 
       <main className="max-w-5xl mx-auto px-6 py-12 pt-28">
