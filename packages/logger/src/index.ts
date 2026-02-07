@@ -191,14 +191,18 @@ const SAFE_FIELDS = new Set([
   'query', 'sortBy', 'sort_by', 'filter', 'filters',
   // Scheduling / worker metrics
   'intervalMs', 'timeoutMs', 'maxAttempts', 'attempt', 'attempts',
-  'concurrency', 'queueName', 'resolverVersion', 'workflow', 'stage',
+  'concurrency', 'queueName', 'resolverVersion', 'workflow', 'stage', 'maxStalledCount',
   'schedulerTick', 'cleanup', 'retentionDays', 'cronPattern',
   'tickIntervalMs', 'maxUrlsPerTick', 'schedulingWindow',
-  'feedsEvaluated', 'scheduledCount', 'skippedCount', 'notDueCount',
+  'feedsEvaluated', 'scheduledCount', 'skippedCount', 'notDueCount', 'alreadyScheduledCount', 'errorCount',
   'aliasCount', 'lastRefreshAt', 'lastRefreshDurationMs',
   'feedSchedule', 'benchmarkSchedule', 'openaiConfigured',
   'totalStale', 'markedStale', 'deletedBroken', 'brokenRechecked',
   'brokenReactivated', 'staleQueueRemoved',
+  // Recompute job metrics / labels
+  'scope', 'triggeredBy', 'lookbackDays', 'inserted', 'deleted',
+  // Metrics object fields
+  'hits', 'misses',
   // Metrics
   'attemptsMade', 'willRetry', 'isFinalAttempt',
   'processed', 'skipped', 'errors', 'success',
