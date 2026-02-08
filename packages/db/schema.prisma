@@ -832,6 +832,9 @@ model products {
   embedding             Unsupported("vector(1536)")?
   /// When the embedding was last generated (for staleness tracking)
   lastEmbeddedAt        DateTime?
+  /// Generated tsvector for full-text search (migration 20260208220000)
+  /// Auto-populated: setweight(name, 'A') || setweight(brand, 'B') || setweight(caliber, 'C') || setweight(description, 'D')
+  searchVector          Unsupported("tsvector")?  @map("search_vector")
   barrelLengthReference Decimal?               @db.Decimal(4, 2)
   bulletType            BulletType?
   controlledExpansion   Boolean?
@@ -895,11 +898,11 @@ model products {
   @@index([caliber])
   @@index([category])
   @@index([createdAt])
-  @@index([description])
+  // REMOVED: @@index([description]) — replaced by GIN trigram index (migration 20260208220000)
   @@index([isSubsonic])
-  @@index([name])
+  // REMOVED: @@index([name]) — replaced by GIN trigram index (migration 20260208220000)
   @@index([pressureRating])
-  @@index([purpose])
+  // REMOVED: @@index([purpose]) — replaced by GIN trigram index (migration 20260208220000)
   @@index([updatedAt])
   @@index([brandNorm, caliberNorm])
 }
