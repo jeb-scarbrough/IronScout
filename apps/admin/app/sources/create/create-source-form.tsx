@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Save, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { createSource, getRetailersForSelect, type SourceType } from '../actions';
+import { createSource, detectSourceType, getRetailersForSelect, type SourceType } from '../actions';
 
 const SOURCE_TYPES: { value: SourceType; label: string; description: string }[] = [
   { value: 'HTML', label: 'HTML', description: 'Standard HTML page' },
@@ -36,6 +36,8 @@ export function CreateSourceForm() {
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [loadingRetailers, setLoadingRetailers] = useState(true);
   const [showScraperConfig, setShowScraperConfig] = useState(false);
+  const [isDetectingType, setIsDetectingType] = useState(false);
+  const [detectMessage, setDetectMessage] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -119,6 +121,34 @@ export function CreateSourceForm() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleDetectType = async () => {
+    if (!formData.url.trim()) {
+      setDetectMessage('Enter a URL to detect type.');
+      return;
+    }
+
+    setIsDetectingType(true);
+    setDetectMessage(null);
+
+    try {
+      const result = await detectSourceType(formData.url);
+      if (!result.success || !result.type) {
+        setDetectMessage(result.error || 'Unable to detect type.');
+        return;
+      }
+
+      updateField('type', result.type);
+
+      const confidence = result.confidence ? `${result.confidence} confidence` : 'confidence unknown';
+      const method = result.method ? ` via ${result.method.toUpperCase()}` : '';
+      setDetectMessage(`Detected ${result.type} (${confidence}${method}).`);
+    } catch {
+      setDetectMessage('Failed to detect type. Try again.');
+    } finally {
+      setIsDetectingType(false);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
@@ -160,9 +190,19 @@ export function CreateSourceForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Type *
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">
+                Type *
+              </label>
+              <button
+                type="button"
+                onClick={handleDetectType}
+                disabled={isDetectingType}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                {isDetectingType ? 'Detecting...' : 'Detect type'}
+              </button>
+            </div>
             <select
               value={formData.type}
               onChange={(e) => updateField('type', e.target.value)}
@@ -174,6 +214,9 @@ export function CreateSourceForm() {
                 </option>
               ))}
             </select>
+            {detectMessage && (
+              <p className="mt-1 text-xs text-gray-500">{detectMessage}</p>
+            )}
           </div>
 
           <div>
