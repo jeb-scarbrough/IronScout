@@ -81,13 +81,12 @@ export default function Home() {
 
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
-            {/* Headline — TODO: brainstorm keyword-rich + attention-grabbing H1 */}
             <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-4">
-              Ammo search that thinks<br />
+              Search ammo prices<br />
               <span className="text-gradient">like a shooter</span>
             </h1>
             <p className="text-xl md:text-2xl text-iron-400 font-display mb-10">
-              Range day or carry day. We search differently.
+              Range day or carry day — one search across retailers.
             </p>
 
             {/* Interactive search — client component */}
