@@ -86,7 +86,7 @@ export default function Home() {
               <span className="text-gradient">like a shooter</span>
             </h1>
             <p className="text-xl md:text-2xl text-iron-400 font-display mb-10">
-              Range day or carry day — one search across retailers.
+              AI-powered search. Results that make sense.
             </p>
 
             {/* Interactive search — client component */}
