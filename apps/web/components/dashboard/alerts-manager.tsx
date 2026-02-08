@@ -1,451 +1,315 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useSession } from 'next-auth/react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Bell, ExternalLink, Trash2, Edit2, Check, X, Filter } from 'lucide-react'
-import { getUserAlerts, updateAlert, deleteAlert, AuthError, type Alert as AlertType } from '@/lib/api'
+import {
+  Bell,
+  BellOff,
+  BellRing,
+  ExternalLink,
+  ChevronDown,
+  Search,
+  TrendingDown,
+  PackageCheck,
+} from 'lucide-react'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { useSavedItems } from '@/hooks/use-saved-items'
 import { ProductImage } from '@/components/products/product-image'
 import { toast } from 'sonner'
+import type { SavedItem } from '@/lib/api'
 import { safeLogger } from '@/lib/safe-logger'
-import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
 
+/**
+ * Alerts Manager — full-page view of all saved items with notification status.
+ *
+ * Per ADR-011: "Saving is the only user action; alerts are an implicit side effect."
+ * This page surfaces the notification dimension of saved items:
+ * - Which items have notifications enabled/paused
+ * - Quick toggles for price drop and back-in-stock alerts
+ * - Status indicators for monitoring state
+ *
+ * This is NOT a separate data source — it's the same saved items
+ * viewed through an alerts lens.
+ */
 export function AlertsManager() {
-  const { data: session, status } = useSession()
-  const [alerts, setAlerts] = useState<AlertType[]>([])
-  const [filteredAlerts, setFilteredAlerts] = useState<AlertType[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editPrice, setEditPrice] = useState<string>('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'triggered'>('all')
+  const { items, loading, error, updatePrefs, refetch } = useSavedItems()
 
-  const token = session?.accessToken
-
-  // Helper to get a valid token, refreshing if needed
-  const getValidToken = useCallback(async (): Promise<string | null> => {
-    if (token) return token
-    const refreshed = await refreshSessionToken()
-    if (!refreshed) {
-      showSessionExpiredToast()
-      return null
-    }
-    return refreshed
-  }, [token])
-
-  useEffect(() => {
-    if (status === 'loading') return
-    if (status === 'unauthenticated') {
-      setLoading(false)
-      return
-    }
-    if (token) {
-      fetchAlerts()
-    } else {
-      // Authenticated but no token - try to get one
-      getValidToken().then((t) => {
-        if (t) fetchAlerts()
-        else setLoading(false)
-      })
-    }
-  }, [token, status])
-
-  useEffect(() => {
-    filterAlerts()
-  }, [alerts, filterStatus])
-
-  const fetchAlerts = async () => {
-    const authToken = await getValidToken()
-    if (!authToken) {
-      setLoading(false)
-      return
-    }
-
+  const handleUpdatePref = async (
+    item: SavedItem,
+    field: 'notificationsEnabled' | 'priceDropEnabled' | 'backInStockEnabled',
+    value: boolean
+  ) => {
     try {
-      setLoading(true)
-      const data = await getUserAlerts(authToken, false)
-      setAlerts(data)
-      setError(null)
+      await updatePrefs(item.productId, { [field]: value })
+      if (field === 'notificationsEnabled') {
+        toast.success(value ? 'Notifications resumed' : 'Notifications paused')
+      }
     } catch (err) {
-      if (err instanceof AuthError) {
-        // Try refresh once
-        const newToken = await refreshSessionToken()
-        if (newToken) {
-          try {
-            const data = await getUserAlerts(newToken, false)
-            setAlerts(data)
-            setError(null)
-            return
-          } catch {
-            // Retry failed
-          }
-        }
-        showSessionExpiredToast()
-        return
-      }
-      setError('Failed to load alerts')
-      safeLogger.dashboard.error('Failed to load alerts', {}, err)
-    } finally {
-      setLoading(false)
+      safeLogger.dashboard.error('Failed to update notification preference', { field }, err)
+      toast.error('Failed to update notifications')
     }
   }
 
-  const filterAlerts = () => {
-    let filtered = alerts
-
-    if (filterStatus === 'active') {
-      filtered = alerts.filter(a => a.isActive && !isTriggered(a))
-    } else if (filterStatus === 'triggered') {
-      filtered = alerts.filter(a => isTriggered(a))
-    }
-
-    setFilteredAlerts(filtered)
-  }
-
-  const isTriggered = (alert: AlertType) => {
-    if (!alert.product.currentPrice || !alert.targetPrice) return false
-    return alert.product.currentPrice <= alert.targetPrice
-  }
-
-  const handleDelete = async (alertId: string) => {
-    const authToken = await getValidToken()
-    if (!authToken) return
-    if (!confirm('Are you sure you want to delete this alert?')) return
-
-    try {
-      await deleteAlert(alertId, authToken)
-      setAlerts(alerts.filter(a => a.id !== alertId))
-      toast.success('Alert deleted')
-    } catch (err) {
-      if (err instanceof AuthError) {
-        showSessionExpiredToast()
-        return
-      }
-      safeLogger.dashboard.error('Failed to delete alert', {}, err)
-      toast.error('Failed to delete alert')
-    }
-  }
-
-  const handleToggleActive = async (alert: AlertType) => {
-    const authToken = await getValidToken()
-    if (!authToken) return
-
-    try {
-      await updateAlert(alert.id, { isActive: !alert.isActive }, authToken)
-      setAlerts(alerts.map(a =>
-        a.id === alert.id ? { ...a, isActive: !a.isActive } : a
-      ))
-      toast.success(alert.isActive ? 'Alert paused' : 'Alert activated')
-    } catch (err) {
-      if (err instanceof AuthError) {
-        showSessionExpiredToast()
-        return
-      }
-      safeLogger.dashboard.error('Failed to toggle alert', {}, err)
-      toast.error('Failed to update alert')
-    }
-  }
-
-  const startEdit = (alert: AlertType) => {
-    setEditingId(alert.id)
-    setEditPrice(alert.targetPrice?.toString() || '')
-  }
-
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditPrice('')
-  }
-
-  const saveEdit = async (alertId: string) => {
-    const authToken = await getValidToken()
-    if (!authToken) return
-
-    try {
-      const newPrice = parseFloat(editPrice)
-      if (isNaN(newPrice) || newPrice <= 0) {
-        toast.error('Please enter a valid price')
-        return
-      }
-
-      await updateAlert(alertId, { targetPrice: newPrice }, authToken)
-      setAlerts(alerts.map(a =>
-        a.id === alertId ? { ...a, targetPrice: newPrice } : a
-      ))
-      setEditingId(null)
-      setEditPrice('')
-      toast.success('Target price updated')
-    } catch (err) {
-      if (err instanceof AuthError) {
-        showSessionExpiredToast()
-        return
-      }
-      safeLogger.dashboard.error('Failed to update alert', {}, err)
-      toast.error('Failed to update alert')
-    }
-  }
-
-  const getAlertStatus = (alert: AlertType) => {
-    if (!alert.isActive) return { label: 'Paused', variant: 'secondary' as const }
-    if (isTriggered(alert)) return { label: 'Triggered', variant: 'default' as const }
-    return { label: 'Active', variant: 'outline' as const }
-  }
-
-  if (!session) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <p className="text-center text-muted-foreground">
-            Please sign in to view your alerts
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
+  // Split items by notification state for summary
+  const activeCount = items.filter((i) => i.notificationsEnabled).length
+  const pausedCount = items.filter((i) => !i.notificationsEnabled).length
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <p className="text-center text-muted-foreground">Loading alerts...</p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Alerts</h1>
+          <p className="text-muted-foreground mt-1">Loading...</p>
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+          ))}
+        </div>
+      </div>
     )
   }
 
   if (error) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <p className="text-center text-destructive">{error}</p>
-          <Button onClick={fetchAlerts} className="mx-auto mt-4 block">
-            Retry
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Alerts</h1>
+        </div>
+        <Card>
+          <CardContent className="py-12">
+            <p className="text-center text-destructive">{error}</p>
+            <Button onClick={refetch} className="mx-auto mt-4 block">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      {/* Stats & Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{alerts.length}</div>
-            <p className="text-xs text-muted-foreground">Total Alerts</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">
-              {alerts.filter(a => a.isActive).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Active</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">
-              {alerts.filter(isTriggered).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Triggered</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">
-              {alerts.filter(a => !a.isActive).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Paused</p>
-          </CardContent>
-        </Card>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold">Alerts</h1>
+        <p className="text-muted-foreground mt-1">
+          Price drop and back-in-stock notifications for your saved items.
+        </p>
       </div>
 
-      {/* Filter Buttons */}
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <Button
-          size="sm"
-          variant={filterStatus === 'all' ? 'default' : 'outline'}
-          onClick={() => setFilterStatus('all')}
-        >
-          All
-        </Button>
-        <Button
-          size="sm"
-          variant={filterStatus === 'active' ? 'default' : 'outline'}
-          onClick={() => setFilterStatus('active')}
-        >
-          Active
-        </Button>
-        <Button
-          size="sm"
-          variant={filterStatus === 'triggered' ? 'default' : 'outline'}
-          onClick={() => setFilterStatus('triggered')}
-        >
-          Triggered
-        </Button>
-      </div>
-
-      {/* Alerts List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Alerts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredAlerts.length === 0 ? (
-            <div className="text-center py-12">
-              <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">
-                {filterStatus === 'all'
-                  ? 'No alerts yet. Search for products and create alerts to track prices.'
-                  : `No ${filterStatus} alerts found.`}
-              </p>
-              <Button className="mt-4" asChild>
-                <a href="/search">Browse Products</a>
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredAlerts.map((alert) => {
-                const status = getAlertStatus(alert)
-                const isEditing = editingId === alert.id
-
-                return (
-                  <div
-                    key={alert.id}
-                    className="flex flex-col md:flex-row items-start md:items-center gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                  >
-                    {/* Product Image */}
-                    <div className="w-20 h-20 relative flex-shrink-0 rounded overflow-hidden bg-gray-100">
-                      <ProductImage
-                        imageUrl={alert.product.imageUrl}
-                        caliber={alert.product.caliber}
-                        brand={alert.product.brand}
-                        alt={alert.product.name}
-                        fill
-                      />
-                    </div>
-
-                    {/* Product Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2 mb-2">
-                        <h3 className="font-medium line-clamp-2 flex-1">
-                          {alert.product.name}
-                        </h3>
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </div>
-
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-center gap-4 flex-wrap">
-                          <span className="text-muted-foreground">
-                            Current: <span className="font-semibold text-foreground">
-                              ${alert.product.currentPrice?.toFixed(2) || 'N/A'}
-                            </span>
-                          </span>
-
-                          {isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">Target:</span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={editPrice}
-                                onChange={(e) => setEditPrice(e.target.value)}
-                                className="w-24 h-7 text-sm"
-                                autoFocus
-                              />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0"
-                                onClick={() => saveEdit(alert.id)}
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0"
-                                onClick={cancelEdit}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              Target: <span className="font-semibold text-foreground">
-                                ${alert.targetPrice?.toFixed(2) || 'N/A'}
-                              </span>
-                            </span>
-                          )}
-                        </div>
-
-                        {alert.product.retailer && (
-                          <p className="text-muted-foreground">
-                            Retailer: {alert.product.retailer.name}
-                          </p>
-                        )}
-
-                        <p className="text-xs text-muted-foreground">
-                          Type: {alert.alertType.replace('_', ' ')} •{' '}
-                          {alert.product.inStock ? 'In Stock' : 'Out of Stock'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 ml-auto">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleToggleActive(alert)}
-                        title={alert.isActive ? 'Pause alert' : 'Activate alert'}
-                      >
-                        {alert.isActive ? 'Pause' : 'Activate'}
-                      </Button>
-
-                      {!isEditing && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startEdit(alert)}
-                          title="Edit target price"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                      )}
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        asChild
-                        title="View product"
-                      >
-                        <a href={`/products/${alert.productId}`}>
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(alert.id)}
-                        title="Delete alert"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+      {/* Summary badges */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+            <BellRing className="h-3.5 w-3.5 text-green-600" />
+            {activeCount} active
+          </Badge>
+          {pausedCount > 0 && (
+            <Badge variant="outline" className="gap-1.5 py-1 px-2.5">
+              <BellOff className="h-3.5 w-3.5 text-muted-foreground" />
+              {pausedCount} paused
+            </Badge>
           )}
-        </CardContent>
-      </Card>
+          <span className="text-xs text-muted-foreground">
+            {items.length} {items.length === 1 ? 'item' : 'items'} total
+          </span>
+        </div>
+      )}
+
+      {/* Items list */}
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">No alerts yet</h3>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+              Save products from search results to automatically track price drops
+              and back-in-stock notifications.
+            </p>
+            <Button asChild>
+              <a href="/search">
+                <Search className="h-4 w-4 mr-2" />
+                Search Products
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <AlertItemRow
+              key={item.id}
+              item={item}
+              onUpdatePref={(field, value) => handleUpdatePref(item, field, value)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Footer note */}
+      {items.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Alerts are sent when prices drop 5%+ or items come back in stock.
+          Manage your saved items on the{' '}
+          <a href="/dashboard/saved" className="underline hover:text-foreground">
+            Watchlist
+          </a>{' '}
+          page.
+        </p>
+      )}
     </div>
+  )
+}
+
+interface AlertItemRowProps {
+  item: SavedItem
+  onUpdatePref: (
+    field: 'notificationsEnabled' | 'priceDropEnabled' | 'backInStockEnabled',
+    value: boolean
+  ) => void
+}
+
+function AlertItemRow({ item, onUpdatePref }: AlertItemRowProps) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+          {/* Product image */}
+          <div className="w-12 h-12 relative flex-shrink-0 rounded overflow-hidden bg-muted">
+            <ProductImage
+              imageUrl={item.imageUrl}
+              caliber={item.caliber}
+              brand={item.brand}
+              alt={item.name}
+              fill
+            />
+          </div>
+
+          {/* Product info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="font-medium text-sm truncate">{item.name}</p>
+              {!item.notificationsEnabled && (
+                <Badge variant="secondary" className="text-xs shrink-0">
+                  Paused
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {item.price && (
+                <span className="font-medium text-foreground">
+                  ${item.price.toFixed(2)}
+                </span>
+              )}
+              {item.caliber && <span>{item.caliber}</span>}
+              {item.inStock ? (
+                <span className="text-green-600">In stock</span>
+              ) : (
+                <span className="text-red-500">Out of stock</span>
+              )}
+            </div>
+          </div>
+
+          {/* Alert type indicators */}
+          <div className="hidden sm:flex items-center gap-2">
+            {item.priceDropEnabled && item.notificationsEnabled && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Price drop alerts on">
+                <TrendingDown className="h-3.5 w-3.5" />
+                Price
+              </span>
+            )}
+            {item.backInStockEnabled && item.notificationsEnabled && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Back in stock alerts on">
+                <PackageCheck className="h-3.5 w-3.5" />
+                Stock
+              </span>
+            )}
+          </div>
+
+          {/* Notification controls */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className={item.notificationsEnabled ? 'text-blue-600' : 'text-muted-foreground'}
+              >
+                {item.notificationsEnabled ? (
+                  <Bell className="h-4 w-4" />
+                ) : (
+                  <BellOff className="h-4 w-4" />
+                )}
+                <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64">
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm">Notification Settings</h4>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={`alert-master-${item.id}`} className="text-sm">
+                    All notifications
+                  </Label>
+                  <Switch
+                    id={`alert-master-${item.id}`}
+                    checked={item.notificationsEnabled}
+                    onCheckedChange={(checked) => onUpdatePref('notificationsEnabled', checked)}
+                  />
+                </div>
+
+                <div className="border-t pt-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor={`alert-price-${item.id}`}
+                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
+                    >
+                      Price drops
+                    </Label>
+                    <Switch
+                      id={`alert-price-${item.id}`}
+                      checked={item.priceDropEnabled}
+                      onCheckedChange={(checked) => onUpdatePref('priceDropEnabled', checked)}
+                      disabled={!item.notificationsEnabled}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor={`alert-stock-${item.id}`}
+                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
+                    >
+                      Back in stock
+                    </Label>
+                    <Switch
+                      id={`alert-stock-${item.id}`}
+                      checked={item.backInStockEnabled}
+                      onCheckedChange={(checked) => onUpdatePref('backInStockEnabled', checked)}
+                      disabled={!item.notificationsEnabled}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground pt-1">
+                  {item.notificationsEnabled
+                    ? 'You\'ll be notified by email when conditions are met.'
+                    : 'Turn on to receive email alerts for this item.'}
+                </p>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* View product link */}
+          <Button size="sm" variant="outline" asChild title="View product">
+            <a href={`/products/${item.productId}`}>
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

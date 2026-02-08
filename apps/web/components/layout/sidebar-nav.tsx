@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Search,
   Bookmark,
+  Bell,
   Settings,
   Menu,
   X,
@@ -58,6 +59,11 @@ const navItems: (NavItem | NavSeparator)[] = [
     title: 'Watchlist',
     href: '/dashboard/saved',
     icon: Bookmark,
+  },
+  {
+    title: 'Alerts',
+    href: '/dashboard/alerts',
+    icon: Bell,
   },
   { separator: true },
   {

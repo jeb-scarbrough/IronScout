@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
-import { Plus, Trash2, Crosshair, Pencil, Camera, X, ImageIcon } from 'lucide-react'
+import { Plus, Trash2, Crosshair, Pencil, Camera, X, ImageIcon, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -47,6 +47,7 @@ import {
 import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-session-refresh'
 import { safeLogger } from '@/lib/safe-logger'
 import { Package, ExternalLink, ChevronDown } from 'lucide-react'
+import { AmmoPickerModal } from './ammo-picker-modal'
 import {
   Popover,
   PopoverContent,
@@ -141,6 +142,9 @@ export function GunLockerManager() {
   const [selectedGun, setSelectedGun] = useState<Gun | null>(null)
   const [ammoPreferences, setAmmoPreferences] = useState<AmmoPreferenceGroup[]>([])
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(false)
+
+  // Ammo picker modal state
+  const [isAmmoPickerOpen, setIsAmmoPickerOpen] = useState(false)
 
   // Extract token from session (properly typed in next-auth.d.ts)
   const token = session?.accessToken
@@ -415,6 +419,34 @@ export function GunLockerManager() {
     }
   }
 
+  // Compute existing SKU IDs for the ammo picker's "already added" state
+  const existingAmmoSkuIds = new Set(
+    ammoPreferences.flatMap((g) => g.preferences.map((p) => p.ammoSkuId))
+  )
+
+  /**
+   * Handle a preference added via the in-place ammo picker modal.
+   * Inserts into the correct use-case group optimistically.
+   */
+  const handleAmmoPickerAdd = (preference: AmmoPreference) => {
+    setAmmoPreferences((prev) => {
+      const targetGroup = prev.find((g) => g.useCase === preference.useCase)
+      if (targetGroup) {
+        return prev.map((g) =>
+          g.useCase === preference.useCase
+            ? { ...g, preferences: [...g.preferences, preference] }
+            : g
+        )
+      }
+      // Create new group
+      const updated = [...prev, { useCase: preference.useCase, preferences: [preference] }]
+      return updated.sort(
+        (a, b) =>
+          AMMO_USE_CASE_ORDER.indexOf(a.useCase) - AMMO_USE_CASE_ORDER.indexOf(b.useCase)
+      )
+    })
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -614,10 +646,7 @@ export function GunLockerManager() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      // Navigate to search with caliber filter
-                      window.location.href = `/search?caliber=${encodeURIComponent(selectedGun.caliber)}&firearmId=${selectedGun.id}`
-                    }}
+                    onClick={() => setIsAmmoPickerOpen(true)}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Ammo
@@ -630,12 +659,16 @@ export function GunLockerManager() {
                     <div className="h-16 bg-muted animate-pulse rounded-lg" />
                   </div>
                 ) : ammoPreferences.length === 0 ? (
-                  <div className="text-center py-8 border rounded-lg bg-muted/30">
-                    <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                      Add ammo you typically use with this firearm to speed up reorders.
+                  <button
+                    onClick={() => setIsAmmoPickerOpen(true)}
+                    className="w-full text-center py-8 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                  >
+                    <Search className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm font-medium mb-1">No ammo preferences yet</p>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                      Tap to search and add ammo you typically shoot with this firearm.
                     </p>
-                  </div>
+                  </button>
                 ) : (
                   <div className="space-y-4">
                     {ammoPreferences.map((group) => (
@@ -721,6 +754,20 @@ export function GunLockerManager() {
         </DialogContent>
       </Dialog>
 
+      {/* Ammo Picker Modal — layered on top of firearm detail dialog */}
+      {selectedGun && token && (
+        <AmmoPickerModal
+          open={isAmmoPickerOpen}
+          onOpenChange={setIsAmmoPickerOpen}
+          firearmId={selectedGun.id}
+          firearmLabel={selectedGun.nickname || getCaliberLabel(selectedGun.caliber)}
+          caliber={selectedGun.caliber}
+          token={token}
+          existingSkuIds={existingAmmoSkuIds}
+          onPreferenceAdded={handleAmmoPickerAdd}
+        />
+      )}
+
       {/* Gun List */}
       {guns.length === 0 ? (
         <Card>
@@ -740,7 +787,7 @@ export function GunLockerManager() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {guns.map((gun) => (
-            <Card key={gun.id} className="group relative overflow-hidden">
+            <Card key={gun.id} className="relative overflow-hidden">
               <CardContent className="p-5">
                 <div className="flex items-start gap-4">
                   {/* Image or placeholder */}
@@ -782,27 +829,35 @@ export function GunLockerManager() {
                     <p className="text-xs text-muted-foreground mt-2">View ammo preferences →</p>
                   </button>
 
-                  {/* Action buttons */}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleEditGun(gun)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      <span className="sr-only">Edit gun</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDeleteGun(gun.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Remove gun</span>
-                    </Button>
-                  </div>
+                  {/* Action menu — always visible for touch accessibility */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="sr-only">Gun actions</span>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-36 p-1">
+                      <button
+                        onClick={() => handleEditGun(gun)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left rounded hover:bg-muted"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGun(gun.id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-left rounded text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </CardContent>
             </Card>
