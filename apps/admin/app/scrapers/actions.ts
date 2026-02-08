@@ -689,6 +689,49 @@ export async function listAdapterStatuses(): Promise<{ success: boolean; error?:
   }
 }
 
+export async function registerKnownAdapters(): Promise<{ success: boolean; error?: string; createdCount?: number }> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
+  try {
+    const existing = await prisma.scrape_adapter_status.findMany({
+      select: { adapterId: true },
+    })
+    const existingIds = new Set(existing.map((row) => row.adapterId))
+
+    const now = new Date()
+    const toCreate = KNOWN_ADAPTERS.filter((adapter) => !existingIds.has(adapter.id))
+
+    if (toCreate.length === 0) {
+      return { success: true, createdCount: 0 }
+    }
+
+    await prisma.scrape_adapter_status.createMany({
+      data: toCreate.map((adapter) => ({
+        adapterId: adapter.id,
+        enabled: false,
+        disabledAt: now,
+        disabledReason: 'MANUAL',
+      })),
+      skipDuplicates: true,
+    })
+
+    await logAdminAction(session.userId, 'REGISTER_SCRAPE_ADAPTERS', {
+      resource: 'ScrapeAdapter',
+      newValue: {
+        createdAdapters: toCreate.map((adapter) => adapter.id),
+        createdCount: toCreate.length,
+      },
+    })
+
+    revalidatePath('/scrapers/adapters')
+    return { success: true, createdCount: toCreate.length }
+  } catch (error) {
+    log.error('Failed to register adapters', {}, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, error: 'Failed to register adapters' }
+  }
+}
+
 export async function toggleAdapterEnabled(adapterId: string, enabled: boolean): Promise<{ success: boolean; error?: string }> {
   const session = await getAdminSession()
   if (!session) return { success: false, error: 'Unauthorized' }

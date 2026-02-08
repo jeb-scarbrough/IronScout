@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { listAdapterStatuses } from '../actions'
+import { listAdapterStatuses, registerKnownAdapters } from '../actions'
 import { AdapterStatusTable } from './adapter-table'
 
 export const dynamic = 'force-dynamic'
@@ -31,11 +31,24 @@ export default async function AdaptersPage() {
       </div>
 
       <div className="mt-8 bg-white shadow rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Registered Adapters</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Enable or disable adapters and view health metrics.
-          </p>
+        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">Registered Adapters</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Enable or disable adapters and view health metrics.
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              Registering from code seeds disabled adapters until you enable them manually.
+            </p>
+          </div>
+          <form action={registerKnownAdapters}>
+            <button
+              type="submit"
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Register adapters from code
+            </button>
+          </form>
         </div>
         <AdapterStatusTable adapters={adapters} />
       </div>

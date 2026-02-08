@@ -1,0 +1,21 @@
+{
+  "name": "@ironscout/scraper-registry",
+  "version": "1.0.0",
+  "description": "Shared scraper adapter registry metadata",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

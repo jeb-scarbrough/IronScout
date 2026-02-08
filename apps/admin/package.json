@@ -18,6 +18,7 @@
     "@ironscout/logger": "workspace:*",
     "@ironscout/redis": "workspace:*",
     "@ironscout/notifications": "workspace:*",
+    "@ironscout/scraper-registry": "workspace:*",
     "basic-ftp": "^5.1.0",
     "bullmq": "^5.67.3",
     "clsx": "^2.1.1",

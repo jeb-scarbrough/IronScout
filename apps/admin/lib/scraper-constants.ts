@@ -6,13 +6,8 @@
  */
 
 /** Known adapters - must match harvester registry */
-export const KNOWN_ADAPTERS = [
-  { id: 'sgammo', name: 'SGAmmo', domain: 'sgammo.com' },
-  { id: 'primaryarms', name: 'Primary Arms', domain: 'primaryarms.com' },
-  { id: 'midway', name: 'MidwayUSA', domain: 'midwayusa.com' },
-] as const
-
-export type KnownAdapter = (typeof KNOWN_ADAPTERS)[number]
+export { KNOWN_ADAPTERS } from '@ironscout/scraper-registry'
+export type { KnownAdapter } from '@ironscout/scraper-registry'
 
 /** Schedule presets for adapter-level scheduling */
 export const SCHEDULE_PRESETS = {
