@@ -1,26 +1,35 @@
-'use client';
-
-import { useState } from 'react';
+import type { Metadata } from 'next';
 import { Header } from './components/Header';
+import { HeroSearch } from './components/HeroSearch';
+import { FaqAccordion } from './components/FaqAccordion';
 import { IronScoutLogo } from '@ironscout/ui/components';
-import { BRAND } from '../lib/brand';
+import { BRAND } from '@/lib/brand';
 
 const APP_URL = BRAND.appUrl;
 
-// Primary example chips — must match apps/web/components/search/unified-search.tsx
-const EXAMPLE_CHIPS = [
-  { label: '9mm Range', query: '9mm for range practice' },
-  { label: '9mm Bulk', query: '9mm bulk for range' },
-  { label: '300BLK Subsonic', query: '300 blackout subsonic' },
-  { label: '5.56 Match 77gr', query: '5.56 match grade 77 grain' },
-  { label: '.22LR Plinking', query: '.22 LR bulk plinking' },
-];
-
-const advancedExampleQueries = [
-  '9mm for compact carry, low flash',
-  'subsonic .300 blackout for suppressor',
-  'short barrel optimized defense ammo',
-];
+export const metadata: Metadata = {
+  title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+  description:
+    'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and 14 calibers across 15+ online retailers. Track price history, set alerts, and find deals. Free to use.',
+  alternates: {
+    canonical: `${BRAND.wwwUrl}/`,
+  },
+  openGraph: {
+    title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+    description:
+      'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more across 15+ retailers. Track price history, set alerts, and find deals.',
+    url: `${BRAND.wwwUrl}/`,
+    siteName: 'IronScout',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+    description:
+      'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more. Free ammo price tracker with alerts.',
+  },
+};
 
 const whyIronScoutItems = [
   {
@@ -28,54 +37,36 @@ const whyIronScoutItems = [
     answer: "IronScout is an indexing and intelligence layer. We don't sell ammo, intermediate checkout, or compete with retailers. We help you understand what's available and where.",
   },
   {
-    question: "We show real price history",
+    question: 'We show real price history',
     answer: "See how prices have changed over time for any product. Historical context helps you understand whether today's price is actually good or just normal.",
   },
   {
-    question: "Results are ordered by intent, not just price",
+    question: 'Results are ordered by intent, not just price',
     answer: "Looking for range ammo? Defense rounds? Match-grade precision? IronScout surfaces results based on what you're actually trying to do, not just the lowest sticker price.",
   },
   {
     question: "We don't tell you what to buy",
-    answer: "No recommendations, no \"best deals,\" no urgency tactics. IronScout provides information and context. The decision is always yours.",
+    answer: 'No recommendations, no "best deals," no urgency tactics. IronScout provides information and context. The decision is always yours.',
   },
   {
-    question: "Your calibers save you time",
+    question: 'Your calibers save you time',
     answer: "Add what you shoot and IronScout focuses on relevant results automatically. No more filtering through calibers you don't own.",
   },
   {
-    question: "Alerts that respect your attention",
+    question: 'Alerts that respect your attention',
     answer: "Get notified when prices drop or items come back in stock. No spam, no manufactured urgency—just the changes that actually matter to you.",
   },
   {
-    question: "Transparent about how we work",
-    answer: "When something is promoted or paid, it's clearly labeled. Relevance and accuracy come before monetization.",
+    question: 'Transparent about how we work',
+    answer: 'When something is promoted or paid, it\'s clearly labeled. Relevance and accuracy come before monetization.',
   },
   {
-    question: "Built by shooters who got tired of bad search",
-    answer: "IronScout exists because we wanted something better for ourselves. We understand the frustration of endless tabs and price-checking because we lived it.",
+    question: 'Built by shooters who got tired of bad search',
+    answer: 'IronScout exists because we wanted something better for ourselves. We understand the frustration of endless tabs and price-checking because we lived it.',
   },
 ];
 
 export default function Home() {
-  const [query, setQuery] = useState('');
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) {
-      window.location.href = `${APP_URL}/search?q=${encodeURIComponent(query)}`;
-    }
-  };
-
-  const handleExampleClick = (example: string) => {
-    window.location.href = `${APP_URL}/search?q=${encodeURIComponent(example)}`;
-  };
-
-  const toggleAccordion = (index: number) => {
-    setOpenIndex(openIndex === index ? null : index);
-  };
-
   return (
     <div className="relative">
       <Header currentPage="home" />
@@ -90,7 +81,7 @@ export default function Home() {
 
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
-            {/* Headline */}
+            {/* Headline — TODO: brainstorm keyword-rich + attention-grabbing H1 */}
             <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-4">
               Ammo search that thinks<br />
               <span className="text-gradient">like a shooter</span>
@@ -99,78 +90,13 @@ export default function Home() {
               Range day or carry day. We search differently.
             </p>
 
-            {/* Search Box */}
-            <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-6">
-              <div className="relative flex items-center">
-                <div className="absolute left-4 flex items-center">
-                  <svg className="w-5 h-5 text-iron-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by caliber, use case, or intent..."
-                  className="w-full pl-12 pr-32 py-4 text-lg bg-iron-900 border-2 border-iron-700 rounded-2xl
-                           focus:border-primary focus:ring-4 focus:ring-primary/20
-                           transition-all text-iron-100 placeholder:text-iron-500"
-                />
-                <button
-                  type="submit"
-                  className="absolute right-2 px-6 py-2.5 bg-primary hover:bg-primary/80
-                           text-iron-950 font-semibold rounded-xl transition-all
-                           flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  Search
-                </button>
-              </div>
-            </form>
-
-            {/* Example Chips — matches web app search */}
-            <div className="mb-12 space-y-5">
-              <div className="flex flex-wrap justify-center gap-2">
-                {EXAMPLE_CHIPS.map((chip, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleExampleClick(chip.query)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-iron-700
-                             bg-iron-900/50 text-iron-200 text-sm font-medium
-                             shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0
-                             hover:border-primary/50 transition-all"
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-3 border-t border-iron-800">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <p className="text-xs text-iron-500 font-medium">Advanced searches:</p>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {advancedExampleQueries.map((example, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleExampleClick(example)}
-                      className="text-xs px-3 py-1.5 rounded-full border border-iron-700
-                               hover:border-primary/50 hover:bg-iron-800/50
-                               transition-colors text-iron-500"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Interactive search — client component */}
+            <HeroSearch />
 
             {/* Account Prompt */}
             <div className="bg-iron-900/50 border border-iron-800 rounded-xl p-6 max-w-xl mx-auto">
               <p className="text-iron-300 mb-4">
-                Tell us what you shoot. We'll alert you to price drops and back-in-stock items.
+                Tell us what you shoot. We&apos;ll alert you to price drops and back-in-stock items.
               </p>
               <a
                 href={`${APP_URL}/auth/signup`}
@@ -203,36 +129,32 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                icon: (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                ),
                 title: 'Intent-Aware Search',
-                description: 'Range ammo and carry ammo are different decisions. IronScout understands your use case and orders results accordingly.',
+                description:
+                  'Range ammo and carry ammo are different decisions. IronScout understands your use case and orders results accordingly.',
+                iconPath:
+                  'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
               },
               {
-                icon: (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                ),
                 title: 'Personal Caliber Context',
-                description: 'Save what you shoot and stop filtering through irrelevant results. Your calibers shape your experience automatically.',
+                description:
+                  'Save what you shoot and stop filtering through irrelevant results. Your calibers shape your experience automatically.',
+                iconPath:
+                  'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
               },
               {
-                icon: (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                ),
                 title: 'Market Awareness',
-                description: "See price history and get alerts for changes that matter. Understand whether today's price is actually good.",
+                description:
+                  "See price history and get alerts for changes that matter. Understand whether today's price is actually good.",
+                iconPath:
+                  'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
               },
             ].map((feature, i) => (
               <div key={i} className="card group hover:border-iron-600 transition-colors">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:bg-primary/20 transition-colors">
-                  {feature.icon}
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={feature.iconPath} />
+                  </svg>
                 </div>
                 <h3 className="font-display text-xl font-semibold mb-2">{feature.title}</h3>
                 <p className="text-iron-400 leading-relaxed">{feature.description}</p>
@@ -249,8 +171,14 @@ export default function Home() {
             <h2 className="section-heading mb-4">
               Browse <span className="text-gradient">Ammo Prices</span>
             </h2>
-            <p className="text-iron-400 text-lg max-w-2xl mx-auto">
+            <p className="text-iron-400 text-lg max-w-2xl mx-auto mb-4">
               Compare prices across retailers by caliber and category.
+            </p>
+            <p className="text-iron-500 text-base max-w-3xl mx-auto">
+              IronScout tracks ammunition prices daily across major online retailers.
+              Browse by category — handgun, rifle, rimfire, or shotgun — or jump to a
+              specific caliber to see current price ranges, popular product lines, and
+              bulk deals.
             </p>
           </div>
 
@@ -310,7 +238,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Why IronScout Section - Accordion */}
+      {/* Why IronScout Section — FAQ Accordion */}
       <section className="pt-16 pb-24 bg-iron-900/30 border-y border-iron-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
@@ -322,36 +250,8 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="space-y-3">
-            {whyIronScoutItems.map((item, i) => (
-              <div
-                key={i}
-                className="border border-iron-800 rounded-lg overflow-hidden bg-iron-950/50"
-              >
-                <button
-                  onClick={() => toggleAccordion(i)}
-                  className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-iron-900/50 transition-colors"
-                >
-                  <span className="font-medium text-iron-100">{item.question}</span>
-                  <svg
-                    className={`w-5 h-5 text-iron-500 transition-transform ${
-                      openIndex === i ? 'rotate-180' : ''
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {openIndex === i && (
-                  <div className="px-6 pb-4">
-                    <p className="text-iron-400 leading-relaxed">{item.answer}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {/* Interactive accordion — client component, answers always in DOM */}
+          <FaqAccordion items={whyIronScoutItems} />
         </div>
       </section>
 
@@ -370,17 +270,20 @@ export default function Home() {
               {
                 step: '01',
                 title: 'Search',
-                description: 'Describe what you need in natural language. IronScout understands calibers, use cases, and intent.',
+                description:
+                  'Describe what you need in natural language. IronScout understands calibers, use cases, and intent.',
               },
               {
                 step: '02',
                 title: 'Save',
-                description: "Add items to your watchlist. We monitor prices and availability in the background so you don't have to.",
+                description:
+                  "Add items to your watchlist. We monitor prices and availability in the background so you don't have to.",
               },
               {
                 step: '03',
                 title: 'Buy',
-                description: 'When conditions are right, click through to the retailer. No middleman, no markup.',
+                description:
+                  'When conditions are right, click through to the retailer. No middleman, no markup.',
               },
             ].map((item, i) => (
               <div key={i} className="relative">
@@ -423,7 +326,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ JSON-LD for Why IronScout accordion */}
+      {/* FAQ JSON-LD */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
