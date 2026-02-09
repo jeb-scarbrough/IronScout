@@ -186,17 +186,47 @@ async function main() {
 
   // exit-code flag: 0 = empty (no diff), 2 = has diff, 1 = error
   if (diffResult.status === 2) {
-    console.error('\n' + diffResult.stdout)
-    fatal(
-      'Database schema does not match schema.prisma',
-      'Run `pnpm db:push` to sync database or `pnpm db:migrate:dev` to create a migration'
-    )
+    const diffOutput = diffResult.stdout || ''
+
+    // Known drift allowlist: GIN trigram indexes and generated columns created via raw SQL
+    // that Prisma cannot represent natively (see prisma/prisma#17516, #16275).
+    // These are intentional and managed outside Prisma's migration system.
+    const KNOWN_DRIFT_PATTERNS = [
+      // GIN trigram indexes on products (migration 20260208220000)
+      /Removed index on columns \((brand|caliberNorm|caseMaterial|description|name|purpose|search_vector)\)/,
+      // Generated tsvector column default (Prisma can't represent GENERATED ALWAYS AS)
+      /Altered column `search_vector` \(default changed/,
+    ]
+
+    // Strip known drift lines and check if any unknown drift remains
+    const diffLines = diffOutput.split('\n')
+    const unknownDrift = diffLines.filter(line => {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('[*] Changed') || trimmed === '') return false
+      if (trimmed.startsWith('[+]') || trimmed.startsWith('[-]') || trimmed.startsWith('[*]')) {
+        return !KNOWN_DRIFT_PATTERNS.some(pattern => pattern.test(trimmed))
+      }
+      return false
+    })
+
+    if (unknownDrift.length > 0) {
+      console.error('\n' + diffOutput)
+      fatal(
+        'Database schema does not match schema.prisma',
+        'Run `pnpm db:push` to sync database or `pnpm db:migrate:dev` to create a migration'
+      )
+    }
+
+    warn('Known drift detected (GIN trigram indexes / generated columns) — allowed')
+    if (args.includes('--verbose')) {
+      console.error(DIM + diffOutput + RESET)
+    }
   } else if (diffResult.status === 1) {
     console.error(diffResult.stderr)
     fatal('Schema diff check failed')
   }
 
-  success('Database schema matches schema.prisma')
+  success('Database schema matches schema.prisma (or only known drift)')
 
   // Step 5: Check if Prisma client is up-to-date
   info('Checking Prisma client freshness...')

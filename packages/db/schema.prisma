@@ -226,14 +226,14 @@ model alert_events {
   sourceId          String?
   triggerPriceId    String?
   eventType         AlertEventType
-  triggeredAt       DateTime
+  triggeredAt       DateTime             @db.Timestamptz
   priceAtTrigger    Decimal?             @db.Decimal(10, 2)
   previousPrice     Decimal?             @db.Decimal(10, 2)
   currency          String               @default("USD")
   deliveryChannel   AlertDeliveryChannel @default(EMAIL)
   providerMessageId String?
   idempotencyKey    String               @unique
-  createdAt         DateTime             @default(now())
+  createdAt         DateTime             @default(now()) @db.Timestamptz
 
   users           users?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   watchlist_items watchlist_items? @relation(fields: [watchlistItemId], references: [id], onDelete: SetNull)
