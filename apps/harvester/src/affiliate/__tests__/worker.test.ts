@@ -12,76 +12,116 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Job } from 'bullmq'
 
-// Mock all dependencies before importing the worker
-const mockPrismaFind = vi.fn()
-const mockPrismaCreate = vi.fn()
-const mockPrismaUpdate = vi.fn()
-const mockPrismaFindUniqueOrThrow = vi.fn()
-const mockAcquireLock = vi.fn()
-const mockReleaseLock = vi.fn()
-const mockDownloadFeed = vi.fn()
-const mockParseFeed = vi.fn()
-const mockProcessProducts = vi.fn()
-const mockEvaluateCircuitBreaker = vi.fn()
-const mockPromoteProducts = vi.fn()
-const mockCopySeenFromPreviousRun = vi.fn()
-const mockNotifyFailed = vi.fn()
-const mockNotifyCircuitBreaker = vi.fn()
-const mockNotifyAutoDisabled = vi.fn()
-const mockNotifyRecovered = vi.fn()
-const mockQueueAdd = vi.fn()
+const workerMocks = vi.hoisted(() => {
+  const state = {
+    processor: null as ((job: any) => Promise<void>) | null,
+  }
+
+  class WorkerMock {
+    constructor(_name: string, handler: (job: any) => Promise<void>) {
+      state.processor = handler
+    }
+
+    on = vi.fn()
+
+    close = vi.fn()
+  }
+
+  return { state, WorkerMock }
+})
+
+const mocks = vi.hoisted(() => ({
+  mockPrismaFind: vi.fn(),
+  mockPrismaCreate: vi.fn(),
+  mockPrismaUpdate: vi.fn(),
+  mockPrismaFindFirst: vi.fn(),
+  mockPrismaFindUniqueOrThrow: vi.fn(),
+  mockAcquireLock: vi.fn(),
+  mockReleaseLock: vi.fn(),
+  mockDownloadFeed: vi.fn(),
+  mockParseFeed: vi.fn(),
+  mockProcessProducts: vi.fn(),
+  mockEvaluateCircuitBreaker: vi.fn(),
+  mockPromoteProducts: vi.fn(),
+  mockCopySeenFromPreviousRun: vi.fn(),
+  mockIsCircuitBreakerBypassed: vi.fn(),
+  mockNotifyFailed: vi.fn(),
+  mockNotifyCircuitBreaker: vi.fn(),
+  mockNotifyAutoDisabled: vi.fn(),
+  mockNotifyRecovered: vi.fn(),
+  mockQueueAdd: vi.fn(),
+}))
+
+vi.mock('bullmq', () => ({
+  Worker: workerMocks.WorkerMock,
+  Job: vi.fn(),
+}))
 
 vi.mock('@ironscout/db', () => ({
   prisma: {
     affiliateFeed: {
-      findUnique: mockPrismaFind,
-      update: mockPrismaUpdate,
+      findUnique: mocks.mockPrismaFind,
+      update: mocks.mockPrismaUpdate,
     },
     affiliateFeedRun: {
-      create: mockPrismaCreate,
-      findUniqueOrThrow: mockPrismaFindUniqueOrThrow,
-      update: mockPrismaUpdate,
+      create: mocks.mockPrismaCreate,
+      findUniqueOrThrow: mocks.mockPrismaFindUniqueOrThrow,
+      update: mocks.mockPrismaUpdate,
     },
     affiliateFeedRunError: {
       createMany: vi.fn(),
     },
+    affiliate_feeds: {
+      findUnique: mocks.mockPrismaFind,
+      update: mocks.mockPrismaUpdate,
+    },
+    affiliate_feed_runs: {
+      create: mocks.mockPrismaCreate,
+      findUniqueOrThrow: mocks.mockPrismaFindUniqueOrThrow,
+      findFirst: mocks.mockPrismaFindFirst,
+      update: mocks.mockPrismaUpdate,
+    },
+    affiliate_feed_run_errors: {
+      createMany: vi.fn(),
+    },
   },
-  Prisma: {},
+  Prisma: { DbNull: null },
+  isCircuitBreakerBypassed: mocks.mockIsCircuitBreakerBypassed,
 }))
 
 vi.mock('../lock', () => ({
-  acquireAdvisoryLock: mockAcquireLock,
-  releaseAdvisoryLock: mockReleaseLock,
+  acquireAdvisoryLock: mocks.mockAcquireLock,
+  releaseAdvisoryLock: mocks.mockReleaseLock,
 }))
 
 vi.mock('../fetcher', () => ({
-  downloadFeed: mockDownloadFeed,
+  downloadFeed: mocks.mockDownloadFeed,
 }))
 
 vi.mock('../parser', () => ({
-  parseFeed: mockParseFeed,
+  parseFeed: mocks.mockParseFeed,
 }))
 
 vi.mock('../processor', () => ({
-  processProducts: mockProcessProducts,
+  processProducts: mocks.mockProcessProducts,
 }))
 
 vi.mock('../circuit-breaker', () => ({
-  evaluateCircuitBreaker: mockEvaluateCircuitBreaker,
-  promoteProducts: mockPromoteProducts,
-  copySeenFromPreviousRun: mockCopySeenFromPreviousRun,
+  evaluateCircuitBreaker: mocks.mockEvaluateCircuitBreaker,
+  promoteProducts: mocks.mockPromoteProducts,
+  copySeenFromPreviousRun: mocks.mockCopySeenFromPreviousRun,
 }))
 
 vi.mock('@ironscout/notifications', () => ({
-  notifyAffiliateFeedRunFailed: mockNotifyFailed,
-  notifyCircuitBreakerTriggered: mockNotifyCircuitBreaker,
-  notifyAffiliateFeedAutoDisabled: mockNotifyAutoDisabled,
-  notifyAffiliateFeedRecovered: mockNotifyRecovered,
+  notifyAffiliateFeedRunFailed: mocks.mockNotifyFailed,
+  notifyCircuitBreakerTriggered: mocks.mockNotifyCircuitBreaker,
+  notifyAffiliateFeedAutoDisabled: mocks.mockNotifyAutoDisabled,
+  notifyAffiliateFeedRecovered: mocks.mockNotifyRecovered,
 }))
 
 vi.mock('../../config/queues', () => ({
   QUEUE_NAMES: { AFFILIATE_FEED: 'affiliate-feed' },
-  affiliateFeedQueue: { add: mockQueueAdd },
+  affiliateFeedQueue: { add: mocks.mockQueueAdd },
 }))
 
 vi.mock('../../config/redis', () => ({
@@ -99,6 +139,51 @@ vi.mock('../../config/logger', () => ({
     },
   },
 }))
+
+vi.mock('../../config/run-file-logger', () => {
+  const createRunFileLogger = vi.fn(() => {
+    const logger: any = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      fatal: vi.fn(),
+      child: vi.fn(() => logger),
+      close: vi.fn().mockResolvedValue(undefined),
+      filePath: '/tmp/mock-run.log',
+    }
+    return logger
+  })
+
+  return {
+    createRunFileLogger,
+    createDualLogger: vi.fn((consoleLogger) => consoleLogger),
+  }
+})
+
+const {
+  mockPrismaFind,
+  mockPrismaCreate,
+  mockPrismaUpdate,
+  mockPrismaFindFirst,
+  mockPrismaFindUniqueOrThrow,
+  mockAcquireLock,
+  mockReleaseLock,
+  mockDownloadFeed,
+  mockParseFeed,
+  mockProcessProducts,
+  mockEvaluateCircuitBreaker,
+  mockPromoteProducts,
+  mockCopySeenFromPreviousRun,
+  mockIsCircuitBreakerBypassed,
+  mockNotifyFailed,
+  mockNotifyCircuitBreaker,
+  mockNotifyAutoDisabled,
+  mockNotifyRecovered,
+  mockQueueAdd,
+} = mocks
+
+import { createAffiliateFeedWorker } from '../worker'
 
 // Create mock feed data
 const createMockFeed = (overrides = {}) => ({
@@ -118,11 +203,12 @@ const createMockFeed = (overrides = {}) => ({
   expiryHours: 72,
   maxRowCount: 500000,
   network: 'IMPACT',
-  source: {
+  manualRunPending: false,
+  sources: {
     id: 'source-456',
     name: 'Test Source',
     retailerId: 'retailer-789',
-    retailer: { id: 'retailer-789', name: 'Test Retailer' },
+    retailers: { id: 'retailer-789', name: 'Test Retailer' },
   },
   ...overrides,
 })
@@ -151,9 +237,33 @@ const createMockJob = (data = {}) =>
     timestamp: Date.now(),
   }) as unknown as Job
 
+const getProcessor = () => {
+  createAffiliateFeedWorker()
+  if (!workerMocks.state.processor) {
+    throw new Error('Affiliate feed processor not initialized')
+  }
+  return workerMocks.state.processor
+}
+
+const getFinalizeSkippedReason = () => {
+  const call = mockPrismaUpdate.mock.calls.find(([args]) => args?.data?.skippedReason !== undefined)
+  return call?.[0]?.data?.skippedReason
+}
+
+const createSkippedDownload = (skippedReason: string) => ({
+  content: Buffer.alloc(0),
+  mtime: new Date(),
+  size: BigInt(0),
+  contentHash: 'hash-unchanged',
+  skipped: true,
+  skippedReason,
+})
+
 describe('Affiliate Feed Worker', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    workerMocks.state.processor = null
+    mockIsCircuitBreakerBypassed.mockResolvedValue(false)
   })
 
   describe('Feed Eligibility', () => {
@@ -504,6 +614,118 @@ describe('Phase 1: Download → Parse → Process', () => {
     expect(downloadResult.skipped).toBe(false)
     expect(parseResult.products.length).toBe(1)
     expect(processResult.productsUpserted).toBe(1)
+  })
+})
+
+describe('SKIPPED run classification', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    workerMocks.state.processor = null
+    mockIsCircuitBreakerBypassed.mockResolvedValue(false)
+  })
+
+  const setupBaseMocks = () => {
+    const feed = createMockFeed()
+    const run = createMockRun()
+
+    mockPrismaFind
+      .mockResolvedValueOnce(feed)
+      .mockResolvedValueOnce({ manualRunPending: false, status: 'ENABLED' })
+    mockPrismaCreate.mockResolvedValue(run)
+    mockPrismaUpdate.mockResolvedValue(undefined)
+    mockAcquireLock.mockResolvedValue(true)
+    mockReleaseLock.mockResolvedValue(undefined)
+
+    return { feed, run }
+  }
+
+  it('UNCHANGED_HASH + successful refresh → REFRESHED_FROM_PREVIOUS', async () => {
+    setupBaseMocks()
+    const previousRun = createMockRun({
+      id: 'run-prev',
+      productsRejected: 2,
+      duplicateKeyCount: 1,
+      urlHashFallbackCount: 3,
+    })
+
+    mockPrismaFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(previousRun)
+    mockDownloadFeed.mockResolvedValue(createSkippedDownload('UNCHANGED_HASH'))
+    mockCopySeenFromPreviousRun.mockResolvedValue(5)
+    mockEvaluateCircuitBreaker.mockResolvedValue({
+      passed: true,
+      metrics: {
+        activeCountBefore: 0,
+        seenSuccessCount: 0,
+        wouldExpireCount: 0,
+        urlHashFallbackCount: 0,
+        expiryPercentage: 0,
+      },
+    })
+    mockPromoteProducts.mockResolvedValue(5)
+
+    const processor = getProcessor()
+    await processor(createMockJob())
+
+    expect(mockCopySeenFromPreviousRun).toHaveBeenCalled()
+    expect(mockEvaluateCircuitBreaker).toHaveBeenCalled()
+    expect(mockPromoteProducts).toHaveBeenCalled()
+    expect(getFinalizeSkippedReason()).toBe('REFRESHED_FROM_PREVIOUS')
+  })
+
+  it('UNCHANGED_HASH + no previous run → true skip with UNCHANGED_HASH', async () => {
+    setupBaseMocks()
+
+    mockPrismaFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+    mockDownloadFeed.mockResolvedValue(createSkippedDownload('UNCHANGED_HASH'))
+
+    const processor = getProcessor()
+    await processor(createMockJob())
+
+    expect(mockCopySeenFromPreviousRun).not.toHaveBeenCalled()
+    expect(getFinalizeSkippedReason()).toBe('UNCHANGED_HASH')
+  })
+
+  it('UNCHANGED_MTIME + zero copied rows → true skip with UNCHANGED_MTIME', async () => {
+    setupBaseMocks()
+    const previousRun = createMockRun({
+      id: 'run-prev',
+      productsRejected: 1,
+      duplicateKeyCount: 0,
+      urlHashFallbackCount: 0,
+    })
+
+    mockPrismaFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(previousRun)
+    mockDownloadFeed.mockResolvedValue(createSkippedDownload('UNCHANGED_MTIME'))
+    mockCopySeenFromPreviousRun.mockResolvedValue(0)
+
+    const processor = getProcessor()
+    await processor(createMockJob())
+
+    expect(mockCopySeenFromPreviousRun).toHaveBeenCalled()
+    expect(mockEvaluateCircuitBreaker).not.toHaveBeenCalled()
+    expect(mockPromoteProducts).not.toHaveBeenCalled()
+    expect(getFinalizeSkippedReason()).toBe('UNCHANGED_MTIME')
+  })
+
+  it('FILE_NOT_FOUND → true skip, no refresh attempted', async () => {
+    setupBaseMocks()
+
+    mockPrismaFindFirst.mockResolvedValueOnce(null)
+    mockDownloadFeed.mockResolvedValue(createSkippedDownload('FILE_NOT_FOUND'))
+
+    const processor = getProcessor()
+    await processor(createMockJob())
+
+    expect(mockCopySeenFromPreviousRun).not.toHaveBeenCalled()
+    expect(mockEvaluateCircuitBreaker).not.toHaveBeenCalled()
+    expect(mockPromoteProducts).not.toHaveBeenCalled()
+    expect(getFinalizeSkippedReason()).toBe('FILE_NOT_FOUND')
   })
 })
 

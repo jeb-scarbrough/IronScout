@@ -43,7 +43,18 @@ export interface FeedRunContext {
 }
 
 /**
- * Result of FTP/SFTP download
+ * Run-level skippedReason values (affiliate_feed_runs.skippedReason).
+ *
+ * True skips (no writes beyond finalizeRun):
+ * - UNCHANGED_HASH — Content hash matches, no refresh performed
+ * - UNCHANGED_MTIME — mtime+size match, no refresh performed
+ * - FILE_NOT_FOUND — Remote file does not exist
+ *
+ * Refresh (writes occur, NOT a true skip):
+ * - REFRESHED_FROM_PREVIOUS — Content unchanged, but seen/presence refreshed
+ *   from previous run to prevent product expiry
+ *
+ * DownloadResult.skippedReason only uses the true-skip values above.
  */
 export interface DownloadResult {
   content: Buffer

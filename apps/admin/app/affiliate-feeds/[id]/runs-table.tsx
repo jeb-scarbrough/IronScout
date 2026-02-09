@@ -80,6 +80,13 @@ const triggerLabels: Record<string, string> = {
   RETRY: 'Retry',
 };
 
+const skipReasonLabels: Record<string, string> = {
+  UNCHANGED_HASH: 'Unchanged (hash)',
+  UNCHANGED_MTIME: 'Unchanged (mtime)',
+  FILE_NOT_FOUND: 'File not found',
+  REFRESHED_FROM_PREVIOUS: 'Refreshed',
+};
+
 export function RunsTable({ runs, feedId }: RunsTableProps) {
   const router = useRouter();
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -264,7 +271,7 @@ export function RunsTable({ runs, feedId }: RunsTableProps) {
                     </div>
                     {run.skippedReason && (
                       <span className="ml-1 text-xs text-gray-500">
-                        ({run.skippedReason})
+                        ({skipReasonLabels[run.skippedReason] ?? run.skippedReason})
                       </span>
                     )}
                   </td>

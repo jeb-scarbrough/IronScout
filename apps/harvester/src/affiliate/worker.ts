@@ -480,7 +480,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
             await finalizeRun(context, 'SUCCEEDED', {
               ...refreshPhase1.metrics,
               productsPromoted: phase2Result.productsPromoted,
-              skippedReason: result.skippedReason,
+              skippedReason: 'REFRESHED_FROM_PREVIOUS',
             }, log)
 
             return
