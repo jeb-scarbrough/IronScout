@@ -12,8 +12,6 @@ import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-sessio
 interface SearchResultCardProps {
   product: Product
   isTracked?: boolean
-  /** Crown this card as the best price in the result set */
-  isBestPrice?: boolean
   /** Additional badges to display */
   badges?: CardBadge[]
   onTrackChange?: (productId: string, isTracked: boolean) => void
@@ -31,7 +29,6 @@ interface SearchResultCardProps {
 export function SearchResultCard({
   product,
   isTracked = false,
-  isBestPrice = false,
   badges = [],
   onTrackChange,
 }: SearchResultCardProps) {
@@ -120,7 +117,6 @@ export function SearchResultCard({
       grain={product.grainWeight}
       caseMaterial={product.caseMaterial}
       isTracked={isTracked}
-      isBestPrice={isBestPrice}
       badges={badges}
       placement="search"
       onTrackToggle={handleTrackToggle}

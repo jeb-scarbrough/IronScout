@@ -11,8 +11,6 @@ import { refreshSessionToken, showSessionExpiredToast } from '@/hooks/use-sessio
 
 interface ForYouResultCardProps {
   item: ProductFeedItem
-  /** Crown this card as the best price */
-  isBestPrice?: boolean
   /** Additional badges to display */
   badges?: CardBadge[]
   onTrackChange?: (productId: string, isTracked: boolean) => void
@@ -26,7 +24,6 @@ interface ForYouResultCardProps {
  */
 export function ForYouResultCard({
   item,
-  isBestPrice = false,
   badges = [],
   onTrackChange,
 }: ForYouResultCardProps) {
@@ -88,7 +85,6 @@ export function ForYouResultCard({
       grain={item.product.grainWeight ?? undefined}
       caseMaterial={undefined} // Not in ProductFeedItem
       isTracked={item.isWatched}
-      isBestPrice={isBestPrice}
       badges={badges}
       placement="for_you"
       onTrackToggle={handleTrackToggle}

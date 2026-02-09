@@ -146,30 +146,6 @@ export function SearchResultsGrid({
     })
   }, [])
 
-  // Find the best price product (lowest price per round, in stock preferred)
-  // Only used in card view
-  const bestPriceProductId = useMemo(() => {
-    if (products.length === 0) return null
-
-    const withPrices = products
-      .map((product) => {
-        const priceData = getProductPriceData(product)
-        if (!priceData) return null
-        return { id: product.id, ...priceData }
-      })
-      .filter((p): p is NonNullable<typeof p> => p !== null)
-
-    if (withPrices.length === 0) return null
-
-    withPrices.sort((a, b) => {
-      if (a.inStock && !b.inStock) return -1
-      if (!a.inStock && b.inStock) return 1
-      return a.pricePerRound - b.pricePerRound
-    })
-
-    return withPrices[0].id
-  }, [products])
-
   // Filter and sort products for grid view
   const gridProducts = useMemo(() => {
     let filtered = [...products]
@@ -219,8 +195,6 @@ export function SearchResultsGrid({
     }).length
   }, [products])
 
-  const hasBestPrice = bestPriceProductId !== null
-
   return (
     <div className="space-y-2">
       {/* Grid view filter - only shown in grid mode */}
@@ -251,7 +225,6 @@ export function SearchResultsGrid({
               <SearchResultCard
                 product={product}
                 isTracked={trackedIds.has(product.id)}
-                isBestPrice={product.id === bestPriceProductId}
                 onTrackChange={handleTrackChange}
               />
             </div>

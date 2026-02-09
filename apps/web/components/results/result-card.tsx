@@ -65,9 +65,6 @@ export interface ResultCardProps {
 
   isTracked: boolean
 
-  /** Visual emphasis - crown this card with scale + border */
-  isBestPrice?: boolean
-
   /** Badges to display (can have multiple) */
   badges?: CardBadge[]
 
@@ -150,7 +147,6 @@ export function ResultCard({
   updatedAt,
   includesShipping = true,
   isTracked,
-  isBestPrice = false,
   badges = [],
   placement = 'search',
   onTrackToggle,
@@ -203,9 +199,7 @@ export function ResultCard({
     <Card
       className={cn(
         'overflow-hidden transition-all duration-200 relative h-full flex flex-col',
-        isBestPrice
-          ? 'border-2 border-primary shadow-lg shadow-primary/10 scale-[1.01] z-10 bg-card'
-          : 'border border-border bg-card hover:border-primary/30'
+        'border border-border bg-card hover:border-primary/30'
       )}
     >
       <CardContent className="p-4 flex flex-col flex-1">
@@ -292,10 +286,7 @@ export function ResultCard({
         <div className="mb-3">
           {/* Primary: $per rd with delivery indicator */}
           <div className="flex items-baseline gap-1">
-            <span className={cn(
-              'font-bold font-mono tracking-tight text-2xl',
-              isBestPrice ? 'text-primary' : 'text-foreground'
-            )}>
+            <span className="font-bold font-mono tracking-tight text-2xl text-foreground">
               {formatPricePerRound(pricePerRound)}
             </span>
             <span className="text-sm text-muted-foreground">
@@ -333,13 +324,8 @@ export function ResultCard({
           <Button
             onClick={handlePrimaryClick}
             disabled={!isValidUrl}
-            variant={isBestPrice ? 'default' : 'outline'}
-            className={cn(
-              'w-full h-10 font-medium',
-              isBestPrice
-                ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                : 'hover:bg-muted hover:text-foreground'
-            )}
+            variant="outline"
+            className="w-full h-10 font-medium hover:bg-muted hover:text-foreground"
           >
             <span className="truncate">View at {retailerName}</span>
             <ArrowUpRight className="ml-2 h-4 w-4 shrink-0" />

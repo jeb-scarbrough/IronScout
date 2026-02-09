@@ -111,7 +111,7 @@ export function ProductCard({ product, showRelevance = false }: ProductCardProps
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
                   <div className="space-y-2">
-                    <p className="font-medium text-sm">AI Match Score</p>
+                    <p className="font-medium text-sm">AI Match Confidence</p>
                     {explanation && (
                       <p className="text-xs text-muted-foreground">{explanation}</p>
                     )}
