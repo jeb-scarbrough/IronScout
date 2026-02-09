@@ -68,7 +68,7 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     const testUtils = await import('@ironscout/db/test-utils')
     cleanTables = testUtils.cleanTables
 
-    const recomputeModule = await import('../../../currentprice/recompute')
+    const recomputeModule = await import('../../currentprice/recompute')
     recomputeCurrentPrices = recomputeModule.recomputeCurrentPrices
   })
 
