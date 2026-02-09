@@ -482,6 +482,10 @@ router.get('/deals', async (req: Request, res: Response) => {
 
     // Single query: best price per product, sorted and limited in DB
     // Uses current_visible_prices (ADR-015) joined to products
+    //
+    // Scope-dependent behavior (preserving original semantics):
+    //   global:    24h freshness, pure lowest-price ranking (no tier preference)
+    //   watchlist: no freshness filter, prefer premium retailers then lowest price
     const bestPriceDeals = await prisma.$queryRaw<Array<{
       priceId: string
       productId: string
@@ -521,20 +525,27 @@ router.get('/deals', async (req: Request, res: Response) => {
           ROW_NUMBER() OVER (
             PARTITION BY p.id
             ORDER BY
-              CASE WHEN cvp."retailerTier" = 'PREMIUM' THEN 0 ELSE 1 END,
-              cvp."visiblePrice" ASC
+              ${isGlobalScope
+                ? Prisma.sql`cvp."visiblePrice" ASC`
+                : Prisma.sql`CASE WHEN cvp."retailerTier" = 'PREMIUM' THEN 0 ELSE 1 END, cvp."visiblePrice" ASC`
+              }
           ) as rn
         FROM current_visible_prices cvp
         JOIN products p ON p.id = cvp."productId"
         WHERE cvp."inStock" = true
-          AND cvp."observedAt" >= ${isGlobalScope ? twentyFourHoursAgo : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
+          ${isGlobalScope
+            ? Prisma.sql`AND cvp."observedAt" >= ${twentyFourHoursAgo}`
+            : Prisma.empty
+          }
           ${caliberFilter ? Prisma.sql`AND p.caliber = ANY(${caliberFilter})` : Prisma.empty}
       )
       SELECT * FROM ranked
       WHERE rn = 1
       ORDER BY
-        CASE WHEN "retailerTier" = 'PREMIUM' THEN 0 ELSE 1 END,
-        price ASC
+        ${isGlobalScope
+          ? Prisma.sql`price ASC`
+          : Prisma.sql`CASE WHEN "retailerTier" = 'PREMIUM' THEN 0 ELSE 1 END, price ASC`
+        }
       LIMIT ${maxDeals}
     `
 
