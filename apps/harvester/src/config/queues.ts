@@ -29,6 +29,7 @@ export const QUEUE_NAMES = {
 export interface AlertJobData {
   executionId: string
   productId: string
+  sourceProductId?: string // Optional: in-flight jobs during deploy won't have it; alerter fails closed when missing
   oldPrice?: number
   newPrice?: number
   inStock?: boolean

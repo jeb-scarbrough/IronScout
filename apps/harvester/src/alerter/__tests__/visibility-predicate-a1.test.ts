@@ -10,10 +10,16 @@
  * - ELIGIBLE + ACTIVE + UNLISTED → Hidden (delinquency)
  * - ELIGIBLE + ACTIVE + LISTED → Visible (merchant-managed)
  *
+ * Source-scoped visibility (#219):
+ * - current_visible_prices is scoped by sourceProductId after recompute
+ * - An INELIGIBLE retailer's sourceProductId has no rows in the derived table
+ * - An ELIGIBLE retailer's sourceProductId has rows
+ *
  * Test cases:
  * 1. Retailer has 0 merchant_retailers → alert fires
  * 2. Retailer has only SUSPENDED relationships → alert fires
  * 3. Retailer has at least one ACTIVE+UNLISTED → alert does NOT fire
+ * 4. Ineligible source's sourceProductId not in current_visible_prices after recompute
  *
  * To run: pnpm --filter harvester test:integration
  * Requires: TEST_DATABASE_URL environment variable
@@ -34,6 +40,8 @@ let prisma: PrismaClient
  * triggering Prisma client creation when tests are skipped.
  */
 let visibleRetailerPriceWhere: () => any
+let recomputeCurrentPrices: any
+let cleanTables: any
 
 describeIntegration('A1 Visibility Predicate Integration', () => {
   // Track created entities for cleanup
@@ -46,6 +54,9 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     if (!TEST_DATABASE_URL) {
       throw new Error('TEST_DATABASE_URL required for integration tests')
     }
+
+    process.env.DATABASE_URL = TEST_DATABASE_URL
+
     prisma = new PrismaClient()
     await prisma.$connect()
 
@@ -53,6 +64,12 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // This avoids triggering Prisma client creation when DATABASE_URL is not set
     const db = await import('@ironscout/db')
     visibleRetailerPriceWhere = db.visibleRetailerPriceWhere
+
+    const testUtils = await import('@ironscout/db/test-utils')
+    cleanTables = testUtils.cleanTables
+
+    const recomputeModule = await import('../../../currentprice/recompute')
+    recomputeCurrentPrices = recomputeModule.recomputeCurrentPrices
   })
 
   afterAll(async () => {
@@ -324,5 +341,178 @@ describeIntegration('A1 Visibility Predicate Integration', () => {
     // Assert: price is NOT visible (alert should NOT fire)
     const isVisible = await hasVisiblePrice(product.id)
     expect(isVisible).toBe(false)
+  })
+
+  // ============================================================================
+  // #219: Source-scoped visibility — ineligible retailer's sourceProductId
+  // is not in current_visible_prices after recompute
+  // ============================================================================
+  it('alert_does_not_fire_for_ineligible_source_same_product', async () => {
+    // Clean derived table to avoid stale data from other tests
+    await cleanTables(prisma, [
+      'current_visible_prices',
+      'prices',
+      'product_links',
+      'source_products',
+      'sources',
+      'merchant_retailers',
+      'retailers',
+      'products',
+    ])
+
+    const now = new Date()
+
+    // Create one product, two retailers (ELIGIBLE and INELIGIBLE)
+    const eligibleRetailer = await prisma.retailers.create({
+      data: {
+        id: randomUUID(),
+        name: `Eligible Retailer ${Date.now()}`,
+        website: `https://eligible-${Date.now()}.example.com`,
+        visibilityStatus: 'ELIGIBLE',
+        updatedAt: now,
+      },
+    })
+    createdRetailerIds.push(eligibleRetailer.id)
+
+    const ineligibleRetailer = await prisma.retailers.create({
+      data: {
+        id: randomUUID(),
+        name: `Ineligible Retailer ${Date.now()}`,
+        website: `https://ineligible-${Date.now()}.example.com`,
+        visibilityStatus: 'INELIGIBLE',
+        updatedAt: now,
+      },
+    })
+    createdRetailerIds.push(ineligibleRetailer.id)
+
+    const product = await prisma.products.create({
+      data: {
+        id: randomUUID(),
+        name: `Shared Product ${Date.now()}`,
+        category: 'ammunition',
+        caliber: '9mm',
+        updatedAt: now,
+      },
+    })
+    createdProductIds.push(product.id)
+
+    // Create sources for each retailer
+    const eligibleSourceId = randomUUID()
+    const ineligibleSourceId = randomUUID()
+
+    await prisma.sources.createMany({
+      data: [
+        {
+          id: eligibleSourceId,
+          name: 'Eligible Source',
+          url: `https://eligible-source-${Date.now()}.example.com/feed`,
+          retailerId: eligibleRetailer.id,
+        },
+        {
+          id: ineligibleSourceId,
+          name: 'Ineligible Source',
+          url: `https://ineligible-source-${Date.now()}.example.com/feed`,
+          retailerId: ineligibleRetailer.id,
+        },
+      ],
+    })
+
+    // Create source_products for each
+    const eligibleSpId = randomUUID()
+    const ineligibleSpId = randomUUID()
+
+    await prisma.source_products.createMany({
+      data: [
+        {
+          id: eligibleSpId,
+          sourceId: eligibleSourceId,
+          title: 'Product at Eligible Retailer',
+          url: `https://eligible-source-${Date.now()}.example.com/p/1`,
+          caliber: '9mm',
+        },
+        {
+          id: ineligibleSpId,
+          sourceId: ineligibleSourceId,
+          title: 'Product at Ineligible Retailer',
+          url: `https://ineligible-source-${Date.now()}.example.com/p/1`,
+          caliber: '9mm',
+        },
+      ],
+    })
+
+    // Link both source_products to the same canonical product
+    await prisma.product_links.createMany({
+      data: [
+        {
+          sourceProductId: eligibleSpId,
+          productId: product.id,
+          matchType: 'FINGERPRINT',
+          status: 'MATCHED',
+          confidence: 1.0,
+          resolverVersion: 'test',
+          evidence: {},
+        },
+        {
+          sourceProductId: ineligibleSpId,
+          productId: product.id,
+          matchType: 'FINGERPRINT',
+          status: 'MATCHED',
+          confidence: 1.0,
+          resolverVersion: 'test',
+          evidence: {},
+        },
+      ],
+    })
+
+    // Create prices from each retailer for the same product
+    const eligiblePriceId = randomUUID()
+    const ineligiblePriceId = randomUUID()
+
+    await prisma.prices.createMany({
+      data: [
+        {
+          id: eligiblePriceId,
+          productId: product.id,
+          retailerId: eligibleRetailer.id,
+          sourceId: eligibleSourceId,
+          sourceProductId: eligibleSpId,
+          price: 19.99,
+          currency: 'USD',
+          url: `https://eligible-source-${Date.now()}.example.com/p/1`,
+          inStock: true,
+          observedAt: now,
+        },
+        {
+          id: ineligiblePriceId,
+          productId: product.id,
+          retailerId: ineligibleRetailer.id,
+          sourceId: ineligibleSourceId,
+          sourceProductId: ineligibleSpId,
+          price: 17.99,
+          currency: 'USD',
+          url: `https://ineligible-source-${Date.now()}.example.com/p/1`,
+          inStock: true,
+          observedAt: now,
+        },
+      ],
+    })
+    createdPriceIds.push(eligiblePriceId, ineligiblePriceId)
+
+    // Run recompute to populate current_visible_prices
+    await recomputeCurrentPrices('FULL', undefined, 'test-recompute-source-scoped')
+
+    // Assert: eligible retailer's sourceProductId has a visible row
+    const eligibleVisible = await prisma.current_visible_prices.findFirst({
+      where: { productId: product.id, sourceProductId: eligibleSpId },
+      select: { id: true },
+    })
+    expect(eligibleVisible).not.toBeNull()
+
+    // Assert: ineligible retailer's sourceProductId has NO visible row
+    const ineligibleVisible = await prisma.current_visible_prices.findFirst({
+      where: { productId: product.id, sourceProductId: ineligibleSpId },
+      select: { id: true },
+    })
+    expect(ineligibleVisible).toBeNull()
   })
 })

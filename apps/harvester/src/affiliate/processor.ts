@@ -1789,10 +1789,20 @@ async function queueAffiliateAlerts(
 
   // Queue price drop alerts
   for (const change of priceChanges) {
+    // ADR-009: Hard guard — do not enqueue without sourceProductId
+    if (!change.sourceProductId) {
+      alertLog.warn('ALERTS_QUEUE_SKIP_NO_SOURCE', {
+        runId,
+        alertType: 'PRICE_DROP',
+        productId: change.productId,
+      })
+      continue
+    }
     try {
       const jobData: AlertJobData = {
         executionId: runId,
         productId: change.productId,
+        sourceProductId: change.sourceProductId,
         oldPrice: change.oldPrice,
         newPrice: change.newPrice,
       }
@@ -1813,10 +1823,20 @@ async function queueAffiliateAlerts(
 
   // Queue back-in-stock alerts
   for (const change of stockChanges) {
+    // ADR-009: Hard guard — do not enqueue without sourceProductId
+    if (!change.sourceProductId) {
+      alertLog.warn('ALERTS_QUEUE_SKIP_NO_SOURCE', {
+        runId,
+        alertType: 'BACK_IN_STOCK',
+        productId: change.productId,
+      })
+      continue
+    }
     try {
       const jobData: AlertJobData = {
         executionId: runId,
         productId: change.productId,
+        sourceProductId: change.sourceProductId,
         inStock: change.inStock,
       }
       // Per spec: Do not set jobId (alerter enforces cooldowns and claim logic)

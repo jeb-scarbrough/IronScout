@@ -4,6 +4,8 @@
  * These tests enforce that:
  * 1. The alerter uses the derived visibility table (ADR-015)
  * 2. The shared predicate implements A1 semantics
+ * 3. The alerter fails closed when sourceProductId is missing (ADR-009)
+ * 4. The visibility check is scoped to sourceProductId (ADR-005)
  *
  * A1 semantics:
  * - ACTIVE relationships control visibility
@@ -73,5 +75,27 @@ describe('Alerter Visibility Guardrails', () => {
     // The second OR condition must require both ACTIVE and LISTED
     expect(sharedVisibilitySource).toContain("listingStatus: 'LISTED'")
     expect(sharedVisibilitySource).toContain("status: 'ACTIVE'")
+  })
+
+  /**
+   * CRITICAL GUARDRAIL: Alerter must fail closed without sourceProductId
+   *
+   * In-flight jobs during deploy won't carry sourceProductId.
+   * Per ADR-009: fail closed on eligibility ambiguity — skip evaluation entirely.
+   */
+  it('alerter_fails_closed_without_source_product_id', () => {
+    expect(alerterSource).toContain('missing_source_product_id')
+  })
+
+  /**
+   * CRITICAL GUARDRAIL: Visibility check must be scoped to sourceProductId
+   *
+   * The query must filter by BOTH productId AND sourceProductId to verify
+   * the triggering listing is visible, not just any listing for the product.
+   * Per ADR-005: retailer visibility is filtered at query time.
+   */
+  it('alerter_scopes_visibility_check_to_source_product_id', () => {
+    // The hasVisibleRetailerPrice query must include both productId and sourceProductId
+    expect(alerterSource).toMatch(/where:\s*\{\s*productId,\s*sourceProductId\s*\}/)
   })
 })

@@ -20,15 +20,18 @@ const TIER_ALERT_DELAY_MS = {
 }
 
 /**
- * Check if a product has any consumer-visible retailer prices.
+ * Check if a specific source product listing is consumer-visible.
  *
  * Uses current_visible_prices derived table (ADR-015).
  * This table already enforces retailer visibility, ignored runs,
  * corrections overlay, and SCRAPE guardrails (ADR-021).
+ *
+ * Scoped to sourceProductId to verify the TRIGGERING listing is visible,
+ * not just that some other retailer sells the same product (ADR-005).
  */
-async function hasVisibleRetailerPrice(productId: string): Promise<boolean> {
+async function hasVisibleRetailerPrice(productId: string, sourceProductId: string): Promise<boolean> {
   const visiblePrice = await prisma.current_visible_prices.findFirst({
-    where: { productId },
+    where: { productId, sourceProductId },
     select: { id: true },
   })
 
@@ -327,7 +330,7 @@ async function reserveUserAlertSlot(userId: string): Promise<boolean> {
 export const alerterWorker = new Worker<AlertJobData>(
   'alert',
   async (job: Job<AlertJobData>) => {
-    const { executionId, productId, oldPrice, newPrice, inStock } = job.data
+    const { executionId, productId, sourceProductId, oldPrice, newPrice, inStock } = job.data
     const startTime = Date.now()
     const jobLog = logger.alerter.child({
       runId: executionId,
@@ -340,6 +343,7 @@ export const alerterWorker = new Worker<AlertJobData>(
     if (!alertProcessingEnabled) {
       log.info('ALERT_EVALUATE_SKIP', {
         productId,
+        sourceProductId,
         reason: 'alert_processing_disabled',
         durationMs: Date.now() - startTime,
       })
@@ -350,28 +354,51 @@ export const alerterWorker = new Worker<AlertJobData>(
           level: 'INFO',
           event: 'ALERT_SKIPPED_DISABLED',
           message: 'Alert processing is disabled via admin settings',
-          metadata: { productId },
+          metadata: { productId, sourceProductId },
         },
       })
 
       return { success: true, skipped: 'alert_processing_disabled' }
     }
 
+    // ADR-009: Fail closed when sourceProductId is missing (in-flight jobs during deploy)
+    if (!sourceProductId) {
+      log.info('ALERT_SKIPPED_MISSING_SOURCE', {
+        productId,
+        reason: 'missing_source_product_id',
+        durationMs: Date.now() - startTime,
+      })
+
+      await prisma.execution_logs.create({
+        data: {
+          executionId,
+          level: 'INFO',
+          event: 'ALERT_SKIPPED_MISSING_SOURCE',
+          message: `Skipped alert evaluation — sourceProductId missing (ADR-009 fail closed)`,
+          metadata: { productId },
+        },
+      })
+
+      return { success: true, skipped: 'missing_source_product_id' }
+    }
+
     log.debug('ALERT_EVALUATE_START', {
       productId,
+      sourceProductId,
       oldPrice,
       newPrice,
       inStock,
     })
 
     try {
-      // ADR-005: Check retailer visibility before evaluating alerts
-      // Alerts must not fire from ineligible or unlisted retailer inventory
-      const hasVisiblePrice = await hasVisibleRetailerPrice(productId)
+      // ADR-005: Check that the TRIGGERING source product listing is visible
+      // Scoped to sourceProductId, not just productId (prevents ineligible retailer leaks)
+      const hasVisiblePrice = await hasVisibleRetailerPrice(productId, sourceProductId)
 
       if (!hasVisiblePrice) {
         log.info('ALERT_EVALUATE_SKIP', {
           productId,
+          sourceProductId,
           reason: 'no_visible_retailer',
           durationMs: Date.now() - startTime,
         })
@@ -381,8 +408,8 @@ export const alerterWorker = new Worker<AlertJobData>(
             executionId,
             level: 'INFO',
             event: 'ALERT_SKIPPED_NO_VISIBLE_RETAILER',
-            message: `Skipped alert evaluation - no visible retailer prices for product ${productId}`,
-            metadata: { productId, oldPrice, newPrice, inStock },
+            message: `Skipped alert evaluation - triggering source product ${sourceProductId} not visible for product ${productId}`,
+            metadata: { productId, sourceProductId, oldPrice, newPrice, inStock },
           },
         })
 
