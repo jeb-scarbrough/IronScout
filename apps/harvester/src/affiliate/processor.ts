@@ -1692,12 +1692,14 @@ function decidePriceWrites(
  * Bulk insert prices using raw SQL with ON CONFLICT DO NOTHING
  *
  * Per spec §4.2.1 and Section 2.6:
- * - Uses ON CONFLICT DO NOTHING (no target) for retry-safe idempotency
- * - Partial unique index `prices_affiliate_dedupe` handles deduplication
+ * - Uses explicit conflict target (sourceProductId, observedAt) for retry-safe idempotency
+ * - Partial unique index `prices_source_observed_dedupe` handles deduplication (#218)
  * - Returns actual inserted count from DB, not array length
  *
- * CRITICAL: The `prices` table must have NO other unique constraints.
- * This is enforced via migration test (Section 18.1.1).
+ * The dedupe key is (sourceProductId, observedAt):
+ * - For a given source product, only one price row per observation timestamp
+ * - observedAt is set to the run's t0, so retries of the same run deduplicate
+ * - Different runs have different t0 values, preserving time-series history
  */
 async function bulkInsertPrices(
   pricesToWrite: NewPriceRecord[],
@@ -1718,10 +1720,10 @@ async function bulkInsertPrices(
   const runIds = pricesToWrite.map((p) => p.affiliateFeedRunId)
   const signatureHashes = pricesToWrite.map((p) => p.priceSignatureHash)
 
-  // Bulk insert with ON CONFLICT DO NOTHING
-  // Per spec: Returns actual row count, which may be less than array length
-  // if duplicates were suppressed by prices_affiliate_dedupe index
-  // Table name: prices (per Prisma @@map)
+  // Bulk insert with explicit conflict target on partial unique index
+  // Per #218: prices_source_observed_dedupe ON (sourceProductId, observedAt)
+  // Returns actual row count, which may be less than array length
+  // if duplicates were suppressed by the unique index
   const insertedCount = await prisma.$executeRaw`
     INSERT INTO prices (
       "id",
@@ -1758,7 +1760,9 @@ async function bulkInsertPrices(
       ${createdAt},
       'AFFILIATE_FEED'::"IngestionRunType",
       unnest(${runIds}::text[])
-    ON CONFLICT DO NOTHING
+    ON CONFLICT ("sourceProductId", "observedAt")
+      WHERE "sourceProductId" IS NOT NULL
+      DO NOTHING
   `
 
   return insertedCount
