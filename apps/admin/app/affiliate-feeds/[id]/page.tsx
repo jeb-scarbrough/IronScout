@@ -75,6 +75,7 @@ export default async function AffiliateFeedDetailPage({
           failureCode: true,
           failureMessage: true,
           correlationId: true,
+          dataQuality: true,
           // ADR-015: Run ignore fields
           ignoredAt: true,
           ignoredBy: true,
@@ -107,6 +108,19 @@ export default async function AffiliateFeedDetailPage({
   const successfulRuns = feed.affiliate_feed_runs.filter(r => r.status === 'SUCCEEDED').length;
   const failedRuns = feed.affiliate_feed_runs.filter(r => r.status === 'FAILED').length;
   const totalProducts = feed.affiliate_feed_runs[0]?.productsUpserted || 0;
+
+  // Compute missing-brand rate from latest successful run
+  const latestSuccessRun = feed.affiliate_feed_runs.find(r => r.status === 'SUCCEEDED');
+  let missingBrandDisplay = 'N/A';
+  let missingBrandColor = 'text-gray-400'; // neutral for N/A
+  if (latestSuccessRun?.dataQuality && latestSuccessRun.productsUpserted && latestSuccessRun.productsUpserted > 0) {
+    const dq = latestSuccessRun.dataQuality as { missingBrand?: number };
+    if (typeof dq.missingBrand === 'number') {
+      const rate = (dq.missingBrand / latestSuccessRun.productsUpserted) * 100;
+      missingBrandDisplay = `${rate.toFixed(1)}%`;
+      missingBrandColor = rate > 10 ? 'text-amber-600' : 'text-green-600';
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -174,7 +188,7 @@ export default async function AffiliateFeedDetailPage({
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-5">
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
@@ -233,6 +247,22 @@ export default async function AffiliateFeedDetailPage({
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Expiry Hours</dt>
                   <dd className="text-lg font-semibold text-gray-900">{feed.expiryHours}h</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <AlertTriangle className={`h-6 w-6 ${missingBrandColor}`} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Missing Brand</dt>
+                  <dd className={`text-lg font-semibold ${missingBrandColor}`}>{missingBrandDisplay}</dd>
                 </dl>
               </div>
             </div>

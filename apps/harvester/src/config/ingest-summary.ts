@@ -111,6 +111,12 @@ export interface IngestRunSummary {
 
     /** Products missing roundCount */
     missingRoundCount: number
+
+    /** Items quarantined for missing caliber */
+    missingCaliber: number
+
+    /** Products missing grainWeight (excludes gauge/shotgun) */
+    missingGrain: number
   }
 }
 
@@ -192,6 +198,8 @@ export function emitIngestRunSummary(summary: IngestRunSummary): void {
     ...(summary.qualityMetrics && {
       missingBrand: summary.qualityMetrics.missingBrand,
       missingRoundCount: summary.qualityMetrics.missingRoundCount,
+      missingCaliber: summary.qualityMetrics.missingCaliber,
+      missingGrain: summary.qualityMetrics.missingGrain,
     }),
 
     // Derived metrics

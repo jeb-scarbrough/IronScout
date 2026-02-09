@@ -174,6 +174,51 @@ export async function notifyAffiliateFeedAutoDisabled(
 }
 
 // =============================================================================
+// Data Quality Warning Notification
+// =============================================================================
+
+/**
+ * Notify when a feed run has abnormally high missing-brand rate.
+ * Only fires on crossing-threshold (rate was below threshold on previous run).
+ */
+export async function notifyDataQualityWarning(
+  feed: AffiliateFeedAlertInfo,
+  stats: {
+    missingBrandCount: number;
+    missingBrandRate: string;
+    thresholdPercent: number;
+    productsUpserted: number;
+  }
+): Promise<SlackResult> {
+  const adminDetailUrl = `${SLACK_CONFIG.adminPortalUrl}/affiliate-feeds/${feed.feedId}`;
+
+  const result = await sendSlackMessage(
+    {
+      text: `Data quality warning: ${feed.feedName} — ${stats.missingBrandRate}% missing brand`,
+      blocks: [
+        slackHeader('Data Quality Warning — Missing Brand'),
+        slackFieldsSection({
+          Feed: feed.feedName,
+          Source: feed.sourceName,
+          'Missing Brand': `${stats.missingBrandCount} / ${stats.productsUpserted} (${stats.missingBrandRate}%)`,
+          Threshold: `${stats.thresholdPercent}%`,
+        }),
+        slackDivider(),
+        slackActions(slackButton('View Feed', adminDetailUrl, 'danger')),
+        slackContext(
+          `Feed ID: ${feed.feedId}`,
+          feed.runId ? `Run ID: ${feed.runId}` : '',
+          'Rate crossed threshold — investigate feed data quality'
+        ),
+      ],
+    },
+    SLACK_CONFIG.datafeedAlertsWebhookUrl || SLACK_CONFIG.merchantOpsWebhookUrl
+  );
+
+  return result;
+}
+
+// =============================================================================
 // Feed Run Succeeded (Recovery) Notification
 // =============================================================================
 

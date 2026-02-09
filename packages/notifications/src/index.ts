@@ -109,6 +109,7 @@ export {
   notifyCircuitBreakerTriggered,
   notifyAffiliateFeedAutoDisabled,
   notifyAffiliateFeedRecovered,
+  notifyDataQualityWarning,
   type AffiliateFeedAlertInfo,
   type CircuitBreakerMetrics,
 } from './notifications/affiliate-feed-alerts.js';

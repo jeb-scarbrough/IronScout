@@ -106,6 +106,26 @@ export interface ParseError {
 }
 
 /**
+ * Per-run data quality metrics. Stored as JSON in affiliate_feed_runs.dataQuality.
+ * This structure is additive-only — never remove or rename fields.
+ * The version field is for diagnostics only; consumers must NOT branch behavior on it.
+ *
+ * All counters except missingCaliber are scoped to deduped, non-quarantined products.
+ * Denominator for rate computation is productsUpserted (sibling column on the run record).
+ */
+export interface DataQualityMetrics {
+  version: 1
+  /** Products with no brand after normalization + garbage filtering */
+  missingBrand: number
+  /** Products with no roundCount (rounds per package) */
+  missingRoundCount: number
+  /** Items quarantined specifically for missing caliber */
+  missingCaliber: number
+  /** Products with no grainWeight; excludes gauge/shotgun calibers where grain is N/A */
+  missingGrain: number
+}
+
+/**
  * Result of Phase 1 processing (ingest + stage)
  */
 export interface ProcessorResult {
@@ -115,6 +135,8 @@ export interface ProcessorResult {
   duplicateKeyCount: number
   urlHashFallbackCount: number
   errors: ParseError[]
+  /** Data quality metrics; undefined on early error exits */
+  qualityMetrics?: DataQualityMetrics
 }
 
 /**

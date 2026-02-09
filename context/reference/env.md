@@ -183,6 +183,11 @@ Safety:
 - `MAX_WRITE_BATCH_SIZE` (optional)
 - `MAX_SOURCE_CONCURRENCY` (optional)
 
+Data Quality:
+- `MISSING_BRAND_THRESHOLD_PERCENT` - Percentage threshold for missing-brand data quality alerts (default: 10)
+  - Alerts fire when missing-brand rate exceeds this value on a feed run with >= 50 products
+  - Uses crossing-threshold logic: only alerts when rate crosses from below threshold to above
+
 Affiliate Feeds:
 - `AFFILIATE_FEED_SCHEDULER_ENABLED=true|false` - Enable affiliate feed scheduling
 - `AFFILIATE_FEED_ALLOW_PLAIN_FTP=true|false` - Allow insecure FTP (default: false)

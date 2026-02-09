@@ -113,6 +113,11 @@ model affiliate_feed_runs {
   artifactUrl          String?
   correlationId        String?
 
+  /// Data quality metrics (additive-only JSON, version field for diagnostics).
+  /// Counters are per deduped, non-quarantined product. Denominator = productsUpserted.
+  /// null for pre-migration runs — consumers must handle null.
+  dataQuality          Json?
+
   /// ADR-015: Run ignore semantics for corrections
   /// When set, prices from this run are excluded from consumer queries
   ignoredAt     DateTime?

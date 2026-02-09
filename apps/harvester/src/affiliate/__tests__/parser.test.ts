@@ -137,6 +137,73 @@ Basic Product,https://example.com/cci-stinger-22lr-32gr-50rd.html,9.99,Yes`
   })
 
   // Note: TSV/XML/JSON parsing tests removed - v1 only supports CSV
+
+  describe('normalizeBrand garbage filtering', () => {
+    // Helper: parse a single CSV row with a given Brand value and return the parsed brand
+    async function parseBrand(brandValue: string): Promise<string | undefined> {
+      const csv = `Name,URL,Price,Stock,Brand\nTest Product,https://example.com/product,10.00,Yes,${brandValue}`
+      const result = await parseFeed(csv, 'CSV', 1000)
+      return result.products[0]?.brand
+    }
+
+    it('should filter common garbage strings', async () => {
+      const garbageValues = ['n/a', 'N/A', 'na', 'NA', 'none', 'None', 'NONE', 'unknown', 'Unknown', 'UNKNOWN']
+      for (const val of garbageValues) {
+        expect(await parseBrand(val), `expected "${val}" to be filtered`).toBeUndefined()
+      }
+    })
+
+    it('should filter punctuation/whitespace variants of garbage strings', async () => {
+      const variants = ['N / A', 'n.a.', 'not-available', 'not available', 'not specified']
+      for (const val of variants) {
+        expect(await parseBrand(val), `expected "${val}" to be filtered`).toBeUndefined()
+      }
+    })
+
+    it('should filter unicode dash variants', async () => {
+      const dashVariants = [
+        'not\u2013available',  // en dash
+        'not\u2014available',  // em dash
+      ]
+      for (const val of dashVariants) {
+        expect(await parseBrand(val), `expected "${val}" to be filtered`).toBeUndefined()
+      }
+    })
+
+    it('should filter strings that become empty after stripping', async () => {
+      const emptyAfterStrip = ['--', '---', '...', '\u2014', '-./', '()']
+      for (const val of emptyAfterStrip) {
+        expect(await parseBrand(val), `expected "${val}" to be filtered`).toBeUndefined()
+      }
+    })
+
+    it('should filter placeholder values', async () => {
+      const placeholders = ['GENERIC', 'generic', 'other', 'Other', 'misc', 'tbd', 'test', 'unbranded']
+      for (const val of placeholders) {
+        expect(await parseBrand(val), `expected "${val}" to be filtered`).toBeUndefined()
+      }
+    })
+
+    it('should preserve valid ammunition brands', async () => {
+      const validBrands = [
+        { input: 'Federal', expected: 'Federal' },
+        { input: 'hornady', expected: 'Hornady' },
+        { input: 'CCI', expected: 'CCI' },
+        { input: 'smith & wesson', expected: 'Smith & Wesson' },
+        { input: 'PMC', expected: 'PMC' },
+        { input: 'Sellier & Bellot', expected: 'Sellier & Bellot' },
+        { input: 'FIOCCHI', expected: 'Fiocchi' },
+      ]
+      for (const { input, expected } of validBrands) {
+        expect(await parseBrand(input), `expected "${input}" to be preserved`).toBe(expected)
+      }
+    })
+
+    it('should return undefined for empty/missing brand', async () => {
+      expect(await parseBrand('')).toBeUndefined()
+      expect(await parseBrand('   ')).toBeUndefined()
+    })
+  })
 })
 
 describe('computeUrlHash', () => {

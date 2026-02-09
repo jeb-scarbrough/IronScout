@@ -51,6 +51,7 @@ interface Run {
   failureCode: string | null;
   failureMessage: string | null;
   correlationId: string | null;
+  dataQuality: unknown;
   // ADR-015: Run ignore fields
   ignoredAt: Date | null;
   ignoredBy: string | null;
@@ -431,6 +432,45 @@ export function RunsTable({ runs, feedId }: RunsTableProps) {
                           </>
                         )}
                       </div>
+
+                      {/* Data Quality Metrics — only when dataQuality is non-null */}
+                      {run.dataQuality != null && (() => {
+                        const dq = run.dataQuality as {
+                          missingBrand?: number;
+                          missingRoundCount?: number;
+                          missingCaliber?: number;
+                          missingGrain?: number;
+                        };
+                        const upserted = run.productsUpserted;
+                        const pct = (count: number | undefined) => {
+                          if (count === undefined) return null;
+                          if (!upserted || upserted === 0) return null;
+                          return ((count / upserted) * 100).toFixed(1);
+                        };
+                        const fmt = (label: string, count: number | undefined) => {
+                          if (count === undefined) return null;
+                          const rate = pct(count);
+                          return (
+                            <div key={label}>
+                              <dt className="font-medium text-gray-500">{label}</dt>
+                              <dd className={`mt-1 ${count > 0 ? 'text-amber-600' : 'text-gray-700'}`}>
+                                {count.toLocaleString()}{rate !== null && ` (${rate}%)`}
+                              </dd>
+                            </div>
+                          );
+                        };
+                        return (
+                          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                            <h4 className="text-sm font-medium text-blue-800 mb-2">Data Quality</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              {fmt('Missing Brand', dq.missingBrand)}
+                              {fmt('Missing Round Count', dq.missingRoundCount)}
+                              {fmt('Missing Caliber', dq.missingCaliber)}
+                              {fmt('Missing Grain', dq.missingGrain)}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Ignored Run Warning */}
                       {run.ignoredAt && (

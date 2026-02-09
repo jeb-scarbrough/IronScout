@@ -34,6 +34,7 @@ import type {
   ProcessorResult,
   ParseError,
   IdentityType,
+  DataQualityMetrics,
 } from './types'
 import { ERROR_CODES, AffiliateFeedError } from './types'
 import { emitIngestRunSummary } from '../config/ingest-summary'
@@ -219,7 +220,8 @@ export async function processProducts(
   let urlHashFallbackCount = 0
   let productsMatched = 0
   let missingBrandCount = 0
-  let missingRoundCountCount = 0
+  let missingRoundCount = 0
+  let missingGrainCount = 0
   const errors: ParseError[] = []
 
   // Run-local price cache - maintained across all chunks
@@ -306,12 +308,6 @@ export async function processProducts(
       // Products without caliber can't be matched to canonical products effectively
       const { valid: validProducts, quarantined: toQuarantine } = filterMissingCaliber(deduped)
 
-      // Track quality metrics (not blocking, just metrics)
-      for (const { product } of deduped) {
-        if (!product.brand) missingBrandCount++
-        if (!product.roundCount) missingRoundCountCount++
-      }
-
       // Quarantine products missing caliber
       if (toQuarantine.length > 0) {
         await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine)
@@ -323,6 +319,18 @@ export async function processProducts(
           quarantinedCount: toQuarantine.length,
           reason: 'MISSING_CALIBER',
         })
+      }
+
+      // Track quality metrics on validProducts (post-quarantine, post-dedup).
+      // Counters are per deduped, non-quarantined product so denominator matches productsUpserted.
+      for (const { product } of validProducts) {
+        if (!product.brand) missingBrandCount++
+        if (!product.roundCount) missingRoundCount++
+        // Only count missing grain when caliber is present and NOT gauge/shotgun
+        // (grain weight is not applicable for shotgun loads)
+        if (!product.grainWeight && product.caliber && !/gauge|bore/i.test(product.caliber)) {
+          missingGrainCount++
+        }
       }
 
       if (validProducts.length === 0) {
@@ -704,9 +712,27 @@ export async function processProducts(
     },
     qualityMetrics: {
       missingBrand: missingBrandCount,
-      missingRoundCount: missingRoundCountCount,
+      missingRoundCount,
+      missingCaliber: productsQuarantined,
+      missingGrain: missingGrainCount,
     },
   })
+
+  // Log threshold warning for missing-brand rate
+  const MISSING_BRAND_THRESHOLD = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
+  if (productsUpserted >= 50) {
+    const missingBrandRate = (missingBrandCount / productsUpserted) * 100
+    if (missingBrandRate > MISSING_BRAND_THRESHOLD) {
+      procLog.warn('DATA_QUALITY_MISSING_BRAND_HIGH', {
+        runId: run.id,
+        feedId: feed.id,
+        missingBrandCount,
+        productsUpserted,
+        missingBrandRate: missingBrandRate.toFixed(2),
+        threshold: MISSING_BRAND_THRESHOLD,
+      })
+    }
+  }
 
   return {
     productsUpserted,
@@ -715,6 +741,15 @@ export async function processProducts(
     duplicateKeyCount,
     urlHashFallbackCount,
     errors,
+    qualityMetrics: {
+      version: 1 as const,
+      missingBrand: missingBrandCount,
+      missingRoundCount,
+      // missingCaliber: count from quarantine (missing-caliber reason only).
+      // If other quarantine reasons are introduced, this must be updated to track separately.
+      missingCaliber: productsQuarantined,
+      missingGrain: missingGrainCount,
+    },
   }
 }
 

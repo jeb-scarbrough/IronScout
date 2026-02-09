@@ -24,6 +24,7 @@ import {
   notifyCircuitBreakerTriggered,
   notifyAffiliateFeedAutoDisabled,
   notifyAffiliateFeedRecovered,
+  notifyDataQualityWarning,
 } from '@ironscout/notifications'
 import { acquireAdvisoryLock, releaseAdvisoryLock } from './lock'
 import { downloadFeed } from './fetcher'
@@ -41,6 +42,11 @@ const moduleLog = createWorkflowLogger(baseLogger, {
 
 // Maximum consecutive failures before auto-disable
 const MAX_CONSECUTIVE_FAILURES = 3
+
+// Missing-brand threshold for data quality alerts (env-configurable)
+const MISSING_BRAND_THRESHOLD_PERCENT = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT) || 10
+// Minimum products to consider for threshold alerting (avoid noise on small/partial runs)
+const MIN_PRODUCTS_FOR_QUALITY_ALERT = 50
 
 /**
  * Create and start the affiliate feed worker
@@ -700,6 +706,7 @@ interface Phase1Result {
     duplicateKeyCount: number
     urlHashFallbackCount: number
     errorCount: number
+    dataQuality?: import('./types').DataQualityMetrics
   }
   changeDetection?: {
     mtime: Date | null
@@ -799,6 +806,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
       duplicateKeyCount: processResult.duplicateKeyCount,
       urlHashFallbackCount: processResult.urlHashFallbackCount,
       errorCount: parseResult.errors.length + processResult.errors.length,
+      dataQuality: processResult.qualityMetrics,
     },
     changeDetection: {
       mtime: downloadResult.mtime,
@@ -904,6 +912,9 @@ async function finalizeRun(
       failureMessage: metrics.errorMessage as string | undefined,
       correlationId: metrics.correlationId as string | undefined,
       isPartial: (metrics.errorCount as number) > 0 && (metrics.productsUpserted as number) > 0,
+      dataQuality: metrics.dataQuality
+        ? (metrics.dataQuality as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull,
     },
   })
 
@@ -930,6 +941,45 @@ async function finalizeRun(
           productsPromoted: (metrics.productsPromoted as number) || 0,
           pricesWritten: (metrics.pricesWritten as number) || 0, durationMs }
       ).catch((err) => moduleLog.error('Failed to send recovery notification', {}, err))
+    }
+
+    // Data quality alert: crossing-threshold for missing brand rate
+    const dq = metrics.dataQuality as import('./types').DataQualityMetrics | undefined
+    const upserted = metrics.productsUpserted as number | undefined
+    if (dq && upserted && upserted >= MIN_PRODUCTS_FOR_QUALITY_ALERT) {
+      const currentRate = (dq.missingBrand / upserted) * 100
+      if (currentRate >= MISSING_BRAND_THRESHOLD_PERCENT) {
+        // Query previous successful run to check crossing-threshold
+        const prevRun = await prisma.affiliate_feed_runs.findFirst({
+          where: {
+            feedId: feed.id,
+            id: { not: run.id },
+            status: 'SUCCEEDED',
+          },
+          orderBy: { startedAt: 'desc' },
+          select: { dataQuality: true, productsUpserted: true },
+        })
+
+        // Alert if: no previous run, or previous run has no quality data, or previous rate was below threshold
+        let shouldAlert = true
+        if (prevRun?.dataQuality && prevRun.productsUpserted && prevRun.productsUpserted > 0) {
+          const prevDq = prevRun.dataQuality as { missingBrand?: number }
+          if (typeof prevDq.missingBrand === 'number') {
+            const prevRate = (prevDq.missingBrand / prevRun.productsUpserted) * 100
+            shouldAlert = prevRate < MISSING_BRAND_THRESHOLD_PERCENT
+          }
+        }
+
+        if (shouldAlert) {
+          notifyDataQualityWarning(
+            { feedId: feed.id, feedName: feed.sources.name, sourceId: feed.sourceId,
+              sourceName: feed.sources.name, retailerName: feed.sources.retailers?.name,
+              network: feed.network, runId: run.id },
+            { missingBrandCount: dq.missingBrand, missingBrandRate: currentRate.toFixed(1),
+              thresholdPercent: MISSING_BRAND_THRESHOLD_PERCENT, productsUpserted: upserted }
+          ).catch((err) => moduleLog.error('Failed to send data quality warning', {}, err))
+        }
+      }
     }
   } else if (status === 'FAILED') {
     const newFailureCount = feed.consecutiveFailures + 1

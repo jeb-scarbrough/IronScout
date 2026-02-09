@@ -366,12 +366,33 @@ function normalizePrice(value: string | undefined): number {
 }
 
 /**
- * Normalize brand/manufacturer: title case, trim
+ * Garbage brand tokens — common placeholder values that should be treated as "no brand provided".
+ * Stored with all punctuation/whitespace stripped so we can match variants like "N / A", "n.a.", "not-available".
+ * In ammunition catalogs, values like "other" and "generic" are exclusively feed placeholders,
+ * not real manufacturer names.
+ */
+const GARBAGE_BRAND_TOKENS = new Set([
+  'na', 'none', 'unknown', 'unbranded', 'generic', 'nobrand', 'other',
+  'misc', 'miscellaneous', 'notspecified', 'notavailable',
+  'tbd', 'test',
+])
+
+/**
+ * Normalize brand/manufacturer: filter garbage, title case, trim
  */
 function normalizeBrand(value: string | undefined): string | undefined {
   if (!value) return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
+
+  // Garbage detection: normalize for comparison without mutating the actual brand string.
+  // Strips ASCII/Unicode punctuation, dashes (incl. em/en dash), dots, slashes, underscores,
+  // commas, parens, and whitespace.
+  const normalizedForGarbageCheck = trimmed.toLowerCase().replace(/[.\-_/,()[\]\s\u2012\u2013\u2014\u2015\u2212]+/g, '')
+  // Empty after stripping (e.g., "--", "—", "...") → treat as garbage
+  if (normalizedForGarbageCheck.length === 0) return undefined
+  if (GARBAGE_BRAND_TOKENS.has(normalizedForGarbageCheck)) return undefined
+
   // Title case but preserve known acronyms
   const acronyms = ['PMC', 'CCI', 'FMJ', 'JHP', 'NATO', 'ACP', 'USA', 'LLC', 'INC']
   return trimmed
