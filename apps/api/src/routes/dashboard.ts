@@ -227,23 +227,26 @@ router.get('/pulse', async (req: Request, res: Response) => {
     // Single query for all calibers → group in JS
     // ================================================================
 
-    // 1. Single query: all products across all calibers
-    // No global take limit — per-caliber capping happens during JS grouping
-    // to prevent popular calibers from starving sparse ones
-    const allProducts = await prisma.products.findMany({
-      where: { caliber: { in: calibers } },
-      select: { id: true, caliber: true }
-    })
-
-    // Group product IDs by caliber, capping at 100 per caliber
-    // This ensures each caliber gets fair representation regardless of catalog size
+    // 1. SQL-capped query: at most 100 products per caliber via ROW_NUMBER()
+    // Prevents unbounded I/O — popular calibers (e.g. 9mm) won't fetch 10k+ rows
     const MAX_PRODUCTS_PER_CALIBER = 100
+    const allProducts = await prisma.$queryRaw<{ id: string; caliber: string }[]>`
+      SELECT id, caliber FROM (
+        SELECT id, caliber,
+          ROW_NUMBER() OVER (PARTITION BY caliber ORDER BY id) as rn
+        FROM products
+        WHERE caliber = ANY(${calibers}::text[])
+      ) ranked
+      WHERE rn <= ${MAX_PRODUCTS_PER_CALIBER}
+    `
+
+    // Group product IDs by caliber (already capped at 100 per caliber by SQL)
     const productsByCaliber = new Map<string, string[]>()
     for (const cal of calibers) productsByCaliber.set(cal, [])
     for (const p of allProducts) {
       if (p.caliber) {
         const ids = productsByCaliber.get(p.caliber)
-        if (ids && ids.length < MAX_PRODUCTS_PER_CALIBER) ids.push(p.id)
+        if (ids) ids.push(p.id)
       }
     }
 
@@ -269,45 +272,49 @@ router.get('/pulse', async (req: Request, res: Response) => {
         })
       : []
 
-    // Build sourceProductId → productId mapping
-    const sourceToProductId = new Map<string, string>()
-    for (const link of allLinks) {
-      if (link.productId) sourceToProductId.set(link.sourceProductId, link.productId)
-    }
-
-    // 4. Single batch: all historical prices
-    // No global take limit — per-caliber capping (50) happens during JS grouping
-    const allSourceProductIds = allLinks.map(link => link.sourceProductId)
-    const allHistoricalPrices = allSourceProductIds.length > 0
-      ? await prisma.prices.findMany({
-          where: {
-            sourceProductId: { in: allSourceProductIds },
-            observedAt: { lt: windowStart },
-            ...visibleHistoricalPriceWhere(),
-          },
-          select: { price: true, sourceProductId: true },
-          orderBy: { observedAt: 'desc' }
-        })
-      : []
-
-    // Group historical prices by caliber (via sourceProductId → productId → caliber)
+    // 4. Per-caliber bounded historical prices (LIMIT 50 each, parallel)
+    // Preserves visibleHistoricalPriceWhere() predicates without raw SQL duplication
+    const MAX_HISTORICAL_PER_CALIBER = 50
     const productIdToCaliber = new Map<string, string>()
     for (const p of allProducts) {
       if (p.caliber) productIdToCaliber.set(p.id, p.caliber)
     }
 
-    const historicalPricesByCaliber = new Map<string, number[]>()
-    for (const cal of calibers) historicalPricesByCaliber.set(cal, [])
-    for (const hp of allHistoricalPrices) {
-      const productId = sourceToProductId.get(hp.sourceProductId)
-      if (productId) {
-        const cal = productIdToCaliber.get(productId)
+    // Group sourceProductIds by caliber for per-caliber queries
+    const sourceProductIdsByCaliber = new Map<string, string[]>()
+    for (const cal of calibers) sourceProductIdsByCaliber.set(cal, [])
+    for (const link of allLinks) {
+      if (link.productId) {
+        const cal = productIdToCaliber.get(link.productId)
         if (cal) {
-          const arr = historicalPricesByCaliber.get(cal)
-          if (arr && arr.length < 50) arr.push(parseFloat(hp.price.toString()))
+          const ids = sourceProductIdsByCaliber.get(cal)
+          if (ids) ids.push(link.sourceProductId)
         }
       }
     }
+
+    const historicalPricesByCaliber = new Map<string, number[]>()
+    await Promise.all(calibers.map(async caliber => {
+      const calSourceProductIds = sourceProductIdsByCaliber.get(caliber) || []
+      if (calSourceProductIds.length === 0) {
+        historicalPricesByCaliber.set(caliber, [])
+        return
+      }
+      const calPrices = await prisma.prices.findMany({
+        where: {
+          sourceProductId: { in: calSourceProductIds },
+          observedAt: { lt: windowStart },
+          ...visibleHistoricalPriceWhere(),
+        },
+        select: { price: true },
+        orderBy: { observedAt: 'desc' },
+        take: MAX_HISTORICAL_PER_CALIBER,
+      })
+      historicalPricesByCaliber.set(
+        caliber,
+        calPrices.map(p => parseFloat(p.price.toString()))
+      )
+    }))
 
     // 5. Assemble pulse data per caliber (pure JS, no more DB calls)
     const pulseData = calibers.map(caliber => {

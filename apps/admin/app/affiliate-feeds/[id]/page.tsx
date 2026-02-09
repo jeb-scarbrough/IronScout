@@ -111,6 +111,8 @@ export default async function AffiliateFeedDetailPage({
 
   // Compute missing-brand rate from latest successful run
   const latestSuccessRun = feed.affiliate_feed_runs.find(r => r.status === 'SUCCEEDED');
+  const _mbRaw = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10);
+  const missingBrandThreshold = Number.isFinite(_mbRaw) ? _mbRaw : 10;
   let missingBrandDisplay = 'N/A';
   let missingBrandColor = 'text-gray-400'; // neutral for N/A
   if (latestSuccessRun?.dataQuality && latestSuccessRun.productsUpserted && latestSuccessRun.productsUpserted > 0) {
@@ -118,7 +120,7 @@ export default async function AffiliateFeedDetailPage({
     if (typeof dq.missingBrand === 'number') {
       const rate = (dq.missingBrand / latestSuccessRun.productsUpserted) * 100;
       missingBrandDisplay = `${rate.toFixed(1)}%`;
-      missingBrandColor = rate > 10 ? 'text-amber-600' : 'text-green-600';
+      missingBrandColor = rate > missingBrandThreshold ? 'text-amber-600' : 'text-green-600';
     }
   }
 

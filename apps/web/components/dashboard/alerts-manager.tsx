@@ -43,7 +43,8 @@ export function AlertsManager() {
     value: boolean
   ) => {
     try {
-      await updatePrefs(item.productId, { [field]: value })
+      const result = await updatePrefs(item.productId, { [field]: value })
+      if (!result) return // Auth failed — toast already shown by hook
       if (field === 'notificationsEnabled') {
         toast.success(value ? 'Notifications resumed' : 'Notifications paused')
       }
