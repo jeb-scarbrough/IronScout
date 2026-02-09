@@ -61,7 +61,6 @@ export function AlertsManager() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Alerts</h1>
           <p className="text-muted-foreground mt-1">Loading...</p>
         </div>
         <div className="space-y-3">
@@ -76,9 +75,6 @@ export function AlertsManager() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Alerts</h1>
-        </div>
         <Card>
           <CardContent className="py-12">
             <p className="text-center text-destructive">{error}</p>
@@ -93,13 +89,10 @@ export function AlertsManager() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Alerts</h1>
-        <p className="text-muted-foreground mt-1">
-          Price drop and back-in-stock notifications for your saved items.
-        </p>
-      </div>
+      {/* Subheading — ADR-023 D2: no page h1, sidebar provides context */}
+      <p className="text-muted-foreground">
+        Price drop and back-in-stock notifications for your saved items.
+      </p>
 
       {/* Summary badges */}
       {items.length > 0 && (
@@ -153,7 +146,7 @@ export function AlertsManager() {
       {/* Footer note */}
       {items.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Alerts are sent when prices drop 5%+ or items come back in stock.
+          Alerts fire when your configured thresholds are met or items come back in stock.
           Manage your saved items on the{' '}
           <a href="/dashboard/saved" className="underline hover:text-foreground">
             Watchlist

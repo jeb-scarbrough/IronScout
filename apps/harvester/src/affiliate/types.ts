@@ -37,7 +37,8 @@ export type AffiliateFeedWithRelations = affiliate_feeds & {
 export interface FeedRunContext {
   feed: AffiliateFeedWithRelations
   run: AffiliateFeedRun
-  t0: Date // Run start timestamp - used for all presence updates
+  t0: Date // Attempt start timestamp - used for duration, presence, heartbeat
+  runObservedAt: Date // Stable per run (= run.startedAt) - used only for prices.observedAt (#218 dedupe)
   sourceId: string
   retailerId: string
 }

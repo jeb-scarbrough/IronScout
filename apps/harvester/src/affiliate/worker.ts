@@ -44,7 +44,8 @@ const moduleLog = createWorkflowLogger(baseLogger, {
 const MAX_CONSECUTIVE_FAILURES = 3
 
 // Missing-brand threshold for data quality alerts (env-configurable)
-const MISSING_BRAND_THRESHOLD_PERCENT = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
+const _mbRaw = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
+const MISSING_BRAND_THRESHOLD_PERCENT = Number.isFinite(_mbRaw) ? _mbRaw : 10
 // Minimum products to consider for threshold alerting (avoid noise on small/partial runs)
 const MIN_PRODUCTS_FOR_QUALITY_ALERT = 50
 
@@ -401,6 +402,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     feed,
     run,
     t0,
+    runObservedAt: run.startedAt, // Stable across retries — used for prices.observedAt dedupe (#218)
     sourceId: feed.sourceId,
     retailerId: feed.sources.retailerId,
   }

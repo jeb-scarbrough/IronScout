@@ -96,7 +96,7 @@ export async function notifyCircuitBreakerTriggered(
 
   const reasonText =
     reason === 'SPIKE_THRESHOLD_EXCEEDED'
-      ? `${metrics.expiryPercentage.toFixed(1)}% of products would expire (threshold: 20%)`
+      ? `${metrics.expiryPercentage.toFixed(1)}% of products would expire (threshold: 30%)`
       : `${((metrics.urlHashFallbackCount / metrics.seenSuccessCount) * 100).toFixed(1)}% URL_HASH fallback (threshold: 50%)`;
 
   const result = await sendSlackMessage(

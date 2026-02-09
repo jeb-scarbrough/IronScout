@@ -187,7 +187,7 @@ export async function processProducts(
   context: FeedRunContext,
   products: ParsedFeedProduct[]
 ): Promise<ProcessorResult> {
-  const { feed, run, sourceId, retailerId, t0 } = context
+  const { feed, run, sourceId, retailerId, t0, runObservedAt } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
   const procLog = log.child({
     runId: run.id,
@@ -556,7 +556,7 @@ export async function processProducts(
         })
         procLog.debug('Inserting prices', { runId: run.id, chunkNum, count: pricesToWrite.length })
         const insertStart = Date.now()
-        actualInserted = await bulkInsertPrices(pricesToWrite, t0)
+        actualInserted = await bulkInsertPrices(pricesToWrite, t0, runObservedAt)
         procLog.debug('Prices inserted', {
           runId: run.id,
           chunkNum,
@@ -719,7 +719,8 @@ export async function processProducts(
   })
 
   // Log threshold warning for missing-brand rate
-  const MISSING_BRAND_THRESHOLD = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
+  const _mbRaw = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
+  const MISSING_BRAND_THRESHOLD = Number.isFinite(_mbRaw) ? _mbRaw : 10
   if (productsUpserted >= 50) {
     const missingBrandRate = (missingBrandCount / productsUpserted) * 100
     if (missingBrandRate > MISSING_BRAND_THRESHOLD) {
@@ -1698,12 +1699,14 @@ function decidePriceWrites(
  *
  * The dedupe key is (sourceProductId, observedAt):
  * - For a given source product, only one price row per observation timestamp
- * - observedAt is set to the run's t0, so retries of the same run deduplicate
- * - Different runs have different t0 values, preserving time-series history
+ * - observedAt is set to run.startedAt (stable across retries), so retries deduplicate
+ * - createdAt is set to t0 (per-attempt) for audit/timing purposes
+ * - Different runs have different startedAt values, preserving time-series history
  */
 async function bulkInsertPrices(
   pricesToWrite: NewPriceRecord[],
-  createdAt: Date
+  createdAt: Date,
+  observedAt: Date
 ): Promise<number> {
   if (pricesToWrite.length === 0) return 0
 
@@ -1757,7 +1760,7 @@ async function bulkInsertPrices(
       unnest(${runIds}::text[]),
       unnest(${signatureHashes}::text[]),
       ${createdAt},
-      ${createdAt},
+      ${observedAt},
       'AFFILIATE_FEED'::"IngestionRunType",
       unnest(${runIds}::text[])
     ON CONFLICT ("sourceProductId", "observedAt")
