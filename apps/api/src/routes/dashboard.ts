@@ -222,135 +222,157 @@ router.get('/pulse', async (req: Request, res: Response) => {
     // Check feature availability
     const showPriceTimingSignal = hasFeature(userTier, 'priceTimingSignal')
 
-    // Calculate market pulse for each caliber
-    // Per Spec v1.2 §0.0: Query through product_links for prices
-    const pulseData = await Promise.all(
-      calibers.map(async caliber => {
-        // Get products for this caliber
-        const products = await prisma.products.findMany({
-          where: { caliber },
-          select: { id: true },
-          take: 100
-        })
+    // ================================================================
+    // BATCHED market pulse calculation (eliminates N+1 per-caliber queries)
+    // Single query for all calibers → group in JS
+    // ================================================================
 
-        if (products.length === 0) {
-          return {
-            caliber,
-            currentAvg: null,
-            trend: 'STABLE' as const,
-            trendPercent: 0,
-            priceTimingSignal: showPriceTimingSignal ? null : undefined,
-            priceContext: 'INSUFFICIENT_DATA' as const,
-            contextMeta: {
-              windowDays,
-              sampleCount: 0,
-              asOf: asOf.toISOString()
-            }
-          }
-        }
+    // 1. Single query: all products across all calibers
+    const allProducts = await prisma.products.findMany({
+      where: { caliber: { in: calibers } },
+      select: { id: true, caliber: true },
+      take: 100 * calibers.length // ~100 per caliber
+    })
 
-        // Get prices through product_links
-        const productIds = products.map(p => p.id)
-        const pricesMap = await batchGetPricesViaProductLinks(productIds)
+    // Group product IDs by caliber
+    const productsByCaliber = new Map<string, string[]>()
+    for (const cal of calibers) productsByCaliber.set(cal, [])
+    for (const p of allProducts) {
+      if (p.caliber) {
+        const ids = productsByCaliber.get(p.caliber)
+        if (ids) ids.push(p.id)
+      }
+    }
 
-        // Collect current in-stock prices
-        const currentPrices: number[] = []
-        for (const prices of pricesMap.values()) {
-          for (const price of prices) {
-            if (price.inStock) {
-              currentPrices.push(parseFloat(price.price.toString()))
-            }
-          }
-        }
+    // 2. Single batch: all prices across all product IDs
+    const allProductIds = allProducts.map(p => p.id)
+    const allPricesMap = allProductIds.length > 0
+      ? await batchGetPricesViaProductLinks(allProductIds)
+      : new Map()
 
-        // Take top 50 for calculation
-        const sampledPrices = currentPrices.slice(0, 50)
+    // 3. Single batch: all product_links for historical price lookup
+    const windowStart = new Date(asOf)
+    windowStart.setDate(windowStart.getDate() - windowDays)
 
-        if (sampledPrices.length === 0) {
-          return {
-            caliber,
-            currentAvg: null,
-            trend: 'STABLE' as const,
-            trendPercent: 0,
-            priceTimingSignal: showPriceTimingSignal ? null : undefined,
-            priceContext: 'INSUFFICIENT_DATA' as const,
-            contextMeta: {
-              windowDays,
-              sampleCount: 0,
-              asOf: asOf.toISOString()
-            }
-          }
-        }
-
-        const currentAvg =
-          sampledPrices.reduce((sum, p) => sum + p, 0) / sampledPrices.length
-
-        // Get historical average for trend based on windowDays
-        // Query historical prices through product_links
-        const windowStart = new Date(asOf)
-        windowStart.setDate(windowStart.getDate() - windowDays)
-
-        // Historical baseline (observedAt-based, visibility enforced)
-        const links = await prisma.product_links.findMany({
+    const allLinks = allProductIds.length > 0
+      ? await prisma.product_links.findMany({
           where: {
-            productId: { in: productIds },
+            productId: { in: allProductIds },
             status: { in: ['MATCHED', 'CREATED'] }
           },
-          select: { sourceProductId: true }
+          select: { sourceProductId: true, productId: true }
         })
+      : []
 
-        const sourceProductIds = links.map(link => link.sourceProductId)
-        const historicalPricesRaw = sourceProductIds.length === 0
-          ? []
-          : await prisma.prices.findMany({
-              where: {
-                sourceProductId: { in: sourceProductIds },
-                observedAt: { lt: windowStart },
-                ...visibleHistoricalPriceWhere(),
-              },
-              select: { price: true },
-              orderBy: { observedAt: 'desc' },
-              take: 50
-            })
+    // Build sourceProductId → productId mapping
+    const sourceToProductId = new Map<string, string>()
+    for (const link of allLinks) {
+      if (link.productId) sourceToProductId.set(link.sourceProductId, link.productId)
+    }
 
-        let trend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE'
-        let trendPercent = 0
+    // 4. Single batch: all historical prices
+    const allSourceProductIds = allLinks.map(link => link.sourceProductId)
+    const allHistoricalPrices = allSourceProductIds.length > 0
+      ? await prisma.prices.findMany({
+          where: {
+            sourceProductId: { in: allSourceProductIds },
+            observedAt: { lt: windowStart },
+            ...visibleHistoricalPriceWhere(),
+          },
+          select: { price: true, sourceProductId: true },
+          orderBy: { observedAt: 'desc' },
+          take: 50 * calibers.length
+        })
+      : []
 
-        if (historicalPricesRaw.length > 0) {
-          const historicalAvg =
-            historicalPricesRaw.reduce((sum, p) => sum + parseFloat(p.price.toString()), 0) /
-            historicalPricesRaw.length
+    // Group historical prices by caliber (via sourceProductId → productId → caliber)
+    const productIdToCaliber = new Map<string, string>()
+    for (const p of allProducts) {
+      if (p.caliber) productIdToCaliber.set(p.id, p.caliber)
+    }
 
-          trendPercent = ((currentAvg - historicalAvg) / historicalAvg) * 100
-
-          if (trendPercent < -3) {
-            trend = 'DOWN'
-          } else if (trendPercent > 3) {
-            trend = 'UP'
-          }
+    const historicalPricesByCaliber = new Map<string, number[]>()
+    for (const cal of calibers) historicalPricesByCaliber.set(cal, [])
+    for (const hp of allHistoricalPrices) {
+      const productId = sourceToProductId.get(hp.sourceProductId)
+      if (productId) {
+        const cal = productIdToCaliber.get(productId)
+        if (cal) {
+          const arr = historicalPricesByCaliber.get(cal)
+          if (arr && arr.length < 50) arr.push(parseFloat(hp.price.toString()))
         }
+      }
+    }
 
-        // Determine price context (ADR-006: descriptive, not prescriptive)
-        // Uses 30th/70th percentile thresholds
-        let priceContext: 'LOWER_THAN_RECENT' | 'WITHIN_RECENT_RANGE' | 'HIGHER_THAN_RECENT' = 'WITHIN_RECENT_RANGE'
-        if (trend === 'DOWN') priceContext = 'LOWER_THAN_RECENT'
-        else if (trend === 'UP') priceContext = 'HIGHER_THAN_RECENT'
+    // 5. Assemble pulse data per caliber (pure JS, no more DB calls)
+    const pulseData = calibers.map(caliber => {
+      const productIds = productsByCaliber.get(caliber) || []
 
+      if (productIds.length === 0) {
         return {
           caliber,
-          currentAvg: Math.round(currentAvg * 100) / 100,
-          trend,
-          trendPercent: Math.round(trendPercent * 10) / 10,
-          priceContext,
-          // Context metadata for transparency
-          contextMeta: {
-            windowDays,
-            sampleCount: sampledPrices.length,
-            asOf: asOf.toISOString()
+          currentAvg: null,
+          trend: 'STABLE' as const,
+          trendPercent: 0,
+          priceTimingSignal: showPriceTimingSignal ? null : undefined,
+          priceContext: 'INSUFFICIENT_DATA' as const,
+          contextMeta: { windowDays, sampleCount: 0, asOf: asOf.toISOString() }
+        }
+      }
+
+      // Collect current in-stock prices for this caliber
+      const currentPrices: number[] = []
+      for (const pid of productIds) {
+        const prices = allPricesMap.get(pid) || []
+        for (const price of prices) {
+          if (price.inStock) {
+            currentPrices.push(parseFloat(price.price.toString()))
           }
         }
-      })
-    )
+      }
+
+      const sampledPrices = currentPrices.slice(0, 50)
+
+      if (sampledPrices.length === 0) {
+        return {
+          caliber,
+          currentAvg: null,
+          trend: 'STABLE' as const,
+          trendPercent: 0,
+          priceTimingSignal: showPriceTimingSignal ? null : undefined,
+          priceContext: 'INSUFFICIENT_DATA' as const,
+          contextMeta: { windowDays, sampleCount: 0, asOf: asOf.toISOString() }
+        }
+      }
+
+      const currentAvg = sampledPrices.reduce((sum, p) => sum + p, 0) / sampledPrices.length
+
+      // Historical trend from pre-batched data
+      const historicalPricesRaw = historicalPricesByCaliber.get(caliber) || []
+      let trend: 'UP' | 'DOWN' | 'STABLE' = 'STABLE'
+      let trendPercent = 0
+
+      if (historicalPricesRaw.length > 0) {
+        const historicalAvg =
+          historicalPricesRaw.reduce((sum, p) => sum + p, 0) / historicalPricesRaw.length
+        trendPercent = ((currentAvg - historicalAvg) / historicalAvg) * 100
+        if (trendPercent < -3) trend = 'DOWN'
+        else if (trendPercent > 3) trend = 'UP'
+      }
+
+      let priceContext: 'LOWER_THAN_RECENT' | 'WITHIN_RECENT_RANGE' | 'HIGHER_THAN_RECENT' = 'WITHIN_RECENT_RANGE'
+      if (trend === 'DOWN') priceContext = 'LOWER_THAN_RECENT'
+      else if (trend === 'UP') priceContext = 'HIGHER_THAN_RECENT'
+
+      return {
+        caliber,
+        currentAvg: Math.round(currentAvg * 100) / 100,
+        trend,
+        trendPercent: Math.round(trendPercent * 10) / 10,
+        priceContext,
+        contextMeta: { windowDays, sampleCount: sampledPrices.length, asOf: asOf.toISOString() }
+      }
+    })
 
     // Cache for 5 minutes, keyed by windowDays (handled by CDN/proxy via Vary header)
     res.set('Cache-Control', 'private, max-age=300')
