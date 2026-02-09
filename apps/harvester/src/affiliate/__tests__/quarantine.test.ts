@@ -116,6 +116,13 @@ describe('Affiliate Quarantine', () => {
       sourceId: 'source-1',
       retailerId: 'retailer-1',
       t0: new Date(),
+      runObservedAt: new Date(),
+      trace: {
+        traceId: 'trace-test',
+        executionId: 'run-1',
+        runId: 'run-1',
+        sourceId: 'source-1',
+      },
     }
   }
 

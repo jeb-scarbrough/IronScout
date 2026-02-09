@@ -184,6 +184,41 @@ Workers log startup and heartbeat messages. Check logs for:
 
 Use the Admin UI at `/affiliate-feeds/[id]` to test FTP/SFTP connections before enabling scheduled runs.
 
+### Harvester Trace Debug Logging
+
+Use trace logging to follow a single listing end-to-end across fetch, parse, normalize, resolve, write, and alert side-effects.
+
+Enable detailed traces:
+```bash
+LOG_LEVEL=debug
+HARVESTER_DEBUG_FIRST_N=50
+HARVESTER_DEBUG_SAMPLE_RATE=0.10
+HARVESTER_LOG_RAW_EXCERPTS=false
+```
+
+Notes:
+- Keep `HARVESTER_LOG_RAW_EXCERPTS=false` unless explicitly needed for parsing diagnostics.
+- If excerpts are enabled, they are short and sanitized; disable after troubleshooting.
+
+Find a run by trace:
+```bash
+rg "traceId=|\\\"traceId\\\"" logs/datafeeds -g "*.log"
+```
+
+Follow a single item through the pipeline:
+```bash
+rg "itemKey=sp:abc123|\\\"itemKey\\\":\\\"sp:abc123\\\"" logs/datafeeds -g "*.log"
+```
+
+Typical event sequence for one run:
+- `AFFILIATE_JOB_START` and `RUN_START`
+- `FETCH_START` and `FETCH_END` or `FETCH_ERROR`
+- `PARSE_START`, `PARSE_VALIDATION_ERROR` (if any), `PARSE_COMPLETE`
+- `NORMALIZE_DECISION` and `RESOLVE_DECISION`
+- `WRITE_PLAN`, `WRITE_START`, `WRITE_END`, `WRITE_PROVENANCE_CHECK`
+- `ALERTS_ENQUEUE_START` or `ALERTS_ENQUEUE_SKIPPED`
+- `RUN_COMPLETE` and `AFFILIATE_JOB_END`
+
 ### Circuit Breaker Triggers
 
 If a feed run shows `expiryBlocked = true`:

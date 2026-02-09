@@ -22,10 +22,20 @@ import {
 } from '../config/queues'
 import { logger } from '../config/logger'
 import { createWorkflowLogger } from '../config/structured-log'
+import {
+  createTraceContext,
+  extendTraceContext,
+  traceLogFields,
+  withTrace,
+  TRACE_REASON_CODES,
+} from '../config/trace'
 
 const log = createWorkflowLogger(logger.affiliate, {
   workflow: 'affiliate',
   stage: 'scheduler',
+  traceId: 'affiliate-scheduler',
+  executionId: 'affiliate-scheduler',
+  sourceId: 'scheduler',
 })
 
 // Run retention configuration (default 30 days)
@@ -52,7 +62,7 @@ export function createAffiliateFeedScheduler() {
         return cleanupOldRuns()
       }
 
-      return schedulerTick()
+      return schedulerTick(job)
     },
     {
       connection: getSharedBullMQConnection(),
@@ -131,17 +141,27 @@ async function setupRepeatableJob() {
  * This prevents double-enqueuing if scheduler crashes between claim and enqueue.
  * If enqueue fails after claim, the feed simply won't run until next scheduled time.
  */
-async function schedulerTick(): Promise<{ processed: number }> {
+async function schedulerTick(job?: Job<AffiliateFeedSchedulerJobData>): Promise<{ processed: number }> {
   const now = new Date()
-  let processed = 0
-  const tickStart = Date.now()
-
-  log.debug('AFFILIATE_SCHEDULER_TICK_START', {
-    timestamp: now.toISOString(),
-    tickId: `tick-${now.getTime()}`,
+  const tickTrace = createTraceContext({
+    executionId: `affiliate-scheduler-${now.getTime()}`,
+    sourceId: 'scheduler',
+    jobId: job?.id ? String(job.id) : undefined,
+    stage: 'affiliate.scheduler',
+    step: 'tick.start',
   })
 
-  try {
+  return withTrace(tickTrace, async () => {
+    let processed = 0
+    const tickStart = Date.now()
+
+    log.debug('AFFILIATE_SCHEDULER_TICK_START', {
+      timestamp: now.toISOString(),
+      tickId: `tick-${now.getTime()}`,
+      ...traceLogFields(tickTrace),
+    })
+
+    try {
     // Atomically claim due feeds by selecting AND updating nextRunAt in one transaction
     // This prevents double-enqueuing: once claimed, the feed won't be selected again
     log.debug('AFFILIATE_SCHEDULER_CLAIM_START', {
@@ -219,9 +239,11 @@ async function schedulerTick(): Promise<{ processed: number }> {
     if (claimedFeeds.length === 0) {
       log.debug('AFFILIATE_SCHEDULER_NO_FEEDS_DUE', {
         tickDurationMs: Date.now() - tickStart,
+        reasonCode: TRACE_REASON_CODES.NO_FEEDS_DUE,
       })
       log.debug('SCHEDULER_TICK_SKIP', {
         reason: 'NO_FEEDS_DUE',
+        reasonCode: TRACE_REASON_CODES.NO_FEEDS_DUE,
         durationMs: Date.now() - tickStart,
       })
       return { processed: 0 }
@@ -236,6 +258,11 @@ async function schedulerTick(): Promise<{ processed: number }> {
     // If this fails, the feed is already claimed (nextRunAt advanced),
     // so it won't be double-enqueued. It will run at next scheduled time.
     for (const feed of claimedFeeds) {
+      const feedTrace = extendTraceContext(tickTrace, {
+        sourceId: feed.sourceId,
+        feedId: feed.id,
+        step: 'enqueue.scheduled',
+      })
       try {
         const jobId = `${feed.id}-scheduled-${Date.now()}`
         log.debug('AFFILIATE_FEED_ENQUEUEING', {
@@ -243,6 +270,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
           sourceId: feed.sourceId,
           trigger: 'SCHEDULED',
           jobId,
+          ...traceLogFields(feedTrace),
         })
 
         await affiliateFeedQueue.add(
@@ -256,13 +284,16 @@ async function schedulerTick(): Promise<{ processed: number }> {
           sourceId: feed.sourceId,
           trigger: 'SCHEDULED',
           jobId,
+          ...traceLogFields(feedTrace),
         })
       } catch (error) {
         // Feed was claimed but enqueue failed - will retry at next scheduled time
         log.error('AFFILIATE_FEED_ENQUEUE_FAILED', {
           feedId: feed.id,
           sourceId: feed.sourceId,
+          reasonCode: TRACE_REASON_CODES.ENQUEUE_FAILED,
           error: error instanceof Error ? error.message : String(error),
+          ...traceLogFields(feedTrace),
         }, error as Error)
       }
     }
@@ -296,6 +327,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
           log.debug('AFFILIATE_MANUAL_FEED_ALREADY_QUEUED', {
             feedId: feed.id,
             decision: 'SKIP',
+            reasonCode: TRACE_REASON_CODES.MANUAL_ALREADY_QUEUED,
           })
           continue
         }
@@ -322,6 +354,7 @@ async function schedulerTick(): Promise<{ processed: number }> {
       } catch (error) {
         log.error('AFFILIATE_MANUAL_FEED_ENQUEUE_FAILED', {
           feedId: feed.id,
+          reasonCode: TRACE_REASON_CODES.ENQUEUE_FAILED,
           error: error instanceof Error ? error.message : String(error),
         }, error as Error)
       }
@@ -341,13 +374,14 @@ async function schedulerTick(): Promise<{ processed: number }> {
     })
 
     return { processed }
-  } catch (error) {
-    log.error('AFFILIATE_SCHEDULER_TICK_ERROR', {
-      tickDurationMs: Date.now() - tickStart,
-      error: error instanceof Error ? error.message : String(error),
-    }, error as Error)
-    throw error
-  }
+    } catch (error) {
+      log.error('AFFILIATE_SCHEDULER_TICK_ERROR', {
+        tickDurationMs: Date.now() - tickStart,
+        error: error instanceof Error ? error.message : String(error),
+      }, error as Error)
+      throw error
+    }
+  })
 }
 
 /**

@@ -11,6 +11,7 @@ import type {
   sources,
   retailers,
 } from '@ironscout/db/generated/prisma'
+import type { TraceContext } from '../config/trace'
 
 // Re-export Prisma types for convenience
 export type { affiliate_feeds, affiliate_feed_runs, source_products, source_product_presence }
@@ -41,6 +42,7 @@ export interface FeedRunContext {
   runObservedAt: Date // Stable per run (= run.startedAt) - used only for prices.observedAt (#218 dedupe)
   sourceId: string
   retailerId: string
+  trace: TraceContext
 }
 
 /**

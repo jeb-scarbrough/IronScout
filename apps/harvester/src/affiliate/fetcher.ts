@@ -13,11 +13,15 @@ import { decryptSecret } from '@ironscout/crypto'
 import { isPlainFtpAllowed } from '@ironscout/db'
 import { logger } from '../config/logger'
 import { createWorkflowLogger } from '../config/structured-log'
+import { TRACE_REASON_CODES } from '../config/trace'
 import type { AffiliateFeed, DownloadResult } from './types'
 
 const log = createWorkflowLogger(logger.affiliate, {
   workflow: 'affiliate',
   stage: 'fetch',
+  traceId: 'affiliate-fetch',
+  executionId: 'affiliate-fetch',
+  sourceId: 'unknown',
 })
 
 // Default limits
@@ -28,12 +32,24 @@ const DEFAULT_MAX_FILE_SIZE = 500 * 1024 * 1024 // 500 MB
  */
 export async function downloadFeed(
   feed: AffiliateFeed,
-  logContext?: { runId?: string; retailerId?: string }
+  logContext?: {
+    runId?: string
+    executionId?: string
+    traceId?: string
+    sourceId?: string
+    retailerId?: string
+    jobId?: string
+    attempt?: number
+  }
 ): Promise<DownloadResult> {
   const feedLog = log.child({
     feedId: feed.id,
-    sourceId: feed.sourceId,
+    sourceId: logContext?.sourceId ?? feed.sourceId,
     runId: logContext?.runId,
+    executionId: logContext?.executionId ?? logContext?.runId,
+    traceId: logContext?.traceId,
+    jobId: logContext?.jobId,
+    attempt: logContext?.attempt,
     retailerId: logContext?.retailerId,
   })
   const fetchStart = Date.now()
@@ -129,8 +145,10 @@ export async function downloadFeed(
       result = await downloadViaFtp(feed, password, maxFileSize, feedLog)
     }
   } catch (err) {
+    const failureClass = classifyFetchFailure(err)
     feedLog.error('FETCH_ERROR', {
       durationMs: Date.now() - fetchStart,
+      failureClass,
       errorMessage: err instanceof Error ? err.message : String(err),
     }, err as Error)
     throw err
@@ -143,6 +161,7 @@ export async function downloadFeed(
       phase: 'complete',
       durationMs: downloadDuration,
       skippedReason: result.skippedReason,
+      reasonCode: result.skippedReason,
       changeDetectionMethod: result.skippedReason === 'UNCHANGED_MTIME' ? 'mtime_size' : 'content_hash',
     })
     feedLog.debug('FETCH_SKIP', {
@@ -226,6 +245,7 @@ async function downloadViaSftp(
               phase: 'stat',
               path: feed.path,
               errorMessage: statErr.message,
+              reasonCode: TRACE_REASON_CODES.FILE_NOT_FOUND,
               action: 'skip_run',
             })
             resolve({
@@ -461,14 +481,15 @@ async function downloadViaFtp(
   // Check if FTP is allowed (database setting with env var fallback)
   feedLog.debug('FTP_CHECKING_ALLOWED', { phase: 'init' })
   const ftpAllowed = await isPlainFtpAllowed()
-  if (!ftpAllowed) {
-    feedLog.warn('FTP_DISABLED', {
-      phase: 'init',
-      reason: 'Plain FTP disabled in settings',
-      hint: 'Enable via admin settings or use SFTP',
-    })
-    throw new Error('Plain FTP is disabled. Use SFTP instead or enable via admin settings.')
-  }
+    if (!ftpAllowed) {
+      feedLog.warn('FTP_DISABLED', {
+        phase: 'init',
+        reason: 'Plain FTP disabled in settings',
+        reasonCode: TRACE_REASON_CODES.DISABLED_STATUS,
+        hint: 'Enable via admin settings or use SFTP',
+      })
+      throw new Error('Plain FTP is disabled. Use SFTP instead or enable via admin settings.')
+    }
 
   const client = new ftp.Client()
   client.ftp.verbose = false
@@ -647,6 +668,7 @@ async function downloadViaFtp(
         phase: 'stat',
         path: feed.path,
         errorMessage,
+        reasonCode: TRACE_REASON_CODES.FILE_NOT_FOUND,
         action: 'skip_run',
       })
       return {
@@ -671,6 +693,37 @@ async function downloadViaFtp(
     feedLog.debug('FTP_DISCONNECTING', { phase: 'cleanup' })
     client.close()
   }
+}
+
+function classifyFetchFailure(error: unknown): 'network' | 'auth' | 'format' | 'unknown' {
+  if (!(error instanceof Error)) return 'unknown'
+  const message = error.message.toLowerCase()
+  if (
+    message.includes('auth') ||
+    message.includes('credential') ||
+    message.includes('permission denied') ||
+    message.includes('login')
+  ) {
+    return 'auth'
+  }
+  if (
+    message.includes('econn') ||
+    message.includes('timeout') ||
+    message.includes('connection') ||
+    message.includes('dns') ||
+    message.includes('network')
+  ) {
+    return 'network'
+  }
+  if (
+    message.includes('gzip') ||
+    message.includes('decompress') ||
+    message.includes('parse') ||
+    message.includes('format')
+  ) {
+    return 'format'
+  }
+  return 'unknown'
 }
 
 /**

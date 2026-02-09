@@ -175,6 +175,10 @@ Scheduling:
 Logging:
 - `LOG_ASYNC=true|1` - Enable async buffered logging with flush on shutdown (default: false)
   - Use only when graceful shutdown is enforced (no `kill -9`).
+- `HARVESTER_DEBUG_SAMPLE_RATE` - Per-item debug decision log sample rate from `0.0` to `1.0` (default: `0.05`)
+- `HARVESTER_DEBUG_FIRST_N` - Always log first N per-item debug decisions per run before sampling (default: `25`)
+- `HARVESTER_LOG_RAW_EXCERPTS=true|false` - Allow short safe row excerpts in parse/fetch debug logs (default: `false`)
+  - Excerpts are truncated and should only be enabled during targeted troubleshooting windows.
 
 Email:
 - `ALERTS_EMAIL_FROM` - Sender for consumer alert emails

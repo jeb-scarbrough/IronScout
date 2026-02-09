@@ -6,17 +6,25 @@
  */
 
 import { createHash } from 'crypto'
+import { sanitizeTraceMeta } from './trace'
 
 export type LogContext = {
   workflow: string
   stage: string
   runId?: string
+  executionId?: string
+  traceId?: string
   sourceId?: string
   retailerId?: string
   feedId?: string
   adapterId?: string
   jobId?: string
+  itemKey?: string
+  step?: string
+  attempt?: number
+  retryCount?: number
   sourceProductId?: string
+  [key: string]: unknown
 }
 
 type LogMeta = Record<string, unknown>
@@ -33,11 +41,11 @@ export function createWorkflowLogger(base: BaseLogger, context: LogContext) {
   const baseContext = compact(context)
 
   const logWith = (level: keyof BaseLogger, event: string, meta?: LogMeta, err?: Error) => {
-    const payload = {
+    const payload = sanitizeTraceMeta({
       event_name: event,
       ...baseContext,
       ...(meta ? compact(meta) : {}),
-    }
+    })
     const logFn = base[level]
     if (logFn) {
       logFn(event, payload, err)

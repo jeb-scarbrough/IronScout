@@ -11,6 +11,12 @@ import { parse as parseCSV } from 'csv-parse/sync'
 import { createHash } from 'crypto'
 import { logger } from '../config/logger'
 import { createWorkflowLogger, sanitizeUrl, hashValue } from '../config/structured-log'
+import {
+  buildItemKey,
+  createItemDebugSampler,
+  safeRawExcerpt,
+  TRACE_REASON_CODES,
+} from '../config/trace'
 import { parseAttributes, parseUrlSignals } from './signal-extraction'
 import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../utils/ammo-utils'
 import type { ParsedFeedProduct, ParseResult, ParseError, ErrorCode } from './types'
@@ -19,6 +25,9 @@ import { ERROR_CODES } from './types'
 const log = createWorkflowLogger(logger.affiliate, {
   workflow: 'affiliate',
   stage: 'parse',
+  traceId: 'affiliate-parse',
+  executionId: 'affiliate-parse',
+  sourceId: 'unknown',
 })
 
 /**
@@ -29,10 +38,19 @@ export async function parseFeed(
   format: 'CSV',
   maxRows: number,
   feedId?: string,
-  logContext?: { runId?: string; sourceId?: string; retailerId?: string }
+  logContext?: {
+    runId?: string
+    executionId?: string
+    traceId?: string
+    sourceId?: string
+    retailerId?: string
+    jobId?: string
+    attempt?: number
+  }
 ): Promise<ParseResult> {
   const parseLog = feedId ? log.child({ feedId, ...logContext }) : log
   const parseStart = Date.now()
+  const itemSampler = createItemDebugSampler(logContext?.traceId ?? feedId ?? 'parse')
   const errors: ParseError[] = []
   let rowsRead = 0
   let rowsParsed = 0
@@ -161,17 +179,33 @@ export async function parseFeed(
             sample: { name: product.name, url: product.url, price: product.price },
           })
 
-          // Log first few validation errors in detail
-          if (errors.length <= 5) {
+          const itemKey = buildItemKey({
+            impactItemId: product.impactItemId,
+            sku: product.sku,
+            upc: product.upc,
+            url: product.url,
+          })
+
+          // Log first few validation errors and sampled rows in detail
+          if (errors.length <= 5 || itemSampler(itemKey)) {
             const urlMeta = product.url ? sanitizeUrl(product.url) : {}
+            const safeExcerpt = safeRawExcerpt(JSON.stringify({
+              name: product.name,
+              url: product.url,
+              price: product.price,
+            }))
             parseLog.debug('PARSE_VALIDATION_ERROR', {
               phase: 'validation',
               rowNumber,
+              itemKey,
+              decision: 'REJECT',
+              reasonCode: TRACE_REASON_CODES.ROW_REJECTED,
               errorCode: validationError.code,
               errorMessage: validationError.message,
               productName: product.name?.slice(0, 50),
               ...urlMeta,
               productPrice: product.price,
+              safeExcerpt,
             })
           }
           continue
@@ -188,13 +222,25 @@ export async function parseFeed(
           sample: Object.fromEntries(Object.entries(record).slice(0, 5)),
         })
 
-        // Log first few parse errors in detail
-        if (validationStats.parseErrors <= 3) {
+        const itemKey = buildItemKey({
+          impactItemId: record.CatalogItemId,
+          sku: record.SKU ?? record.sku,
+          upc: record.Gtin ?? record.GTIN ?? record.UPC ?? record.upc,
+          url: record.Url ?? record.URL ?? record.url,
+        })
+
+        // Log first few parse errors in detail (plus sampled rows)
+        if (validationStats.parseErrors <= 3 || itemSampler(itemKey)) {
+          const safeExcerpt = safeRawExcerpt(JSON.stringify(Object.fromEntries(Object.entries(record).slice(0, 6))))
           parseLog.debug('PARSE_ROW_ERROR', {
             phase: 'mapping',
             rowNumber,
+            itemKey,
+            decision: 'REJECT',
+            reasonCode: TRACE_REASON_CODES.ROW_REJECTED,
             errorMessage: err instanceof Error ? err.message : 'Parse error',
             recordKeys: Object.keys(record).slice(0, 10),
+            safeExcerpt,
           })
         }
       }
@@ -223,8 +269,11 @@ export async function parseFeed(
     parseLog.info('PARSE_COMPLETE', {
       phase: 'complete',
       format,
+      rowsSeen: rowsRead,
       rowsRead,
       rowsParsed,
+      offersExtracted: rowsParsed,
+      offersRejected: rowsRead - rowsParsed,
       rowsRejected: rowsRead - rowsParsed,
       errorCount: errors.length,
       successRate: successRate + '%',

@@ -24,6 +24,12 @@ import { createHash } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
 import { logger } from '../config/logger'
 import { createWorkflowLogger } from '../config/structured-log'
+import {
+  buildItemKey,
+  createItemDebugSampler,
+  traceLogFields,
+  TRACE_REASON_CODES,
+} from '../config/trace'
 import { computeUrlHash, normalizeUrl } from './parser'
 import { ProductMatcher } from './product-matcher'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
@@ -42,6 +48,9 @@ import { emitIngestRunSummary } from '../config/ingest-summary'
 const log = createWorkflowLogger(logger.affiliate, {
   workflow: 'affiliate',
   stage: 'process',
+  traceId: 'affiliate-process',
+  executionId: 'affiliate-process',
+  sourceId: 'unknown',
 })
 
 // Batch sizes for database operations
@@ -187,18 +196,20 @@ export async function processProducts(
   context: FeedRunContext,
   products: ParsedFeedProduct[]
 ): Promise<ProcessorResult> {
-  const { feed, run, sourceId, retailerId, t0, runObservedAt } = context
+  const { feed, run, sourceId, retailerId, t0, runObservedAt, trace } = context
   const maxRowCount = feed.maxRowCount ?? DEFAULT_MAX_ROW_COUNT
   const procLog = log.child({
     runId: run.id,
     sourceId,
     retailerId,
     feedId: feed.id,
+    ...traceLogFields(trace),
   })
   const normalizeLog = procLog.child({ stage: 'normalize' })
   const resolveLog = procLog.child({ stage: 'resolve' })
   const writeLog = procLog.child({ stage: 'write' })
   const alertLog = procLog.child({ stage: 'alert' })
+  const itemSampler = createItemDebugSampler(trace.traceId)
 
   procLog.info('PROCESS_START', {
     runId: run.id,
@@ -299,6 +310,30 @@ export async function processProducts(
         duplicatesRemoved: chunk.length - deduped.length,
       })
 
+      if (chunk.length > deduped.length) {
+        for (let i = 0; i < chunk.length; i++) {
+          const globalIndex = chunkStart + i
+          if (winningRows.has(globalIndex)) continue
+
+          const duplicate = chunk[i]
+          const itemKey = buildItemKey({
+            impactItemId: duplicate.impactItemId,
+            sku: duplicate.sku,
+            upc: duplicate.upc,
+            url: duplicate.url,
+          })
+          if (!itemSampler(itemKey)) continue
+
+          normalizeLog.debug('NORMALIZE_DECISION', {
+            chunkNum,
+            itemKey,
+            decision: 'SKIP',
+            reasonCode: TRACE_REASON_CODES.DUPLICATE_IDENTITY,
+            rowNumber: duplicate.rowNumber,
+          })
+        }
+      }
+
       if (deduped.length === 0) {
         procLog.debug('Chunk skipped - all duplicates', { runId: run.id, chunkNum })
         continue
@@ -319,11 +354,33 @@ export async function processProducts(
           quarantinedCount: toQuarantine.length,
           reason: 'MISSING_CALIBER',
         })
+
+        for (const quarantined of toQuarantine) {
+          const itemKey = buildItemKey({
+            identityKey: quarantined.identityKey,
+            impactItemId: quarantined.product.impactItemId,
+            sku: quarantined.product.sku,
+            upc: quarantined.product.upc,
+            url: quarantined.product.url,
+          })
+          if (!itemSampler(itemKey)) continue
+          normalizeLog.debug('NORMALIZE_DECISION', {
+            chunkNum,
+            itemKey,
+            decision: 'SKIP',
+            reasonCode: TRACE_REASON_CODES.MISSING_CALIBER,
+            identifiers: {
+              impactItemId: quarantined.product.impactItemId ?? null,
+              sku: quarantined.product.sku ?? null,
+              upc: quarantined.product.upc ?? null,
+            },
+          })
+        }
       }
 
       // Track quality metrics on validProducts (post-quarantine, post-dedup).
       // Counters are per deduped, non-quarantined product so denominator matches productsUpserted.
-      for (const { product } of validProducts) {
+      for (const { product, identityKey } of validProducts) {
         if (!product.brand) missingBrandCount++
         if (!product.roundCount) missingRoundCount++
         // Only count missing grain when caliber is present and NOT gauge/shotgun
@@ -331,6 +388,33 @@ export async function processProducts(
         if (!product.grainWeight && product.caliber && !/gauge|bore/i.test(product.caliber)) {
           missingGrainCount++
         }
+
+        const itemKey = buildItemKey({
+          identityKey,
+          impactItemId: product.impactItemId,
+          sku: product.sku,
+          upc: product.upc,
+          url: product.url,
+        })
+        if (!itemSampler(itemKey)) continue
+
+        normalizeLog.debug('NORMALIZE_DECISION', {
+          chunkNum,
+          itemKey,
+          decision: 'KEEP',
+          identifiers: {
+            impactItemId: product.impactItemId ?? null,
+            sku: product.sku ?? null,
+            upc: product.upc ?? null,
+            urlHash: product.url ? computeUrlHash(product.url).slice(0, 16) : null,
+          },
+          normalized: {
+            caliber: product.caliber ?? null,
+            grainWeight: product.grainWeight ?? null,
+            roundCount: product.roundCount ?? null,
+            brand: product.brand ?? null,
+          },
+        })
       }
 
       if (validProducts.length === 0) {
@@ -406,6 +490,25 @@ export async function processProducts(
             itemsNeedingResolver.push({ sourceProductId: result.sourceProductId, identityKey })
           }
         }
+
+        if (result.needsResolver || !result.linkWritten) {
+          const identityKey = sourceProductIdToIdentityKey.get(result.sourceProductId)
+          const itemKey = buildItemKey({
+            sourceProductId: result.sourceProductId,
+            identityKey,
+          })
+          if (itemSampler(itemKey)) {
+            resolveLog.debug('RESOLVE_DECISION', {
+              chunkNum,
+              itemKey,
+              sourceProductId: result.sourceProductId,
+              decision: result.needsResolver ? 'NEEDS_REVIEW' : 'MATCH_WITHOUT_LINK_WRITE',
+              reasonCode: result.needsResolver ? TRACE_REASON_CODES.RESOLVER_REQUIRED : 'LINK_CONFLICT_GUARD',
+              candidateCount: result.productId ? 1 : 0,
+              bestScore: result.productId ? 1 : 0,
+            })
+          }
+        }
       }
 
       productsMatched += matchedCount
@@ -445,6 +548,14 @@ export async function processProducts(
         matchedCount,
         enqueuedForResolver: itemsNeedingResolver.length,
         durationMs: Date.now() - matchStart,
+      })
+      resolveLog.info('RESOLVE_SUMMARY', {
+        chunkNum,
+        matched: matchedCount,
+        needsReview: itemsNeedingResolver.length,
+        skipped: sourceProductsForMatching.length - matchedCount,
+        errors: 0,
+        resolverVersion: RESOLVER_VERSION,
       })
 
       // Step 3: Batch update presence and seen records
@@ -517,14 +628,16 @@ export async function processProducts(
       // Per spec §4.2.1: No per-row DB reads - all decisions use cache
       // Per affiliate-feed-alerts-v1: Also returns price/stock changes for alerting
       procLog.debug('Deciding price writes', { runId: run.id, chunkNum, productCount: deduped.length })
-      const { pricesToWrite, priceChanges, stockChanges } = decidePriceWrites(
+      const { pricesToWrite, priceChanges, stockChanges, alertSkips } = decidePriceWrites(
         deduped,
         upsertedProducts,
         retailerId,
         run.id,
         t0,
         lastPriceCache,
-        sourceProductIdToProductId
+        sourceProductIdToProductId,
+        writeLog,
+        itemSampler
       )
       procLog.debug('Price write decisions made', {
         runId: run.id,
@@ -532,6 +645,7 @@ export async function processProducts(
         pricesToWrite: pricesToWrite.length,
         priceChanges: priceChanges.length,
         stockChanges: stockChanges.length,
+        alertSkips,
         skipped: deduped.length - pricesToWrite.length,
       })
       const provenanceGaps = {
@@ -539,10 +653,27 @@ export async function processProducts(
         missingRetailerId: pricesToWrite.filter((p) => !p.retailerId).length,
         missingSourceProductId: pricesToWrite.filter((p) => !p.sourceProductId).length,
       }
+      const provenanceCompleteness = {
+        hasIngestionRunType: true,
+        hasIngestionRunId: Boolean(run.id),
+        hasObservedAt: Boolean(runObservedAt),
+        hasSourceId: Boolean(sourceId),
+        hasRetailerId: Boolean(retailerId),
+      }
       writeLog.debug('WRITE_PROVENANCE_CHECK', {
         chunkNum,
         totalPlanned: pricesToWrite.length,
         provenanceGaps,
+        provenanceCompleteness,
+        provenanceComplete: Object.values(provenanceCompleteness).every(Boolean),
+      })
+      writeLog.debug('WRITE_PLAN', {
+        chunkNum,
+        tables: {
+          prices: pricesToWrite.length,
+          sourceProducts: upsertedProducts.length,
+          links: linksWrittenCount,
+        },
       })
 
       // Step 6: Bulk insert prices with ON CONFLICT DO NOTHING
@@ -572,6 +703,14 @@ export async function processProducts(
           duplicatesRejected: pricesToWrite.length - actualInserted,
           durationMs: Date.now() - writeStart,
         })
+        if (pricesToWrite.length - actualInserted > 0) {
+          writeLog.debug('WRITE_CONFLICT_PATH', {
+            chunkNum,
+            decision: 'SKIP_DUPLICATE',
+            reasonCode: 'WRITE_DEDUPE_CONFLICT',
+            duplicatesRejected: pricesToWrite.length - actualInserted,
+          })
+        }
 
         // ═══════════════════════════════════════════════════════════════════════
         // Step 6b: Queue alerts AFTER successful price writes
@@ -608,6 +747,7 @@ export async function processProducts(
           alertLog.debug('ALERTS_ENQUEUE_SKIPPED', {
             chunkNum,
             reason: 'NO_CHANGES',
+            reasonCode: TRACE_REASON_CODES.ALERT_NO_CHANGES,
           })
         }
 
@@ -1563,7 +1703,9 @@ function decidePriceWrites(
   runId: string,
   t0: Date,
   lastPriceCache: Map<string, LastPriceEntry>,
-  sourceProductIdToProductId: Map<string, string | null>
+  sourceProductIdToProductId: Map<string, string | null>,
+  decisionLog?: typeof log,
+  itemSampler?: (itemKey: string) => boolean
 ): PriceWriteResult {
   const pricesToWrite: NewPriceRecord[] = []
   const priceChanges: AffiliatePriceChange[] = []
@@ -1585,7 +1727,27 @@ function decidePriceWrites(
 
   for (const { product, identityKey } of products) {
     const sourceProductId = idLookup.get(identityKey)
-    if (!sourceProductId) continue
+    const itemKey = buildItemKey({
+      sourceProductId,
+      identityKey,
+      impactItemId: product.impactItemId,
+      sku: product.sku,
+      upc: product.upc,
+      url: product.url,
+    })
+
+    if (!sourceProductId) {
+      if (decisionLog && (!itemSampler || itemSampler(itemKey))) {
+        decisionLog.debug('WRITE_DECISION', {
+          runId,
+          retailerId,
+          itemKey,
+          decision: 'SKIP',
+          reasonCode: 'SOURCE_PRODUCT_ID_MISSING',
+        })
+      }
+      continue
+    }
 
     const priceSignatureHash = computePriceSignature(product)
     const lastPrice = lastPriceCache.get(sourceProductId)
@@ -1609,6 +1771,16 @@ function decidePriceWrites(
     if (!isNew && !signatureChanged && !heartbeatDue && !stockChanged) {
       // Skip write - no changes detected
       alertSkips.noChange++
+      if (decisionLog && (!itemSampler || itemSampler(itemKey))) {
+        decisionLog.debug('WRITE_DECISION', {
+          runId,
+          retailerId,
+          sourceProductId,
+          itemKey,
+          decision: 'SKIP',
+          reasonCode: TRACE_REASON_CODES.UNCHANGED_NO_WRITE,
+        })
+      }
       continue
     }
 
@@ -1632,6 +1804,22 @@ function decidePriceWrites(
           : 'REGULAR',
     })
 
+    if (decisionLog && (!itemSampler || itemSampler(itemKey))) {
+      decisionLog.debug('WRITE_DECISION', {
+        runId,
+        retailerId,
+        sourceProductId,
+        itemKey,
+        decision: 'WRITE',
+        writeDrivers: {
+          isNew,
+          signatureChanged: Boolean(signatureChanged),
+          heartbeatDue: Boolean(heartbeatDue),
+          stockChanged: Boolean(stockChanged),
+        },
+      })
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ALERT CHANGE DETECTION
     // Per affiliate-feed-alerts-v1 spec §6 - using exported helper for testability
@@ -1649,6 +1837,16 @@ function decidePriceWrites(
 
     // Track skip reasons for observability logging
     if (alertResult.skipReason) {
+      if (decisionLog && (!itemSampler || itemSampler(itemKey))) {
+        decisionLog.debug('ALERT_DECISION', {
+          runId,
+          retailerId,
+          sourceProductId,
+          itemKey,
+          decision: 'SKIP',
+          reasonCode: alertResult.skipReason,
+        })
+      }
       switch (alertResult.skipReason) {
         case 'NULL_PRODUCT_ID':
           alertSkips.nullProductId++
