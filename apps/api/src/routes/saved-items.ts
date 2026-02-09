@@ -21,6 +21,7 @@ import {
   updateSavedItemPrefs,
   countSavedItems,
   getAlertHistory,
+  InvalidCursorError,
 } from '../services/saved-items'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
@@ -44,11 +45,12 @@ const updatePrefsSchema = z.object({
 
 // ============================================================================
 // GET /api/saved-items/history - Get alert notification history
+// alert-history-v1 spec §7: cursor-based pagination, retailer redaction
 // ============================================================================
 
 const historyQuerySchema = z.object({
   limit: z.string().default('50'),
-  offset: z.string().default('0'),
+  cursor: z.string().optional(),
 })
 
 router.get('/history', async (req: Request, res: Response) => {
@@ -58,22 +60,18 @@ router.get('/history', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' })
     }
 
-    const { limit, offset } = historyQuerySchema.parse(req.query)
-    const limitNum = Math.min(parseInt(limit), 100) // Max 100 per request
-    const offsetNum = parseInt(offset)
+    const { limit, cursor } = historyQuerySchema.parse(req.query)
+    const limitNum = parseInt(limit)
+    if (isNaN(limitNum) || limitNum < 1) {
+      return res.status(400).json({ error: 'Invalid limit' })
+    }
 
-    const { history, total } = await getAlertHistory(userId, limitNum, offsetNum)
-
-    res.json({
-      history,
-      _meta: {
-        total,
-        limit: limitNum,
-        offset: offsetNum,
-        hasMore: offsetNum + history.length < total,
-      },
-    })
+    const result = await getAlertHistory(userId, limitNum, cursor)
+    res.json(result)
   } catch (error) {
+    if (error instanceof InvalidCursorError) {
+      return res.status(400).json({ error: 'Invalid cursor' })
+    }
     const err = error as Error
     log.error('Get alert history error', { message: err.message }, err)
     res.status(500).json({ error: 'Failed to fetch alert history' })

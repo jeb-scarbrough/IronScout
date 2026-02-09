@@ -1,4 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
+import { createId } from '@paralleldrive/cuid2'
 import { prisma, isAlertProcessingEnabled, isEmailNotificationsEnabled } from '@ironscout/db'
 import { getSharedBullMQConnection, createRedisClient } from '../config/redis'
 import { logger } from '../config/logger'
@@ -209,42 +210,105 @@ async function claimNotificationSlot(
  * Commit a successful notification send.
  * Updates lastNotifiedAt and clears claim fields.
  * Only succeeds if we still own the claim (claimKey matches).
+ *
+ * alert-history-v1 §6.1: If alertEvent is provided, inserts into alert_events
+ * within the SAME transaction as the commit update. This ensures history
+ * is only written when the commit succeeds (no orphan rows on crash).
+ *
+ * Uses ON CONFLICT DO NOTHING for idempotency (§5).
  */
 async function commitNotificationSend(
   watchlistItemId: string,
   ruleType: RuleType,
-  claimKey: string
+  claimKey: string,
+  alertEvent?: AlertEventPayload
 ): Promise<boolean> {
   const now = new Date()
 
   try {
-    if (ruleType === 'PRICE_DROP') {
-      const result = await prisma.watchlist_items.updateMany({
-        where: {
-          id: watchlistItemId,
-          priceNotificationClaimKey: claimKey, // Only owner can commit
-        },
-        data: {
-          lastPriceNotifiedAt: now,
-          priceNotificationClaimedAt: null,
-          priceNotificationClaimKey: null,
-        },
-      })
-      return result.count > 0
-    } else {
-      const result = await prisma.watchlist_items.updateMany({
-        where: {
-          id: watchlistItemId,
-          stockNotificationClaimKey: claimKey,
-        },
-        data: {
-          lastStockNotifiedAt: now,
-          stockNotificationClaimedAt: null,
-          stockNotificationClaimKey: null,
-        },
-      })
-      return result.count > 0
-    }
+    return await prisma.$transaction(async (tx) => {
+      let result
+
+      if (ruleType === 'PRICE_DROP') {
+        result = await tx.watchlist_items.updateMany({
+          where: {
+            id: watchlistItemId,
+            priceNotificationClaimKey: claimKey, // Only owner can commit
+          },
+          data: {
+            lastPriceNotifiedAt: now,
+            priceNotificationClaimedAt: null,
+            priceNotificationClaimKey: null,
+          },
+        })
+      } else {
+        result = await tx.watchlist_items.updateMany({
+          where: {
+            id: watchlistItemId,
+            stockNotificationClaimKey: claimKey,
+          },
+          data: {
+            lastStockNotifiedAt: now,
+            stockNotificationClaimedAt: null,
+            stockNotificationClaimKey: null,
+          },
+        })
+      }
+
+      if (result.count === 0) {
+        return false
+      }
+
+      // alert-history-v1 §6.1: Insert history row in same transaction as commit.
+      // ON CONFLICT DO NOTHING for idempotency (§5).
+      if (alertEvent) {
+        try {
+          await tx.$executeRaw`
+            INSERT INTO "alert_events" (
+              "id", "userId", "watchlistItemId", "alertId", "productId",
+              "retailerId", "sourceId", "triggerPriceId",
+              "eventType", "triggeredAt", "priceAtTrigger", "previousPrice",
+              "currency", "deliveryChannel", "providerMessageId",
+              "idempotencyKey", "createdAt"
+            ) VALUES (
+              ${createId()},
+              ${alertEvent.userId},
+              ${alertEvent.watchlistItemId},
+              ${alertEvent.alertId},
+              ${alertEvent.productId},
+              ${alertEvent.retailerId ?? null},
+              ${alertEvent.sourceId ?? null},
+              ${alertEvent.triggerPriceId ?? null},
+              ${alertEvent.eventType}::"AlertEventType",
+              ${alertEvent.triggeredAt},
+              ${alertEvent.priceAtTrigger ?? null}::DECIMAL(10,2),
+              ${alertEvent.previousPrice ?? null}::DECIMAL(10,2),
+              ${alertEvent.currency},
+              ${alertEvent.deliveryChannel}::"AlertDeliveryChannel",
+              ${alertEvent.providerMessageId ?? null},
+              ${alertEvent.idempotencyKey},
+              NOW()
+            )
+            ON CONFLICT ("idempotencyKey") DO NOTHING
+          `
+          log.info('alert_events_inserted', {
+            watchlistItemId: alertEvent.watchlistItemId,
+            eventType: alertEvent.eventType,
+            idempotencyKey: alertEvent.idempotencyKey,
+          })
+        } catch (insertError) {
+          // Idempotency conflict is fine (deduped). Any other error: log but
+          // don't fail the commit — the notification was already sent.
+          log.warn('alert_events_insert_failed', {
+            watchlistItemId: alertEvent.watchlistItemId,
+            idempotencyKey: alertEvent.idempotencyKey,
+            error: insertError instanceof Error ? insertError.message : 'Unknown',
+          })
+        }
+      }
+
+      return true
+    })
   } catch (error) {
     log.error('Commit notification send failed', { watchlistItemId, ruleType, error })
     return false
@@ -659,10 +723,50 @@ export const alerterWorker = new Worker<AlertJobData>(
 
             // Phase 2: Send
             try {
-              await sendNotification(alert, triggerReason, log)
+              const sendResult = await sendNotification(alert, triggerReason, log)
 
-              // Phase 3: Commit (atomic, guarded by claimKey)
-              const committed = await commitNotificationSend(watchlistItem.id, ruleType, claimKey)
+              if (!sendResult.success) {
+                // Send returned failure (EMAIL_DISABLED, NO_VISIBLE_PRICE, etc.)
+                // ADR-009: fail closed — do not log history, release claim
+                await releaseNotificationClaim(watchlistItem.id, ruleType, claimKey)
+                log.info('Notification send returned failure', {
+                  alertId: alert.id,
+                  error: sendResult.error,
+                })
+                continue
+              }
+
+              // alert-history-v1 §6.1: Build alert event payload for transactional insert
+              const triggeredAtDate = job.data.triggeredAt
+                ? new Date(job.data.triggeredAt)
+                : new Date()
+
+              // §5: Idempotency key = watchlistItemId:eventType:triggerPriceId (preferred)
+              //       Fallback: watchlistItemId:eventType:YYYY-MM-DD
+              const idempotencyKey = job.data.triggerPriceId
+                ? `${watchlistItem.id}:${ruleType}:${job.data.triggerPriceId}`
+                : `${watchlistItem.id}:${ruleType}:${triggeredAtDate.toISOString().slice(0, 10)}`
+
+              const alertEvent: AlertEventPayload = {
+                userId: alert.userId,
+                watchlistItemId: watchlistItem.id,
+                alertId: alert.id,
+                productId: alert.productId,
+                retailerId: job.data.retailerId,
+                sourceId: job.data.sourceId,
+                triggerPriceId: job.data.triggerPriceId,
+                eventType: ruleType,
+                triggeredAt: triggeredAtDate,
+                priceAtTrigger: job.data.priceAtTrigger ?? job.data.newPrice,
+                previousPrice: job.data.previousPrice ?? job.data.oldPrice,
+                currency: job.data.currency ?? 'USD',
+                deliveryChannel: 'EMAIL',
+                providerMessageId: sendResult.providerMessageId,
+                idempotencyKey,
+              }
+
+              // Phase 3: Commit + insert history (atomic, guarded by claimKey)
+              const committed = await commitNotificationSend(watchlistItem.id, ruleType, claimKey, alertEvent)
 
               if (committed) {
                 await prisma.execution_logs.create({
@@ -670,7 +774,7 @@ export const alerterWorker = new Worker<AlertJobData>(
                     executionId,
                     level: 'INFO',
                     event: 'ALERT_NOTIFY',
-                    message: `Alert triggered immediately for PREMIUM user ${alert.userId}: ${triggerReason}`,
+                    message: `Alert triggered immediately for user ${alert.userId}: ${triggerReason}`,
                     metadata: {
                       alertId: alert.id,
                       userId: alert.userId,
@@ -884,16 +988,47 @@ export const delayedNotificationWorker = new Worker<{
 
       // Phase 2: Send
       try {
-        await sendNotification(alert, triggerReason, log)
+        const sendResult = await sendNotification(alert, triggerReason, log)
 
-        // Phase 3: Commit (atomic, guarded by claimKey)
-        const committed = await commitNotificationSend(watchlistItemId, ruleType, claimKey)
+        if (!sendResult.success) {
+          // Send returned failure — release claim, do not log history (ADR-009)
+          await releaseNotificationClaim(watchlistItemId, ruleType, claimKey)
+          log.info('Delayed notification send returned failure', {
+            alertId,
+            error: sendResult.error,
+          })
+          return { success: false, reason: sendResult.error }
+        }
 
-          if (committed) {
-            await prisma.execution_logs.create({
-              data: {
-                executionId,
-                level: 'INFO',
+        // alert-history-v1 §6.1: Build alert event payload
+        // Note: delayed jobs don't have §6.2 trigger-time fields from AlertJobData,
+        // so we use what's available from the alert record and job metadata.
+        const triggeredAtDate = new Date(jobCreatedAt)
+
+        // §5: Idempotency key fallback (delayed jobs don't have triggerPriceId)
+        const idempotencyKey = `${watchlistItemId}:${ruleType}:${triggeredAtDate.toISOString().slice(0, 10)}`
+
+        const alertEvent: AlertEventPayload = {
+          userId: alert.userId,
+          watchlistItemId,
+          alertId: alert.id,
+          productId: alert.productId,
+          eventType: ruleType,
+          triggeredAt: triggeredAtDate,
+          currency: 'USD',
+          deliveryChannel: 'EMAIL',
+          providerMessageId: sendResult.providerMessageId,
+          idempotencyKey,
+        }
+
+        // Phase 3: Commit + insert history (atomic, guarded by claimKey)
+        const committed = await commitNotificationSend(watchlistItemId, ruleType, claimKey, alertEvent)
+
+        if (committed) {
+          await prisma.execution_logs.create({
+            data: {
+              executionId,
+              level: 'INFO',
               event: 'ALERT_DELAYED_SENT',
               message: `Delayed alert notification sent`,
               metadata: {
@@ -905,18 +1040,18 @@ export const delayedNotificationWorker = new Worker<{
                 ruleType,
               },
             },
-            })
+          })
 
-            log.debug('ALERT_DELAYED_END', {
-              alertId,
-              durationMs: Date.now() - startTime,
-              outcome: 'sent',
-            })
-            return { success: true }
-          } else {
-            log.warn('Commit failed for delayed notification - claim may have been stolen', {
-              alertId,
-              claimKey,
+          log.debug('ALERT_DELAYED_END', {
+            alertId,
+            durationMs: Date.now() - startTime,
+            outcome: 'sent',
+          })
+          return { success: true }
+        } else {
+          log.warn('Commit failed for delayed notification - claim may have been stolen', {
+            alertId,
+            claimKey,
           })
           return { success: false, reason: 'Commit failed' }
         }
@@ -965,9 +1100,42 @@ export const delayedNotificationWorker = new Worker<{
   }
 )
 
+/**
+ * Result of a notification send attempt.
+ * Per alert-history-v1 §6.1: sendNotification must return structured result.
+ */
+interface SendNotificationResult {
+  success: boolean
+  providerMessageId?: string
+  error?: string
+}
+
+/**
+ * Alert event data for history logging.
+ * Per alert-history-v1 §6.1: passed to commitNotificationSend for transactional insert.
+ */
+interface AlertEventPayload {
+  userId: string
+  watchlistItemId: string
+  alertId: string
+  productId: string
+  retailerId?: string
+  sourceId?: string
+  triggerPriceId?: string
+  eventType: 'PRICE_DROP' | 'BACK_IN_STOCK'
+  triggeredAt: Date
+  priceAtTrigger?: number
+  previousPrice?: number
+  currency: string
+  deliveryChannel: 'EMAIL'
+  providerMessageId?: string
+  idempotencyKey: string
+}
+
 // Send notification to user
 // ADR-011: Uses ruleType instead of alertType
-async function sendNotification(alert: any, reason: string, notifyLog: typeof log) {
+// alert-history-v1 §6.1: Returns structured result, does NOT swallow errors.
+async function sendNotification(alert: any, reason: string, notifyLog: typeof log): Promise<SendNotificationResult> {
   const log = notifyLog.child({ stage: 'notify' })
   // Check if email notifications are enabled via admin settings
   const emailEnabled = await isEmailNotificationsEnabled()
@@ -975,7 +1143,8 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
     log.info('Email notifications disabled via admin settings, skipping', {
       alertId: alert.id,
     })
-    return
+    // alert-history-v1 §6.1: Return failure, not silent skip
+    return { success: false, error: 'EMAIL_DISABLED' }
   }
 
   log.info('Sending notification', {
@@ -986,88 +1155,88 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
     reason,
   })
 
-  try {
-    // Get the latest price for the product from a visible retailer
-    // ADR-005: Only show prices from ELIGIBLE + LISTED + ACTIVE relationships
-    const latestPrice = await prisma.prices.findFirst({
-      where: {
-        productId: alert.productId,
-        retailers: {
-          is: {
-            visibilityStatus: 'ELIGIBLE',
-            merchant_retailers: {
-              some: {
-                listingStatus: 'LISTED',
-                status: 'ACTIVE',
-              },
+  // Get the latest price for the product from a visible retailer
+  // ADR-005: Only show prices from ELIGIBLE + LISTED + ACTIVE relationships
+  const latestPrice = await prisma.prices.findFirst({
+    where: {
+      productId: alert.productId,
+      retailers: {
+        is: {
+          visibilityStatus: 'ELIGIBLE',
+          merchant_retailers: {
+            some: {
+              listingStatus: 'LISTED',
+              status: 'ACTIVE',
             },
           },
         },
       },
-      include: { retailers: true },
-      orderBy: { createdAt: 'desc' }
+    },
+    include: { retailers: true },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  if (!latestPrice) {
+    log.warn('No price found for product', { productId: alert.productId })
+    // ADR-009: Fail closed — no visible price means no notification
+    return { success: false, error: 'NO_VISIBLE_PRICE' }
+  }
+
+  const currentPrice = parseFloat(latestPrice.price.toString())
+  const productUrl = `${FRONTEND_URL}/products/${alert.productId}`
+
+  if (!resend) {
+    log.debug('Email sending disabled (no RESEND_API_KEY)', { userId: alert.userId })
+    return { success: false, error: 'EMAIL_DISABLED' }
+  }
+
+  // Send email — errors propagate (not swallowed) per alert-history-v1 §6.1
+  let emailResult: any
+
+  if (alert.ruleType === 'PRICE_DROP') {
+    const html = generatePriceDropEmailHTML({
+      userName: alert.users.name || 'there',
+      productName: alert.products.name,
+      productUrl,
+      productImageUrl: alert.products.imageUrl,
+      currentPrice,
+      retailerName: latestPrice.retailers.name,
+      retailerUrl: latestPrice.url,
+      userTier: alert.users.tier,
     })
 
-    if (!latestPrice) {
-      log.warn('No price found for product', { productId: alert.productId })
-      return
-    }
+    emailResult = await resend.emails.send({
+      from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
+      to: [alert.users.email],
+      subject: `🎉 Price Drop Alert: ${alert.products.name}`,
+      html
+    })
+    log.info('Price drop email sent', { userId: alert.userId, providerMessageId: emailResult?.data?.id })
+  } else if (alert.ruleType === 'BACK_IN_STOCK') {
+    const html = generateBackInStockEmailHTML({
+      userName: alert.users.name || 'there',
+      productName: alert.products.name,
+      productUrl,
+      productImageUrl: alert.products.imageUrl,
+      currentPrice,
+      retailerName: latestPrice.retailers.name,
+      retailerUrl: latestPrice.url,
+      userTier: alert.users.tier,
+    })
 
-    const currentPrice = parseFloat(latestPrice.price.toString())
-    const productUrl = `${FRONTEND_URL}/products/${alert.productId}`
-
-    if (alert.ruleType === 'PRICE_DROP') {
-      const html = generatePriceDropEmailHTML({
-        userName: alert.users.name || 'there',
-        productName: alert.products.name,
-        productUrl,
-        productImageUrl: alert.products.imageUrl,
-        currentPrice,
-        retailerName: latestPrice.retailers.name,
-        retailerUrl: latestPrice.url,
-        userTier: alert.users.tier,
-      })
-
-      if (resend) {
-        await resend.emails.send({
-          from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
-          to: [alert.users.email],
-          subject: `🎉 Price Drop Alert: ${alert.products.name}`,
-          html
-        })
-        log.info('Price drop email sent', { userId: alert.userId })
-      } else {
-        log.debug('Email sending disabled (no RESEND_API_KEY)', { userId: alert.userId, type: 'price_drop' })
-      }
-    } else if (alert.ruleType === 'BACK_IN_STOCK') {
-      const html = generateBackInStockEmailHTML({
-        userName: alert.users.name || 'there',
-        productName: alert.products.name,
-        productUrl,
-        productImageUrl: alert.products.imageUrl,
-        currentPrice,
-        retailerName: latestPrice.retailers.name,
-        retailerUrl: latestPrice.url,
-        userTier: alert.users.tier,
-      })
-
-      if (resend) {
-        await resend.emails.send({
-          from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
-          to: [alert.users.email],
-          subject: `✨ Back in Stock: ${alert.products.name}`,
-          html
-        })
-        log.info('Back in stock email sent', { userId: alert.userId })
-      } else {
-        log.debug('Email sending disabled (no RESEND_API_KEY)', { userId: alert.userId, type: 'back_in_stock' })
-      }
-    }
-  } catch (error) {
-    const err = error as Error
-    log.error('Failed to send email', { error: err.message })
-    // Don't throw - we don't want email failures to stop alert processing
+    emailResult = await resend.emails.send({
+      from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM}>`,
+      to: [alert.users.email],
+      subject: `✨ Back in Stock: ${alert.products.name}`,
+      html
+    })
+    log.info('Back in stock email sent', { userId: alert.userId, providerMessageId: emailResult?.data?.id })
   }
+
+  // Capture provider message ID from Resend response
+  const providerMessageId = emailResult?.data?.id ?? undefined
+
+  return { success: true, providerMessageId }
 }
 
 function generatePriceDropEmailHTML(data: {

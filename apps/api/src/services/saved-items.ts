@@ -14,6 +14,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma, AlertRuleType, Prisma } from '@ironscout/db'
+import { visibleRetailerWhere } from '@ironscout/db/visibility.js'
 import { visiblePriceWhere } from '../config/tiers'
 import { watchlistItemRepository } from './watchlist-item'
 
@@ -376,83 +377,243 @@ export async function countSavedItems(userId: string): Promise<number> {
 // Alert History
 // ============================================================================
 
+/**
+ * Alert history entry returned by the API.
+ *
+ * Per alert-history-v1 spec §7:
+ * - `metadata.retailer` is present but null when redacted (ADR-005)
+ * - Superseded products resolve to current product, with originalProductId in metadata
+ */
 export interface AlertHistoryEntry {
   id: string
   type: 'PRICE_DROP' | 'BACK_IN_STOCK'
   productId: string
   productName: string
   triggeredAt: string
-  reason: string
   metadata: {
     oldPrice?: number
     newPrice?: number
-    retailer?: string
+    currency: string
+    retailer: string | null
+    originalProductId?: string
+  }
+}
+
+export interface AlertHistoryResponse {
+  history: AlertHistoryEntry[]
+  _meta: {
+    schemaVersion: 1
+    limit: number
+    hasMore: boolean
+    nextCursor: string | null
+  }
+}
+
+// Internal row shape from the raw query
+interface AlertEventRow {
+  id: string
+  eventType: string
+  triggeredAt: Date
+  priceAtTrigger: any
+  previousPrice: any
+  currency: string
+  retailerId: string | null
+  eventProductId: string | null
+  productName: string | null
+  supersededById: string | null
+  supersedingProductId: string | null
+  supersedingProductName: string | null
+}
+
+/** Encode an opaque cursor from triggeredAt + id (spec §7) */
+function encodeCursor(triggeredAt: Date, id: string): string {
+  return Buffer.from(`${triggeredAt.toISOString()}|${id}`).toString('base64')
+}
+
+/** Decode an opaque cursor. Returns null if malformed. */
+function decodeCursor(cursor: string): { triggeredAt: Date; id: string } | null {
+  try {
+    const decoded = Buffer.from(cursor, 'base64').toString('utf-8')
+    const pipeIdx = decoded.indexOf('|')
+    if (pipeIdx === -1) return null
+    const triggeredAt = new Date(decoded.slice(0, pipeIdx))
+    const id = decoded.slice(pipeIdx + 1)
+    if (isNaN(triggeredAt.getTime()) || !id) return null
+    return { triggeredAt, id }
+  } catch {
+    return null
   }
 }
 
 /**
- * Get alert notification history for a user
+ * Get alert notification history for a user.
  *
- * Queries execution_logs for ALERT_NOTIFY and ALERT_DELAYED_SENT events
- * where the userId matches in the metadata JSON field.
+ * Queries the alert_events table (alert-history-v1 spec §7).
+ * Replaces the previous execution_logs mining approach.
  *
- * Returns notifications in reverse chronological order.
+ * Enforcement:
+ * - User-scoped: only returns events for the authenticated userId
+ * - Retailer redaction (ADR-005): if retailer is now ineligible/unlisted,
+ *   metadata.retailer is set to null (present but redacted)
+ * - Superseded product resolution (spec §10): resolves to current product
+ * - Cursor-based pagination: opaque base64 cursor (triggeredAt|id)
  */
 export async function getAlertHistory(
   userId: string,
   limit: number = 50,
-  offset: number = 0
-): Promise<{ history: AlertHistoryEntry[]; total: number }> {
-  // Query execution_logs for alert notifications sent to this user
-  // Using raw query for JSON field filtering
-  const [logs, countResult] = await Promise.all([
-    prisma.$queryRaw<Array<{
-      id: string
-      event: string
-      message: string
-      metadata: any
-      timestamp: Date
-    }>>`
-      SELECT el.id, el.event, el.message, el.metadata, el.timestamp
-      FROM execution_logs el
-      WHERE el.event IN ('ALERT_NOTIFY', 'ALERT_DELAYED_SENT')
-        AND el.metadata->>'userId' = ${userId}
-      ORDER BY el.timestamp DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `,
-    prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) as count
-      FROM execution_logs el
-      WHERE el.event IN ('ALERT_NOTIFY', 'ALERT_DELAYED_SENT')
-        AND el.metadata->>'userId' = ${userId}
-    `,
-  ])
+  cursor?: string
+): Promise<AlertHistoryResponse> {
+  const safeLimit = Math.min(Math.max(1, limit), 100)
 
-  const total = Number(countResult[0]?.count ?? 0)
+  // Decode cursor if provided
+  let cursorData: { triggeredAt: Date; id: string } | null = null
+  if (cursor) {
+    cursorData = decodeCursor(cursor)
+    if (!cursorData) {
+      throw new InvalidCursorError()
+    }
+  }
 
-  // Map to AlertHistoryEntry format
-  const history: AlertHistoryEntry[] = logs.map((log) => {
-    const meta = log.metadata || {}
-    const isBackInStock = meta.reason?.includes('BACK_IN_STOCK') ||
-                          meta.ruleType === 'BACK_IN_STOCK'
+  // Fetch one extra row to determine hasMore
+  const fetchLimit = safeLimit + 1
+
+  // Query alert_events with product joins for name + supersession resolution
+  const rows = cursorData
+    ? await prisma.$queryRaw<AlertEventRow[]>`
+        SELECT
+          ae.id, ae."eventType", ae."triggeredAt", ae."priceAtTrigger",
+          ae."previousPrice", ae.currency, ae."retailerId",
+          ae."productId" AS "eventProductId",
+          p.name AS "productName", p."supersededById",
+          sp.id AS "supersedingProductId", sp.name AS "supersedingProductName"
+        FROM alert_events ae
+        LEFT JOIN products p ON ae."productId" = p.id
+        LEFT JOIN products sp ON p."supersededById" = sp.id
+        WHERE ae."userId" = ${userId}
+          AND (ae."triggeredAt", ae.id) < (${cursorData.triggeredAt}, ${cursorData.id})
+        ORDER BY ae."triggeredAt" DESC, ae.id DESC
+        LIMIT ${fetchLimit}
+      `
+    : await prisma.$queryRaw<AlertEventRow[]>`
+        SELECT
+          ae.id, ae."eventType", ae."triggeredAt", ae."priceAtTrigger",
+          ae."previousPrice", ae.currency, ae."retailerId",
+          ae."productId" AS "eventProductId",
+          p.name AS "productName", p."supersededById",
+          sp.id AS "supersedingProductId", sp.name AS "supersedingProductName"
+        FROM alert_events ae
+        LEFT JOIN products p ON ae."productId" = p.id
+        LEFT JOIN products sp ON p."supersededById" = sp.id
+        WHERE ae."userId" = ${userId}
+        ORDER BY ae."triggeredAt" DESC, ae.id DESC
+        LIMIT ${fetchLimit}
+      `
+
+  const hasMore = rows.length > safeLimit
+  const resultRows = hasMore ? rows.slice(0, safeLimit) : rows
+
+  // Batch-check retailer visibility for redaction (ADR-005 §7)
+  const retailerIds = [
+    ...new Set(resultRows.filter(r => r.retailerId).map(r => r.retailerId!)),
+  ]
+  const visibleRetailerIds = new Set<string>()
+
+  if (retailerIds.length > 0) {
+    const visibleRetailers = await prisma.retailers.findMany({
+      where: {
+        id: { in: retailerIds },
+        ...visibleRetailerWhere(),
+      },
+      select: { id: true, name: true },
+    })
+    for (const r of visibleRetailers) {
+      visibleRetailerIds.add(r.id)
+    }
+  }
+
+  // Build retailer name lookup (only for visible retailers)
+  const retailerNameMap = new Map<string, string>()
+  if (retailerIds.length > 0) {
+    const retailers = await prisma.retailers.findMany({
+      where: { id: { in: retailerIds } },
+      select: { id: true, name: true },
+    })
+    for (const r of retailers) {
+      retailerNameMap.set(r.id, r.name)
+    }
+  }
+
+  // Map to response shape
+  const history: AlertHistoryEntry[] = resultRows.map(row => {
+    // Superseded product resolution (spec §10)
+    const isSuperseded = !!(row.supersededById && row.supersedingProductId)
+    const productId = isSuperseded ? row.supersedingProductId! : (row.eventProductId || '')
+    const productName = isSuperseded
+      ? (row.supersedingProductName || 'Product unavailable')
+      : (row.productName || 'Product unavailable')
+
+    // Retailer redaction (ADR-005 §7):
+    // Present but null when retailer exists but is ineligible/unlisted
+    let retailer: string | null = null
+    if (row.retailerId) {
+      retailer = visibleRetailerIds.has(row.retailerId)
+        ? (retailerNameMap.get(row.retailerId) || null)
+        : null // Redacted — retailer ineligible
+    }
+
+    const metadata: AlertHistoryEntry['metadata'] = {
+      currency: row.currency || 'USD',
+      retailer,
+    }
+
+    if (row.previousPrice !== null && row.previousPrice !== undefined) {
+      metadata.oldPrice = parseFloat(row.previousPrice.toString())
+    }
+    if (row.priceAtTrigger !== null && row.priceAtTrigger !== undefined) {
+      metadata.newPrice = parseFloat(row.priceAtTrigger.toString())
+    }
+    if (isSuperseded && row.eventProductId) {
+      metadata.originalProductId = row.eventProductId
+    }
 
     return {
-      id: log.id,
-      type: isBackInStock ? 'BACK_IN_STOCK' : 'PRICE_DROP',
-      productId: meta.productId || '',
-      productName: meta.productName || 'Unknown Product',
-      triggeredAt: log.timestamp.toISOString(),
-      reason: meta.reason || log.message,
-      metadata: {
-        oldPrice: meta.oldPrice,
-        newPrice: meta.newPrice,
-        retailer: meta.retailerName,
-      },
+      id: row.id,
+      type: row.eventType as 'PRICE_DROP' | 'BACK_IN_STOCK',
+      productId,
+      productName,
+      triggeredAt: row.triggeredAt instanceof Date
+        ? row.triggeredAt.toISOString()
+        : String(row.triggeredAt),
+      metadata,
     }
   })
 
-  return { history, total }
+  // Build next cursor from the last row
+  const lastRow = resultRows[resultRows.length - 1]
+  const nextCursor = hasMore && lastRow
+    ? encodeCursor(
+        lastRow.triggeredAt instanceof Date ? lastRow.triggeredAt : new Date(lastRow.triggeredAt),
+        lastRow.id
+      )
+    : null
+
+  return {
+    history,
+    _meta: {
+      schemaVersion: 1,
+      limit: safeLimit,
+      hasMore,
+      nextCursor,
+    },
+  }
+}
+
+/** Thrown when cursor parameter is malformed */
+export class InvalidCursorError extends Error {
+  constructor() {
+    super('Invalid cursor')
+    this.name = 'InvalidCursorError'
+  }
 }
 
 // ============================================================================

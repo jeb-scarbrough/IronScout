@@ -1311,6 +1311,68 @@ export async function getSavedItem(token: string, productId: string): Promise<Sa
 }
 
 // ============================================
+// Alert History API (alert-history-v1 spec §7)
+// ============================================
+
+export interface AlertHistoryEntry {
+  id: string
+  type: 'PRICE_DROP' | 'BACK_IN_STOCK'
+  productId: string
+  productName: string
+  triggeredAt: string
+  metadata: {
+    oldPrice?: number
+    newPrice?: number
+    currency: string
+    retailer: string | null
+    originalProductId?: string
+  }
+}
+
+export interface AlertHistoryResponse {
+  history: AlertHistoryEntry[]
+  _meta: {
+    schemaVersion: number
+    limit: number
+    hasMore: boolean
+    nextCursor: string | null
+  }
+}
+
+/**
+ * Get alert notification history for the authenticated user.
+ * Cursor-based pagination per alert-history-v1 spec §7.
+ */
+export async function getAlertHistory(
+  token: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<AlertHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (cursor) {
+    params.set('cursor', cursor)
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/saved-items/history?${params.toString()}`,
+    {
+      headers: buildAuthHeaders(token),
+      cache: 'no-store',
+    }
+  )
+
+  if (response.status === 401) {
+    throw new AuthError()
+  }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throwApiError(error, 'Failed to fetch alert history', 'ALERT_HISTORY_FETCH_FAILED')
+  }
+
+  return response.json()
+}
+
+// ============================================
 // Gun Locker API
 // ============================================
 

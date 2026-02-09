@@ -207,6 +207,46 @@ model alerts {
   @@index([createdAt])
   @@index([suppressedAt])
   @@index([watchlistItemId])
+
+  alert_events alert_events[] @relation("AlertToAlertEvents")
+}
+
+/// Alert History Logging v1 (alert-history-v1.md)
+/// Append-only log of delivered alert notifications.
+/// Per ADR-009: Only written after delivery provider confirms send.
+/// Per ADR-004: Immutable once written — no UPDATE or DELETE.
+/// FK behavior: ON DELETE SET NULL on all FKs to preserve history.
+model alert_events {
+  id                String               @id @default(cuid())
+  userId            String?
+  watchlistItemId   String?
+  alertId           String?
+  productId         String?
+  retailerId        String?
+  sourceId          String?
+  triggerPriceId    String?
+  eventType         AlertEventType
+  triggeredAt       DateTime
+  priceAtTrigger    Decimal?             @db.Decimal(10, 2)
+  previousPrice     Decimal?             @db.Decimal(10, 2)
+  currency          String               @default("USD")
+  deliveryChannel   AlertDeliveryChannel @default(EMAIL)
+  providerMessageId String?
+  idempotencyKey    String               @unique
+  createdAt         DateTime             @default(now())
+
+  users           users?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  watchlist_items watchlist_items? @relation(fields: [watchlistItemId], references: [id], onDelete: SetNull)
+  alerts          alerts?          @relation("AlertToAlertEvents", fields: [alertId], references: [id], onDelete: SetNull)
+  products        products?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  retailers       retailers?       @relation(fields: [retailerId], references: [id], onDelete: SetNull)
+  sources         sources?         @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  prices          prices?          @relation(fields: [triggerPriceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, triggeredAt(sort: Desc)])
+  @@index([watchlistItemId, triggeredAt(sort: Desc)])
+  @@index([productId, triggeredAt(sort: Desc)])
+  @@index([triggerPriceId])
 }
 
 // DELETED: benchmarks model (benchmark subsystem removed for v1)
@@ -689,6 +729,7 @@ model prices {
   source_products     source_products?     @relation(fields: [sourceProductId], references: [id])
   retailer_skus       retailer_skus?       @relation(fields: [retailerSkuId], references: [id], onDelete: SetNull)
   product_reports     product_reports[]
+  alert_events        alert_events[]
 
   @@index([inStock])
   @@index([productId])
@@ -900,6 +941,7 @@ model products {
   aliasesTo                product_aliases[]          @relation("AliasTo")
   product_resolve_requests product_resolve_requests[]
   firearm_ammo_preferences firearm_ammo_preferences[]
+  alert_events             alert_events[]
 
   @@index([bulletType])
   @@index([brand])
@@ -968,6 +1010,8 @@ model retailers {
   retailer_skus      retailer_skus[]
   click_events       click_events[]
   scrape_runs        scrape_runs[]
+
+  alert_events    alert_events[]
 
   @@index([visibilityStatus])
   @@index([tier])
@@ -1333,6 +1377,8 @@ model sources {
   scrape_adapter_status    scrape_adapter_status?     @relation("ScrapeAdapterStatusSources", fields: [adapterId], references: [adapterId])
 
   // Composite unique for FK validation from scrape_targets
+  alert_events    alert_events[]
+
   @@unique([id, adapterId], map: "sources_id_adapter_id_unique")
   @@index([retailerId], map: "sources_retailer_id_idx")
   @@index([type])
@@ -1600,6 +1646,7 @@ model users {
   Account                  Account[]
   Session                  Session[]
   alerts                   alerts[]
+  alert_events             alert_events[]
   data_subscriptions       data_subscriptions[]
   product_reports          product_reports[]
   subscriptions            subscriptions[]
@@ -1712,6 +1759,7 @@ model watchlist_items {
 
   /// Relations
   alerts                alerts[]
+  alert_events          alert_events[]
   watchlist_collections watchlist_collections? @relation(fields: [collectionId], references: [id])
   products              products?              @relation(fields: [productId], references: [id], onDelete: Cascade)
   users                 users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1830,6 +1878,15 @@ enum BrandAliasStatus {
   DRAFT
   ACTIVE
   DISABLED
+}
+
+enum AlertEventType {
+  PRICE_DROP
+  BACK_IN_STOCK
+}
+
+enum AlertDeliveryChannel {
+  EMAIL
 }
 
 enum AlertRuleType {

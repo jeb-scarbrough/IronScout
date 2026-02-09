@@ -33,6 +33,15 @@ export interface AlertJobData {
   oldPrice?: number
   newPrice?: number
   inStock?: boolean
+  // alert-history-v1 §6.2: Trigger-time data for history logging.
+  // Optional for backward compat with in-flight jobs; alerter logs history only when present.
+  triggerPriceId?: string
+  triggeredAt?: string    // ISO string
+  retailerId?: string
+  sourceId?: string
+  priceAtTrigger?: number
+  previousPrice?: number
+  currency?: string       // Default 'USD' if omitted
 }
 
 // =============================================================================
