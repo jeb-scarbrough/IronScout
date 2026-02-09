@@ -5,8 +5,8 @@ heading: "10mm Auto FMJ range ammo prices"
 subheading: "Compare FMJ training ammo across retailers."
 ctaPrimaryLabel: "Search 10mm FMJ"
 ctaPrimaryPath: "/search?q=10mm+auto+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value 10mm FMJ

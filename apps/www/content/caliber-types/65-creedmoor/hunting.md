@@ -5,8 +5,8 @@ heading: "6.5 Creedmoor hunting ammo prices"
 subheading: "Compare expanding bullet hunting loads across retailers."
 ctaPrimaryLabel: "Search 6.5CM Hunting"
 ctaPrimaryPath: "/search?q=6.5+creedmoor+hunting"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 6.5 Creedmoor hunting options

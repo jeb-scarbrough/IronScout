@@ -5,8 +5,8 @@ heading: "9mm +P ammo prices"
 subheading: "Compare +P overpressure defense loads across retailers."
 ctaPrimaryLabel: "Search 9mm +P"
 ctaPrimaryPath: "/search?q=9mm+%2Bp"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 9mm +P product lines

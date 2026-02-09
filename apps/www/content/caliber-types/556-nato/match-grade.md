@@ -5,8 +5,8 @@ heading: "5.56 match grade ammo prices"
 subheading: "Compare precision and competition loads across retailers."
 ctaPrimaryLabel: "Search 5.56 Match"
 ctaPrimaryPath: "/search?q=5.56+match+grade+77gr"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 5.56 match grade options

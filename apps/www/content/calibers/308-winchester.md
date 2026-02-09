@@ -1,40 +1,58 @@
 ---
-title: ".308 Winchester Ammo Prices — Compare Deals | IronScout"
-description: "Compare .308 Winchester and 7.62x51 NATO ammo prices across retailers. FMJ from $0.50/rd, match from $0.80/rd. Updated daily."
-heading: ".308 Winchester ammo prices"
-subheading: "Compare prices across retailers for FMJ, match-grade, and hunting loads."
-category: "rifle"
-ctaPrimaryLabel: "Search .308 Winchester"
-ctaPrimaryPath: "/search?q=308+winchester"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+title: .308 Winchester Ammo Prices — Compare Deals Across Retailers | IronScout
+description: Compare .308 Winchester ammo prices across 15+ retailers. FMJ from $0.55/rd, hunting from $0.90/rd, match-grade from $1.00/rd. Updated daily.
+heading: .308 Winchester ammo prices
+subheading: The full-power rifle standard. Compare FMJ, hunting, match-grade, and bulk deals for the most versatile .30-caliber cartridge.
+category: rifle
+priceRange: $0.55–$2.50
+ctaPrimaryLabel: Search .308 Win
+ctaPrimaryPath: /search?q=308+winchester
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Popular .308 Winchester product lines
 
 | Product Line | Type | Grain | Use Case | Typical CPR |
 |---|---|---|---|---|
-| [Federal American Eagle 308](/ammo/federal-american-eagle-308) | FMJ | 150gr | Range/Training | $0.55–0.75 |
-| [Winchester White Box 308](/ammo/winchester-white-box-308) | FMJ | 147gr | Range/Training | $0.55–0.70 |
-| [Federal Gold Medal Match 308](/ammo/federal-gold-medal-match-308) | BTHP | 168gr | Precision | $0.80–1.20 |
-| [Hornady ELD Match 308](/ammo/hornady-eld-match-308) | ELD-M | 168gr | Precision | $0.90–1.30 |
-| [Federal Power-Shok 308](/ammo/federal-power-shok-308) | SP | 150gr | Hunting | $0.75–1.00 |
-| [Hornady American Whitetail 308](/ammo/hornady-american-whitetail-308) | InterLock | 150gr | Hunting | $0.80–1.10 |
+| [Federal American Eagle](/ammo/federal-american-eagle-308) | FMJ | 150gr | Range / Training | $0.55–0.75 |
+| [PMC X-TAC .308](/ammo/pmc-xtac-308) | FMJ | 147gr | Range / Training | $0.55–0.70 |
+| [Winchester Super-X](/ammo/winchester-super-x-308) | PP | 150gr | Hunting | $0.90–1.30 |
+| [Federal Power-Shok](/ammo/federal-power-shok-308) | SP | 150gr | Hunting | $0.85–1.20 |
+| [Hornady American Whitetail](/ammo/hornady-american-whitetail-308) | InterLock | 150gr | Hunting | $0.90–1.30 |
+| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | Sierra MK | 168gr | Match / Precision | $1.20–1.80 |
+| [Hornady ELD Match](/ammo/hornady-eld-match-308) | ELD-M | 168gr | Match / Precision | $1.20–1.70 |
+| [Hornady Precision Hunter](/ammo/hornady-precision-hunter-308) | ELD-X | 178gr | Long-Range Hunting | $1.40–2.00 |
+| [Barnes VOR-TX](/ammo/barnes-vor-tx-308) | TTSX | 150gr | Lead-Free Hunting | $1.60–2.50 |
 
-## .308 Winchester by bullet type
+## .308 Winchester by load type
 
-- [.308 FMJ / Range ammo](/caliber/308-winchester/fmj) — Training and plinking
-- [.308 Match Grade](/caliber/308-winchester/match-grade) — Precision and competition
-- [.308 Hunting loads](/caliber/308-winchester/hunting) — Soft point and expanding
-- [Bulk .308 (200+ rounds)](/caliber/308-winchester/bulk) — Case quantity deals
+- [.308 FMJ / Range ammo](/caliber/308-winchester/fmj) — Brass-cased training and plinking loads
+- [Bulk .308 (200+ rounds)](/caliber/308-winchester/bulk) — Case quantity deals for volume shooters
+- [.308 Hunting loads](/caliber/308-winchester/hunting) — Soft point, bonded, and expanding bullets for game
+- [.308 Match Grade](/caliber/308-winchester/match-grade) — 168gr–175gr OTM for precision and competition
 
 ## How .308 Winchester prices compare
 
-The .308 Winchester is the standard full-power rifle round. FMJ/ball ammo for range use typically runs $0.55–0.75 per round. Match-grade loads (168gr–175gr BTHP/OTM) run $0.80–1.30 per round. Hunting loads with expanding bullets fall between. The 7.62x51 NATO military equivalent is dimensionally similar but loaded to slightly lower pressure — safe to shoot in .308 chambers. Buying bulk (200+ rounds) saves significantly over 20-round boxes.
+The .308 Winchester occupies a unique position in the rifle market: it's the most popular full-power .30-caliber cartridge, serving equally well for hunting, precision shooting, and general-purpose rifle work. That versatility is reflected in one of the broadest price ranges of any caliber.
+
+**FMJ range and training ammo** runs **$0.55–0.75 per round** for brass-cased loads from Federal American Eagle, PMC, and S&B. This is roughly 2x the cost of 5.56 NATO FMJ, which is the main reason many AR-platform shooters train with 5.56 and save the .308 for specific applications. Surplus and imported 7.62 NATO ball can occasionally dip below $0.50/rd, but availability is inconsistent.
+
+**Hunting ammunition** represents the broadest segment, ranging from **$0.85 to $2.50+ per round** depending on bullet technology. Budget hunting loads — Federal Power-Shok, Remington Core-Lokt, Winchester Super-X — use traditional cup-and-core bullets and run $0.85–1.30/rd. Premium bonded and controlled-expansion bullets (Hornady ELD-X, Nosler AccuBond, Barnes TTSX) command $1.40–2.50/rd, with lead-free options like Barnes at the top of the range.
+
+> **The 168gr vs 175gr question:** For match shooters, the traditional choice was 168gr Sierra MatchKing. At distances beyond 800 yards, the 175gr SMK and Hornady 178gr ELD-M maintain supersonic flight longer, giving them an edge at extended range. For most hunters and precision shooters inside 600 yards, either works well.
+
+### .308 vs 7.62 NATO
+
+The .308 Winchester and 7.62x51mm NATO share the same external case dimensions but differ in chamber pressure specifications and brass thickness. In practice, commercial .308 Winchester ammunition is safe in 7.62 NATO chambers and vice versa for modern rifles. Military surplus 7.62 NATO tends to be loaded slightly milder than commercial .308, making it a lower-cost training option when available.
+
+### Market trends
+
+The .308 Winchester market is mature and well-supplied. Domestic production from Federal, Hornady, and Winchester covers every segment. Import options from S&B, PMC, and Norma provide additional competition. Pricing has been stable since 2024, with match-grade loads showing the most price compression as competition in the precision segment has increased.
 
 ## Related calibers
 
-- [6.5 Creedmoor](/caliber/65-creedmoor) — lower recoil, better long-range ballistics
-- [.30-06 Springfield](/caliber/30-06-springfield) — higher velocity, classic hunting
-- [5.56 NATO](/caliber/556-nato) — intermediate rifle cartridge
-- [.300 Blackout](/caliber/300-blackout) — AR-platform subsonic/supersonic
+- [5.56 NATO](/caliber/556-nato) — Lower recoil, lower cost per round, higher volume AR-platform shooting
+- [6.5 Creedmoor](/caliber/65-creedmoor) — Better ballistic coefficient, less recoil, purpose-built for precision
+- [.30-06 Springfield](/caliber/30-06-springfield) — Higher velocity potential with the same bullet weights
+- [7.62x39](/caliber/762x39) — Budget intermediate cartridge for AK/SKS platforms

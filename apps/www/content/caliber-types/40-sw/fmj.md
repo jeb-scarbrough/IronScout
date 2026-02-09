@@ -5,8 +5,8 @@ heading: ".40 S&W FMJ range ammo prices"
 subheading: "Compare FMJ training ammo across retailers."
 ctaPrimaryLabel: "Search .40 S&W FMJ"
 ctaPrimaryPath: "/search?q=40+sw+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .40 S&W FMJ

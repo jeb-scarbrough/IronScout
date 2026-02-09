@@ -5,8 +5,8 @@ heading: ".380 ACP FMJ range ammo prices"
 subheading: "Compare FMJ training ammo across retailers."
 ctaPrimaryLabel: "Search .380 FMJ"
 ctaPrimaryPath: "/search?q=380+acp+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .380 ACP FMJ

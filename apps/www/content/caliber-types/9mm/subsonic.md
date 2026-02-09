@@ -5,8 +5,8 @@ heading: "9mm subsonic ammo prices"
 subheading: "Compare suppressor-optimized loads across retailers."
 ctaPrimaryLabel: "Search 9mm Subsonic"
 ctaPrimaryPath: "/search?q=9mm+subsonic+147gr"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 9mm subsonic options

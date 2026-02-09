@@ -5,8 +5,8 @@ heading: ".380 ACP hollow point ammo prices"
 subheading: "Compare JHP self-defense loads designed for micro-compact pistols."
 ctaPrimaryLabel: "Search .380 JHP"
 ctaPrimaryPath: "/search?q=380+acp+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .380 ACP JHP options

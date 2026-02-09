@@ -5,8 +5,8 @@ heading: ".308 Winchester FMJ range ammo prices"
 subheading: "Compare FMJ and ball training ammo across retailers."
 ctaPrimaryLabel: "Search .308 FMJ"
 ctaPrimaryPath: "/search?q=308+fmj+range"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .308 FMJ

@@ -5,8 +5,8 @@ heading: ".45 ACP FMJ range ammo prices"
 subheading: "Compare 230gr FMJ training and range ammo across retailers."
 ctaPrimaryLabel: "Search .45 ACP FMJ"
 ctaPrimaryPath: "/search?q=45+acp+fmj+230"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .45 ACP FMJ by product line

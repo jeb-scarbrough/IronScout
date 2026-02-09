@@ -5,8 +5,8 @@ heading: ".45 ACP hollow point ammo prices"
 subheading: "Compare JHP self-defense loads across retailers."
 ctaPrimaryLabel: "Search .45 ACP JHP"
 ctaPrimaryPath: "/search?q=45+acp+hollow+point+jhp"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Top .45 ACP JHP by product line

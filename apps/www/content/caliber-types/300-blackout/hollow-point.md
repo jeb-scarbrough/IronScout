@@ -5,8 +5,8 @@ heading: ".300 Blackout hollow point ammo prices"
 subheading: "Compare expanding bullet loads for defense and hunting across retailers."
 ctaPrimaryLabel: "Search .300 BLK HP"
 ctaPrimaryPath: "/search?q=300+blackout+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .300 BLK expanding options

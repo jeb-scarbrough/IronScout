@@ -5,8 +5,8 @@ heading: ".30-06 Springfield hunting ammo prices"
 subheading: "Compare soft point and expanding bullet hunting loads across retailers."
 ctaPrimaryLabel: "Search .30-06 Hunting"
 ctaPrimaryPath: "/search?q=30-06+hunting+soft+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .30-06 hunting options

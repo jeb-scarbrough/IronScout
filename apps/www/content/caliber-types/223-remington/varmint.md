@@ -5,8 +5,8 @@ heading: ".223 Remington varmint ammo prices"
 subheading: "Compare rapid expansion varmint loads across retailers."
 ctaPrimaryLabel: "Search .223 Varmint"
 ctaPrimaryPath: "/search?q=223+varmint+v-max"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .223 varmint options

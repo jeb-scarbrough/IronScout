@@ -5,8 +5,8 @@ heading: ".40 S&W hollow point ammo prices"
 subheading: "Compare JHP self-defense loads across retailers."
 ctaPrimaryLabel: "Search .40 S&W JHP"
 ctaPrimaryPath: "/search?q=40+sw+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .40 S&W JHP options

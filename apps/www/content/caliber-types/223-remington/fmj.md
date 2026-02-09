@@ -5,8 +5,8 @@ heading: ".223 Remington FMJ range ammo prices"
 subheading: "Compare FMJ training and range ammo across retailers."
 ctaPrimaryLabel: "Search .223 FMJ"
 ctaPrimaryPath: "/search?q=223+remington+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .223 FMJ

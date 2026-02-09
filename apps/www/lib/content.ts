@@ -31,7 +31,8 @@ function parseFrontmatter(raw: string): MarkdownContent {
     const key = line.slice(0, index).trim()
     const value = line.slice(index + 1).trim()
     if (key) {
-      frontmatter[key] = value
+      // Strip surrounding quotes from frontmatter values
+      frontmatter[key] = value.replace(/^["'](.+)["']$/, '$1')
     }
   }
 

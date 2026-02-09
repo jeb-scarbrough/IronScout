@@ -5,8 +5,8 @@ heading: "10mm Auto hollow point ammo prices"
 subheading: "Compare JHP defense and hard-cast woods carry loads across retailers."
 ctaPrimaryLabel: "Search 10mm JHP"
 ctaPrimaryPath: "/search?q=10mm+auto+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 10mm expanding options

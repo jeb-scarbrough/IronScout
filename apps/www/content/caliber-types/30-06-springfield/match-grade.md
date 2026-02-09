@@ -5,8 +5,8 @@ heading: ".30-06 Springfield match grade ammo prices"
 subheading: "Compare precision and competition loads across retailers."
 ctaPrimaryLabel: "Search .30-06 Match"
 ctaPrimaryPath: "/search?q=30-06+match+grade"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .30-06 match grade options

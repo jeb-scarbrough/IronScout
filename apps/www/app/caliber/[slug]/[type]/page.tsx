@@ -62,6 +62,7 @@ export default async function CaliberTypePage({
 
   const heading = content.frontmatter.heading || 'Ammo Prices'
   const subheading = content.frontmatter.subheading
+  const priceRange = content.frontmatter.priceRange
   const primaryCta = content.frontmatter.ctaPrimaryLabel && content.frontmatter.ctaPrimaryPath
     ? {
         label: content.frontmatter.ctaPrimaryLabel,
@@ -96,6 +97,13 @@ export default async function CaliberTypePage({
         content={content.body}
         primaryCta={primaryCta}
         secondaryCta={secondaryCta}
+        priceRange={priceRange}
+        breadcrumbs={[
+          { label: 'Home', href: '/' },
+          { label: 'Calibers', href: '/calibers' },
+          { label: parentName, href: `/caliber/${slug}` },
+          { label: typeName, href: `/caliber/${slug}/${type}` },
+        ]}
       />
     </>
   )

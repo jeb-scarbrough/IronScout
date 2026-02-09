@@ -5,8 +5,8 @@ heading: ".308 Winchester hunting ammo prices"
 subheading: "Compare soft point, bonded, and expanding bullet loads across retailers."
 ctaPrimaryLabel: "Search .308 Hunting"
 ctaPrimaryPath: "/search?q=308+hunting+soft+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .308 hunting options

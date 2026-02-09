@@ -5,8 +5,8 @@ heading: "6.5 Creedmoor match grade ammo prices"
 subheading: "Compare precision and competition loads across retailers."
 ctaPrimaryLabel: "Search 6.5CM Match"
 ctaPrimaryPath: "/search?q=6.5+creedmoor+match+eld"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 6.5 Creedmoor match options

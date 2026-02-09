@@ -5,8 +5,8 @@ heading: "12 gauge birdshot ammo prices"
 subheading: "Compare birdshot for clay shooting and small game across retailers."
 ctaPrimaryLabel: "Search 12ga Birdshot"
 ctaPrimaryPath: "/search?q=12+gauge+birdshot"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 12 gauge birdshot options

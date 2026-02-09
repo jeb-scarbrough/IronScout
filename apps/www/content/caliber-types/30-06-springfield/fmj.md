@@ -5,8 +5,8 @@ heading: ".30-06 Springfield FMJ range ammo prices"
 subheading: "Compare FMJ ball and training ammo across retailers."
 ctaPrimaryLabel: "Search .30-06 FMJ"
 ctaPrimaryPath: "/search?q=30-06+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .30-06 FMJ

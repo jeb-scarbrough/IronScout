@@ -5,8 +5,8 @@ heading: ".223 Remington match grade ammo prices"
 subheading: "Compare precision and competition loads across retailers."
 ctaPrimaryLabel: "Search .223 Match"
 ctaPrimaryPath: "/search?q=223+match+grade"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .223 match grade options

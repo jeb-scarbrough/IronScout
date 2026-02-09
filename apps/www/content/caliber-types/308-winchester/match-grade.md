@@ -5,8 +5,8 @@ heading: ".308 match grade ammo prices"
 subheading: "Compare precision and competition loads across retailers."
 ctaPrimaryLabel: "Search .308 Match"
 ctaPrimaryPath: "/search?q=308+match+grade+168"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .308 match grade options

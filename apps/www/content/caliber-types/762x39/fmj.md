@@ -5,8 +5,8 @@ heading: "7.62x39 FMJ range ammo prices"
 subheading: "Compare steel-case and brass-case FMJ across retailers."
 ctaPrimaryLabel: "Search 7.62x39 FMJ"
 ctaPrimaryPath: "/search?q=7.62x39+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value 7.62x39 FMJ

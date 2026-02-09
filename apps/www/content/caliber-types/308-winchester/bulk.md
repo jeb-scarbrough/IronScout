@@ -5,8 +5,8 @@ heading: "Bulk .308 Winchester ammo prices"
 subheading: "Compare 200+ round case quantity deals across retailers."
 ctaPrimaryLabel: "Search Bulk .308"
 ctaPrimaryPath: "/search?q=bulk+308+winchester+200"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best bulk .308 deals

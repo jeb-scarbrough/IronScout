@@ -5,8 +5,8 @@ heading: "Bulk .45 ACP ammo prices"
 subheading: "Compare 500+ round case quantity deals across retailers."
 ctaPrimaryLabel: "Search Bulk .45 ACP"
 ctaPrimaryPath: "/search?q=bulk+45+acp+500"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best bulk .45 ACP deals

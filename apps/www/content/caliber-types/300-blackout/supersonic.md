@@ -5,8 +5,8 @@ heading: ".300 Blackout supersonic ammo prices"
 subheading: "Compare standard velocity FMJ and expanding loads across retailers."
 ctaPrimaryLabel: "Search .300 BLK Supersonic"
 ctaPrimaryPath: "/search?q=300+blackout+supersonic+fmj"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .300 BLK supersonic options

@@ -5,8 +5,8 @@ heading: ".22 LR subsonic ammo prices"
 subheading: "Compare suppressor-optimized and quiet loads across retailers."
 ctaPrimaryLabel: "Search .22 LR Subsonic"
 ctaPrimaryPath: "/search?q=22+lr+subsonic"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .22 LR subsonic options

@@ -5,8 +5,8 @@ heading: "Bulk 7.62x39 ammo prices"
 subheading: "Compare 500+ round case quantity deals across retailers."
 ctaPrimaryLabel: "Search Bulk 7.62x39"
 ctaPrimaryPath: "/search?q=bulk+7.62x39+1000"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best bulk 7.62x39 deals

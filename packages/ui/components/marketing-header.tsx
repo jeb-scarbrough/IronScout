@@ -5,13 +5,10 @@ import { IronScoutLogo } from './iron-scout-logo'
 
 /**
  * Props for MarketingHeader component.
- *
- * Brand URLs should be passed in from the consuming app's environment/config
- * to support different environments (local, staging, production).
  */
 export interface MarketingHeaderProps {
   /** Current active page for highlighting */
-  currentPage?: 'home' | 'search' | 'price-check' | 'about' | 'retailers' | 'privacy' | 'terms' | 'signin' | 'signup'
+  currentPage?: 'home' | 'search' | 'calibers' | 'price-check' | 'about' | 'retailers' | 'privacy' | 'terms' | 'signin' | 'signup'
   /** Base URL for the marketing website (www) */
   websiteUrl: string
   /** Base URL for the web app */
@@ -21,69 +18,58 @@ export interface MarketingHeaderProps {
 /**
  * Shared marketing header component used across www, web, and other apps.
  * Provides consistent navigation and branding across all IronScout properties.
- *
- * Usage:
- * ```tsx
- * import { MarketingHeader } from '@ironscout/ui/components/marketing-header'
- *
- * <MarketingHeader
- *   currentPage="about"
- *   websiteUrl={BRAND.website}
- *   appUrl={BRAND.appUrl}
- * />
- * ```
+ * Includes responsive hamburger menu for mobile.
  */
 export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHeaderProps) {
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false)
   const isSignIn = currentPage === 'signin'
   const isSignUp = currentPage === 'signup'
+
+  // Close menu on resize to desktop
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) setIsMenuOpen(false)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const navLinks = [
+    { href: `${appUrl}/search`, label: 'Search', page: 'search' as const, alwaysVisible: false },
+    { href: `${websiteUrl}/calibers`, label: 'Calibers', page: 'calibers' as const, alwaysVisible: false },
+    { href: `${appUrl}/price-check`, label: 'In-Store Price Check', page: 'price-check' as const, alwaysVisible: false },
+    { href: `${websiteUrl}/about`, label: 'About', page: 'about' as const, alwaysVisible: false },
+    { href: `${websiteUrl}/retailers`, label: 'For Retailers', page: 'retailers' as const, alwaysVisible: false },
+  ]
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-iron-950/80 backdrop-blur-md border-b border-iron-800/50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <a href={websiteUrl} className="flex items-center gap-2">
+          {/* Logo */}
+          <a href={websiteUrl} className="flex items-center gap-2 flex-shrink-0">
             <IronScoutLogo className="w-8 h-8" />
             <span className="font-display text-xl font-semibold tracking-tight">
               Iron<span className="text-primary">Scout</span>
             </span>
           </a>
 
-          <div className="flex items-center gap-4 sm:gap-6">
-            <a
-              href={`${appUrl}/search`}
-              className={`text-sm font-medium transition-colors ${
-                currentPage === 'search' ? 'text-white' : 'text-iron-400 hover:text-white'
-              }`}
-            >
-              Search
-            </a>
-            <a
-              href={`${appUrl}/price-check`}
-              className={`text-sm font-medium transition-colors ${
-                currentPage === 'price-check' ? 'text-white' : 'text-iron-400 hover:text-white'
-              }`}
-            >
-              In-Store Price Check
-            </a>
-            <a
-              href={`${websiteUrl}/about`}
-              className={`text-sm font-medium transition-colors hidden sm:block ${
-                currentPage === 'about' ? 'text-white' : 'text-iron-400 hover:text-white'
-              }`}
-            >
-              About
-            </a>
-            <a
-              href={`${websiteUrl}/retailers`}
-              className={`text-sm font-medium transition-colors hidden sm:block ${
-                currentPage === 'retailers' ? 'text-white' : 'text-iron-400 hover:text-white'
-              }`}
-            >
-              For Retailers
-            </a>
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-4 lg:gap-6">
+            {navLinks.map((link) => (
+              <a
+                key={link.page}
+                href={link.href}
+                className={`text-sm font-medium transition-colors whitespace-nowrap ${
+                  currentPage === link.page ? 'text-white' : 'text-iron-400 hover:text-white'
+                }`}
+              >
+                {link.label}
+              </a>
+            ))}
             <a
               href={`${appUrl}/auth/signin`}
-              className={`text-sm font-medium transition-colors hidden sm:block ${
+              className={`text-sm font-medium transition-colors ${
                 isSignIn
                   ? 'text-iron-600 pointer-events-none'
                   : 'text-iron-300 hover:text-white'
@@ -102,7 +88,74 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
               Get Started
             </a>
           </div>
+
+          {/* Mobile: Search + CTA + Hamburger */}
+          <div className="flex md:hidden items-center gap-3">
+            <a
+              href={`${appUrl}/search`}
+              className={`text-sm font-medium transition-colors ${
+                currentPage === 'search' ? 'text-white' : 'text-iron-400 hover:text-white'
+              }`}
+            >
+              Search
+            </a>
+            <a
+              href={`${appUrl}/auth/signup`}
+              className={`text-sm py-1.5 px-4 ${
+                isSignUp
+                  ? 'btn-primary opacity-50 pointer-events-none'
+                  : 'btn-primary'
+              }`}
+            >
+              Get Started
+            </a>
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="text-iron-300 hover:text-white p-2 -mr-2"
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {isMenuOpen ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Menu */}
+        {isMenuOpen && (
+          <div className="md:hidden border-t border-iron-800 py-4">
+            <div className="flex flex-col space-y-4">
+              {navLinks.map((link) => (
+                <a
+                  key={link.page}
+                  href={link.href}
+                  className={`text-sm font-medium transition-colors ${
+                    currentPage === link.page ? 'text-white' : 'text-iron-400 hover:text-white'
+                  }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ))}
+              <div className="border-t border-iron-800 my-1" />
+              <a
+                href={`${appUrl}/auth/signin`}
+                className={`text-sm font-medium transition-colors ${
+                  isSignIn ? 'text-iron-600 pointer-events-none' : 'text-iron-300 hover:text-white'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Sign In
+              </a>
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   )

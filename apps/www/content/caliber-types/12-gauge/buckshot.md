@@ -5,8 +5,8 @@ heading: "12 gauge buckshot ammo prices"
 subheading: "Compare 00 buck and defense loads across retailers."
 ctaPrimaryLabel: "Search 12ga Buckshot"
 ctaPrimaryPath: "/search?q=12+gauge+00+buckshot"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 12 gauge buckshot options

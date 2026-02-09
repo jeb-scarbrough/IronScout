@@ -5,8 +5,8 @@ heading: "12 gauge target load prices"
 subheading: "Compare competition trap and skeet loads across retailers."
 ctaPrimaryLabel: "Search 12ga Target"
 ctaPrimaryPath: "/search?q=12+gauge+target+load+trap"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 12 gauge target load options

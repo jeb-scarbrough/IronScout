@@ -46,6 +46,13 @@ export async function generateMetadata({
   }
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  handgun: 'Handgun',
+  rifle: 'Rifle',
+  rimfire: 'Rimfire',
+  shotgun: 'Shotgun',
+}
+
 export default async function CaliberPage({
   params,
 }: {
@@ -59,6 +66,8 @@ export default async function CaliberPage({
 
   const heading = content.frontmatter.heading || 'Ammo Prices by Caliber'
   const subheading = content.frontmatter.subheading
+  const category = content.frontmatter.category
+  const priceRange = content.frontmatter.priceRange
   const primaryCta = content.frontmatter.ctaPrimaryLabel && content.frontmatter.ctaPrimaryPath
     ? {
         label: content.frontmatter.ctaPrimaryLabel,
@@ -73,6 +82,7 @@ export default async function CaliberPage({
     : undefined
 
   const displayName = content.frontmatter.heading || slug
+  const categoryLabel = CATEGORY_LABELS[category] || category
 
   return (
     <>
@@ -89,6 +99,13 @@ export default async function CaliberPage({
         content={content.body}
         primaryCta={primaryCta}
         secondaryCta={secondaryCta}
+        category={categoryLabel}
+        priceRange={priceRange}
+        breadcrumbs={[
+          { label: 'Home', href: '/' },
+          { label: 'Calibers', href: '/calibers' },
+          { label: displayName, href: `/caliber/${slug}` },
+        ]}
       />
     </>
   )

@@ -5,8 +5,8 @@ heading: ".22 LR hollow point ammo prices"
 subheading: "Compare high-velocity HP for small game and varmint across retailers."
 ctaPrimaryLabel: "Search .22 LR HP"
 ctaPrimaryPath: "/search?q=22+lr+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## .22 LR hollow point options

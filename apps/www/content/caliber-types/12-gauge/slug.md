@@ -5,8 +5,8 @@ heading: "12 gauge slug ammo prices"
 subheading: "Compare rifled slugs and sabot slugs across retailers."
 ctaPrimaryLabel: "Search 12ga Slugs"
 ctaPrimaryPath: "/search?q=12+gauge+slug"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 12 gauge slug options

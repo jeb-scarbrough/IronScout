@@ -5,8 +5,8 @@ heading: "5.56 green tip M855 ammo prices"
 subheading: "Compare 62gr steel-core penetrator ammo across retailers."
 ctaPrimaryLabel: "Search 5.56 Green Tip"
 ctaPrimaryPath: "/search?q=5.56+green+tip+m855"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 5.56 M855 green tip options

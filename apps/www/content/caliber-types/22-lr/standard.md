@@ -5,8 +5,8 @@ heading: ".22 LR standard / plinking ammo prices"
 subheading: "Compare bulk standard velocity ammo across retailers."
 ctaPrimaryLabel: "Search .22 LR Standard"
 ctaPrimaryPath: "/search?q=22+lr+standard+bulk"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Best-value .22 LR standard

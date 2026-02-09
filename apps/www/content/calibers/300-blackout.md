@@ -1,38 +1,57 @@
 ---
-title: ".300 Blackout Ammo Prices — Compare Deals | IronScout"
-description: "Compare .300 Blackout ammo prices across retailers. Supersonic from $0.50/rd, subsonic from $0.55/rd. Updated daily."
-heading: ".300 Blackout ammo prices"
-subheading: "Compare prices across retailers for supersonic, subsonic, and hunting loads."
-category: "rifle"
-ctaPrimaryLabel: "Search .300 Blackout"
-ctaPrimaryPath: "/search?q=300+blackout"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+title: .300 Blackout Ammo Prices — Compare Deals Across Retailers | IronScout
+description: Compare .300 AAC Blackout ammo prices across 15+ retailers. Supersonic from $0.50/rd, subsonic suppressor loads from $0.55/rd. Updated daily.
+heading: .300 Blackout ammo prices
+subheading: Built for suppressed AR-15s and short-barreled rifles. Compare supersonic, subsonic, and defense loads across every major retailer.
+category: rifle
+priceRange: $0.50–$1.50
+ctaPrimaryLabel: Search .300 BLK
+ctaPrimaryPath: /search?q=300+blackout
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## Popular .300 Blackout product lines
 
 | Product Line | Type | Grain | Use Case | Typical CPR |
 |---|---|---|---|---|
-| [Hornady Black Subsonic](/ammo/hornady-black-300blk-subsonic) | Sub-X | 190gr | Suppressed | $0.60–0.90 |
-| [Magtech 300 BLK](/ammo/magtech-300blk) | FMJ | 123gr | Range/Training | $0.50–0.70 |
-| [Federal American Eagle 300 BLK](/ammo/federal-american-eagle-300blk) | FMJ | 150gr | Range/Training | $0.55–0.75 |
-| [Sig Sauer 300 BLK](/ammo/sig-sauer-300blk) | OTM | 125gr | Supersonic | $0.65–0.90 |
-| [Barnes VOR-TX 300 BLK](/ammo/barnes-vortx-300blk) | TAC-TX | 110gr | Hunting/Defense | $1.00–1.40 |
+| [S&B .300 BLK](/ammo/sellier-bellot-300-blackout) | FMJ | 147gr | Range / Training | $0.50–0.65 |
+| [Magtech .300 BLK](/ammo/magtech-300-blackout) | FMJ | 115gr | Range / Training | $0.50–0.65 |
+| [Hornady Black 110gr](/ammo/hornady-black-300blk-110) | V-MAX | 110gr | Supersonic / Varmint | $0.65–0.90 |
+| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | Sub-X | 190gr | Suppressed | $0.60–0.90 |
+| [Sig Sauer 300 BLK](/ammo/sig-sauer-300-blackout) | OTM | 220gr | Suppressed | $0.70–1.00 |
+| [Sellier & Bellot 200gr Sub](/ammo/sellier-bellot-300-blackout-sub) | FMJ | 200gr | Subsonic Range | $0.55–0.75 |
+| [Barnes VOR-TX 300 BLK](/ammo/barnes-vor-tx-300-blackout) | TAC-TX | 120gr | HD / Hunting | $1.10–1.50 |
 
-## .300 Blackout by bullet type
+## .300 Blackout by load type
 
-- [.300 Blackout Subsonic](/caliber/300-blackout/subsonic) — Suppressor-optimized, 190–220gr
-- [.300 Blackout Supersonic](/caliber/300-blackout/supersonic) — Standard velocity, 110–150gr
-- [.300 Blackout Hollow Point](/caliber/300-blackout/hollow-point) — Defense and hunting
+- [.300 Blackout supersonic](/caliber/300-blackout/supersonic) — 110–125gr loads for full-velocity applications
+- [.300 Blackout subsonic](/caliber/300-blackout/subsonic) — 190–220gr loads optimized for suppressors
+- [.300 Blackout hollow point](/caliber/300-blackout/hollow-point) — Expanding defense and hunting loads
 
 ## How .300 Blackout prices compare
 
-The .300 Blackout commands a premium over 5.56 NATO due to lower production volume and heavier projectiles. Supersonic FMJ range ammo runs $0.50–0.75 per round. Subsonic loads (the primary reason most people own this caliber) run $0.55–0.90 per round. Premium hunting and defense loads with expanding bullets exceed $1.00 per round. This caliber uses standard AR-15 lower receivers with only a barrel swap, making it popular for suppressed shooting.
+The .300 AAC Blackout was designed with one specific mission: give the AR-15 platform a .30-caliber option that works in short barrels and suppresses exceptionally well. That design intent shapes the entire market — this is a caliber where subsonic loads outsell supersonic in many product lines.
+
+**Supersonic loads** (110–125gr) run **$0.50–0.90 per round** and deliver ballistics similar to 7.62x39 from an AR-15 platform. These are the range/training loads for .300 BLK owners who want to practice without the cost of subsonic ammo. S&B and Magtech offer the lowest-cost supersonic options.
+
+**Subsonic loads** (190–220gr) run **$0.55–1.00 per round** and are the reason most people buy a .300 BLK in the first place. At velocities below 1,050 fps, these loads eliminate the supersonic crack when paired with a suppressor, producing a hearing-safe shooting experience. Hornady Sub-X is the standout in this segment because its bullet is specifically designed to expand at subsonic velocity — most traditional JHP designs won't expand below 1,000 fps.
+
+> **The expansion problem:** Standard hollow point bullets require minimum velocities of 1,200–1,800 fps to reliably expand. At .300 BLK subsonic velocities (~1,000 fps), they act like FMJ. Hornady Sub-X and Lehigh Defense Controlled Chaos are specifically engineered for subsonic expansion. If terminal performance matters for your use case, these are the loads to research.
+
+### .300 BLK vs 5.56 NATO
+
+The .300 BLK's main advantage is suppressor performance and short-barrel efficiency. It reaches full ballistic potential in a 9" barrel, versus 14.5–16" for 5.56 NATO. The tradeoff is cost: .300 BLK range ammo costs roughly 2x what 5.56 NATO costs per round. Most .300 BLK owners also own 5.56 uppers and train primarily with the cheaper caliber, reserving .300 BLK for specific applications.
+
+> **Safety warning:** .300 Blackout rounds will chamber in a 5.56 NATO rifle but cannot safely fire. This is the most dangerous cross-caliber compatibility issue in the AR platform. Always clearly mark your .300 BLK magazines and never mix ammunition on the same bench.
+
+### Market trends
+
+The .300 Blackout market continues to grow as suppressor ownership increases following the NFA reform movement. Ammo selection has expanded significantly since 2023, with more manufacturers offering dedicated subsonic lines. Pricing has decreased moderately as production volume has increased.
 
 ## Related calibers
 
-- [5.56 NATO](/caliber/556-nato) — same platform, cheaper to shoot
-- [.308 Winchester](/caliber/308-winchester) — full-power rifle alternative
-- [7.62x39](/caliber/762x39) — similar ballistics, AK platform
-- [.223 Remington](/caliber/223-remington) — same parent case
+- [5.56 NATO](/caliber/556-nato) — Same AR-15 lower, much cheaper to shoot, better at distance
+- [7.62x39](/caliber/762x39) — Similar ballistics to supersonic .300 BLK, budget-friendly
+- [.308 Winchester](/caliber/308-winchester) — Full-power .30-caliber for longer range applications
+- [9mm](/caliber/9mm) — Another popular suppressor host caliber, lower cost per round

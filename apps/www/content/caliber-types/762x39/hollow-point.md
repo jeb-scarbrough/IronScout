@@ -5,8 +5,8 @@ heading: "7.62x39 hollow point ammo prices"
 subheading: "Compare expanding bullet loads for defense and hunting across retailers."
 ctaPrimaryLabel: "Search 7.62x39 HP"
 ctaPrimaryPath: "/search?q=7.62x39+hollow+point"
-ctaSecondaryLabel: "Set Price Alert"
-ctaSecondaryPath: "/alerts"
+ctaSecondaryLabel: Get Price Alerts — Free
+ctaSecondaryPath: /auth/signup?intent=alerts
 ---
 
 ## 7.62x39 expanding options
