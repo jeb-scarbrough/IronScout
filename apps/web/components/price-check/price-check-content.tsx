@@ -334,7 +334,7 @@ function InitialView({
           </div>
           <div>
             <div className="text-2xl font-bold text-primary mb-1">3</div>
-            <p className="text-xs text-iron-400">See if you're getting a fair deal</p>
+            <p className="text-xs text-iron-400">See if you're getting a fair price</p>
           </div>
         </div>
       </div>
