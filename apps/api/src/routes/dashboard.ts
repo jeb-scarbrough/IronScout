@@ -228,24 +228,29 @@ router.get('/pulse', async (req: Request, res: Response) => {
     // ================================================================
 
     // 1. Single query: all products across all calibers
+    // No global take limit — per-caliber capping happens during JS grouping
+    // to prevent popular calibers from starving sparse ones
     const allProducts = await prisma.products.findMany({
       where: { caliber: { in: calibers } },
-      select: { id: true, caliber: true },
-      take: 100 * calibers.length // ~100 per caliber
+      select: { id: true, caliber: true }
     })
 
-    // Group product IDs by caliber
+    // Group product IDs by caliber, capping at 100 per caliber
+    // This ensures each caliber gets fair representation regardless of catalog size
+    const MAX_PRODUCTS_PER_CALIBER = 100
     const productsByCaliber = new Map<string, string[]>()
     for (const cal of calibers) productsByCaliber.set(cal, [])
     for (const p of allProducts) {
       if (p.caliber) {
         const ids = productsByCaliber.get(p.caliber)
-        if (ids) ids.push(p.id)
+        if (ids && ids.length < MAX_PRODUCTS_PER_CALIBER) ids.push(p.id)
       }
     }
 
     // 2. Single batch: all prices across all product IDs
-    const allProductIds = allProducts.map(p => p.id)
+    // Use only the capped product IDs (not allProducts) so downstream queries
+    // match the per-caliber caps applied above
+    const allProductIds = Array.from(productsByCaliber.values()).flat()
     const allPricesMap = allProductIds.length > 0
       ? await batchGetPricesViaProductLinks(allProductIds)
       : new Map()
@@ -271,6 +276,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
     }
 
     // 4. Single batch: all historical prices
+    // No global take limit — per-caliber capping (50) happens during JS grouping
     const allSourceProductIds = allLinks.map(link => link.sourceProductId)
     const allHistoricalPrices = allSourceProductIds.length > 0
       ? await prisma.prices.findMany({
@@ -280,8 +286,7 @@ router.get('/pulse', async (req: Request, res: Response) => {
             ...visibleHistoricalPriceWhere(),
           },
           select: { price: true, sourceProductId: true },
-          orderBy: { observedAt: 'desc' },
-          take: 50 * calibers.length
+          orderBy: { observedAt: 'desc' }
         })
       : []
 
