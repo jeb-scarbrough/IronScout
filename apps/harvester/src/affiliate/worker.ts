@@ -44,7 +44,7 @@ const moduleLog = createWorkflowLogger(baseLogger, {
 const MAX_CONSECUTIVE_FAILURES = 3
 
 // Missing-brand threshold for data quality alerts (env-configurable)
-const MISSING_BRAND_THRESHOLD_PERCENT = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT) || 10
+const MISSING_BRAND_THRESHOLD_PERCENT = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
 // Minimum products to consider for threshold alerting (avoid noise on small/partial runs)
 const MIN_PRODUCTS_FOR_QUALITY_ALERT = 50
 

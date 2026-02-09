@@ -442,14 +442,20 @@ export function RunsTable({ runs, feedId }: RunsTableProps) {
                           missingGrain?: number;
                         };
                         const upserted = run.productsUpserted;
-                        const pct = (count: number | undefined) => {
+                        // missingCaliber items are quarantined (excluded from productsUpserted),
+                        // so their denominator is (upserted + missingCaliber)
+                        const caliberDenom = upserted && dq.missingCaliber !== undefined
+                          ? upserted + dq.missingCaliber
+                          : null;
+                        const pct = (count: number | undefined, denom?: number | null) => {
                           if (count === undefined) return null;
-                          if (!upserted || upserted === 0) return null;
-                          return ((count / upserted) * 100).toFixed(1);
+                          const d = denom !== undefined ? denom : upserted;
+                          if (!d || d === 0) return null;
+                          return ((count / d) * 100).toFixed(1);
                         };
-                        const fmt = (label: string, count: number | undefined) => {
+                        const fmt = (label: string, count: number | undefined, denom?: number | null) => {
                           if (count === undefined) return null;
-                          const rate = pct(count);
+                          const rate = pct(count, denom);
                           return (
                             <div key={label}>
                               <dt className="font-medium text-gray-500">{label}</dt>
@@ -465,7 +471,7 @@ export function RunsTable({ runs, feedId }: RunsTableProps) {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               {fmt('Missing Brand', dq.missingBrand)}
                               {fmt('Missing Round Count', dq.missingRoundCount)}
-                              {fmt('Missing Caliber', dq.missingCaliber)}
+                              {fmt('Missing Caliber', dq.missingCaliber, caliberDenom)}
                               {fmt('Missing Grain', dq.missingGrain)}
                             </div>
                           </div>
