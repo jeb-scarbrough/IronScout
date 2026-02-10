@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createLogger } from '@ironscout/logger'
+import { createLogger } from '@/lib/server-logger'
 
 const log = createLogger('web:proxy')
 

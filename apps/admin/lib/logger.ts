@@ -6,9 +6,10 @@
  */
 
 import { createLogger, type ILogger, type LogContext } from '@ironscout/logger'
+import { wrapLoggerWithSlack } from '@ironscout/notifications'
 
 // Root logger for admin service
-const rootLogger = createLogger('admin')
+const rootLogger = wrapLoggerWithSlack(createLogger('admin'), { service: 'admin' })
 
 // Pre-configured child loggers for admin components
 export const logger = rootLogger

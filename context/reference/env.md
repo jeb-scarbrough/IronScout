@@ -61,6 +61,21 @@ If you use separate roles:
 
 ---
 
+## Slack (Ops Alerts)
+
+Optional but recommended for **API, Web, Merchant, Admin, Harvester**.
+
+Used by `@ironscout/notifications` and Slack-wrapped loggers to send
+error/fatal alerts via Incoming Webhooks.
+
+Variables:
+- `SLACK_MERCHANT_OPS_WEBHOOK_URL` - Primary ops channel webhook
+- `SLACK_DATAFEED_ALERTS_WEBHOOK_URL` - Optional separate channel for datafeed alerts
+
+If unset, Slack notifications are skipped (fail open).
+
+---
+
 ## apps/api
 
 Required:

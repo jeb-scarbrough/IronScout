@@ -6,9 +6,10 @@
  */
 
 import { createLogger, type ILogger, type LogContext } from '@ironscout/logger'
+import { wrapLoggerWithSlack } from '@ironscout/notifications'
 
 // Root logger for merchant service
-const rootLogger = createLogger('merchant')
+const rootLogger = wrapLoggerWithSlack(createLogger('merchant'), { service: 'merchant' })
 
 // Pre-configured child loggers for merchant components
 export const logger = rootLogger

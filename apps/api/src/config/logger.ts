@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from '@ironscout/logger'
+import { wrapLoggerWithSlack } from '@ironscout/notifications'
 
 // Standard context fields for all API logs
 const SERVICE = 'api'
@@ -20,7 +21,7 @@ const ENV = process.env.NODE_ENV || 'development'
 const VERSION = process.env.npm_package_version || '1.0.0'
 
 // Root logger for API service with standard context
-export const logger = createLogger(SERVICE)
+export const logger = wrapLoggerWithSlack(createLogger(SERVICE), { service: SERVICE })
 
 // Pre-configured child loggers for common components
 // Each child logger inherits the service name and adds its component path

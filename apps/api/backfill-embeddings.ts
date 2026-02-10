@@ -14,9 +14,12 @@
 import 'dotenv/config'
 
 import { createLogger } from '@ironscout/logger'
+import { wrapLoggerWithSlack } from '@ironscout/notifications'
 import { backfillProductEmbeddings } from './src/services/ai-search/embedding-service'
 
-const log = createLogger('api:backfill-embeddings')
+const log = wrapLoggerWithSlack(createLogger('api:backfill-embeddings'), {
+  service: 'api:backfill-embeddings',
+})
 
 async function main() {
   log.info('Starting embedding backfill')

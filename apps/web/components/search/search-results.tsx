@@ -4,7 +4,7 @@ import { SearchResultsGridV2 } from '@/components/results'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { SearchHeader } from './search-header'
-import { createLogger } from '@/lib/logger'
+import { createLogger } from '@/lib/server-logger'
 
 const logger = createLogger('search-results')
 

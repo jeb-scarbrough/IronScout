@@ -150,7 +150,9 @@ function validateEnv(): ValidatedEnv {
 // ============================================================================
 
 async function alertMissingEnvVars(missing: string[]): Promise<void> {
-  const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL
+  const slackWebhookUrl =
+    process.env.SLACK_MERCHANT_OPS_WEBHOOK_URL
+    ?? process.env.SLACK_DATAFEED_ALERTS_WEBHOOK_URL
   if (!slackWebhookUrl) {
     logger.error('[CRITICAL] Missing env vars and no Slack webhook configured', { missing })
     return

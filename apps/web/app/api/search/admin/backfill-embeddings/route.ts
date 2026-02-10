@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAdminAccessToken } from '@/lib/admin-session'
-import { createLogger } from '@ironscout/logger'
+import { createLogger } from '@/lib/server-logger'
 
 const logger = createLogger('web:api:admin')
 

@@ -6,7 +6,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createLogger } from '@/lib/logger'
+import { createLogger } from '@/lib/server-logger'
 import { env } from '@/lib/env'
 
 const logger = createLogger('api:signup')
