@@ -490,7 +490,7 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     const orphanedPricesCount = Number(orphanedPrices[0]?.count ?? 0);
     checks.push({
       name: 'Orphaned Price Records',
-      description: 'Prices with sourceId pointing to non-existent sources',
+      description: 'Orphaned prices break provenance chains and ADR-015 correction scoping. Indicates a source was hard-deleted without cleanup.',
       status: orphanedPricesCount === 0 ? 'ok' : 'warning',
       count: orphanedPricesCount,
       message: orphanedPricesCount === 0
@@ -508,7 +508,7 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     const sourcesWithoutRetailerCount = Number(sourcesWithoutRetailer[0]?.count ?? 0);
     checks.push({
       name: 'Sources Without Retailer',
-      description: 'Sources must have a retailerId (required field)',
+      description: 'Per ADR-016, every source must belong to a retailer. NULL retailerId breaks the visibility chain.',
       status: sourcesWithoutRetailerCount === 0 ? 'ok' : 'error',
       count: sourcesWithoutRetailerCount,
       message: sourcesWithoutRetailerCount === 0
@@ -527,7 +527,7 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     const suppressedEnabledCount = Number(suppressedEnabledAlerts[0]?.count ?? 0);
     checks.push({
       name: 'Suppressed But Enabled Alerts',
-      description: 'Suppressed alerts should typically be disabled',
+      description: 'Suppressed alerts (ADR-015 correction) with isEnabled=true indicate incomplete suppression cleanup.',
       status: suppressedEnabledCount === 0 ? 'ok' : 'warning',
       count: suppressedEnabledCount,
       message: suppressedEnabledCount === 0
@@ -547,7 +547,7 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     const pricesWithoutProvenanceCount = Number(recentPricesWithoutProvenance[0]?.count ?? 0);
     checks.push({
       name: 'Recent Prices Without Provenance',
-      description: 'ADR-015: New prices must include ingestionRunType and ingestionRunId',
+      description: 'ADR-015: Prices without provenance cannot participate in correction/ignore workflows.',
       status: pricesWithoutProvenanceCount === 0 ? 'ok' : 'warning',
       count: pricesWithoutProvenanceCount,
       message: pricesWithoutProvenanceCount === 0
@@ -557,6 +557,491 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     });
 
     // NOTE: pricing_snapshots provenance check removed - table deleted (benchmark subsystem removed for v1)
+
+    // =========================================================================
+    // Check 5: Stuck Runs (ADR-001)
+    // =========================================================================
+    const stuckAffiliate = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM affiliate_feed_runs
+      WHERE status = 'RUNNING' AND "finishedAt" IS NULL
+        AND "expiryBlocked" = false
+        AND "startedAt" < NOW() - INTERVAL '2 hours'
+    `;
+    const stuckExecutions = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM executions
+      WHERE status = 'RUNNING' AND "completedAt" IS NULL
+        AND "startedAt" < NOW() - INTERVAL '1 hour'
+    `;
+    const stuckScrape = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM scrape_runs
+      WHERE status = 'RUNNING' AND "completedAt" IS NULL
+        AND "startedAt" < NOW() - INTERVAL '1 hour'
+    `;
+    const stuckTotal = Number(stuckAffiliate[0]?.count ?? 0)
+      + Number(stuckExecutions[0]?.count ?? 0)
+      + Number(stuckScrape[0]?.count ?? 0);
+    checks.push({
+      name: 'Stuck Runs',
+      description: 'Runs stuck in RUNNING indicate worker crash/deadlock. Blocks scheduling and leaves CVP stale.',
+      status: stuckTotal === 0 ? 'ok' : 'error',
+      count: stuckTotal,
+      message: stuckTotal === 0
+        ? 'No stuck runs detected'
+        : `${stuckTotal} runs stuck in RUNNING state (affiliate >2h, execution/scrape >1h)`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 6: Ignored Run Prices Still Visible (ADR-015)
+    // =========================================================================
+    const ignoredRunPrices = await prisma.$queryRaw<{ count: bigint }[]>`
+      WITH ignored_affiliate AS (
+        SELECT id FROM affiliate_feed_runs WHERE "ignoredAt" IS NOT NULL
+      ),
+      ignored_retailer AS (
+        SELECT id FROM retailer_feed_runs WHERE "ignoredAt" IS NOT NULL
+      ),
+      ignored_execution AS (
+        SELECT id FROM executions WHERE "ignoredAt" IS NOT NULL
+      ),
+      all_ignored AS (
+        SELECT id FROM ignored_affiliate
+        UNION ALL SELECT id FROM ignored_retailer
+        UNION ALL SELECT id FROM ignored_execution
+      )
+      SELECT COUNT(*) as count
+      FROM current_visible_prices cvp
+      LEFT JOIN prices p ON p.id = cvp.id
+      WHERE (
+        (p."ingestionRunType" = 'AFFILIATE_FEED' AND p."ingestionRunId" IN (SELECT id FROM ignored_affiliate))
+        OR (p."ingestionRunType" = 'RETAILER_FEED' AND p."ingestionRunId" IN (SELECT id FROM ignored_retailer))
+        OR (p."ingestionRunType" = 'SCRAPE' AND p."ingestionRunId" IN (SELECT id FROM ignored_execution))
+        OR (p."ingestionRunType" IS NULL AND p."ingestionRunId" IN (SELECT id FROM all_ignored))
+        OR (p."affiliateFeedRunId" IN (SELECT id FROM ignored_affiliate))
+      )
+    `;
+    const ignoredRunPricesCount = Number(ignoredRunPrices[0]?.count ?? 0);
+    checks.push({
+      name: 'Ignored Run Prices Still Visible',
+      description: 'ADR-015: Prices from ignored runs must not appear in current_visible_prices.',
+      status: ignoredRunPricesCount === 0 ? 'ok' : 'error',
+      count: ignoredRunPricesCount,
+      message: ignoredRunPricesCount === 0
+        ? 'No ignored-run prices in current_visible_prices'
+        : `${ignoredRunPricesCount} prices from ignored runs still visible — recompute may not have run`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 7: Stale Current Visible Prices
+    // =========================================================================
+    const cvpStats = await prisma.$queryRaw<{ stale_count: bigint; total_count: bigint }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE "recomputedAt" < NOW() - INTERVAL '30 minutes') as stale_count,
+        COUNT(*) as total_count
+      FROM current_visible_prices
+    `;
+    const staleCount = Number(cvpStats[0]?.stale_count ?? 0);
+    const cvpTotalCount = Number(cvpStats[0]?.total_count ?? 0);
+
+    let cvpEmpty = false;
+    if (cvpTotalCount === 0) {
+      const recentRuns = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM (
+          (SELECT 1 FROM affiliate_feed_runs WHERE status = 'SUCCEEDED' AND "pricesWritten" > 0 AND "finishedAt" > NOW() - INTERVAL '24 hours' LIMIT 1)
+          UNION ALL
+          (SELECT 1 FROM retailer_feed_runs WHERE status IN ('SUCCESS', 'WARNING') AND "completedAt" > NOW() - INTERVAL '24 hours' LIMIT 1)
+          UNION ALL
+          (SELECT 1 FROM executions WHERE status = 'SUCCESS' AND "itemsUpserted" > 0 AND "completedAt" > NOW() - INTERVAL '24 hours' LIMIT 1)
+          UNION ALL
+          (SELECT 1 FROM scrape_runs WHERE status = 'SUCCESS' AND "completedAt" > NOW() - INTERVAL '24 hours' LIMIT 1)
+        ) recent_runs
+      `;
+      cvpEmpty = Number(recentRuns[0]?.count ?? 0) > 0;
+    }
+
+    const staleCvpWarning = staleCount > 0 || cvpEmpty;
+    checks.push({
+      name: 'Stale Current Visible Prices',
+      description: 'CVP table should be refreshed every 5 min by recompute scheduler. Stale or empty = consumers see outdated data.',
+      status: staleCvpWarning ? 'warning' : 'ok',
+      count: staleCount || (cvpEmpty ? -1 : 0),
+      message: cvpEmpty
+        ? 'Empty CVP with recent ingestion activity. May be legitimate if all data is filtered by eligibility/corrections — investigate recompute logs.'
+        : staleCount > 0
+          ? `${staleCount} rows have recomputedAt >30 min old`
+          : `${cvpTotalCount} rows, all fresh`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 8: Provenance Run ID Validity (ADR-015)
+    // =========================================================================
+    const invalidProvenance = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM prices p
+      WHERE p."ingestionRunId" IS NOT NULL
+        AND p."ingestionRunType" IS NOT NULL
+        AND p."ingestionRunType" IN ('AFFILIATE_FEED', 'RETAILER_FEED', 'SCRAPE')
+        AND p."createdAt" > NOW() - INTERVAL '7 days'
+        AND NOT (
+          (p."ingestionRunType" = 'AFFILIATE_FEED' AND EXISTS (SELECT 1 FROM affiliate_feed_runs WHERE id = p."ingestionRunId"))
+          OR (p."ingestionRunType" = 'RETAILER_FEED' AND EXISTS (SELECT 1 FROM retailer_feed_runs WHERE id = p."ingestionRunId"))
+          OR (p."ingestionRunType" = 'SCRAPE' AND (
+            EXISTS (SELECT 1 FROM scrape_runs WHERE id = p."ingestionRunId")
+            OR EXISTS (SELECT 1 FROM executions WHERE id = p."ingestionRunId")
+          ))
+        )
+    `;
+    const invalidProvenanceCount = Number(invalidProvenance[0]?.count ?? 0);
+    checks.push({
+      name: 'Provenance Run ID Validity',
+      description: 'ADR-015: ingestionRunId must reference a valid run in the corresponding table. Broken provenance blocks corrections.',
+      status: invalidProvenanceCount === 0 ? 'ok' : 'error',
+      count: invalidProvenanceCount,
+      message: invalidProvenanceCount === 0
+        ? 'All recent prices reference valid runs'
+        : `${invalidProvenanceCount} prices (last 7 days) reference non-existent runs`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 9: Provenance Consistency (ADR-015)
+    // =========================================================================
+    const provenanceMismatch = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM prices p
+      WHERE p."createdAt" > NOW() - INTERVAL '7 days'
+        AND (
+          (p."affiliateFeedRunId" IS NOT NULL AND p."ingestionRunType" IS DISTINCT FROM 'AFFILIATE_FEED')
+          OR (p."ingestionRunType" = 'AFFILIATE_FEED' AND p."affiliateFeedRunId" IS NULL AND p."ingestionRunId" IS NOT NULL)
+        )
+    `;
+    const provenanceMismatchCount = Number(provenanceMismatch[0]?.count ?? 0);
+    checks.push({
+      name: 'Provenance Consistency',
+      description: 'Legacy affiliateFeedRunId and new ingestionRunType/Id must agree. Mismatches cause inconsistent ignore filtering.',
+      status: provenanceMismatchCount === 0 ? 'ok' : 'warning',
+      count: provenanceMismatchCount,
+      message: provenanceMismatchCount === 0
+        ? 'Legacy and new provenance fields are consistent'
+        : `${provenanceMismatchCount} prices (last 7 days) have mismatched provenance fields`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 10: ObservedAt Future Timestamps
+    // =========================================================================
+    const futureObservedAt = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM prices
+      WHERE "observedAt" > NOW() + INTERVAL '5 minutes'
+        AND "createdAt" > NOW() - INTERVAL '24 hours'
+    `;
+    const futureObservedAtCount = Number(futureObservedAt[0]?.count ?? 0);
+    checks.push({
+      name: 'ObservedAt Future Timestamps',
+      description: 'Future observedAt breaks correction matching, price ordering, and lookback queries. 5-min skew tolerance applied.',
+      status: futureObservedAtCount === 0 ? 'ok' : 'warning',
+      count: futureObservedAtCount,
+      message: futureObservedAtCount === 0
+        ? 'No future-dated prices in last 24h'
+        : `${futureObservedAtCount} prices (last 24h) have observedAt >5 min in the future`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 11: Visible Prices Violating Retailer Visibility (ADR-005)
+    // =========================================================================
+    const visibilityViolations = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM current_visible_prices cvp
+      JOIN retailers r ON r.id = cvp."retailerId"
+      WHERE r."visibilityStatus" != 'ELIGIBLE'
+        OR (
+          r."visibilityStatus" = 'ELIGIBLE'
+          AND EXISTS (
+            SELECT 1 FROM merchant_retailers mr
+            WHERE mr."retailerId" = r.id AND mr.status = 'ACTIVE'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM merchant_retailers mr
+            WHERE mr."retailerId" = r.id AND mr.status = 'ACTIVE' AND mr."listingStatus" = 'LISTED'
+          )
+        )
+    `;
+    const visibilityViolationsCount = Number(visibilityViolations[0]?.count ?? 0);
+    checks.push({
+      name: 'Visible Prices Violating Retailer Visibility',
+      description: 'ADR-005: CVP rows from ineligible/unlisted retailers. Trust violation — consumers see hidden prices.',
+      status: visibilityViolationsCount === 0 ? 'ok' : 'error',
+      count: visibilityViolationsCount,
+      message: visibilityViolationsCount === 0
+        ? 'All visible prices comply with retailer visibility rules'
+        : `${visibilityViolationsCount} CVP rows violate ADR-005 visibility. May resolve after next recompute cycle.`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 12: SCRAPE Guardrail Compliance (ADR-021)
+    // =========================================================================
+    const scrapeViolations = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM current_visible_prices cvp
+      LEFT JOIN sources s ON s.id = cvp."sourceId"
+      LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
+      WHERE cvp."ingestionRunType" = 'SCRAPE'
+        AND (
+          s.id IS NULL
+          OR s."scrapeEnabled" = false
+          OR s."robotsCompliant" = false
+          OR s."tosReviewedAt" IS NULL
+          OR s."tosApprovedBy" IS NULL
+          OR sas."adapterId" IS NULL
+          OR sas."enabled" = false
+        )
+    `;
+    const scrapeViolationsCount = Number(scrapeViolations[0]?.count ?? 0);
+    checks.push({
+      name: 'SCRAPE Guardrail Compliance',
+      description: 'ADR-021: Visible SCRAPE data must pass all guardrails (scrapeEnabled, robots, ToS, adapter). Legal/compliance risk.',
+      status: scrapeViolationsCount === 0 ? 'ok' : 'error',
+      count: scrapeViolationsCount,
+      message: scrapeViolationsCount === 0
+        ? 'All visible SCRAPE prices pass guardrails'
+        : `${scrapeViolationsCount} SCRAPE prices visible with failing guardrails`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 13: Orphaned Product Supersession Chains
+    // =========================================================================
+    const orphanedSupersession = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM products p
+      WHERE p."supersededById" IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM products p2 WHERE p2.id = p."supersededById"
+        )
+    `;
+    const orphanedSupersessionCount = Number(orphanedSupersession[0]?.count ?? 0);
+    checks.push({
+      name: 'Orphaned Product Supersession Chains',
+      description: 'supersededById pointing to non-existent product breaks resolveSupersededSku() chain resolution.',
+      status: orphanedSupersessionCount === 0 ? 'ok' : 'warning',
+      count: orphanedSupersessionCount,
+      message: orphanedSupersessionCount === 0
+        ? 'All supersession chains are valid'
+        : `${orphanedSupersessionCount} products have broken supersession links`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 14: Supersession Cycle Reachability
+    // =========================================================================
+    const supersessionCycles = await prisma.$queryRaw<{ count: bigint }[]>`
+      WITH RECURSIVE chain AS (
+        SELECT
+          id as origin_id,
+          "supersededById" as next_id,
+          ARRAY[id] as visited,
+          false as is_cycle
+        FROM products
+        WHERE "supersededById" IS NOT NULL
+        UNION ALL
+        SELECT
+          c.origin_id,
+          p."supersededById",
+          c.visited || c.next_id,
+          p."supersededById" IS NOT NULL AND p."supersededById" = ANY(c.visited || c.next_id) as is_cycle
+        FROM chain c
+        JOIN products p ON p.id = c.next_id
+        WHERE c.is_cycle = false
+          AND array_length(c.visited, 1) < 10
+      ),
+      cycle_members AS (
+        SELECT DISTINCT unnest(visited || next_id) as product_id
+        FROM chain
+        WHERE is_cycle = true
+      )
+      SELECT COUNT(*) as count FROM cycle_members
+    `;
+    const supersessionCycleCount = Number(supersessionCycles[0]?.count ?? 0);
+    checks.push({
+      name: 'Supersession Cycle Reachability',
+      description: 'Products whose supersession chain enters a cycle cannot resolve to a valid current SKU.',
+      status: supersessionCycleCount === 0 ? 'ok' : 'warning',
+      count: supersessionCycleCount,
+      message: supersessionCycleCount === 0
+        ? 'No supersession cycles detected'
+        : `${supersessionCycleCount} products whose supersession chain enters a cycle`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 15: Duplicate Active Watchlist Items (ADR-011)
+    // =========================================================================
+    const duplicateWatchlist = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM (
+        SELECT "userId", "productId"
+        FROM watchlist_items
+        WHERE "intent_type" = 'SKU'
+          AND "deleted_at" IS NULL
+          AND "productId" IS NOT NULL
+        GROUP BY "userId", "productId"
+        HAVING COUNT(*) > 1
+      ) dupes
+    `;
+    const duplicateWatchlistCount = Number(duplicateWatchlist[0]?.count ?? 0);
+    checks.push({
+      name: 'Duplicate Active Watchlist Items',
+      description: 'ADR-011: Partial unique index should prevent duplicates. Indicates race condition or index corruption.',
+      status: duplicateWatchlistCount === 0 ? 'ok' : 'error',
+      count: duplicateWatchlistCount,
+      message: duplicateWatchlistCount === 0
+        ? 'No duplicate active watchlist items'
+        : `${duplicateWatchlistCount} user+product pairs have duplicate active SKU items`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 16: SKU Intent Invariants (ADR-011)
+    // =========================================================================
+    const skuInvariantViolations = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM watchlist_items
+      WHERE "deleted_at" IS NULL
+        AND (
+          "intent_type" != 'SKU'
+          OR ("intent_type" = 'SKU' AND "productId" IS NULL)
+        )
+    `;
+    const skuInvariantCount = Number(skuInvariantViolations[0]?.count ?? 0);
+    checks.push({
+      name: 'SKU Intent Invariants',
+      description: 'V1 only supports SKU intent with non-null productId. Violations crash alerter/API/dashboard.',
+      status: skuInvariantCount === 0 ? 'ok' : 'error',
+      count: skuInvariantCount,
+      message: skuInvariantCount === 0
+        ? 'All active watchlist items have valid SKU intent'
+        : `${skuInvariantCount} active items violate SKU intent invariants`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 17: Stale Notification Claims
+    // =========================================================================
+    const staleClaims = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM watchlist_items
+      WHERE "deleted_at" IS NULL
+        AND (
+          ("price_notification_claimed_at" IS NOT NULL
+           AND "price_notification_claimed_at" < NOW() - INTERVAL '15 minutes')
+          OR
+          ("stock_notification_claimed_at" IS NOT NULL
+           AND "stock_notification_claimed_at" < NOW() - INTERVAL '15 minutes')
+        )
+    `;
+    const staleClaimsCount = Number(staleClaims[0]?.count ?? 0);
+    checks.push({
+      name: 'Stale Notification Claims',
+      description: 'Claims >15 min old (3x stale threshold) indicate systematic worker failures — notifications not being delivered.',
+      status: staleClaimsCount === 0 ? 'ok' : 'warning',
+      count: staleClaimsCount,
+      message: staleClaimsCount === 0
+        ? 'No stale notification claims'
+        : `${staleClaimsCount} watchlist items with claims older than 15 minutes`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 18: Enabled Alerts for Deleted Watchlist Items
+    // =========================================================================
+    const enabledAlertsDeleted = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM alerts a
+      JOIN watchlist_items wi ON wi.id = a."watchlistItemId"
+      WHERE a."isEnabled" = true
+        AND wi."deleted_at" IS NOT NULL
+    `;
+    const enabledAlertsDeletedCount = Number(enabledAlertsDeleted[0]?.count ?? 0);
+    checks.push({
+      name: 'Enabled Alerts for Deleted Watchlist Items',
+      description: 'Soft-delete cleanup should disable associated alerts. Enabled alerts on deleted items send unwanted notifications.',
+      status: enabledAlertsDeletedCount === 0 ? 'ok' : 'warning',
+      count: enabledAlertsDeletedCount,
+      message: enabledAlertsDeletedCount === 0
+        ? 'No enabled alerts on deleted watchlist items'
+        : `${enabledAlertsDeletedCount} alerts still enabled for soft-deleted items`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 19: Invalid Corrections (ADR-015)
+    // =========================================================================
+    const invalidCorrections = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM price_corrections
+      WHERE "revokedAt" IS NULL
+        AND (
+          "startTs" >= "endTs"
+          OR (action = 'MULTIPLIER' AND (value IS NULL OR value <= 0))
+          OR (action = 'IGNORE' AND value IS NOT NULL)
+        )
+    `;
+    const invalidCorrectionsCount = Number(invalidCorrections[0]?.count ?? 0);
+    checks.push({
+      name: 'Invalid Corrections',
+      description: 'ADR-015: Active corrections with inverted windows, invalid MULTIPLIER values, or contradictory IGNORE values.',
+      status: invalidCorrectionsCount === 0 ? 'ok' : 'error',
+      count: invalidCorrectionsCount,
+      message: invalidCorrectionsCount === 0
+        ? 'All active corrections have valid parameters'
+        : `${invalidCorrectionsCount} active corrections with invalid parameters`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 20: Fully Orphaned Alert Events — Last 30 Days (ADR-009)
+    // =========================================================================
+    const orphanedEvents = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count FROM alert_events
+      WHERE "createdAt" > NOW() - INTERVAL '30 days'
+        AND "userId" IS NULL
+        AND "productId" IS NULL
+        AND "retailerId" IS NULL
+        AND "watchlistItemId" IS NULL
+        AND "alertId" IS NULL
+        AND "sourceId" IS NULL
+        AND "triggerPriceId" IS NULL
+    `;
+    const orphanedEventsCount = Number(orphanedEvents[0]?.count ?? 0);
+    checks.push({
+      name: 'Fully Orphaned Alert Events',
+      description: 'ADR-009: Events with all 7 FKs nulled have lost all context. Growing count suggests excessive entity deletions.',
+      status: orphanedEventsCount === 0 ? 'ok' : 'warning',
+      count: orphanedEventsCount,
+      message: orphanedEventsCount === 0
+        ? 'No fully orphaned alert events in last 30 days'
+        : `${orphanedEventsCount} alert events (last 30 days) with all parent FKs null`,
+      lastChecked: now,
+    });
+
+    // =========================================================================
+    // Check 21: CVP Rows Orphaned from Prices
+    // =========================================================================
+    const cvpOrphaned = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) as count
+      FROM current_visible_prices cvp
+      LEFT JOIN prices p ON p.id = cvp.id
+      WHERE p.id IS NULL
+    `;
+    const cvpOrphanedCount = Number(cvpOrphaned[0]?.count ?? 0);
+    checks.push({
+      name: 'CVP Rows Orphaned from Prices',
+      description: 'CVP rows with no matching prices row indicate failed recompute or unsafe price deletion.',
+      status: cvpOrphanedCount === 0 ? 'ok' : 'error',
+      count: cvpOrphanedCount,
+      message: cvpOrphanedCount === 0
+        ? 'All CVP rows reference valid prices'
+        : `${cvpOrphanedCount} current_visible_prices rows have no matching price record`,
+      lastChecked: now,
+    });
 
     // Determine overall status
     let overallStatus: 'ok' | 'warning' | 'error' = 'ok';
