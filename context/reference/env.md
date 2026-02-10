@@ -76,6 +76,7 @@ Auth:
 Optional:
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
 - `INTERNAL_API_KEY` - For internal service-to-service calls
+- `ADMIN_API_KEY` - Shared secret validated via `X-Admin-Key` header from admin proxy routes. Must match the same key in `apps/admin`.
 
 AI/Search:
 - `OPENAI_API_KEY` (or equivalent provider key)
@@ -148,7 +149,8 @@ Required:
 - `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 - `NEXT_PUBLIC_ADMIN_API_URL` (if admin calls API directly)
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
- - `MERCHANT_EMAIL_FROM` - Sender for merchant-facing admin emails
+- `MERCHANT_EMAIL_FROM` - Sender for merchant-facing admin emails
+- `ADMIN_API_KEY` - Shared secret sent as `X-Admin-Key` header when admin proxies requests to API. Must match the same key in `apps/api`. Without this, admin proxy routes (e.g. embedding stats) return 503.
 
 Important:
 - Admin impersonation must not bypass eligibility enforcement (or tier enforcement if reintroduced).

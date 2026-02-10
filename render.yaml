@@ -54,6 +54,8 @@ envVarGroups:
         sync: false
       - key: ADMIN_EMAILS
         sync: false
+      - key: ADMIN_API_KEY
+        sync: false  # Shared secret for admin→API proxy auth (must match in API and Admin)
 
   - name: ironscout-redis
     envVars:
