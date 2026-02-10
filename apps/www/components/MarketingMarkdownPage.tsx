@@ -1,4 +1,5 @@
 import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import Link from 'next/link'
 import { Header } from '@/app/components/Header'
 import { MarketingFooter } from '@/components/MarketingFooter'
@@ -129,6 +130,7 @@ export function MarketingMarkdownPage({
         {/* Article body */}
         <article className="prose prose-invert prose-iron max-w-none">
           <Markdown
+            remarkPlugins={[remarkGfm]}
             components={{
               h2: ({ children }) => (
                 <h2 className="text-2xl md:text-3xl font-semibold text-iron-100 mt-12 mb-5 pb-2 border-b border-iron-800/60">

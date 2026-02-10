@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Save, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { updateSource, type SourceType } from '../actions';
+import { KNOWN_ADAPTERS } from '@ironscout/scraper-registry';
 
 const SOURCE_TYPES: { value: SourceType; label: string; description: string }[] = [
   { value: 'HTML', label: 'HTML', description: 'Standard HTML page' },
@@ -267,13 +268,18 @@ export function EditSourceForm({ source, retailers }: EditSourceFormProps) {
                 <label className="block text-sm font-medium text-gray-700">
                   Adapter ID
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.adapterId}
                   onChange={(e) => updateField('adapterId', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono"
-                  placeholder="e.g., sgammo, primaryarms"
-                />
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                >
+                  <option value="">None</option>
+                  {KNOWN_ADAPTERS.map((adapter) => (
+                    <option key={adapter.id} value={adapter.id}>
+                      {adapter.id} — {adapter.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="sm:col-span-2">
