@@ -150,6 +150,7 @@ Required:
 - `NEXT_PUBLIC_ADMIN_API_URL` (if admin calls API directly)
 - `ADMIN_EMAILS` - Comma-separated list of admin email addresses
 - `MERCHANT_EMAIL_FROM` - Sender for merchant-facing admin emails
+- `API_URL` - Internal URL of the API service (e.g. `https://api.ironscout.ai`). Used by admin proxy routes. Falls back to `http://localhost:8000` if unset.
 - `ADMIN_API_KEY` - Shared secret sent as `X-Admin-Key` header when admin proxies requests to API. Must match the same key in `apps/api`. Without this, admin proxy routes (e.g. embedding stats) return 503.
 
 Important:

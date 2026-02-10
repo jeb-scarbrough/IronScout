@@ -189,6 +189,8 @@ services:
         value: https://admin.ironscout.ai
       - key: AUTH_TRUST_HOST
         value: true
+      - key: API_URL
+        value: https://api.ironscout.ai
 
   # --------------------------------------------------------------------------
   # Marketing Site (static) - www.ironscout.ai
