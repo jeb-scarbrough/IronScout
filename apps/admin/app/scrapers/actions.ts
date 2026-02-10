@@ -427,6 +427,150 @@ export async function createScrapeTarget(data: CreateTargetInput): Promise<{ suc
   }
 }
 
+// =============================================================================
+// Bulk Import
+// =============================================================================
+
+export interface BulkCreateResult {
+  success: boolean
+  created: number
+  skipped: number
+  errors: Array<{ row: number; url: string; error: string }>
+}
+
+export async function bulkCreateScrapeTargets(
+  rows: Array<{ url: string; adapterId: string; priority?: number }>,
+  sourceId: string
+): Promise<BulkCreateResult> {
+  const session = await getAdminSession()
+  if (!session) return { success: false, created: 0, skipped: 0, errors: [{ row: 0, url: '', error: 'Unauthorized' }] }
+
+  if (!sourceId?.trim()) {
+    return { success: false, created: 0, skipped: 0, errors: [{ row: 0, url: '', error: 'Source is required' }] }
+  }
+
+  if (!rows || rows.length === 0) {
+    return { success: false, created: 0, skipped: 0, errors: [{ row: 0, url: '', error: 'No rows provided' }] }
+  }
+
+  try {
+    // Verify source exists
+    const source = await prisma.sources.findUnique({
+      where: { id: sourceId },
+      select: { id: true, adapterId: true, scrapeEnabled: true },
+    })
+
+    if (!source) {
+      return { success: false, created: 0, skipped: 0, errors: [{ row: 0, url: '', error: 'Source not found' }] }
+    }
+
+    // Validate and prepare rows
+    const validRows: Array<{
+      url: string
+      canonicalUrl: string
+      sourceId: string
+      adapterId: string
+      priority: number
+      enabled: boolean
+      status: 'ACTIVE'
+    }> = []
+    const errors: Array<{ row: number; url: string; error: string }> = []
+    const canonicalsSeen = new Set<string>()
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]!
+      const rowNum = i + 1 // 1-indexed for user display
+
+      // Validate URL
+      const urlError = validateUrl(row.url?.trim())
+      if (urlError) {
+        errors.push({ row: rowNum, url: row.url, error: urlError })
+        continue
+      }
+
+      // Validate adapter matches source
+      if (source.adapterId && row.adapterId !== source.adapterId) {
+        errors.push({
+          row: rowNum,
+          url: row.url,
+          error: `Adapter "${row.adapterId}" does not match source adapter "${source.adapterId}"`,
+        })
+        continue
+      }
+
+      // Validate priority
+      const priority = row.priority ?? 0
+      if (priority < 0 || priority > 100) {
+        errors.push({ row: rowNum, url: row.url, error: 'Priority must be between 0 and 100' })
+        continue
+      }
+
+      // Canonicalize
+      let canonical: string
+      try {
+        canonical = canonicalizeUrl(row.url.trim())
+      } catch {
+        errors.push({ row: rowNum, url: row.url, error: 'Failed to canonicalize URL' })
+        continue
+      }
+
+      // Deduplicate within the batch
+      if (canonicalsSeen.has(canonical)) {
+        continue // silently skip in-batch duplicates
+      }
+      canonicalsSeen.add(canonical)
+
+      validRows.push({
+        url: row.url.trim(),
+        canonicalUrl: canonical,
+        sourceId,
+        adapterId: row.adapterId,
+        priority,
+        enabled: true,
+        status: 'ACTIVE',
+      })
+    }
+
+    if (validRows.length === 0) {
+      return { success: true, created: 0, skipped: 0, errors }
+    }
+
+    // Check for existing targets to count skipped
+    const existingTargets = await prisma.scrape_targets.findMany({
+      where: {
+        sourceId,
+        canonicalUrl: { in: validRows.map((r) => r.canonicalUrl) },
+      },
+      select: { canonicalUrl: true },
+    })
+    const existingCanonicals = new Set(existingTargets.map((t) => t.canonicalUrl))
+    const skipped = validRows.filter((r) => existingCanonicals.has(r.canonicalUrl)).length
+
+    // Bulk insert, skip duplicates
+    const result = await prisma.scrape_targets.createMany({
+      data: validRows,
+      skipDuplicates: true,
+    })
+
+    await logAdminAction(session.userId, 'BULK_CREATE_SCRAPE_TARGETS', {
+      resource: 'ScrapeTarget',
+      newValue: {
+        sourceId,
+        totalRows: rows.length,
+        created: result.count,
+        skipped,
+        errors: errors.length,
+      },
+    })
+
+    revalidatePath('/scrapers')
+    return { success: true, created: result.count, skipped, errors }
+  } catch (error) {
+    log.error('Failed to bulk create scrape targets', { sourceId, rowCount: rows.length }, error instanceof Error ? error : new Error(String(error)))
+    return { success: false, created: 0, skipped: 0, errors: [{ row: 0, url: '', error: 'Failed to create targets' }] }
+  }
+}
+
 export async function updateScrapeTarget(
   id: string,
   data: { priority?: number; schedule?: string | null; enabled?: boolean }
