@@ -41,6 +41,7 @@ import { gunLockerRouter } from './routes/gun-locker'
 import { firearmAmmoPreferenceRouter, ammoPreferencesRouter } from './routes/firearm-ammo-preference'
 import { priceCheckRouter } from './routes/price-check'
 import { adminRouter } from './routes/admin'
+import { reviewQueueRouter } from './routes/review-queue'
 import { usersRouter } from './routes/users'
 import { classifyError, getSafeMessage } from './lib/errors'
 import { getRequestContext } from '@ironscout/logger'
@@ -194,6 +195,7 @@ app.use('/api/gun-locker', firearmAmmoPreferenceRouter) // Ammo preferences nest
 app.use('/api/ammo-preferences', ammoPreferencesRouter)  // User-level ammo preferences (My Loadout)
 app.use('/api/price-check', priceCheckRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/review-queue', reviewQueueRouter)
 app.use('/api/users', usersRouter)
 
 // Error logger middleware - logs errors with classification

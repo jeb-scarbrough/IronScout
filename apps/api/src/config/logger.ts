@@ -37,6 +37,7 @@ export const loggers = {
   admin: logger.child('admin', { env: ENV, version: VERSION }),
   email: logger.child('email', { env: ENV, version: VERSION }),
   ai: logger.child('ai', { env: ENV, version: VERSION }),
+  reviewQueue: logger.child('reviewQueue', { env: ENV, version: VERSION }),
 }
 
 /**
