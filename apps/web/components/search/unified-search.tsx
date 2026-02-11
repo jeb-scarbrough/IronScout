@@ -9,13 +9,9 @@ import { PremiumFilters } from '@/components/premium'
 import { cn } from '@/lib/utils'
 import { useSearchLoading } from './search-loading-context'
 import { safeLogger } from '@/lib/safe-logger'
+import { env } from '@/lib/env'
 
-// Common calibers for the ammunition market
-const CALIBERS = [
-  '9mm', '.45 ACP', '.40 S&W', '.380 ACP', '.38 Special', '.357 Magnum',
-  '.223 Remington', '5.56 NATO', '.308 Winchester', '7.62x39', '6.5 Creedmoor',
-  '.300 Blackout', '12 Gauge', '20 Gauge', '.22 LR', '.17 HMR'
-]
+const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
 const PURPOSES = [
   'Target', 'Defense', 'Hunting', 'Competition', 'Plinking', 'Training'
@@ -71,6 +67,16 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
+
+  // Dynamic caliber list from database
+  const [calibers, setCalibers] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/search/calibers`)
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data) => setCalibers((data.calibers || []).map((c: { value: string }) => c.value)))
+      .catch(() => {}) // Fail silently
+  }, [])
 
   // Filter state - collapsed by default
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -431,7 +437,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                 style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
               >
                 <option value="">Caliber</option>
-                {CALIBERS.map(cal => (
+                {calibers.map(cal => (
                   <option key={cal} value={cal}>{cal}</option>
                 ))}
               </select>
@@ -521,7 +527,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
               style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
             >
               <option value="">Caliber</option>
-              {CALIBERS.map(cal => (
+              {calibers.map(cal => (
                 <option key={cal} value={cal}>{cal}</option>
               ))}
             </select>

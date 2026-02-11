@@ -8,27 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Slider } from '@/components/ui/slider'
 import { Filter, X } from 'lucide-react'
+import { env } from '@/lib/env'
 
-// Ammo-specific filter options
-const calibers = [
-  '9mm',
-  '.45 ACP',
-  '.40 S&W',
-  '.38 Special',
-  '.357 Magnum',
-  '10mm Auto',
-  '.380 ACP',
-  '5.56 NATO',
-  '.223 Remington',
-  '.22 LR',
-  '7.62x39mm',
-  '.308 Winchester',
-  '.30-06 Springfield',
-  '.300 Blackout',
-  '6.5 Creedmoor',
-  '12 Gauge',
-  '20 Gauge',
-]
+const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
 const grainWeights = ['55', '62', '77', '115', '124', '147', '150', '165', '168', '175', '180', '230']
 
@@ -53,6 +35,17 @@ export function SearchFiltersAmmo() {
   const [roundsRange, setRoundsRange] = useState([0, 1000])
 
   const [showMobileFilters, setShowMobileFilters] = useState(false)
+
+  // Dynamic caliber list from database
+  const [calibers, setCalibers] = useState<Array<{ value: string; count: number }>>([])
+
+  // Fetch available calibers on mount
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/search/calibers`)
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data) => setCalibers(data.calibers || []))
+      .catch(() => {}) // Fail silently - filter just won't show calibers
+  }, [])
 
   // Initialize from URL params
   useEffect(() => {
@@ -294,8 +287,10 @@ export function SearchFiltersAmmo() {
             className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
           >
             <option value="">All Calibers</option>
-            {calibers.map(caliber => (
-              <option key={caliber} value={caliber}>{caliber}</option>
+            {calibers.map((cal) => (
+              <option key={cal.value} value={cal.value}>
+                {cal.value} ({cal.count})
+              </option>
             ))}
           </select>
         </CardContent>

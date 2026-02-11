@@ -791,4 +791,33 @@ router.get('/debug/bullet-types', requireAdmin, async (req: Request, res: Respon
   }
 })
 
+/**
+ * Public endpoint - get distinct calibers in database
+ * GET /api/search/calibers
+ *
+ * Returns calibers with product counts, sorted by count descending.
+ * Used by the search filter UI to show only calibers that exist in the catalog.
+ */
+router.get('/calibers', async (req: Request, res: Response) => {
+  try {
+    const calibers = await prisma.products.groupBy({
+      by: ['caliber'],
+      where: { caliber: { not: null } },
+      _count: { caliber: true },
+      orderBy: { _count: { caliber: 'desc' } },
+    })
+
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+    res.json({
+      calibers: calibers.map((c: { caliber: string | null; _count: { caliber: number } }) => ({
+        value: c.caliber!,
+        count: c._count.caliber,
+      })),
+    })
+  } catch (error) {
+    log.error('Get calibers error', {}, error)
+    res.status(500).json({ error: 'Failed to get calibers' })
+  }
+})
+
 export { router as searchRouter }

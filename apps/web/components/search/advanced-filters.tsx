@@ -4,13 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { X, ChevronDown, SlidersHorizontal, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { env } from '@/lib/env'
 
-// Common calibers for the ammunition market
-const CALIBERS = [
-  '9mm', '.45 ACP', '.40 S&W', '.380 ACP', '.38 Special', '.357 Magnum',
-  '.223 Remington', '5.56 NATO', '.308 Winchester', '7.62x39', '6.5 Creedmoor',
-  '.300 Blackout', '12 Gauge', '20 Gauge', '.22 LR', '.17 HMR'
-]
+const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 
 const PURPOSES = [
   'Target', 'Defense', 'Hunting', 'Competition', 'Plinking', 'Training'
@@ -49,7 +45,17 @@ export function AdvancedFilters({ isOpen, onToggle }: AdvancedFiltersProps) {
   }
 
   const [filters, setFilters] = useState(currentFilters)
-  
+
+  // Dynamic caliber list from database
+  const [calibers, setCalibers] = useState<string[]>([])
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/search/calibers`)
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data) => setCalibers((data.calibers || []).map((c: { value: string }) => c.value)))
+      .catch(() => {})
+  }, [])
+
   // Count active filters
   const activeFilterCount = Object.entries(currentFilters).filter(([key, value]) => {
     if (key === 'inStock') return value === true
@@ -177,7 +183,7 @@ export function AdvancedFilters({ isOpen, onToggle }: AdvancedFiltersProps) {
                 className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
               >
                 <option value="">All calibers</option>
-                {CALIBERS.map(cal => (
+                {calibers.map(cal => (
                   <option key={cal} value={cal}>{cal}</option>
                 ))}
               </select>
