@@ -75,10 +75,13 @@ export function GunLockerCard({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center max-w-sm mx-auto">
             <Crosshair className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">
-              No firearms in your Gun Locker yet
+            <p className="font-medium text-foreground">
+              Tell us what you shoot. We&apos;ll watch it for you.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Add firearms to focus results and surface price movement for the calibers you care about.
             </p>
             <Button variant="outline" size="sm" className="mt-4" asChild>
               <a href="/dashboard/gun-locker">Add your first firearm</a>

@@ -51,14 +51,23 @@ export function WatchingCard({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center max-w-sm mx-auto">
             <Bookmark className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">
-              No items in your watchlist yet
+            <p className="font-medium text-foreground">
+              Save items to track price and availability.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              We&apos;ll keep an eye on changes so you don&apos;t have to check every day.
             </p>
             <Button variant="outline" size="sm" className="mt-4" asChild>
               <a href="/search">Browse ammo</a>
             </Button>
+            <a
+              href="/search"
+              className="text-xs text-muted-foreground hover:text-foreground mt-2 transition-colors"
+            >
+              Or search a specific caliber
+            </a>
           </div>
         </CardContent>
       </Card>

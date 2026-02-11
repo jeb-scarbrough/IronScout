@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
-import { GunLockerCard, WatchingCard, MarketActivityCard } from '@/components/dashboard/loadout'
+import { GunLockerCard, WatchingCard, MarketActivityCard, GetStartedChecklist } from '@/components/dashboard/loadout'
 import { DashboardContent } from '@/components/dashboard/dashboard-content'
 import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
@@ -158,33 +158,74 @@ export default function DashboardPage() {
     )
   }
 
+  const hasFirearms = data.gunLocker.firearms.length > 0
+  const hasWatchedItems = data.watching.items.length > 0
+  const bothEmpty = !hasFirearms && !hasWatchedItems
+  // TODO: wire up real alert check once alerts API is ready
+  const hasAlerts = false
+
   return (
     <DashboardContent>
-      {/* Gun Locker - Full width */}
-      <GunLockerCard
-        firearms={data.gunLocker.firearms}
-        totalAmmoItems={data.gunLocker.totalAmmoItems}
-        onCompareClick={handleCompareClick}
-        onFindSimilarClick={handleFindSimilarClick}
+      {/* Getting Started checklist — auto-hides when 2/3 done */}
+      <GetStartedChecklist
+        hasFirearm={hasFirearms}
+        hasWatchedItem={hasWatchedItems}
+        hasAlerts={hasAlerts}
       />
 
-      {/* Two-column grid: Watching (~66%) + Market Activity (~34%) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <WatchingCard
-            items={data.watching.items}
-            totalCount={data.watching.totalCount}
-            onCompareClick={handleCompareClick}
-            onFindSimilarClick={handleFindSimilarClick}
-          />
-        </div>
-        <div className="lg:col-span-1">
+      {bothEmpty ? (
+        // Combined layout when both Gun Locker and Watching are empty:
+        // Side-by-side feature pitches + Market Activity below
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <GunLockerCard
+              firearms={data.gunLocker.firearms}
+              totalAmmoItems={data.gunLocker.totalAmmoItems}
+              onCompareClick={handleCompareClick}
+              onFindSimilarClick={handleFindSimilarClick}
+            />
+            <WatchingCard
+              items={data.watching.items}
+              totalCount={data.watching.totalCount}
+              onCompareClick={handleCompareClick}
+              onFindSimilarClick={handleFindSimilarClick}
+            />
+          </div>
           <MarketActivityCard
             stats={data.marketActivity}
             onCaliberClick={handleCaliberClick}
           />
-        </div>
-      </div>
+        </>
+      ) : (
+        // Standard layout once either section has data
+        <>
+          {/* Gun Locker - Full width */}
+          <GunLockerCard
+            firearms={data.gunLocker.firearms}
+            totalAmmoItems={data.gunLocker.totalAmmoItems}
+            onCompareClick={handleCompareClick}
+            onFindSimilarClick={handleFindSimilarClick}
+          />
+
+          {/* Two-column grid: Watching (~66%) + Market Activity (~34%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <WatchingCard
+                items={data.watching.items}
+                totalCount={data.watching.totalCount}
+                onCompareClick={handleCompareClick}
+                onFindSimilarClick={handleFindSimilarClick}
+              />
+            </div>
+            <div className="lg:col-span-1">
+              <MarketActivityCard
+                stats={data.marketActivity}
+                onCaliberClick={handleCaliberClick}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Retailer Panel (slide-out) */}
       <RetailerPanel
