@@ -656,6 +656,46 @@ describe('B. Matching Logic', () => {
       assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
     })
 
+    it('matches existing product for pistol shotshells on second encounter', async () => {
+      const sourceProduct = createSourceProduct({
+        brand: 'CCI',
+        title: 'CCI 9mm Luger Pest Control Shotshells 10rd Box',
+      })
+
+      // First call: create the product
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [],
+      })
+
+      const createResult = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+      expect(createResult.status).toBe('CREATED')
+      const canonicalKey = createResult.createdProduct!.canonicalKey!
+
+      // Second call: same input, product now exists with that canonicalKey
+      resetMocks()
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [createProduct({
+          canonicalKey,
+          brand: 'CCI',
+          brandNorm: 'cci',
+          caliberNorm: '9mm',
+          roundCount: 10,
+          grainWeight: null,
+        })],
+      })
+
+      const matchResult = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(matchResult.status).toBe('MATCHED')
+      expect(matchResult.matchType).toBe('FINGERPRINT')
+      expect(matchResult.confidence).toBe(1.0)
+      assertRulesFired(matchResult, ['IDENTITY_KEY_MATCHED'])
+    })
+
     it('creates product via shotgun identity key when loadType + packCount present', async () => {
       const sourceProduct = createSourceProduct({
         brand: 'TestBrand',

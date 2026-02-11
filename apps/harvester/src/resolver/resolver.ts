@@ -806,7 +806,7 @@ function computeTitleSignature(title: string): string {
 
 function isShotshellTitle(title?: string | null): boolean {
   if (!title) return false
-  return /\bshot[-\s]*shells?\b|\bshotshells?\b/i.test(title)
+  return /\bshot[-\s]*shells?\b/i.test(title)
 }
 
 /**
@@ -1066,6 +1066,7 @@ async function attemptFingerprintMatch(
   const isShotshell = Boolean(normalized.isShotshell)
   const hasGrain = normalized.grain != null && normalized.grain > 0
   const hasGrainOrShotshell = hasGrain || isShotshell
+  const grainComponent = isShotshell ? 'shotshell' : String(normalized.grain)
   const hasPackCount = normalized.packCount != null && normalized.packCount > 0
   const hasShellOrSignature = Boolean(normalized.shellLength || normalized.titleSignature)
   const hasShotgunIdentity = Boolean(
@@ -1263,7 +1264,6 @@ async function attemptFingerprintMatch(
 
   if (hasCompleteIdentity) {
     // Compute deterministic identity key
-    const grainComponent = isShotshell ? 'shotshell' : String(normalized.grain)
     const fingerprintData = [
       normalized.brandNorm,
       normalized.caliberNorm,
@@ -1643,7 +1643,7 @@ async function attemptFingerprintMatch(
     }
 
     // Check for minimum required fields to create a product
-    // Per design: require grain and packCount to avoid bad merges (e.g., 50-round vs 20-round boxes)
+    // Per design: require grain (or shotshell flag) and packCount to avoid bad merges
     if (!normalized.brandNorm || !normalized.caliberNorm || !normalized.titleSignature || !hasGrainOrShotshell || !hasPackCount) {
       rulesFired.push('FINGERPRINT_INSUFFICIENT_DATA')
       rlog.info('FINGERPRINT_NO_CANDIDATES_INSUFFICIENT_DATA', {
@@ -1653,7 +1653,8 @@ async function attemptFingerprintMatch(
         hasBrandNorm: !!normalized.brandNorm,
         hasCaliberNorm: !!normalized.caliberNorm,
         hasTitleSignature: !!normalized.titleSignature,
-        hasGrain: hasGrainOrShotshell,
+        hasGrain,
+        isShotshell,
         hasPackCount,
       })
       return createNeedsReviewResult(
@@ -1670,7 +1671,6 @@ async function attemptFingerprintMatch(
 
     // Generate deterministic canonicalKey for fingerprint-based product
     // Format: FP:<version>:<sha256 hash> per schema comment
-    const grainComponent = isShotshell ? 'shotshell' : String(normalized.grain)
     const fingerprintData = [
       normalized.brandNorm,
       normalized.caliberNorm,
