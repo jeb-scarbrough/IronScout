@@ -113,7 +113,7 @@ export interface ResultCardV2Props {
   roundCount?: number
   retailers: RetailerPrice[]
   isWatched: boolean
-  onWatchToggle: (productId: string) => void
+  onWatchToggle: (productId: string) => Promise<boolean>
   onCompareClick: (productId: string) => void
 }
 
@@ -131,7 +131,7 @@ export interface ResultRowV2Props {
   retailerCount: number
   anyInStock: boolean
   isWatched: boolean
-  onWatchToggle: (productId: string) => void
+  onWatchToggle: (productId: string) => Promise<boolean>
   onCompareClick: (productId: string) => void
 }
 
@@ -152,7 +152,7 @@ export interface RetailerPanelProps {
   } | null
   retailers: RetailerPrice[]
   isWatched?: boolean
-  onWatchToggle?: (productId: string) => void
+  onWatchToggle?: (productId: string) => Promise<boolean>
 }
 
 /**

@@ -67,9 +67,9 @@ export function RetailerPanel({
   const oosCount = retailers.filter((r) => !r.inStock).length
   const allFiltered = hideOutOfStock && displayRetailers.length === 0
 
-  const handleWatchToggle = useCallback(() => {
+  const handleWatchToggle = useCallback(async () => {
     if (product && onWatchToggle) {
-      onWatchToggle(product.id)
+      await onWatchToggle(product.id)
     }
   }, [product, onWatchToggle])
 

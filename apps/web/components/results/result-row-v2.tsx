@@ -42,25 +42,33 @@ export function ResultRowV2({
     setWatchingOptimistic(isWatched)
   }, [isWatched])
 
-  const handleWatchToggle = useCallback(() => {
+  const handleWatchToggle = useCallback(async () => {
     const nextState = !watchingOptimistic
+
+    // Optimistically update UI
     setWatchingOptimistic(nextState)
     trackTrackToggle(id, nextState)
 
-    if (nextState) {
-      toast.success('Added to watchlist', {
-        description: "We'll notify you when the price drops.",
-        action: {
-          label: 'View Watchlist',
-          onClick: () => (window.location.href = '/dashboard/saved'),
-        },
-        duration: 4000,
-      })
-    } else {
-      toast.success('Removed from watchlist', { duration: 2000 })
-    }
+    // Await parent handler — it handles auth checks and API calls
+    const success = await onWatchToggle(id)
 
-    onWatchToggle(id)
+    if (success) {
+      if (nextState) {
+        toast.success('Added to watchlist', {
+          description: "We'll notify you when the price drops.",
+          action: {
+            label: 'View Watchlist',
+            onClick: () => (window.location.href = '/dashboard/saved'),
+          },
+          duration: 4000,
+        })
+      } else {
+        toast.success('Removed from watchlist', { duration: 2000 })
+      }
+    } else {
+      // Revert optimistic state on failure
+      setWatchingOptimistic(!nextState)
+    }
   }, [id, watchingOptimistic, onWatchToggle])
 
   const handleCompareClick = useCallback(() => {

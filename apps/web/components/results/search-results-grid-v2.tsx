@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { ResultCardV2, ResultCardV2Skeleton } from './result-card-v2'
 import { ResultRowV2, ResultRowV2Skeleton, ResultTableHeaderV2 } from './result-row-v2'
 import { RetailerPanel } from './retailer-panel'
@@ -152,11 +153,26 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
     [searchParams, navigateWithLoading]
   )
 
-  // Handle watch toggle
+  // Handle watch toggle — returns true if successful, false otherwise
   const handleWatchToggle = useCallback(
-    async (productId: string) => {
+    async (productId: string): Promise<boolean> => {
+      // If user is not signed in, prompt them to sign in
+      if (!session?.user) {
+        toast('Sign in to watch products', {
+          description: 'Create a free account to track prices and get alerts.',
+          action: {
+            label: 'Sign in',
+            onClick: () => {
+              window.location.href = '/auth/signin?callbackUrl=' + encodeURIComponent(window.location.href)
+            },
+          },
+          duration: 8000,
+        })
+        return false
+      }
+
       const token = await getValidToken()
-      if (!token) return
+      if (!token) return false
 
       const isCurrentlyWatched = trackedIds.has(productId)
 
@@ -176,15 +192,17 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
             return next
           })
         }
+        return true
       } catch (error) {
         if (error instanceof AuthError) {
           showSessionExpiredToast()
-          return
+          return false
         }
         safeLogger.components.error('Failed to toggle watch state', {}, error)
+        return false
       }
     },
-    [getValidToken, trackedIds]
+    [session?.user, getValidToken, trackedIds]
   )
 
   // Handle compare click (open panel)
