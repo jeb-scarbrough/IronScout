@@ -53,6 +53,67 @@ export interface AmmoPreferenceGroup {
 const USE_CASE_ORDER: AmmoUseCase[] = ['CARRY', 'TRAINING', 'COMPETITION', 'GENERAL']
 
 // ============================================================================
+// Caliber Equivalence
+// ============================================================================
+
+/**
+ * Caliber equivalence groups.
+ * Each group contains caliber strings that refer to the same cartridge.
+ * The first entry in each group is the Gun Locker canonical value (from CALIBERS).
+ * All comparisons are case-insensitive.
+ */
+const CALIBER_EQUIVALENCE_GROUPS: string[][] = [
+  ['9mm', '9mm luger', '9mm parabellum', '9x19mm', '9x19', '9mm nato'],
+  ['.380 acp', '.380 auto', '380 acp', '380 auto', '9mm short', '9x17mm'],
+  ['.45 acp', '45 acp', '.45 auto', '45 auto'],
+  ['.40 s&w', '40 s&w', '.40 smith & wesson'],
+  ['.38 special', '38 special', '.38 spl', '38 spl'],
+  ['.357 magnum', '357 magnum', '.357 mag', '357 mag'],
+  ['.223/5.56', '.223 remington', '223 remington', '.223 rem', '223 rem', '5.56 nato', '5.56x45mm', '5.56x45', '5.56mm nato', '5.56'],
+  ['.308/7.62x51', '.308 winchester', '308 winchester', '.308 win', '308 win', '7.62x51mm', '7.62x51 nato', '7.62x51', '7.62 nato'],
+  ['.22 lr', '22 lr', '.22 long rifle', '22 long rifle'],
+  ['.22 wmr', '22 wmr', '.22 magnum', '22 magnum', '.22 mag', '22 mag'],
+  ['12ga', '12 gauge', '12ga.', '12 ga', '12 ga.'],
+  ['20ga', '20 gauge', '20ga.', '20 ga', '20 ga.'],
+  ['16ga', '16 gauge', '16ga.', '16 ga', '16 ga.'],
+  ['.410 bore', '410 bore', '.410', '410'],
+  ['.300 aac blackout', '300 blackout', '.300 blk', '300 blk', '.300 aac', '300 aac'],
+  ['6.5 creedmoor', '6.5mm creedmoor', '6.5 cm'],
+  ['7.62x39', '7.62x39mm'],
+  ['.30-06', '30-06', '.30-06 springfield', '30-06 springfield', '.30-06 sprg'],
+  ['.270 winchester', '270 winchester', '.270 win', '270 win'],
+  ['.243 winchester', '243 winchester', '.243 win', '243 win'],
+  ['.30-30 winchester', '30-30 winchester', '.30-30 win', '30-30 win', '.30-30'],
+  ['10mm auto', '10mm', '10mm auto'],
+  ['.25 acp', '25 acp', '.25 auto'],
+  ['.32 acp', '32 acp', '.32 auto'],
+  ['.45 colt', '45 colt', '.45 long colt', '45 long colt', '.45 lc'],
+  ['.17 hmr', '17 hmr', '.17 hornady magnum rimfire'],
+]
+
+// Build a lookup map: normalized caliber string → group index
+const CALIBER_GROUP_MAP = new Map<string, number>()
+for (let i = 0; i < CALIBER_EQUIVALENCE_GROUPS.length; i++) {
+  for (const cal of CALIBER_EQUIVALENCE_GROUPS[i]) {
+    CALIBER_GROUP_MAP.set(cal.toLowerCase(), i)
+  }
+}
+
+/**
+ * Check if two caliber strings refer to the same cartridge.
+ * Returns true if they match exactly (case-insensitive) or belong to the same equivalence group.
+ */
+function calibersAreCompatible(calA: string, calB: string): boolean {
+  const a = calA.toLowerCase().trim()
+  const b = calB.toLowerCase().trim()
+  if (a === b) return true
+  const groupA = CALIBER_GROUP_MAP.get(a)
+  const groupB = CALIBER_GROUP_MAP.get(b)
+  if (groupA !== undefined && groupB !== undefined && groupA === groupB) return true
+  return false
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -389,9 +450,12 @@ export async function addPreference(
   // A6: Caliber compatibility validation (fail-closed per ADR-009 and spec)
   // Per spec: "Fail-closed on ambiguous caliber mapping"
   // Ambiguity triggers: Unknown firearm caliber, unknown ammo caliber, or mismatch
+  // Uses equivalence groups to handle variant names (e.g. "9mm" == "9mm Luger")
   const firearmCaliberKnown = !!firearm.caliber
   const ammoCaliberKnown = !!ammoSku.caliber
-  const calibersMatch = firearm.caliber === ammoSku.caliber
+  const calibersMatch = firearmCaliberKnown && ammoCaliberKnown
+    ? calibersAreCompatible(firearm.caliber!, ammoSku.caliber!)
+    : false
 
   let blockReason: string | null = null
   if (!firearmCaliberKnown) {
