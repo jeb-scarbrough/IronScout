@@ -171,6 +171,9 @@ importers:
       '@ironscout/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@ironscout/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@ironscout/redis':
         specifier: workspace:*
         version: link:../../packages/redis
@@ -468,6 +471,9 @@ importers:
       '@ironscout/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@ironscout/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@ironscout/ui':
         specifier: workspace:*
         version: link:../../packages/ui
