@@ -48,7 +48,7 @@ const baseLog = createWorkflowLogger(logger.resolver, {
 })
 
 // Current resolver version - bump on algorithm changes
-export const RESOLVER_VERSION = '1.3.0'
+export const RESOLVER_VERSION = '1.3.1'
 
 // Dictionary version - bump on normalization dictionary changes
 const DICTIONARY_VERSION = '1.4.0'
@@ -698,6 +698,7 @@ function normalizeInput(
 
   // Normalize title
   const normalizedTitle = normalizeTitle(rawTitle)
+  const isShotshell = isShotshellTitle(rawTitle)
   const titleSignature = computeTitleSignature(rawTitle)
 
   // Extract caliber, grain, and round count from title
@@ -750,6 +751,7 @@ function normalizeInput(
       slugWeight: resolvedSlugWeight,
       shellLength: resolvedShellLength,
       loadType: resolvedLoadType,
+      isShotshell,
     },
     identifierCount: identifiers.length,
     identifierTypes: identifiers.map(i => i.idType),
@@ -768,6 +770,7 @@ function normalizeInput(
       upcNorm: normalizedUpc,
       packCount: resolvedRoundCount ?? undefined,
       grain: resolvedGrain ?? undefined,
+      isShotshell,
       shotSize: resolvedShotSize,
       slugWeight: resolvedSlugWeight,
       shellLength: resolvedShellLength,
@@ -799,6 +802,11 @@ function computeTitleSignature(title: string): string {
   // Extract key tokens, sort, hash
   const tokens = normalized.split(' ').filter(t => t.length > 2).sort()
   return createHash('sha256').update(tokens.join('|')).digest('hex').slice(0, 16)
+}
+
+function isShotshellTitle(title?: string | null): boolean {
+  if (!title) return false
+  return /\bshot[-\s]*shells?\b|\bshotshells?\b/i.test(title)
 }
 
 /**
@@ -1055,7 +1063,9 @@ async function attemptFingerprintMatch(
   // IDENTITY-KEY FIRST: Direct lookup when all identity fields are present
   // ============================================================================
   const isShotgun = normalized.caliberNorm?.includes('Gauge') || normalized.caliberNorm === '.410 Bore'
+  const isShotshell = Boolean(normalized.isShotshell)
   const hasGrain = normalized.grain != null && normalized.grain > 0
+  const hasGrainOrShotshell = hasGrain || isShotshell
   const hasPackCount = normalized.packCount != null && normalized.packCount > 0
   const hasShellOrSignature = Boolean(normalized.shellLength || normalized.titleSignature)
   const hasShotgunIdentity = Boolean(
@@ -1071,7 +1081,7 @@ async function attemptFingerprintMatch(
     normalized.brandNorm &&
     normalized.caliberNorm &&
     normalized.titleSignature &&
-    hasGrain &&
+    hasGrainOrShotshell &&
     hasPackCount
   )
 
@@ -1253,10 +1263,11 @@ async function attemptFingerprintMatch(
 
   if (hasCompleteIdentity) {
     // Compute deterministic identity key
+    const grainComponent = isShotshell ? 'shotshell' : String(normalized.grain)
     const fingerprintData = [
       normalized.brandNorm,
       normalized.caliberNorm,
-      String(normalized.grain),
+      grainComponent,
       String(normalized.packCount),
       normalized.titleSignature,
     ].join('|')
@@ -1270,6 +1281,7 @@ async function attemptFingerprintMatch(
         brandNorm: normalized.brandNorm,
         caliberNorm: normalized.caliberNorm,
         grain: normalized.grain,
+        isShotshell,
         packCount: normalized.packCount,
         titleSignature: normalized.titleSignature?.slice(0, 30),
       },
@@ -1433,7 +1445,7 @@ async function attemptFingerprintMatch(
   if (!normalized.brandNorm) missingFieldsList.push('brandNorm')
   if (!normalized.caliberNorm) missingFieldsList.push('caliberNorm')
   if (!normalized.titleSignature) missingFieldsList.push('titleSignature')
-  if (!hasGrain) missingFieldsList.push('grain')
+  if (!hasGrainOrShotshell) missingFieldsList.push('grain')
   if (!hasPackCount) missingFieldsList.push('packCount')
   if (isShotgun && !normalized.loadType) missingFieldsList.push('loadType')
   if (isShotgun && !normalized.shellLength) missingFieldsList.push('shellLength')
@@ -1453,7 +1465,7 @@ async function attemptFingerprintMatch(
       brandNorm: !normalized.brandNorm,
       caliberNorm: !normalized.caliberNorm,
       titleSignature: !normalized.titleSignature,
-      grain: !hasGrain,
+      grain: !hasGrainOrShotshell,
       packCount: !hasPackCount,
       loadType: isShotgun ? !normalized.loadType : undefined,
       shellLength: isShotgun ? !normalized.shellLength : undefined,
@@ -1632,7 +1644,7 @@ async function attemptFingerprintMatch(
 
     // Check for minimum required fields to create a product
     // Per design: require grain and packCount to avoid bad merges (e.g., 50-round vs 20-round boxes)
-    if (!normalized.brandNorm || !normalized.caliberNorm || !normalized.titleSignature || !hasGrain || !hasPackCount) {
+    if (!normalized.brandNorm || !normalized.caliberNorm || !normalized.titleSignature || !hasGrainOrShotshell || !hasPackCount) {
       rulesFired.push('FINGERPRINT_INSUFFICIENT_DATA')
       rlog.info('FINGERPRINT_NO_CANDIDATES_INSUFFICIENT_DATA', {
         phase: 'fingerprint_match',
@@ -1641,7 +1653,7 @@ async function attemptFingerprintMatch(
         hasBrandNorm: !!normalized.brandNorm,
         hasCaliberNorm: !!normalized.caliberNorm,
         hasTitleSignature: !!normalized.titleSignature,
-        hasGrain,
+        hasGrain: hasGrainOrShotshell,
         hasPackCount,
       })
       return createNeedsReviewResult(
@@ -1658,10 +1670,11 @@ async function attemptFingerprintMatch(
 
     // Generate deterministic canonicalKey for fingerprint-based product
     // Format: FP:<version>:<sha256 hash> per schema comment
+    const grainComponent = isShotshell ? 'shotshell' : String(normalized.grain)
     const fingerprintData = [
       normalized.brandNorm,
       normalized.caliberNorm,
-      String(normalized.grain),
+      grainComponent,
       String(normalized.packCount),
       normalized.titleSignature,
     ].join('|')

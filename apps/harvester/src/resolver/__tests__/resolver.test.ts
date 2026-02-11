@@ -635,6 +635,27 @@ describe('B. Matching Logic', () => {
       assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
     })
 
+    it('creates product for pistol shotshells even without grain', async () => {
+      const sourceProduct = createSourceProduct({
+        brand: 'CCI',
+        title: 'CCI 9mm Luger Pest Control Shotshells 10rd Box',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+        existingProducts: [], // No candidates match
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(result.status).toBe('CREATED')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.createdProduct?.canonicalKey?.startsWith('FP:')).toBe(true)
+      expect(result.evidence.inputNormalized.isShotshell).toBe(true)
+      assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
+    })
+
     it('creates product via shotgun identity key when loadType + packCount present', async () => {
       const sourceProduct = createSourceProduct({
         brand: 'TestBrand',

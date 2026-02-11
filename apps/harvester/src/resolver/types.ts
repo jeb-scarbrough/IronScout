@@ -27,6 +27,7 @@ export interface NormalizedInput {
   upcNorm?: string
   packCount?: number
   grain?: number
+  isShotshell?: boolean
   shotSize?: string
   slugWeight?: string
   shellLength?: string
