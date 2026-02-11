@@ -25,6 +25,7 @@ import {
 } from '../services/saved-items'
 import { getAuthenticatedUserId } from '../middleware/auth'
 import { loggers } from '../config/logger'
+import { invalidateLoadoutCache } from '../services/loadout'
 
 const log = loggers.watchlist
 
@@ -132,6 +133,9 @@ router.post('/:productId', async (req: Request, res: Response) => {
     const item = await saveItem(userId, productId)
     const newCount = await countSavedItems(userId)
 
+    // Invalidate loadout cache so recon page reflects the change immediately
+    await invalidateLoadoutCache(userId)
+
     res.status(existing ? 200 : 201).json({
       ...item,
       _meta: {
@@ -166,6 +170,9 @@ router.delete('/:productId', async (req: Request, res: Response) => {
     const productId = req.params.productId as string
 
     await unsaveItem(userId, productId)
+
+    // Invalidate loadout cache so recon page reflects the change immediately
+    await invalidateLoadoutCache(userId)
 
     res.json({ message: 'Item removed', productId })
   } catch (error: any) {

@@ -22,6 +22,21 @@ const log = loggers.dashboard
 const LOADOUT_CACHE_PREFIX = 'loadout:'
 const LOADOUT_CACHE_TTL = 60 // 60 seconds
 
+/**
+ * Invalidate the cached loadout data for a user.
+ * Call this when watchlist items or gun locker data changes
+ * so the recon page reflects updates immediately.
+ */
+export async function invalidateLoadoutCache(userId: string): Promise<void> {
+  try {
+    const redis = getRedisClient()
+    await redis.del(`${LOADOUT_CACHE_PREFIX}${userId}`)
+    log.debug('LOADOUT_CACHE_INVALIDATED', { userId })
+  } catch (e) {
+    log.warn('LOADOUT_CACHE_INVALIDATE_ERROR', { error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================

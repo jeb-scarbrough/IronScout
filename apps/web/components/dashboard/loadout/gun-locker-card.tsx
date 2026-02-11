@@ -170,9 +170,14 @@ function FirearmSection({
       <CollapsibleContent>
         <div className="mt-2 space-y-2 pl-4">
           {firearm.ammoItems.length === 0 ? (
-            <p className="py-4 text-sm text-muted-foreground text-center">
+            <a
+              href="/dashboard/gun-locker"
+              onClick={(e) => e.stopPropagation()}
+              className="block py-4 text-sm text-muted-foreground text-center hover:text-foreground transition-colors"
+            >
               No ammo preferences saved for this firearm
-            </p>
+              <span className="block text-xs text-primary mt-1">Add ammo preferences →</span>
+            </a>
           ) : (
             firearm.ammoItems.map((item) => (
               <AmmoItemRow
