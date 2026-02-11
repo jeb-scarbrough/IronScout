@@ -56,6 +56,8 @@ envVarGroups:
         sync: false
       - key: ADMIN_API_KEY
         sync: false  # Shared secret for admin→API proxy auth (must match in API and Admin)
+      - key: INTERNAL_API_KEY
+        sync: false  # SSR→API rate limit bypass (must match in API and Web)
 
   - name: ironscout-redis
     envVars:
