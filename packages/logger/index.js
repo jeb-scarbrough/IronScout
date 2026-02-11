@@ -384,13 +384,38 @@ function formatError(error) {
         message: String(error),
     };
 }
+/**
+ * Maximum JSON log line length to prevent Render's log parser from choking.
+ * Render truncates lines beyond ~16KB, producing JSONParserErr when the
+ * closing '}' is missing. We cap at 12KB to leave headroom.
+ */
+const MAX_JSON_LINE_LENGTH = 12_288;
 function formatJson(entry) {
     // Apply redaction if enabled
     const finalEntry = isRedactionEnabled() ? redactEntry(entry) : entry;
     if (isRedactionEnabled()) {
         metrics.redacted++;
     }
-    return JSON.stringify(finalEntry);
+    const json = JSON.stringify(finalEntry);
+    if (json.length <= MAX_JSON_LINE_LENGTH) {
+        return json;
+    }
+    // Truncate oversized entries: rebuild with a truncation notice
+    const truncated = {
+        ...finalEntry,
+        __truncated: true,
+        __original_length: json.length,
+    };
+    // Remove the largest string values to bring it under limit
+    for (const [key, value] of Object.entries(truncated)) {
+        if (typeof value === 'string' && value.length > 500) {
+            truncated[key] = value.slice(0, 500) + `... [truncated from ${value.length} chars]`;
+        }
+    }
+    const result = JSON.stringify(truncated);
+    return result.length > MAX_JSON_LINE_LENGTH
+        ? result.slice(0, MAX_JSON_LINE_LENGTH - 1) + '}'
+        : result;
 }
 // ANSI colors for Node.js terminal
 const ANSI_COLORS = {
