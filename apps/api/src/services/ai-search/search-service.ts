@@ -277,7 +277,10 @@ export async function aiSearch(
 
   const dbStart = Date.now()
 
-  if (useVectorSearch && (sortBy === 'relevance' || sortBy === 'price_context') && !hasExplicitFilters) {
+  // IMPORTANT: Use vector search whenever it's enabled and no explicit filters are set.
+  // The sortBy parameter only affects ordering AFTER results are fetched.
+  // This prevents the result set from changing when the user toggles sort.
+  if (useVectorSearch && !hasExplicitFilters) {
     try {
       // Try vector-enhanced search (only when no explicit filters)
       const embeddingStart = Date.now()
