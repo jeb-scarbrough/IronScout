@@ -16,6 +16,19 @@ export class AuthError extends Error {
 }
 
 /**
+ * Custom error class for rate limiting (429)
+ * Triggers fallback to basic search in consumers
+ */
+export class RateLimitError extends Error {
+  retryAfter: number
+  constructor(retryAfter: number = 60) {
+    super('Rate limit exceeded')
+    this.name = 'RateLimitError'
+    this.retryAfter = retryAfter
+  }
+}
+
+/**
  * Build headers with authentication token
  * All authenticated API calls should use this to pass the JWT
  */
@@ -27,6 +40,18 @@ function buildAuthHeaders(token?: string): Record<string, string> {
     headers['Authorization'] = `Bearer ${token}`
   }
   return headers
+}
+
+/**
+ * Build internal service headers for SSR→API calls.
+ * Includes INTERNAL_API_KEY so the API can skip per-IP rate limits for SSR traffic.
+ * Returns empty object on the client side (key must never leak to browser).
+ */
+function getInternalHeaders(): Record<string, string> {
+  if (typeof window !== 'undefined') return {}
+  const key = process.env.INTERNAL_API_KEY
+  if (!key) return {}
+  return { 'X-Api-Key': key }
 }
 
 /**
@@ -650,11 +675,20 @@ export async function aiSearch(params: AISearchParams): Promise<AISearchResponse
 
   const response = await fetch(`${API_BASE_URL}/api/search/semantic`, {
     method: 'POST',
-    headers,
+    headers: {
+      ...headers,
+      ...getInternalHeaders(),
+    },
     body: JSON.stringify(body)
   })
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10)
+      logger.api.warn('AI search rate limited, will fall back to basic search', { retryAfter })
+      throw new RateLimitError(retryAfter)
+    }
+
     const errorText = await response.text().catch(() => '')
     logger.api.error('AI search request failed', {
       status: response.status,
@@ -667,6 +701,60 @@ export async function aiSearch(params: AISearchParams): Promise<AISearchResponse
   }
 
   return response.json()
+}
+
+/**
+ * Adapt a basic SearchResponse into an AISearchResponse shape so consumers
+ * can render results without caring which backend answered.
+ */
+function adaptBasicToAIResponse(basic: SearchResponse, query: string): AISearchResponse {
+  return {
+    products: basic.products,
+    pagination: basic.pagination,
+    intent: {
+      originalQuery: query,
+      confidence: 0,
+      explanation: 'Using basic search (AI search temporarily unavailable)',
+    },
+    facets: {},
+    searchMetadata: {
+      parsedFilters: {},
+      aiEnhanced: false,
+      vectorSearchUsed: false,
+      processingTimeMs: 0,
+    },
+  }
+}
+
+/**
+ * AI search with automatic fallback to basic product search on 429 (rate limit).
+ * Returns { data, fallback } so consumers can show a subtle indicator when
+ * results come from the basic search path.
+ */
+export async function aiSearchWithFallback(
+  params: AISearchParams
+): Promise<{ data: AISearchResponse; fallback: boolean }> {
+  try {
+    const data = await aiSearch(params)
+    return { data, fallback: false }
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      const basicParams: SearchParams = {
+        q: params.query,
+        page: String(params.page ?? 1),
+        limit: String(params.limit ?? 20),
+        sortBy: params.sortBy === 'relevance' ? undefined : params.sortBy,
+        ...(params.filters?.caliber && { caliber: params.filters.caliber } as any),
+        ...(params.filters?.brand && { brand: params.filters.brand }),
+        ...(params.filters?.inStock !== undefined && { inStock: String(params.filters.inStock) }),
+        ...(params.filters?.minPrice !== undefined && { minPrice: String(params.filters.minPrice) }),
+        ...(params.filters?.maxPrice !== undefined && { maxPrice: String(params.filters.maxPrice) }),
+      }
+      const basic = await searchProducts(basicParams)
+      return { data: adaptBasicToAIResponse(basic, params.query), fallback: true }
+    }
+    throw error
+  }
 }
 
 /**

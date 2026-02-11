@@ -70,6 +70,10 @@ export const app: Express = express()
 
 app.use(helmet())
 
+// Render deploys behind a reverse proxy — trust X-Forwarded-For so req.ip
+// returns the real client IP instead of the proxy's IP.
+app.set('trust proxy', 1)
+
 // Request context middleware - provides requestId correlation for logging
 // Must be early in the chain to capture all request processing
 app.use(requestContextMiddleware)

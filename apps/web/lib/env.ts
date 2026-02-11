@@ -45,6 +45,7 @@ interface ValidatedEnv {
   NODE_ENV: string
   ADMIN_EMAILS: string
   COOKIE_DOMAIN: string
+  INTERNAL_API_KEY: string
 }
 
 // ============================================================================
@@ -66,6 +67,7 @@ const envConfig: EnvConfig = {
     NEXT_PUBLIC_E2E_TEST_MODE: 'false',
     ADMIN_EMAILS: '',
     COOKIE_DOMAIN: '',
+    INTERNAL_API_KEY: '',
   },
 }
 
@@ -81,6 +83,7 @@ const optionalEnv = {
   NEXT_PUBLIC_E2E_TEST_MODE: publicEnv.NEXT_PUBLIC_E2E_TEST_MODE,
   ADMIN_EMAILS: process.env.ADMIN_EMAILS,
   COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
 }
 
 // ============================================================================

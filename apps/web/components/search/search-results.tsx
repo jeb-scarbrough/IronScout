@@ -1,5 +1,5 @@
 import { auth } from '@/lib/auth'
-import { aiSearch, AISearchResponse, ExplicitFilters } from '@/lib/api'
+import { aiSearchWithFallback, AISearchResponse, ExplicitFilters } from '@/lib/api'
 import { SearchResultsGridV2 } from '@/components/results'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
@@ -81,7 +81,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   }
 
   try {
-    const searchData = await aiSearch({
+    const { data: searchData, fallback } = await aiSearchWithFallback({
       query,
       page,
       limit: 20,
@@ -150,6 +150,13 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
 
         {/* Results Zone */}
         <div className="space-y-4">
+          {/* Fallback Banner */}
+          {fallback && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2 text-sm text-amber-800 dark:text-amber-200">
+              Showing basic results — AI-enhanced search is temporarily busy. Results may be less precise.
+            </div>
+          )}
+
           {/* Results Limited Banner */}
           {_meta?.resultsLimited && (
             <div className="bg-muted/40 border border-border rounded-xl p-4">

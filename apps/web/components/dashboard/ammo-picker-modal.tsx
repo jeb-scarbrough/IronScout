@@ -19,7 +19,7 @@ import {
   type Product,
   AMMO_USE_CASE_ORDER,
   AMMO_USE_CASE_LABELS,
-  aiSearch,
+  aiSearchWithFallback,
   addAmmoPreference,
 } from '@/lib/api'
 import { safeLogger } from '@/lib/safe-logger'
@@ -79,7 +79,7 @@ export function AmmoPickerModal({
       const fullQuery = searchQuery.trim()
         ? `${caliber} ${searchQuery.trim()}`
         : caliber
-      const data = await aiSearch({
+      const { data } = await aiSearchWithFallback({
         query: fullQuery,
         limit: 20,
         token,

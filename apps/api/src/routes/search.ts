@@ -73,12 +73,19 @@ const semanticSearchSchema = z.object({
   }).optional(),
 })
 
-// Rate limit AI search: 30 requests/minute per IP (protects AI/embedding costs)
+// Rate limit AI search: 100 requests/minute per real user IP (protects AI/embedding costs).
+// SSR requests from the web server include INTERNAL_API_KEY via X-Api-Key header
+// and skip the per-IP rate limit entirely.
 router.post('/semantic', redisRateLimit({
   windowMs: 60 * 1000,
-  max: 30,
+  max: 100,
   keyPrefix: 'rl:ai-search:semantic:',
   endpoint: 'ai-search-semantic',
+  skip: (req) => {
+    const apiKey = req.headers['x-api-key'] as string | undefined
+    const expectedKey = process.env.INTERNAL_API_KEY
+    return !!(apiKey && expectedKey && apiKey === expectedKey)
+  },
 }), async (req: Request, res: Response) => {
   try {
 

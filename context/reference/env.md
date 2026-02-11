@@ -125,6 +125,9 @@ Required:
 - `NEXTAUTH_URL` (canonical URL for NextAuth callbacks)
 - `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
 
+Optional:
+- `INTERNAL_API_KEY` - When set, SSR requests to the API include this key via `X-Api-Key` header to bypass per-IP rate limits. Must match the API's `INTERNAL_API_KEY`.
+
 Stripe (client):
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (if checkout is embedded)
 - Server-side webhooks should live in API or a server route with `STRIPE_WEBHOOK_SECRET`.
