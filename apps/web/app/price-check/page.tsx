@@ -29,7 +29,7 @@ export default function PriceCheckPage() {
         appUrl={BRAND.appUrl}
       />
 
-      <main className="container mx-auto px-4 py-6 pt-24">
+      <main className="container mx-auto px-4 py-6 pt-8">
         <PriceCheckContent accessToken={token} />
       </main>
     </div>

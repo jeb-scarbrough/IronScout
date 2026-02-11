@@ -20,7 +20,7 @@ export default function AuthLayout({
         websiteUrl={BRAND.website}
         appUrl={BRAND.appUrl}
       />
-      <main className="pt-24">
+      <main className="pt-8">
         {children}
       </main>
     </div>

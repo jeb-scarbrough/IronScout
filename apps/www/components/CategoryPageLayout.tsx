@@ -38,7 +38,7 @@ export function CategoryPageLayout({
       />
       <Header />
 
-      <main className="max-w-5xl mx-auto px-6 py-12 pt-28">
+      <main className="max-w-5xl mx-auto px-6 py-12 pt-12">
         <header className="mb-10">
           <h1
             className="text-4xl md:text-5xl font-bold text-iron-100 mb-4"

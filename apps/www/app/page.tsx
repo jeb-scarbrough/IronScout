@@ -72,7 +72,7 @@ export default function Home() {
       <Header currentPage="home" />
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-16">
+      <section className="relative pt-16 pb-16">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 -right-64 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />

@@ -18,7 +18,7 @@ export default function GlobalError({
   return (
     <div className="relative">
       <Header currentPage="home" />
-      <section className="pt-28 pb-24">
+      <section className="pt-12 pb-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="card border-iron-800/80 bg-iron-950/70">
             <div className="p-8">

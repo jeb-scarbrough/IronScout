@@ -32,7 +32,7 @@ export default async function SearchLayout({
             websiteUrl={BRAND.website}
             appUrl={BRAND.appUrl}
           />
-          <main className="pt-16">
+          <main>
             {children}
           </main>
         </div>

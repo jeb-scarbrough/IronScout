@@ -43,7 +43,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
   ]
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-iron-950/80 backdrop-blur-md border-b border-iron-800/50">
+    <header className="sticky top-0 z-50 w-full border-b border-iron-800/50 bg-iron-950/80 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -55,7 +55,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
           </a>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-4 lg:gap-6">
+          <div className="hidden md:flex items-center gap-4 sm:gap-6">
             {navLinks.map((link) => (
               <a
                 key={link.page}
@@ -157,6 +157,6 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
           </div>
         )}
       </div>
-    </nav>
+    </header>
   )
 }

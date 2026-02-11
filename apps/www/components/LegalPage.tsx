@@ -13,7 +13,7 @@ export function LegalPage({ content, lastUpdated }: LegalPageProps) {
       <Header />
 
       {/* Content */}
-      <main className="max-w-4xl mx-auto px-6 py-12 pt-24">
+      <main className="max-w-4xl mx-auto px-6 py-12 pt-8">
         <article className="prose prose-invert prose-iron max-w-none">
           <Markdown
             components={{

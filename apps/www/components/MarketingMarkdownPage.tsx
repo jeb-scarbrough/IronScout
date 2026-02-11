@@ -40,7 +40,7 @@ export function MarketingMarkdownPage({
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pt-24 sm:pt-28">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pt-8 sm:pt-12">
         {/* Breadcrumbs */}
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav
