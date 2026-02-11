@@ -183,39 +183,7 @@ export function AdvancedFilters({ isOpen, onToggle }: AdvancedFiltersProps) {
               </select>
             </div>
 
-            {/* Purpose */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Purpose
-              </label>
-              <select
-                value={filters.purpose}
-                onChange={(e) => handleSelectChange('purpose', e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              >
-                <option value="">All purposes</option>
-                {PURPOSES.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Case Material */}
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Case Material
-              </label>
-              <select
-                value={filters.caseMaterial}
-                onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              >
-                <option value="">All materials</option>
-                {CASE_MATERIALS.map(mat => (
-                  <option key={mat} value={mat}>{mat}</option>
-                ))}
-              </select>
-            </div>
+            {/* Purpose and Case Material filters hidden — data not yet populated */}
 
             {/* Min Price */}
             <div>

@@ -460,35 +460,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
                 ))}
               </select>
 
-              <select
-                value={filters.caseMaterial}
-                onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-                className={cn(
-                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                  filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-                )}
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-              >
-                <option value="">Casing</option>
-                {CASE_MATERIALS.map(mat => (
-                  <option key={mat} value={mat}>{mat}</option>
-                ))}
-              </select>
-
-              <select
-                value={filters.purpose}
-                onChange={(e) => handleSelectChange('purpose', e.target.value)}
-                className={cn(
-                  "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                  filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border hover:text-foreground"
-                )}
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-              >
-                <option value="">Type</option>
-                {PURPOSES.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
+              {/* Casing and Type filters hidden — data not yet populated (see #GH-issue) */}
             </div>
 
             {/* Spacer to push toggles to the right */}
@@ -578,35 +550,7 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
               ))}
             </select>
 
-            <select
-              value={filters.caseMaterial}
-              onChange={(e) => handleSelectChange('caseMaterial', e.target.value)}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.caseMaterial ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Casing</option>
-              {CASE_MATERIALS.map(mat => (
-                <option key={mat} value={mat}>{mat}</option>
-              ))}
-            </select>
-
-            <select
-              value={filters.purpose}
-              onChange={(e) => handleSelectChange('purpose', e.target.value)}
-              className={cn(
-                "px-3 py-2 rounded-lg border text-sm font-medium bg-card transition-colors appearance-none cursor-pointer pr-8",
-                filters.purpose ? "text-foreground border-primary/50" : "text-muted-foreground border-border"
-              )}
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
-            >
-              <option value="">Type</option>
-              {PURPOSES.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+            {/* Casing and Type filters hidden — data not yet populated (see #GH-issue) */}
           </div>
 
           {/* Price Range */}
