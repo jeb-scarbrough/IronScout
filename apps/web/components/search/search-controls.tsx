@@ -14,7 +14,10 @@ export function SearchControls() {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <ViewToggle value={viewMode} onChange={setViewMode} />
+      {/* Hide view toggle on phone - grid view requires md+ to render the table */}
+      <div className="hidden md:block">
+        <ViewToggle value={viewMode} onChange={setViewMode} />
+      </div>
       <EnhancedSortSelect />
     </div>
   )
