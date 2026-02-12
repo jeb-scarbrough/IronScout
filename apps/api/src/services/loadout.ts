@@ -462,10 +462,26 @@ async function getWatchingWithPrices(
 }
 
 /**
- * Get market activity stats
- * These are aggregated stats, not user-specific
+ * Get market activity stats.
+ * These are aggregated stats, not user-specific.
+ * Cached globally with MARKET_ACTIVITY_CACHE_TTL since all users see the same data.
  */
+const MARKET_ACTIVITY_CACHE_KEY = 'market-activity-stats'
+const MARKET_ACTIVITY_CACHE_TTL = 300 // 5 minutes
+
 async function getMarketActivityStats(): Promise<MarketActivityStats> {
+  // Check global cache — market stats are user-independent
+  try {
+    const redis = getRedisClient()
+    const cached = await redis.get(MARKET_ACTIVITY_CACHE_KEY)
+    if (cached) {
+      log.debug('MARKET_ACTIVITY_CACHE_HIT')
+      return JSON.parse(cached)
+    }
+  } catch (e) {
+    log.warn('MARKET_ACTIVITY_CACHE_ERROR', { error: e instanceof Error ? e.message : String(e) })
+  }
+
   const now = new Date()
   const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -580,7 +596,7 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
     LIMIT 8
   `
 
-  return {
+  const result: MarketActivityStats = {
     retailersTracked: retailerCount,
     itemsInStock: Number(inStockCount[0]?.count ?? 0),
     lastUpdated: now.toISOString(),
@@ -589,4 +605,14 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
       count: Number(c.count),
     })),
   }
+
+  // Cache globally — these stats are user-independent and change slowly
+  try {
+    const redis = getRedisClient()
+    await redis.setex(MARKET_ACTIVITY_CACHE_KEY, MARKET_ACTIVITY_CACHE_TTL, JSON.stringify(result))
+  } catch (e) {
+    log.warn('MARKET_ACTIVITY_CACHE_SET_ERROR', { error: e instanceof Error ? e.message : String(e) })
+  }
+
+  return result
 }

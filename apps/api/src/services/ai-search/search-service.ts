@@ -9,7 +9,7 @@ import {
   PremiumRankedProduct
 } from './premium-ranking'
 import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal-index'
-import { batchGetPricesViaProductLinks, batchGetPricesWithConfidence } from './price-resolver'
+import { batchGetPricesWithConfidence } from './price-resolver'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
 import { loggers } from '../../config/logger'
 import type { LensMetadata, ProductWithOffers } from '../lens'
@@ -273,6 +273,8 @@ export async function aiSearch(
   let products: any[]
   let vectorSearchUsed = false
   let total: number
+  // Populated by standardSearch/vectorEnhancedSearch; reused by lens pipeline
+  let confidenceMap: Map<string, number> = new Map()
   const hasExplicitFilters = Object.keys(explicitFilters).length > 0
 
   const dbStart = Date.now()
@@ -284,7 +286,9 @@ export async function aiSearch(
     try {
       // Try vector-enhanced search (only when no explicit filters)
       const embeddingStart = Date.now()
-      products = await vectorEnhancedSearch(query, mergedIntent, explicitFilters, { skip, limit: limit * 2 }, isPremium)
+      const vectorResult = await vectorEnhancedSearch(query, mergedIntent, explicitFilters, { skip, limit: limit * 2 }, isPremium)
+      products = vectorResult.products
+      confidenceMap = vectorResult.confidenceMap
       timing.embeddingMs = Date.now() - embeddingStart
       vectorSearchUsed = true
       // For vector search, count using base where clause
@@ -306,7 +310,9 @@ export async function aiSearch(
           reason: 'vector_empty_but_products_exist',
           total,
         })
-        products = await standardSearch(where, skip, limit * 2, isPremium)
+        const fallbackResult = await standardSearch(where, skip, limit * 2, isPremium)
+        products = fallbackResult.products
+        confidenceMap = fallbackResult.confidenceMap
         vectorSearchUsed = false
       }
     } catch (error) {
@@ -314,7 +320,9 @@ export async function aiSearch(
         requestId,
         error: error instanceof Error ? error.message : String(error),
       })
-      products = await standardSearch(where, skip, limit * 2, isPremium)
+      const fallbackResult = await standardSearch(where, skip, limit * 2, isPremium)
+      products = fallbackResult.products
+      confidenceMap = fallbackResult.confidenceMap
       total = await prisma.products.count({ where })
     }
   } else {
@@ -324,7 +332,9 @@ export async function aiSearch(
       hasExplicitFilters,
       sortBy,
     })
-    products = await standardSearch(where, skip, limit * 2, isPremium)
+    const standardResult = await standardSearch(where, skip, limit * 2, isPremium)
+    products = standardResult.products
+    confidenceMap = standardResult.confidenceMap
     total = await prisma.products.count({ where })
 
     log.info('SEARCH_STANDARD_COMPLETE', {
@@ -417,9 +427,8 @@ export async function aiSearch(
 
     try {
       // Per search-lens-v1.md: canonicalConfidence source = ProductResolver.matchScore
-      // Fetch product_links.confidence and merge into products before lens evaluation
-      const productIds = products.map((p: any) => p.id)
-      const { confidenceMap } = await batchGetPricesWithConfidence(productIds)
+      // Reuse confidenceMap already populated by standardSearch/vectorEnhancedSearch
+      // to avoid a duplicate batchGetPricesWithConfidence call
 
       // Merge linkConfidence into products for lens aggregation
       const productsWithConfidence = products.map((p: any) => ({
@@ -885,7 +894,7 @@ function addCondition(where: any, condition: any): void {
  * Prices are fetched through product_links per Spec v1.2 §0.0.
  * This is the canonical query path for price grouping.
  */
-async function standardSearch(where: any, skip: number, take: number, includePremiumFields: boolean): Promise<any[]> {
+async function standardSearch(where: any, skip: number, take: number, includePremiumFields: boolean): Promise<{ products: any[]; confidenceMap: Map<string, number> }> {
   const queryStart = Date.now()
 
   const baseSelect = {
@@ -934,13 +943,14 @@ async function standardSearch(where: any, skip: number, take: number, includePre
 
   if (products.length === 0) {
     log.debug('SEARCH_STANDARD_NO_PRODUCTS', { where: JSON.stringify(where), dbDurationMs: dbDuration })
-    return []
+    return { products: [], confidenceMap: new Map() }
   }
 
-  // Batch fetch prices via product_links
+  // Batch fetch prices + confidence via product_links
+  // Returns both pricesMap and confidenceMap to avoid re-fetching in the lens pipeline
   const priceStart = Date.now()
   const productIds = products.map((p: { id: string }) => p.id)
-  const pricesMap = await batchGetPricesViaProductLinks(productIds)
+  const { pricesMap, confidenceMap } = await batchGetPricesWithConfidence(productIds)
   const priceDuration = Date.now() - priceStart
 
   log.debug('SEARCH_STANDARD_PRICES_FETCHED', {
@@ -949,10 +959,13 @@ async function standardSearch(where: any, skip: number, take: number, includePre
     priceDurationMs: priceDuration,
   })
 
-  return products.map((p: { id: string }) => ({
-    ...p,
-    prices: dedupeAndSortPrices(pricesMap.get(p.id) || []),
-  }))
+  return {
+    products: products.map((p: { id: string }) => ({
+      ...p,
+      prices: dedupeAndSortPrices(pricesMap.get(p.id) || []),
+    })),
+    confidenceMap,
+  }
 }
 
 /**
@@ -964,7 +977,7 @@ async function vectorEnhancedSearch(
   explicitFilters: ExplicitFilters,
   options: { skip: number; limit: number },
   isPremium: boolean
-): Promise<any[]> {
+): Promise<{ products: any[]; confidenceMap: Map<string, number> }> {
   const { skip, limit } = options
 
   // Build the search text
@@ -1064,7 +1077,7 @@ async function vectorEnhancedSearch(
   })
 
   if (productIds.length === 0) {
-    return []
+    return { products: [], confidenceMap: new Map() }
   }
 
   // Fetch full product details
@@ -1107,9 +1120,10 @@ async function vectorEnhancedSearch(
     select: baseSelect,
   })
 
-  // Batch fetch prices via product_links
+  // Batch fetch prices + confidence via product_links
+  // Returns both pricesMap and confidenceMap to avoid re-fetching in the lens pipeline
   const ids = rawProducts.map((p: { id: string }) => p.id)
-  const pricesMap = await batchGetPricesViaProductLinks(ids)
+  const { pricesMap, confidenceMap } = await batchGetPricesWithConfidence(ids)
 
   const products = rawProducts.map((p: { id: string }) => ({
     ...p,
@@ -1119,13 +1133,16 @@ async function vectorEnhancedSearch(
   // Create similarity map and sort by similarity
   const similarityMap = new Map(productIds.map(p => [p.id, p.similarity]))
 
-  return products
-    .map((p: { id: string; [key: string]: unknown }) => ({
-      ...p,
-      _relevanceScore: Math.round((similarityMap.get(p.id) || 0) * 100),
-      _vectorSimilarity: similarityMap.get(p.id) || 0
-    }))
-    .sort((a: { _vectorSimilarity: number }, b: { _vectorSimilarity: number }) => b._vectorSimilarity - a._vectorSimilarity)
+  return {
+    products: products
+      .map((p: { id: string; [key: string]: unknown }) => ({
+        ...p,
+        _relevanceScore: Math.round((similarityMap.get(p.id) || 0) * 100),
+        _vectorSimilarity: similarityMap.get(p.id) || 0
+      }))
+      .sort((a: { _vectorSimilarity: number }, b: { _vectorSimilarity: number }) => b._vectorSimilarity - a._vectorSimilarity),
+    confidenceMap,
+  }
 }
 
 /**

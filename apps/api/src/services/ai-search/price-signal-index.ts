@@ -17,7 +17,7 @@
  */
 
 import { prisma, Prisma } from '@ironscout/db'
-import { visiblePriceWhere } from '../../config/tiers'
+import { visibleHistoricalPriceWhere } from '../../config/tiers'
 type Decimal = Prisma.Decimal
 
 // ============================================================================
@@ -175,8 +175,10 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
         where: {
           inStock: true,
           createdAt: { gte: windowStart },
-          // ADR-015: Filter out prices from ignored runs
-          ...visiblePriceWhere(),
+          // Use visibleHistoricalPriceWhere (not visiblePriceWhere) to avoid
+          // collapsing the 30-day sample window to CURRENT_PRICE_LOOKBACK_DAYS.
+          // Note: this still does not apply IGNORE/MULTIPLIER corrections (tracked as #1b).
+          ...visibleHistoricalPriceWhere(),
         },
         select: { price: true },
         take: 1,
