@@ -233,6 +233,7 @@ export async function processProducts(
   let missingBrandCount = 0
   let missingRoundCount = 0
   let missingGrainCount = 0
+  let nonAmmunitionFiltered = 0
   const errors: ParseError[] = []
 
   // Run-local price cache - maintained across all chunks
@@ -339,13 +340,29 @@ export async function processProducts(
         continue
       }
 
-      // Step 1b: Quarantine products missing caliber (trust-critical field)
+      // Step 1b: Filter non-ammunition products (signal-based detection)
+      const { valid: ammoProducts, filtered: nonAmmoProducts } = filterNonAmmunition(deduped)
+
+      if (nonAmmoProducts.length > 0) {
+        await batchQuarantineProducts(feed.id, run.id, sourceId, nonAmmoProducts, 'NON_AMMUNITION')
+        productsQuarantined += nonAmmoProducts.length
+        nonAmmunitionFiltered += nonAmmoProducts.length
+
+        procLog.info('QUARANTINE_BATCH', {
+          runId: run.id,
+          chunkNum,
+          quarantinedCount: nonAmmoProducts.length,
+          reason: 'NON_AMMUNITION',
+        })
+      }
+
+      // Step 1c: Quarantine products missing caliber (trust-critical field)
       // Products without caliber can't be matched to canonical products effectively
-      const { valid: validProducts, quarantined: toQuarantine } = filterMissingCaliber(deduped)
+      const { valid: validProducts, quarantined: toQuarantine } = filterMissingCaliber(ammoProducts)
 
       // Quarantine products missing caliber
       if (toQuarantine.length > 0) {
-        await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine)
+        await batchQuarantineProducts(feed.id, run.id, sourceId, toQuarantine, 'MISSING_CALIBER')
         productsQuarantined += toQuarantine.length
 
         procLog.info('QUARANTINE_BATCH', {
@@ -853,8 +870,9 @@ export async function processProducts(
     qualityMetrics: {
       missingBrand: missingBrandCount,
       missingRoundCount,
-      missingCaliber: productsQuarantined,
+      missingCaliber: productsQuarantined - nonAmmunitionFiltered,
       missingGrain: missingGrainCount,
+      nonAmmunitionFiltered,
     },
   })
 
@@ -886,10 +904,9 @@ export async function processProducts(
       version: 1 as const,
       missingBrand: missingBrandCount,
       missingRoundCount,
-      // missingCaliber: count from quarantine (missing-caliber reason only).
-      // If other quarantine reasons are introduced, this must be updated to track separately.
-      missingCaliber: productsQuarantined,
+      missingCaliber: productsQuarantined - nonAmmunitionFiltered,
       missingGrain: missingGrainCount,
+      nonAmmunitionFiltered,
     },
   }
 }
@@ -1103,6 +1120,54 @@ function filterToWinningRows(
 }
 
 /**
+ * Filter out non-ammunition products using signal-based detection.
+ * Products scoring 0 ammo signals are quarantined as NON_AMMUNITION.
+ *
+ * Signals checked (0–4):
+ * 1. Recognized caliber (already extracted during parsing)
+ * 2. Grain weight (already extracted during parsing)
+ * 3. Ammo pack language: "rounds", "rds" in title
+ * 4. Ammo context keyword: "ammo", "ammunition", "cartridges", "loads", "shells" in title
+ *
+ * Hard-coded exception: "Projectile For Handloading" — these have caliber + grain
+ * signals but are reloading components, not loaded ammunition.
+ */
+export function filterNonAmmunition(
+  products: ProductWithIdentity[]
+): { valid: ProductWithIdentity[]; filtered: ProductWithIdentity[] } {
+  const valid: ProductWithIdentity[] = []
+  const filtered: ProductWithIdentity[] = []
+
+  const AMMO_PACK_RE = /\b(?:rounds?|rds?)\b/i
+  const AMMO_CONTEXT_RE = /\b(?:ammo|ammunition|cartridges?|loads?|shells?)\b/i
+  const HANDLOADING_RE = /\bprojectiles?\b.*\bhandloading\b|\bhandloading\b.*\bprojectiles?\b/i
+
+  for (const p of products) {
+    const title = p.product.name
+
+    // Hard-coded exception: handloading projectiles are NOT ammunition
+    if (HANDLOADING_RE.test(title)) {
+      filtered.push(p)
+      continue
+    }
+
+    let signals = 0
+    if (p.product.caliber) signals++
+    if (p.product.grainWeight) signals++
+    if (AMMO_PACK_RE.test(title)) signals++
+    if (AMMO_CONTEXT_RE.test(title)) signals++
+
+    if (signals === 0) {
+      filtered.push(p)
+    } else {
+      valid.push(p)
+    }
+  }
+
+  return { valid, filtered }
+}
+
+/**
  * Filter out products missing caliber (trust-critical field).
  * Products without caliber cannot be effectively matched to canonical products.
  */
@@ -1131,11 +1196,16 @@ async function batchQuarantineProducts(
   feedId: string,
   runId: string,
   sourceId: string,
-  products: ProductWithIdentity[]
+  products: ProductWithIdentity[],
+  reason: 'MISSING_CALIBER' | 'NON_AMMUNITION' = 'MISSING_CALIBER'
 ): Promise<void> {
   if (products.length === 0) return
 
   const now = new Date()
+  const reasonMessages: Record<string, string> = {
+    MISSING_CALIBER: 'Product is missing caliber field',
+    NON_AMMUNITION: 'Product has zero ammunition signals (not ammunition)',
+  }
 
   // Batch upsert quarantine records
   for (const p of products) {
@@ -1168,7 +1238,7 @@ async function batchQuarantineProducts(
           grainWeight: p.product.grainWeight,
           roundCount: p.product.roundCount,
         },
-        blockingErrors: [{ code: 'MISSING_CALIBER', message: 'Product is missing caliber field' }],
+        blockingErrors: [{ code: reason, message: reasonMessages[reason] }],
         status: 'QUARANTINED',
         updatedAt: now,
       },
@@ -1186,7 +1256,7 @@ async function batchQuarantineProducts(
           grainWeight: p.product.grainWeight,
           roundCount: p.product.roundCount,
         },
-        blockingErrors: [{ code: 'MISSING_CALIBER', message: 'Product is missing caliber field' }],
+        blockingErrors: [{ code: reason, message: reasonMessages[reason] }],
         updatedAt: now,
       },
     })

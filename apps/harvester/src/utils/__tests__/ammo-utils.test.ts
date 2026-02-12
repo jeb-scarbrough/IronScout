@@ -3,6 +3,7 @@ import {
   normalizeCaliberString,
   extractGrainWeight,
   extractRoundCount,
+  extractBrand,
   deriveShotgunLoadType,
 } from '../ammo-utils'
 
@@ -133,5 +134,98 @@ describe('deriveShotgunLoadType', () => {
     expect(deriveShotgunLoadType('12 Gauge Rubber Buckshot')).toBe('Rubber Buck')
     expect(deriveShotgunLoadType('Rubber Buck 12ga Round')).toBe('Rubber Buck')
     expect(deriveShotgunLoadType('Sellier & Bellot Rubber 12 Gauge Buck Shot Ammunition')).toBe('Rubber Buck')
+  })
+})
+
+// ============================================================================
+// NEW CALIBER PATTERN TESTS
+// ============================================================================
+
+describe('normalizeCaliberString - new/fixed patterns', () => {
+  it.each([
+    ['500 SW 300 Grain', '.500 S&W Magnum'],
+    ['.500 S&W 350gr', '.500 S&W Magnum'],
+    ['327 Magnum 80 Grain', '.327 Federal Magnum'],
+    ['327 Mag 85gr', '.327 Federal Magnum'],
+    ['.327 Federal Magnum 100gr', '.327 Federal Magnum'],
+    ['41 Remington Magnum 190gr', '.41 Magnum'],
+    ['41 Rem Mag 210gr', '.41 Magnum'],
+    ['.41 Mag 170gr', '.41 Magnum'],
+    ['460 Smith and Wesson 200gr', '.460 S&W Magnum'],
+    ['460 Smith & Wesson 250gr', '.460 S&W Magnum'],
+    ['7mm Magnum 174 Grain SP', '7mm Remington Magnum'],
+    ['7mm Mag 140gr Nosler', '7mm Remington Magnum'],
+    ['32 HR Magnum 85gr', '.32 H&R Magnum'],
+    ['32 HR Mag 95gr', '.32 H&R Magnum'],
+    ['.32 H&R Magnum 80gr', '.32 H&R Magnum'],
+    ['50 Cal BMG Hornady', '.50 BMG'],
+    ['50 Cal BMG 660gr', '.50 BMG'],
+    ['.50 BMG 750gr AMAX', '.50 BMG'],
+    ['6.8mm SPC 100 Grain', '6.8 SPC'],
+    ['6.8 SPC 115gr', '6.8 SPC'],
+    ['22 Cal Win Magnum 30gr', '.22 WMR'],
+    ['22 Cal Winchester Mag 40gr', '.22 WMR'],
+    ['22 Cal Long Rifle Federal', '.22 LR'],
+    ['22 Cal Long Rifle 36gr HP', '.22 LR'],
+    ['410 Judge Handgun Load', '.410 Bore'],
+    ['410 Judge 000 Buck', '.410 Bore'],
+    ['.223 WSSM 55gr', '.223 WSSM'],
+    ['223 WSSM 64 grain SP', '.223 WSSM'],
+  ])('normalizes "%s" → %s', (input, expected) => {
+    expect(normalizeCaliberString(input)).toBe(expected)
+  })
+})
+
+// ============================================================================
+// NEW BRAND TESTS
+// ============================================================================
+
+describe('extractBrand - new brands', () => {
+  it.each([
+    ['Piney Mountain 22LR Tracer 50rd', 'Piney Mountain'],
+    ['Stars and Stripes 9mm 115gr FMJ', 'Stars and Stripes'],
+    ['Panzer Defense 12ga Slug', 'Panzer Defense'],
+    ['Lake City M855 5.56 62gr', 'Lake City'],
+    ['Ammo Incorporated 9mm 115gr TMC', 'Ammo Inc'],
+    ['NobelSport 12ga 2-3/4" Target', 'NobelSport'],
+    ['GGG 5.56 NATO 62gr', 'GGG'],
+    ['Maxxtech 9mm 115gr FMJ', 'Maxxtech'],
+    ['ADI 308 Win 150gr SP', 'ADI'],
+    ['Supernova 22LR Tracer Round', 'Piney Mountain'],
+  ])('extracts brand from "%s" → %s', (input, expected) => {
+    expect(extractBrand(input)).toBe(expected)
+  })
+})
+
+// ============================================================================
+// ROUND COUNT COMMA FIX
+// ============================================================================
+
+describe('extractRoundCount - comma-separated numbers', () => {
+  it('extracts comma-separated round counts', () => {
+    expect(extractRoundCount('10,000 Rounds - 5.7x28')).toBe(10000)
+    expect(extractRoundCount('Federal 9mm 1,000 Round Case')).toBe(1000)
+    expect(extractRoundCount('Bulk 5,000 Rounds 22LR')).toBe(5000)
+  })
+
+  it('still extracts non-comma round counts', () => {
+    expect(extractRoundCount('Federal 9mm 115gr FMJ - 50 Rounds')).toBe(50)
+    expect(extractRoundCount('Winchester 1000 Round Case')).toBe(1000)
+  })
+})
+
+// ============================================================================
+// GRAIN EDGE CASE
+// ============================================================================
+
+describe('extractGrainWeight - edge cases', () => {
+  it('extracts grain when followed directly by product name', () => {
+    expect(extractGrainWeight('50 GrainV-Max Hornady')).toBe(50)
+    expect(extractGrainWeight('55 GrainFMJ Federal')).toBe(55)
+  })
+
+  it('still extracts normal grain patterns', () => {
+    expect(extractGrainWeight('Federal 124gr JHP')).toBe(124)
+    expect(extractGrainWeight('Winchester 180 grain SP')).toBe(180)
   })
 })

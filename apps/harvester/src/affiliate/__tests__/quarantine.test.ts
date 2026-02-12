@@ -66,7 +66,7 @@ vi.mock('../circuit-breaker', () => ({
 }))
 
 // Import after mocks
-import { processProducts } from '../processor'
+import { processProducts, filterNonAmmunition } from '../processor'
 import type { ParsedFeedProduct, FeedRunContext } from '../types'
 
 describe('Affiliate Quarantine', () => {
@@ -130,12 +130,13 @@ describe('Affiliate Quarantine', () => {
     it('quarantines products missing caliber', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product Without Caliber',
+          name: 'Federal 115gr FMJ 50 Rounds',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
           sku: 'SKU-001',
-          // caliber is missing
+          // caliber is missing but has grain + round signals → passes non-ammo filter
+          grainWeight: 115,
           brand: 'Federal',
           roundCount: 50,
           rowNumber: 1,
@@ -144,7 +145,7 @@ describe('Affiliate Quarantine', () => {
 
       await processProducts(createContext(), products)
 
-      // Verify quarantine record was created
+      // Verify quarantine record was created with MISSING_CALIBER reason
       expect(prisma.quarantined_records.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({
@@ -161,7 +162,7 @@ describe('Affiliate Quarantine', () => {
     it('does not quarantine products with caliber', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product With Caliber',
+          name: 'Federal 9mm 115gr FMJ 50 Rounds',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
@@ -182,7 +183,7 @@ describe('Affiliate Quarantine', () => {
     it('quarantines some products while processing others', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product With Caliber',
+          name: 'Federal 9mm 115gr FMJ 50 Rounds',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
@@ -193,12 +194,13 @@ describe('Affiliate Quarantine', () => {
           rowNumber: 1,
         },
         {
-          name: 'Product Without Caliber',
+          name: 'Winchester 147gr JHP 20 Rounds',
           url: 'https://example.com/product2',
           price: 24.99,
           inStock: true,
           sku: 'SKU-002',
-          // caliber is missing
+          // caliber is missing but has grain + round signals → passes non-ammo filter
+          grainWeight: 147,
           brand: 'Winchester',
           roundCount: 20,
           rowNumber: 2,
@@ -207,11 +209,8 @@ describe('Affiliate Quarantine', () => {
 
       const result = await processProducts(createContext(), products)
 
-      // Should have quarantined 1 product
+      // Should have quarantined 1 product (missing caliber)
       expect(prisma.quarantined_records.upsert).toHaveBeenCalledTimes(1)
-
-      // Result should indicate quarantine
-      // Note: The actual result structure depends on implementation
     })
   })
 
@@ -219,7 +218,7 @@ describe('Affiliate Quarantine', () => {
     it('tracks missing brand count in quality metrics', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product Without Brand',
+          name: '9mm 115gr FMJ 50 Rounds',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
@@ -230,7 +229,7 @@ describe('Affiliate Quarantine', () => {
           rowNumber: 1,
         },
         {
-          name: 'Product With Brand',
+          name: 'Federal .45 ACP 230gr FMJ 20 Rounds',
           url: 'https://example.com/product2',
           price: 24.99,
           inStock: true,
@@ -242,8 +241,6 @@ describe('Affiliate Quarantine', () => {
         },
       ]
 
-      // The quality metrics are logged via emitIngestRunSummary
-      // In a real test, we'd capture the log output or mock the summary function
       await processProducts(createContext(), products)
 
       // No quarantine since caliber is present
@@ -253,7 +250,7 @@ describe('Affiliate Quarantine', () => {
     it('tracks missing roundCount in quality metrics', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product Without RoundCount',
+          name: 'Federal 9mm 115gr FMJ Ammunition',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
@@ -276,7 +273,7 @@ describe('Affiliate Quarantine', () => {
     it('includes raw product data in quarantine record', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Test Product',
+          name: 'TestBrand 115gr JHP 50 Rounds',
           url: 'https://example.com/test',
           price: 29.99,
           inStock: false,
@@ -285,7 +282,7 @@ describe('Affiliate Quarantine', () => {
           brand: 'TestBrand',
           grainWeight: 115,
           roundCount: 50,
-          // caliber is missing
+          // caliber is missing but has grain + round signals
           rowNumber: 1,
         },
       ]
@@ -296,7 +293,7 @@ describe('Affiliate Quarantine', () => {
         expect.objectContaining({
           create: expect.objectContaining({
             rawData: expect.objectContaining({
-              name: 'Test Product',
+              name: 'TestBrand 115gr JHP 50 Rounds',
               url: 'https://example.com/test',
               price: 29.99,
               inStock: false,
@@ -314,12 +311,12 @@ describe('Affiliate Quarantine', () => {
     it('uses identity key as match key for deduplication', async () => {
       const products: ParsedFeedProduct[] = [
         {
-          name: 'Product 1',
+          name: 'Mystery Ammunition 50 Rounds',
           url: 'https://example.com/product1',
           price: 19.99,
           inStock: true,
           sku: 'UNIQUE-SKU',
-          // caliber is missing
+          // caliber is missing but has ammo context signal
           rowNumber: 1,
         },
       ]
@@ -338,5 +335,122 @@ describe('Affiliate Quarantine', () => {
         })
       )
     })
+  })
+})
+
+// ============================================================================
+// Non-Ammunition Filter (unit tests for filterNonAmmunition)
+// ============================================================================
+
+describe('filterNonAmmunition', () => {
+  function makeProduct(overrides: Partial<ParsedFeedProduct> & { name: string }) {
+    return {
+      product: {
+        name: overrides.name,
+        url: 'https://example.com/test',
+        price: 19.99,
+        inStock: true,
+        rowNumber: 1,
+        ...overrides,
+      } as ParsedFeedProduct,
+      identity: { type: 'SKU' as const, value: 'test' },
+      identityKey: 'SKU:test',
+      allIdentifiers: [],
+    }
+  }
+
+  it('filters products with zero ammo signals', () => {
+    const products = [
+      makeProduct({ name: 'Magpul PMAG Gen M3 AR-15 Magazine' }),
+      makeProduct({ name: 'Mountain House Freeze Dried Beef Stew' }),
+      makeProduct({ name: 'Hogue Grips for 1911 Pistol' }),
+      makeProduct({ name: 'Rifle Scope Vortex Crossfire II 4-12x44' }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(filtered).toHaveLength(4)
+    expect(valid).toHaveLength(0)
+  })
+
+  it('passes products with caliber signal', () => {
+    const products = [
+      makeProduct({ name: 'Federal 9mm 115gr FMJ', caliber: '9mm' }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(valid).toHaveLength(1)
+    expect(filtered).toHaveLength(0)
+  })
+
+  it('passes products with grain weight signal', () => {
+    const products = [
+      makeProduct({ name: 'Mystery Brand 124gr JHP', grainWeight: 124 }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(valid).toHaveLength(1)
+    expect(filtered).toHaveLength(0)
+  })
+
+  it('passes products with ammo pack language (rounds/rds)', () => {
+    const products = [
+      makeProduct({ name: 'Premium Target 50 Rounds' }),
+      makeProduct({ name: 'Bulk Pack 500 rds' }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(valid).toHaveLength(2)
+    expect(filtered).toHaveLength(0)
+  })
+
+  it('passes products with ammo context keywords', () => {
+    const products = [
+      makeProduct({ name: 'Premium Ammunition Value Pack' }),
+      makeProduct({ name: 'Shotgun Shells #7 Shot' }),
+      makeProduct({ name: 'Hunting Cartridges Special' }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(valid).toHaveLength(3)
+    expect(filtered).toHaveLength(0)
+  })
+
+  it('filters handloading projectiles despite having caliber/grain signals', () => {
+    const products = [
+      makeProduct({
+        name: 'Hornady 30 Cal .308 168gr Projectile For Handloading',
+        caliber: '.308 Winchester',
+        grainWeight: 168,
+      }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(filtered).toHaveLength(1)
+    expect(valid).toHaveLength(0)
+  })
+
+  it('does NOT filter normal ammo that happens to mention caliber', () => {
+    const products = [
+      makeProduct({
+        name: 'Federal American Eagle 9mm Luger 115gr FMJ 50 Rounds',
+        caliber: '9mm',
+        grainWeight: 115,
+      }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(valid).toHaveLength(1)
+    expect(filtered).toHaveLength(0)
+  })
+
+  it('filters less-lethal items with no ammo signals', () => {
+    const products = [
+      makeProduct({ name: 'Tactical Pepper Spray Canister' }),
+      makeProduct({ name: 'Taser X26P Professional' }),
+    ]
+
+    const { valid, filtered } = filterNonAmmunition(products)
+    expect(filtered).toHaveLength(2)
+    expect(valid).toHaveLength(0)
   })
 })

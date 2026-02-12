@@ -137,6 +137,8 @@ export interface DataQualityMetrics {
   missingCaliber: number
   /** Products with no grainWeight; excludes gauge/shotgun calibers where grain is N/A */
   missingGrain: number
+  /** Products filtered as non-ammunition (zero ammo signals) */
+  nonAmmunitionFiltered?: number
 }
 
 /**

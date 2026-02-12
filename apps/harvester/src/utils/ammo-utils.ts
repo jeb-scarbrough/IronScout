@@ -35,11 +35,11 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b9x21\b/i, normalized: '9x21mm' },
   { pattern: /(?:^|\s|\W)\.?\s?357\s?mag\b|357\s?magnum\b/i, normalized: '.357 Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?357\s?sig\b|357\s?sig\b/i, normalized: '.357 SIG' },
-  { pattern: /(?:^|\s|\W)\.?\s?327\s?fed(?:eral)?\s?mag(?:num)?\b/i, normalized: '.327 Federal Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?327\s?fed(?:eral)?\s?mag(?:num)?\b|327\s?mag(?:num)?\b/i, normalized: '.327 Federal Magnum' },
   { pattern: /\b10\s?mm|10mm\s?auto\b/i, normalized: '10mm Auto' },
   { pattern: /(?:^|\s|\W)\.?\s?380\s?acp\b|380\s?auto\b/i, normalized: '.380 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?32\s?acp\b|32\s?auto\b/i, normalized: '.32 ACP' },
-  { pattern: /(?:^|\s|\W)\.?\s?32\s?h&r\s?mag(?:num)?\b/i, normalized: '.32 H&R Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?32\s?h&?r\s?mag(?:num)?\b/i, normalized: '.32 H&R Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?32\s?win\.?\s?(?:chester)?\s?(?:special|spl)\b|32\s?special\b/i, normalized: '.32 Winchester Special' },
   { pattern: /(?:^|\s|\W)\.?\s?32-20\s?win(?:chester)?\b|32-20\b/i, normalized: '.32-20 Winchester' },
   { pattern: /(?:^|\s|\W)\.?\s?25\s?acp\b|25\s?auto\b/i, normalized: '.25 ACP' },
@@ -48,10 +48,10 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?44\s?(?:rem(?:ingto[nm])?\s+)?mag(?:num)?\b/i, normalized: '.44 Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?44\s?special\b|44\s?spl\b/i, normalized: '.44 Special' },
   { pattern: /(?:^|\s|\W)\.?\s?44-40\s?win(?:chester)?\b|44-40\b/i, normalized: '.44-40 Winchester' },
-  { pattern: /(?:^|\s|\W)\.?\s?41\s?mag(?:num)?\b/i, normalized: '.41 Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?41\s?(?:rem(?:ington)?\s?)?mag(?:num)?\b/i, normalized: '.41 Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?454\s?casull\b/i, normalized: '.454 Casull' },
-  { pattern: /(?:^|\s|\W)\.?\s?460\s?s&w\b|460\s?sw\s?mag(?:num)?\b/i, normalized: '.460 S&W Magnum' },
-  { pattern: /(?:^|\s|\W)\.?\s?500\s?s&w\b|500\s?sw\s?mag(?:num)?\b/i, normalized: '.500 S&W Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?460\s?s&w\b|460\s?sw\s?mag(?:num)?\b|460\s?smith\s*(?:and|&)\s*wesson\b/i, normalized: '.460 S&W Magnum' },
+  { pattern: /(?:^|\s|\W)\.?\s?500\s?s&w\b|500\s?sw\b/i, normalized: '.500 S&W Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?50\s?ae\b|50\s?action\s?express\b/i, normalized: '.50 Action Express' },
   { pattern: /(?:^|\s|\W)\.?\s?30\s?super\s?carry\b/i, normalized: '.30 Super Carry' },
   { pattern: /\b7\.62x38r?\s?nagant\b|7\.62\s?nagant\b/i, normalized: '7.62x38R Nagant' },
@@ -61,8 +61,8 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?480\s?ruger\b/i, normalized: '.480 Ruger' },
 
   // Rimfire calibers
-  { pattern: /(?:^|\s|\W)\.?\s?22\s?lr\b|22\s?long\s?rifle\b/i, normalized: '.22 LR' },
-  { pattern: /(?:^|\s|\W)\.?\s?22\s?wmr\b|22\s?win(?:chester)?\s?mag(?:num)?\b|22\s?magnum\b/i, normalized: '.22 WMR' },
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?lr\b|22\s?long\s?rifle\b|22\s?cal\s?long\s?rifle\b/i, normalized: '.22 LR' },
+  { pattern: /(?:^|\s|\W)\.?\s?22\s?wmr\b|22\s?win(?:chester)?\s?mag(?:num)?\b|22\s?magnum\b|22\s?cal\s?win(?:chester)?\s?mag(?:num)?\b/i, normalized: '.22 WMR' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?short\b/i, normalized: '.22 Short' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?long\b(?!\s?rifle)/i, normalized: '.22 Long' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?rem(?:ingto[nm])?\s?jet\b/i, normalized: '.22 Remington Jet' },
@@ -83,6 +83,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?222\s?rem(?:ingto[nm])?\b/i, normalized: '.222 Remington' },
   { pattern: /(?:^|\s|\W)\.?\s?224\s?valkyrie\b/i, normalized: '.224 Valkyrie' },
   { pattern: /(?:^|\s|\W)\.?\s?22-250\b|22-250\s?rem(?:ingto[nm])?\b/i, normalized: '.22-250 Remington' },
+  { pattern: /(?:^|\s|\W)\.?\s?223\s?wssm\b/i, normalized: '.223 WSSM' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?creedmoor\b/i, normalized: '.22 Creedmoor' },
   { pattern: /(?:^|\s|\W)\.?\s?220\s?swift\b/i, normalized: '.220 Swift' },
   { pattern: /(?:^|\s|\W)\.?\s?204\s?ruger\b/i, normalized: '.204 Ruger' },
@@ -112,7 +113,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b6\.5-284\s?norma\b|6\.5-284\b/i, normalized: '6.5-284 Norma' },
 
   // Rifle calibers - 6.8mm
-  { pattern: /\b6\.8\s?spc\b|6\.8\s?rem(?:ingto[nm])?\s?spc\b/i, normalized: '6.8 SPC' },
+  { pattern: /\b6\.8(?:mm)?\s?spc\b|6\.8\s?rem(?:ingto[nm])?\s?spc\b/i, normalized: '6.8 SPC' },
   { pattern: /\b6\.8\s?western\b/i, normalized: '6.8 Western' },
 
   // Rifle calibers - 7mm
@@ -124,6 +125,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b7mm\s?wsm\b|7mm\s?win(?:chester)?\s?short\s?mag\b/i, normalized: '7mm WSM' },
   { pattern: /\b7mm\s?wby\b|7mm\s?weatherby\b|7mm\s?weatherby\s?mag(?:num)?\b/i, normalized: '7mm Weatherby Magnum' },
   { pattern: /\b7mm\s?stw\b|7mm\s?shooting\s?times\b/i, normalized: '7mm STW' },
+  { pattern: /\b7mm\s?mag(?:num)?\b/i, normalized: '7mm Remington Magnum' },
   { pattern: /\b7-30\s?waters\b/i, normalized: '7-30 Waters' },
   { pattern: /\b7x57r?\b|7mm\s?mauser\b/i, normalized: '7x57mm Mauser' },
   { pattern: /\b7x64\b/i, normalized: '7x64mm Brenneke' },
@@ -227,7 +229,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?460\s?wby\b|460\s?weatherby\b/i, normalized: '.460 Weatherby Magnum' },
   { pattern: /(?:^|\s|\W)\.?\s?470\s?nitro\s?exp(?:ress)?\b|470\s?ne\b/i, normalized: '.470 Nitro Express' },
   { pattern: /(?:^|\s|\W)\.?\s?450\s?bushmaster\b/i, normalized: '.450 Bushmaster' },
-  { pattern: /(?:^|\s|\W)\.?\s?50\s?bmg\b|50\s?bmg\b/i, normalized: '.50 BMG' },
+  { pattern: /(?:^|\s|\W)\.?\s?50\s?bmg\b|50\s?bmg\b|50\s?cal\s?bmg\b/i, normalized: '.50 BMG' },
   { pattern: /(?:^|\s|\W)\.?\s?50\s?beowulf\b/i, normalized: '.50 Beowulf' },
   { pattern: /(?:^|\s|\W)\.?\s?500\s?nitro\s?exp(?:ress)?\b|500\s?ne\b/i, normalized: '.500 Nitro Express' },
   { pattern: /(?:^|\s|\W)\.?\s?505\s?gibbs\b/i, normalized: '.505 Gibbs' },
@@ -248,7 +250,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b16\s?ga|16\s?gauge\b/i, normalized: '16 Gauge' },
   { pattern: /\b28\s?ga|28\s?gauge\b/i, normalized: '28 Gauge' },
   { pattern: /\b10\s?ga(?:uge)?\b/i, normalized: '10 Gauge' },
-  { pattern: /\b\.410\s?bore|410\s?bore\b|410\s?gauge\b/i, normalized: '.410 Bore' },
+  { pattern: /\b\.410\s?bore|410\s?bore\b|410\s?gauge\b|410\s?judge\b/i, normalized: '.410 Bore' },
 ]
 
 export function extractCaliber(productName: string): string | null {
@@ -277,7 +279,7 @@ export function extractGrainWeight(productName: string): number | null {
   const patterns = [
     /(\d{2,3}(?:\.\d+)?)\s?gr(?:ain)?(?:s)?\b/i,
     /(\d{2,3}(?:\.\d+)?)\s?gn\b/i,  // "gn" variant (common in some feeds)
-    /(\d{2,3}(?:\.\d+)?)-?grain/i,
+    /(\d{2,3}(?:\.\d+)?)\s?-?grain/i,
     /(\d{2,3}(?:\.\d+)?)\s?grn\b/i, // "grn" variant
   ]
 
@@ -466,36 +468,37 @@ export function extractRoundCount(productName: string): number | null {
   // Match patterns like "50 rounds", "100rd", "500 count", "20-count"
   // Also handles bulk/case patterns like "case of 500", "bulk 1000"
   const patterns = [
-    // Standard patterns
-    /(\d+)\s?(?:rounds?|rds?|count|ct)\b/i,
-    /(\d+)-(?:round|rd|count|ct)\b/i,
-    /box\s?of\s?(\d+)/i,
+    // Standard patterns (support comma-separated numbers like "10,000 Rounds")
+    // Uses (\d[\d,]*) to match both plain digits and comma-formatted numbers
+    /(\d[\d,]*)\s?(?:rounds?|rds?|count|ct)\b/i,
+    /(\d[\d,]*)-(?:round|rd|count|ct)\b/i,
+    /box\s?of\s?(\d[\d,]*)/i,
     // Bulk/case patterns
-    /case\s?of\s?(\d+)/i,
-    /(\d+)\s?(?:per\s?case|\/case)\b/i,
-    /bulk\s?(\d+)/i,
-    /(\d+)\s?(?:rd|round)s?\s?(?:bulk|case)\b/i,
+    /case\s?of\s?(\d[\d,]*)/i,
+    /(\d[\d,]*)\s?(?:per\s?case|\/case)\b/i,
+    /bulk\s?(\d[\d,]*)/i,
+    /(\d[\d,]*)\s?(?:rd|round)s?\s?(?:bulk|case)\b/i,
     // Value pack patterns
-    /value\s?pack\s?(?:of\s?)?(\d+)/i,
-    /(\d+)\s?(?:rd|round)s?\s?value\s?pack/i,
+    /value\s?pack\s?(?:of\s?)?(\d[\d,]*)/i,
+    /(\d[\d,]*)\s?(?:rd|round)s?\s?value\s?pack/i,
     // Range pack patterns
-    /range\s?pack\s?(?:of\s?)?(\d+)/i,
-    /(\d+)\s?(?:rd|round)s?\s?range\s?pack/i,
+    /range\s?pack\s?(?:of\s?)?(\d[\d,]*)/i,
+    /(\d[\d,]*)\s?(?:rd|round)s?\s?range\s?pack/i,
     // Box/pack shorthand patterns
-    /(\d+)\/box\b/i,                        // "20/box"
-    /(?:pk|pack)\s?of\s?(\d+)/i,            // "pk of 20", "pack of 20"
-    /(\d+)\s?-?\s?pk\b/i,                   // "20pk", "20-pk", "20 pk"
-    /(\d+)\s?-?\s?pack\b/i,                 // "20-pack", "20 pack"
-    /qty[:\s]*(\d+)/i,                      // "qty 20", "qty: 20"
-    /\((\d+)\)\s*$/,                        // "(50)" at end of title
-    /(\d+)\s?per\s?box\b/i,                 // "5 Per Box", "5 per box"
-    /(\d+)\s?per\s?case\b/i,                // "25 Per Case"
+    /(\d[\d,]*)\/box\b/i,                        // "20/box"
+    /(?:pk|pack)\s?of\s?(\d[\d,]*)/i,            // "pk of 20", "pack of 20"
+    /(\d[\d,]*)\s?-?\s?pk\b/i,                   // "20pk", "20-pk", "20 pk"
+    /(\d[\d,]*)\s?-?\s?pack\b/i,                 // "20-pack", "20 pack"
+    /qty[:\s]*(\d[\d,]*)/i,                       // "qty 20", "qty: 20"
+    /\((\d[\d,]*)\)\s*$/,                         // "(50)" at end of title
+    /(\d[\d,]*)\s?per\s?box\b/i,                  // "5 Per Box", "5 per box"
+    /(\d[\d,]*)\s?per\s?case\b/i,                 // "25 Per Case"
   ]
 
   for (const pattern of patterns) {
     const match = productName.match(pattern)
     if (match) {
-      const count = parseInt(match[1], 10)
+      const count = parseInt(match[1].replace(/,/g, ''), 10)
       // Sanity check: typical sizes range from 5 to 10000 (bulk cases)
       if (count >= 5 && count <= 10000) {
         return count
@@ -543,8 +546,14 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bcritical\s*defense\b/i, normalized: 'Hornady' },
   { pattern: /\bcritical\s*duty\b/i, normalized: 'Hornady' },
   { pattern: /\bromanian\s*surplus\b/i, normalized: 'Romanian Surplus' },
+  { pattern: /\bpiney\s*mountain\b/i, normalized: 'Piney Mountain' },
+  { pattern: /\bstars\s*and\s*stripes\b/i, normalized: 'Stars and Stripes' },
+  { pattern: /\bpanzer\s*defense\b/i, normalized: 'Panzer Defense' },
+  { pattern: /\blake\s*city\b/i, normalized: 'Lake City' },
+  { pattern: /\bammo\s*incorporated\b/i, normalized: 'Ammo Inc' },
 
   // Single-word brands (alphabetical)
+  { pattern: /\badi\b/i, normalized: 'ADI' },
   { pattern: /\baguila\b/i, normalized: 'Aguila' },
   { pattern: /\barmscor\b/i, normalized: 'Armscor' },
   { pattern: /\bbarnaul\b/i, normalized: 'Barnaul' },
@@ -559,6 +568,7 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bfederal\b/i, normalized: 'Federal' },
   { pattern: /\bfiocchi\b/i, normalized: 'Fiocchi' },
   { pattern: /\bgeco\b/i, normalized: 'Geco' },
+  { pattern: /\bggg\b/i, normalized: 'GGG' },
   { pattern: /\bherters\b/i, normalized: 'Herter\'s' },
   { pattern: /\bhornady\b/i, normalized: 'Hornady' },
   { pattern: /\bhpr\b/i, normalized: 'HPR' },
@@ -567,7 +577,9 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\blapua\b/i, normalized: 'Lapua' },
   { pattern: /\blps\b/i, normalized: 'Romanian Surplus' },
   { pattern: /\bmagtech\b/i, normalized: 'Magtech' },
+  { pattern: /\bmaxxtech\b/i, normalized: 'Maxxtech' },
   { pattern: /\bmeister\b/i, normalized: 'Meister' },
+  { pattern: /\bnobelsport\b/i, normalized: 'NobelSport' },
   { pattern: /\bnorma\b/i, normalized: 'Norma' },
   { pattern: /\bnosler\b/i, normalized: 'Nosler' },
   { pattern: /\bpmc\b/i, normalized: 'PMC' },
@@ -602,6 +614,7 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bsilver\s*tip\b/i, normalized: 'Winchester' },
   { pattern: /\bpdx1\b/i, normalized: 'Winchester' },
   { pattern: /\bsuper-?x\b/i, normalized: 'Winchester' },
+  { pattern: /\bsupernova\b/i, normalized: 'Piney Mountain' },
 ]
 
 /**
