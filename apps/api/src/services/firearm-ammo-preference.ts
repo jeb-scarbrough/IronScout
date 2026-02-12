@@ -117,15 +117,37 @@ function calibersAreCompatible(calA: string, calB: string): boolean {
 // Helper Functions
 // ============================================================================
 
+/** Shape used for product selects throughout this module */
+const PRODUCT_SELECT = {
+  id: true,
+  name: true,
+  brand: true,
+  caliber: true,
+  grainWeight: true,
+  roundCount: true,
+  isActiveSku: true,
+  supersededById: true,
+} as const
+
+type ProductData = {
+  id: string
+  name: string
+  brand: string | null
+  caliber: string | null
+  grainWeight: number | null
+  roundCount: number | null
+  isActiveSku: boolean
+  supersededById: string | null
+}
+
 /**
- * Resolve superseded SKU to canonical SKU
+ * Resolve superseded SKU to canonical SKU (single-product path for addPreference)
  * Per spec: "Deprecated SKUs resolve to canonical SKU at read time"
  */
 async function resolveSupersededSku(productId: string): Promise<string> {
   let currentId = productId
   const visited = new Set<string>()
 
-  // Follow supersession chain (with cycle protection)
   while (true) {
     if (visited.has(currentId)) {
       log.warn('Supersession cycle detected', { productId, visited: Array.from(visited) })
@@ -148,6 +170,88 @@ async function resolveSupersededSku(productId: string): Promise<string> {
   return currentId
 }
 
+/**
+ * Batch-preload all products in supersession chains.
+ * Returns a map of productId → ProductData for in-memory chain resolution.
+ * Loads in breadth-first waves to avoid N+1 queries.
+ */
+async function batchPreloadSupersessionChains(
+  records: Array<{ products: ProductData }>
+): Promise<Map<string, ProductData>> {
+  const productMap = new Map<string, ProductData>()
+
+  // Seed with products already loaded via Prisma include
+  for (const r of records) {
+    productMap.set(r.products.id, r.products)
+  }
+
+  // Collect supersededById targets not yet in the map
+  const pendingIds = new Set<string>()
+  for (const r of records) {
+    if (!r.products.isActiveSku && r.products.supersededById && !productMap.has(r.products.supersededById)) {
+      pendingIds.add(r.products.supersededById)
+    }
+  }
+
+  // Breadth-first loading: follow chains until no new IDs to load
+  while (pendingIds.size > 0) {
+    const batch = [...pendingIds]
+    pendingIds.clear()
+
+    const loaded = await prisma.products.findMany({
+      where: { id: { in: batch } },
+      select: PRODUCT_SELECT,
+    })
+
+    for (const p of loaded) {
+      productMap.set(p.id, p)
+      // If this product is also superseded, queue its target
+      if (!p.isActiveSku && p.supersededById && !productMap.has(p.supersededById)) {
+        pendingIds.add(p.supersededById)
+      }
+    }
+
+    // Mark any IDs that weren't found (broken chain) so we don't loop
+    for (const id of batch) {
+      if (!productMap.has(id)) {
+        // Product doesn't exist — stop following this chain
+        productMap.set(id, undefined as any) // sentinel
+      }
+    }
+  }
+
+  return productMap
+}
+
+/**
+ * Resolve a supersession chain in-memory using the preloaded product map.
+ * Returns the canonical product ID, or the original if chain cannot be followed.
+ */
+function resolveSupersededSkuFromMap(
+  productId: string,
+  productMap: Map<string, ProductData>
+): string {
+  let currentId = productId
+  const visited = new Set<string>()
+
+  while (true) {
+    if (visited.has(currentId)) {
+      log.warn('Supersession cycle detected', { productId, visited: Array.from(visited) })
+      break
+    }
+    visited.add(currentId)
+
+    const product = productMap.get(currentId)
+    if (!product || !product.supersededById || product.isActiveSku) {
+      break
+    }
+
+    currentId = product.supersededById
+  }
+
+  return currentId
+}
+
 // Internal type for tracking supersession during dedupe
 interface MappedPreference extends AmmoPreference {
   _originalId: string // Original preference ID (for soft-delete tracking)
@@ -156,8 +260,63 @@ interface MappedPreference extends AmmoPreference {
 }
 
 /**
- * Map database record to AmmoPreference with resolved SKU data
- * Tracks original IDs for supersession soft-delete
+ * Map database records to AmmoPreferences with resolved SKU data (batch).
+ * Uses preloaded product map to avoid N+1 queries.
+ * Tracks original IDs for supersession soft-delete.
+ */
+function mapToAmmoPreferences(
+  records: Array<{
+    id: string
+    firearmId: string
+    ammoSkuId: string
+    useCase: AmmoUseCase
+    createdAt: Date
+    updatedAt: Date
+    products: ProductData
+  }>,
+  productMap: Map<string, ProductData>
+): MappedPreference[] {
+  return records.map((record) => {
+    let ammoSku = record.products
+    let wasSuperseded = false
+
+    if (!ammoSku.isActiveSku && ammoSku.supersededById) {
+      const canonicalId = resolveSupersededSkuFromMap(record.ammoSkuId, productMap)
+      if (canonicalId !== record.ammoSkuId) {
+        const canonical = productMap.get(canonicalId)
+        if (canonical) {
+          ammoSku = canonical
+          wasSuperseded = true
+        }
+      }
+    }
+
+    return {
+      id: record.id,
+      firearmId: record.firearmId,
+      ammoSkuId: ammoSku.id,
+      useCase: record.useCase,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      ammoSku: {
+        id: ammoSku.id,
+        name: ammoSku.name,
+        brand: ammoSku.brand,
+        caliber: ammoSku.caliber,
+        grainWeight: ammoSku.grainWeight,
+        roundCount: ammoSku.roundCount,
+        isActive: ammoSku.isActiveSku,
+      },
+      _originalId: record.id,
+      _originalSkuId: record.ammoSkuId,
+      _wasSuperseded: wasSuperseded,
+    }
+  })
+}
+
+/**
+ * Map a single database record to AmmoPreference with resolved SKU data.
+ * Used for single-record paths (addPreference, updatePreferenceUseCase).
  */
 async function mapToAmmoPreference(
   record: {
@@ -167,37 +326,18 @@ async function mapToAmmoPreference(
     useCase: AmmoUseCase
     createdAt: Date
     updatedAt: Date
-    products: {
-      id: string
-      name: string
-      brand: string | null
-      caliber: string | null
-      grainWeight: number | null
-      roundCount: number | null
-      isActiveSku: boolean
-      supersededById: string | null
-    }
+    products: ProductData
   }
 ): Promise<MappedPreference> {
   let ammoSku = record.products
   let wasSuperseded = false
 
-  // Resolve supersession if needed
   if (!ammoSku.isActiveSku && ammoSku.supersededById) {
     const canonicalId = await resolveSupersededSku(record.ammoSkuId)
     if (canonicalId !== record.ammoSkuId) {
       const canonical = await prisma.products.findUnique({
         where: { id: canonicalId },
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          caliber: true,
-          grainWeight: true,
-          roundCount: true,
-          isActiveSku: true,
-          supersededById: true,
-        },
+        select: PRODUCT_SELECT,
       })
       if (canonical) {
         ammoSku = canonical
@@ -338,16 +478,7 @@ export async function getPreferencesForFirearm(
     },
     include: {
       products: {
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          caliber: true,
-          grainWeight: true,
-          roundCount: true,
-          isActiveSku: true,
-          supersededById: true,
-        },
+        select: PRODUCT_SELECT,
       },
     },
     orderBy: [
@@ -356,8 +487,9 @@ export async function getPreferencesForFirearm(
     ],
   })
 
-  // Map, resolve supersession, and dedupe (soft-deletes deprecated mappings per spec)
-  const mapped = await Promise.all(preferences.map(mapToAmmoPreference))
+  // Batch-preload supersession chains, then map + dedupe (no N+1)
+  const productMap = await batchPreloadSupersessionChains(preferences)
+  const mapped = mapToAmmoPreferences(preferences, productMap)
   const deduped = await dedupeAndSoftDeleteSuperseded(mapped)
 
   // Group by use case in fixed order
@@ -386,16 +518,7 @@ export async function getPreferencesForUser(
     },
     include: {
       products: {
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          caliber: true,
-          grainWeight: true,
-          roundCount: true,
-          isActiveSku: true,
-          supersededById: true,
-        },
+        select: PRODUCT_SELECT,
       },
     },
     orderBy: [
@@ -404,8 +527,9 @@ export async function getPreferencesForUser(
     ],
   })
 
-  // Map, resolve supersession, and dedupe (soft-deletes deprecated mappings per spec)
-  const mapped = await Promise.all(preferences.map(mapToAmmoPreference))
+  // Batch-preload supersession chains, then map + dedupe (no N+1)
+  const productMap = await batchPreloadSupersessionChains(preferences)
+  const mapped = mapToAmmoPreferences(preferences, productMap)
   return dedupeAndSoftDeleteSuperseded(mapped)
 }
 
@@ -431,16 +555,7 @@ export async function addPreference(
   // Verify ammo SKU exists
   const ammoSku = await prisma.products.findUnique({
     where: { id: ammoSkuId },
-    select: {
-      id: true,
-      name: true,
-      brand: true,
-      caliber: true,
-      grainWeight: true,
-      roundCount: true,
-      isActiveSku: true,
-      supersededById: true,
-    },
+    select: PRODUCT_SELECT,
   })
 
   if (!ammoSku) {
@@ -519,16 +634,7 @@ export async function addPreference(
     },
     include: {
       products: {
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          caliber: true,
-          grainWeight: true,
-          roundCount: true,
-          isActiveSku: true,
-          supersededById: true,
-        },
+        select: PRODUCT_SELECT,
       },
     },
   })
@@ -574,16 +680,7 @@ export async function updatePreferenceUseCase(
     data: { useCase: newUseCase },
     include: {
       products: {
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          caliber: true,
-          grainWeight: true,
-          roundCount: true,
-          isActiveSku: true,
-          supersededById: true,
-        },
+        select: PRODUCT_SELECT,
       },
     },
   })

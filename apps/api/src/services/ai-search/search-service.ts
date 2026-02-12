@@ -1370,66 +1370,59 @@ function formatProduct(product: any, isPremium: boolean): any {
 }
 
 /**
- * Build facets for filtering UI
+ * Build facets for filtering UI.
+ *
+ * Uses Prisma groupBy to aggregate counts at the DB level instead of
+ * materializing all matching rows into Node.js memory.
  */
 async function buildFacets(where: any, isPremium: boolean): Promise<Record<string, Record<string, number>>> {
-  const selectFields: any = {
-    caliber: true,
-    grainWeight: true,
-    caseMaterial: true,
-    purpose: true,
-    brand: true,
-    category: true,
-  }
+  // Define facet fields: [dbField, outputKey]
+  const baseFacets: Array<[string, string]> = [
+    ['caliber', 'calibers'],
+    ['grainWeight', 'grainWeights'],
+    ['caseMaterial', 'caseMaterials'],
+    ['purpose', 'purposes'],
+    ['brand', 'brands'],
+    ['category', 'categories'],
+  ]
 
-  // Add Premium facet fields
   if (isPremium) {
-    selectFields.bulletType = true
-    selectFields.pressureRating = true
-    selectFields.isSubsonic = true
-  }
-
-  const allProducts = await prisma.products.findMany({
-    where,
-    select: selectFields
-  })
-
-  const countValues = (field: string) => {
-    const counts = new Map<string, number>()
-    allProducts.forEach((p: any) => {
-      const value = p[field]
-      if (value !== null && value !== undefined) {
-        const key = value.toString()
-        counts.set(key, (counts.get(key) || 0) + 1)
-      }
-    })
-    return Object.fromEntries(
-      Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
+    baseFacets.push(
+      ['bulletType', 'bulletTypes'],
+      ['pressureRating', 'pressureRatings'],
+      ['isSubsonic', 'isSubsonic'],
     )
   }
 
-  const facets: Record<string, Record<string, number>> = {
-    calibers: countValues('caliber'),
-    grainWeights: countValues('grainWeight'),
-    caseMaterials: countValues('caseMaterial'),
-    purposes: countValues('purpose'),
-    brands: countValues('brand'),
-    categories: countValues('category')
-  }
+  // Run all groupBy queries in parallel
+  const results = await Promise.all(
+    baseFacets.map(([field]) =>
+      prisma.products.groupBy({
+        by: [field] as any,
+        where: { ...where, [field]: { not: null } },
+        _count: { [field]: true } as any,
+        orderBy: { _count: { [field]: 'desc' } } as any,
+      })
+    )
+  )
 
-  // Add Premium facets
-  if (isPremium) {
-    facets.bulletTypes = countValues('bulletType')
-    facets.pressureRatings = countValues('pressureRating')
+  // Build facets from groupBy results
+  const facets: Record<string, Record<string, number>> = {}
 
-    // Boolean facet for subsonic
-    const subsonicCount = allProducts.filter((p: any) => p.isSubsonic === true).length
-    const nonSubsonicCount = allProducts.filter((p: any) => p.isSubsonic === false).length
-    if (subsonicCount > 0 || nonSubsonicCount > 0) {
-      facets.isSubsonic = {
-        'true': subsonicCount,
-        'false': nonSubsonicCount
-      }
+  for (let i = 0; i < baseFacets.length; i++) {
+    const [field, outputKey] = baseFacets[i]
+    const rows = results[i] as Array<Record<string, any>>
+    const counts: Record<string, number> = {}
+
+    for (const row of rows) {
+      // Map value to string key (handles booleans like isSubsonic)
+      const key = String(row[field])
+      counts[key] = row._count[field]
+    }
+
+    // Only include non-empty facets
+    if (Object.keys(counts).length > 0) {
+      facets[outputKey] = counts
     }
   }
 

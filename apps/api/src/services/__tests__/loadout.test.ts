@@ -113,27 +113,17 @@ describe('loadout ADR-015 compliance', () => {
     expectScrapeGuardrail(lowestQuery!)
   })
 
-  it('excludes prices from ignored runs in in-stock count', async () => {
+  it('excludes prices from ignored runs in in-stock count and top calibers', async () => {
     await getLoadoutData('user-123')
 
     const queries = mockPrisma.$queryRaw.mock.calls.map(getQueryText)
-    const inStockQuery = queries.find(
-      (q) => q.includes('COUNT(DISTINCT p.id)') && !q.includes('GROUP BY p.caliber')
+    // In-stock count and top calibers are combined via GROUPING SETS
+    const combinedQuery = queries.find(
+      (q) => q.includes('COUNT(DISTINCT p.id)') && q.includes('GROUPING SETS')
     )
 
-    expect(inStockQuery).toBeTruthy()
-    expectIgnoredRunFilter(inStockQuery!)
-    expectScrapeGuardrail(inStockQuery!)
-  })
-
-  it('excludes prices from ignored runs in top calibers', async () => {
-    await getLoadoutData('user-123')
-
-    const queries = mockPrisma.$queryRaw.mock.calls.map(getQueryText)
-    const topCalibersQuery = queries.find((q) => q.includes('GROUP BY p.caliber'))
-
-    expect(topCalibersQuery).toBeTruthy()
-    expectIgnoredRunFilter(topCalibersQuery!)
-    expectScrapeGuardrail(topCalibersQuery!)
+    expect(combinedQuery).toBeTruthy()
+    expectIgnoredRunFilter(combinedQuery!)
+    expectScrapeGuardrail(combinedQuery!)
   })
 })

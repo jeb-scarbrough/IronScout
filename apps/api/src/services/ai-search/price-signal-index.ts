@@ -17,7 +17,6 @@
  */
 
 import { prisma, Prisma } from '@ironscout/db'
-import { visibleHistoricalPriceWhere } from '../../config/tiers'
 type Decimal = Prisma.Decimal
 
 // ============================================================================
@@ -150,7 +149,12 @@ function percentile(sorted: number[], p: number): number {
 }
 
 /**
- * Get price statistics for a caliber
+ * Get price statistics for a caliber.
+ *
+ * ADR-015 compliant: queries through product_links and applies
+ * IGNORE/MULTIPLIER corrections over the full DEFAULT_WINDOW_DAYS window.
+ * The previous Prisma-relation approach bypassed corrections and had its
+ * 30-day window collapsed to CURRENT_PRICE_LOOKBACK_DAYS.
  */
 async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats> {
   const cacheKey = caliber.toLowerCase()
@@ -160,37 +164,95 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
     return cached
   }
 
-  // Calculate from database
   const windowStart = new Date()
   windowStart.setDate(windowStart.getDate() - DEFAULT_WINDOW_DAYS)
 
-  const products = await prisma.products.findMany({
-    where: {
-      caliber: { contains: caliber, mode: 'insensitive' },
-      roundCount: { not: null, gt: 0 },
-    },
-    select: {
-      roundCount: true,
-      prices: {
-        where: {
-          inStock: true,
-          createdAt: { gte: windowStart },
-          // Use visibleHistoricalPriceWhere (not visiblePriceWhere) to avoid
-          // collapsing the 30-day sample window to CURRENT_PRICE_LOOKBACK_DAYS.
-          // Note: this still does not apply IGNORE/MULTIPLIER corrections (tracked as #1b).
-          ...visibleHistoricalPriceWhere(),
-        },
-        select: { price: true },
-        take: 1,
-        orderBy: { price: 'asc' }
-      }
-    },
-    take: 500 // Sample size
-  })
+  // ADR-015: Query through product_links with full corrections overlay.
+  // Returns the cheapest corrected in-stock price per product for this caliber.
+  const rows = await prisma.$queryRaw<Array<{ roundCount: number; cheapestPrice: any }>>`
+    SELECT
+      p."roundCount",
+      MIN(
+        pr.price * COALESCE((
+          SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+          FROM price_corrections pc
+          WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+            AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+            AND (
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+            )
+        ), 1.0)
+      ) as "cheapestPrice"
+    FROM products p
+    JOIN product_links pl ON pl."productId" = p.id
+    JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
+    JOIN retailers r ON r.id = pr."retailerId"
+    LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
+    LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
+    LEFT JOIN sources s ON s.id = pr."sourceId"
+    LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
+    WHERE p.caliber ILIKE ${'%' + caliber + '%'}
+      AND p."roundCount" IS NOT NULL AND p."roundCount" > 0
+      AND pl.status IN ('MATCHED', 'CREATED')
+      AND pr."inStock" = true
+      AND pr."observedAt" >= ${windowStart}
+      AND r."visibilityStatus" = 'ELIGIBLE'
+      AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
+      AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
+      -- ADR-015: Exclude prices with active IGNORE corrections
+      AND NOT EXISTS (
+        SELECT 1 FROM price_corrections pc
+        WHERE pc."revokedAt" IS NULL
+          AND pc.action = 'IGNORE'
+          AND pr."observedAt" >= pc."startTs"
+          AND pr."observedAt" < pc."endTs"
+          AND (
+            (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+            (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+          )
+      )
+      -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
+      AND (
+        SELECT COUNT(*)
+        FROM price_corrections pc
+        WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+          AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+          AND (
+            (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+            (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+          )
+      ) <= 2
+      -- ADR-021: Allow SCRAPE prices only when guardrails pass
+      AND (
+        pr."ingestionRunType" IS NULL
+        OR pr."ingestionRunType" != 'SCRAPE'
+        OR (
+          pr."ingestionRunType" = 'SCRAPE'
+          AND s."adapterId" IS NOT NULL
+          AND s."scrapeEnabled" = true
+          AND s."robotsCompliant" = true
+          AND s."tosReviewedAt" IS NOT NULL
+          AND s."tosApprovedBy" IS NOT NULL
+          AND sas."enabled" = true
+        )
+      )
+    GROUP BY p.id, p."roundCount"
+    LIMIT 500
+  `
 
-  const pricesPerRound = products
-    .filter((p) => p.prices.length > 0 && p.roundCount)
-    .map((p) => calculatePricePerRound(p.prices[0].price, p.roundCount))
+  const pricesPerRound = rows
+    .filter((r) => r.cheapestPrice != null)
+    .map((r) => calculatePricePerRound(parseFloat(r.cheapestPrice.toString()), r.roundCount))
     .filter((ppr) => ppr > 0 && ppr < 10) // Filter outliers
     .sort((a, b) => a - b)
 

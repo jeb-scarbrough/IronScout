@@ -25,6 +25,7 @@ import {
   AmmoUseCase,
 } from '../services/firearm-ammo-preference'
 import { getAuthenticatedUserId } from '../middleware/auth'
+import { invalidateLoadoutCache } from '../services/loadout'
 import { loggers } from '../config/logger'
 import { getRequestContext } from '@ironscout/logger'
 
@@ -104,6 +105,7 @@ router.post('/:firearmId/ammo-preferences', async (req: Request, res: Response) 
 
     const { ammoSkuId, useCase } = parsed.data
     const preference = await addPreference(userId, firearmId, ammoSkuId, useCase as AmmoUseCase)
+    void invalidateLoadoutCache(userId)
 
     res.status(201).json({ preference })
   } catch (error) {
@@ -166,6 +168,7 @@ router.patch('/:firearmId/ammo-preferences/:id', async (req: Request, res: Respo
 
     const { useCase } = parsed.data
     const preference = await updatePreferenceUseCase(userId, id, useCase as AmmoUseCase)
+    void invalidateLoadoutCache(userId)
 
     res.json({ preference })
   } catch (error) {
@@ -202,6 +205,7 @@ router.delete('/:firearmId/ammo-preferences/:id', async (req: Request, res: Resp
     const id = req.params.id as string
 
     await removePreference(userId, id)
+    void invalidateLoadoutCache(userId)
 
     res.json({ message: 'Preference removed', preferenceId: id })
   } catch (error) {

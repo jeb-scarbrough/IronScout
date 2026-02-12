@@ -20,7 +20,7 @@ const log = loggers.dashboard
 
 // Cache configuration
 const LOADOUT_CACHE_PREFIX = 'loadout:'
-const LOADOUT_CACHE_TTL = 60 // 60 seconds
+const LOADOUT_CACHE_TTL = 300 // 5 minutes (invalidated on mutations)
 
 /**
  * Invalidate the cached loadout data for a user.
@@ -476,7 +476,11 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
     const cached = await redis.get(MARKET_ACTIVITY_CACHE_KEY)
     if (cached) {
       log.debug('MARKET_ACTIVITY_CACHE_HIT')
-      return JSON.parse(cached)
+      const parsed = JSON.parse(cached) as MarketActivityStats
+      // Stamp current request time so consumers see freshness-as-of-request,
+      // not cache creation time
+      parsed.lastUpdated = new Date().toISOString()
+      return parsed
     }
   } catch (e) {
     log.warn('MARKET_ACTIVITY_CACHE_ERROR', { error: e instanceof Error ? e.message : String(e) })
@@ -494,10 +498,14 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
     },
   })
 
-  // Count in-stock items (deduplicated by product) from last 7 days
+  // Combined in-stock count + top calibers in a single query using GROUPING SETS.
+  // The (caliber) group gives per-caliber counts; the () group gives the overall total.
   // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
-  const inStockCount = await prisma.$queryRaw<[{ count: bigint }]>`
-    SELECT COUNT(DISTINCT p.id) as count
+  const caliberStats = await prisma.$queryRaw<Array<{ caliber: string | null; count: bigint; is_total: boolean }>>`
+    SELECT
+      p.caliber,
+      COUNT(DISTINCT p.id) as count,
+      GROUPING(p.caliber) = 1 as "is_total"
     FROM products p
     JOIN product_links pl ON pl."productId" = p.id
     JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
@@ -541,67 +549,22 @@ async function getMarketActivityStats(): Promise<MarketActivityStats> {
           AND sas."enabled" = true
         )
       )
+    GROUP BY GROUPING SETS ((), (p.caliber))
   `
 
-  // Get top calibers by in-stock count
-  // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
-  const topCalibers = await prisma.$queryRaw<Array<{ caliber: string; count: bigint }>>`
-    SELECT p.caliber, COUNT(DISTINCT p.id) as count
-    FROM products p
-    JOIN product_links pl ON pl."productId" = p.id
-    JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
-    JOIN retailers r ON r.id = pr."retailerId"
-    LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
-    LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
-    LEFT JOIN sources s ON s.id = pr."sourceId"
-    LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
-    WHERE pl.status IN ('MATCHED', 'CREATED')
-      AND pr."inStock" = true
-      AND pr."observedAt" >= ${sevenDaysAgo}
-      AND r."visibilityStatus" = 'ELIGIBLE'
-      AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
-      AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
-      -- ADR-015: Exclude prices with active IGNORE corrections
-      AND NOT EXISTS (
-        SELECT 1 FROM price_corrections pc
-        WHERE pc."revokedAt" IS NULL
-          AND pc.action = 'IGNORE'
-          AND pr."observedAt" >= pc."startTs"
-          AND pr."observedAt" < pc."endTs"
-          AND (
-            (pc."scopeType" = 'PRODUCT' AND pc."scopeId" = p.id) OR
-            (pc."scopeType" = 'RETAILER' AND pc."scopeId" = r.id) OR
-            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-          )
-      )
-      -- ADR-021: Allow SCRAPE prices only when guardrails pass
-      AND (
-        pr."ingestionRunType" IS NULL
-        OR pr."ingestionRunType" != 'SCRAPE'
-        OR (
-          pr."ingestionRunType" = 'SCRAPE'
-          AND s."adapterId" IS NOT NULL
-          AND s."scrapeEnabled" = true
-          AND s."robotsCompliant" = true
-          AND s."tosReviewedAt" IS NOT NULL
-          AND s."tosApprovedBy" IS NOT NULL
-          AND sas."enabled" = true
-        )
-      )
-      AND p.caliber IS NOT NULL
-    GROUP BY p.caliber
-    ORDER BY count DESC
-    LIMIT 8
-  `
+  // Separate total row from caliber rows
+  const totalRow = caliberStats.find((r) => r.is_total)
+  const caliberRows = caliberStats
+    .filter((r) => !r.is_total && r.caliber !== null)
+    .sort((a, b) => Number(b.count) - Number(a.count))
+    .slice(0, 8)
 
   const result: MarketActivityStats = {
     retailersTracked: retailerCount,
-    itemsInStock: Number(inStockCount[0]?.count ?? 0),
+    itemsInStock: Number(totalRow?.count ?? 0),
     lastUpdated: now.toISOString(),
-    topCalibers: topCalibers.map((c) => ({
-      caliber: c.caliber,
+    topCalibers: caliberRows.map((c) => ({
+      caliber: c.caliber as string,
       count: Number(c.count),
     })),
   }

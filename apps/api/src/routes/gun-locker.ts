@@ -27,6 +27,7 @@ import {
   isValidCaliber,
 } from '../services/gun-locker'
 import { getAuthenticatedUserId } from '../middleware/auth'
+import { invalidateLoadoutCache } from '../services/loadout'
 import { loggers } from '../config/logger'
 import { getRequestContext } from '@ironscout/logger'
 
@@ -101,6 +102,7 @@ router.post('/', async (req: Request, res: Response) => {
     const { caliber, nickname } = parsed.data
     const gun = await addGun(userId, caliber, nickname)
     const count = await countGuns(userId)
+    void invalidateLoadoutCache(userId)
 
     res.status(201).json({
       gun,
@@ -146,6 +148,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     }
 
     const gun = await updateGun(userId, gunId, parsed.data)
+    void invalidateLoadoutCache(userId)
 
     res.json({ gun })
   } catch (error) {
@@ -174,6 +177,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const gunId = req.params.id as string
 
     await removeGun(userId, gunId)
+    void invalidateLoadoutCache(userId)
 
     res.json({ message: 'Gun removed', gunId })
   } catch (error) {
@@ -210,6 +214,7 @@ router.post('/:id/image', async (req: Request, res: Response) => {
     }
 
     const gun = await setGunImage(userId, gunId, parsed.data.imageDataUrl)
+    void invalidateLoadoutCache(userId)
 
     res.json({ gun, message: 'Image uploaded' })
   } catch (error) {
@@ -246,6 +251,7 @@ router.delete('/:id/image', async (req: Request, res: Response) => {
     const gunId = req.params.id as string
 
     const gun = await deleteGunImage(userId, gunId)
+    void invalidateLoadoutCache(userId)
 
     res.json({ gun, message: 'Image deleted' })
   } catch (error) {
