@@ -15,7 +15,7 @@
 import { randomUUID } from 'crypto'
 import { prisma, AlertRuleType, Prisma } from '@ironscout/db'
 import { visibleRetailerWhere } from '@ironscout/db/visibility.js'
-import { visiblePriceWhere, currentVisiblePriceWhere } from '../config/tiers'
+import { visiblePriceWhere } from '../config/tiers'
 import { batchGetPricesViaProductLinks } from './ai-search/price-resolver'
 import { watchlistItemRepository } from './watchlist-item'
 
