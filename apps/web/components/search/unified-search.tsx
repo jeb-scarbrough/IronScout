@@ -309,17 +309,18 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
             )}
 
             {/* Search Button - Cyan pill on the right */}
+            {/* Icon-only on mobile, icon+text on md+ */}
             <Button
               type="submit"
               disabled={isSearching}
-              className="flex-shrink-0 mr-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-5 py-2 h-auto font-semibold shadow-md hover:shadow-lg transition-all"
+              className="flex-shrink-0 mr-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-3 md:px-5 py-2 h-auto font-semibold shadow-md hover:shadow-lg transition-all"
             >
               {isSearching ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  <Search className="h-4 w-4 mr-2" />
-                  Search
+                  <Search className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Search</span>
                 </>
               )}
             </Button>
