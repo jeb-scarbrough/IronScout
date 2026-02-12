@@ -33,6 +33,11 @@ vi.mock('@ironscout/db', () => ({
 
 vi.mock('../../config/tiers', () => ({
   visiblePriceWhere: () => ({}),
+  currentVisiblePriceWhere: () => ({}),
+}))
+
+vi.mock('../ai-search/price-resolver', () => ({
+  batchGetPricesViaProductLinks: vi.fn().mockResolvedValue(new Map()),
 }))
 
 // Import the mocked prisma after vi.mock

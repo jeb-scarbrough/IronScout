@@ -15,7 +15,8 @@
 import { randomUUID } from 'crypto'
 import { prisma, AlertRuleType, Prisma } from '@ironscout/db'
 import { visibleRetailerWhere } from '@ironscout/db/visibility.js'
-import { visiblePriceWhere } from '../config/tiers'
+import { visiblePriceWhere, currentVisiblePriceWhere } from '../config/tiers'
+import { batchGetPricesViaProductLinks } from './ai-search/price-resolver'
 import { watchlistItemRepository } from './watchlist-item'
 
 // ============================================================================
@@ -217,6 +218,9 @@ export async function unsaveItem(
 /**
  * Get all saved items for a user (active only)
  * Per ADR-011A Section 17.2: All user-facing queries MUST include deletedAt: null
+ *
+ * Per Spec v1.2 §0.0: Prices are resolved through product_links → current_visible_prices
+ * (same path as search) to ensure consistent stock/price data.
  */
 export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
   const items = await prisma.watchlist_items.findMany({
@@ -229,25 +233,21 @@ export async function getSavedItems(userId: string): Promise<SavedItemDTO[]> {
           brand: true,
           caliber: true,
           imageUrl: true,
-          prices: {
-            where: {
-              inStock: true,
-              ...visiblePriceWhere(),
-            },
-            orderBy: [{ price: 'asc' }],
-            take: 1,
-            select: {
-              price: true,
-              inStock: true,
-            },
-          },
         },
       },
     },
     orderBy: { createdAt: 'desc' },
   })
 
-  return items.map(mapToDTO)
+  // Batch resolve prices through product_links (same path as search)
+  const productIds = items
+    .map(item => item.productId)
+    .filter((id): id is string => id !== null)
+  const pricesMap = productIds.length > 0
+    ? await batchGetPricesViaProductLinks(productIds)
+    : new Map<string, any[]>()
+
+  return items.map(item => mapToDTOWithResolvedPrices(item, pricesMap))
 }
 
 /**
@@ -268,18 +268,6 @@ export async function getSavedItemById(
           brand: true,
           caliber: true,
           imageUrl: true,
-          prices: {
-            where: {
-              inStock: true,
-              ...visiblePriceWhere(),
-            },
-            orderBy: [{ price: 'asc' }],
-            take: 1,
-            select: {
-              price: true,
-              inStock: true,
-            },
-          },
         },
       },
     },
@@ -289,7 +277,12 @@ export async function getSavedItemById(
     throw new Error('Item not found')
   }
 
-  return mapToDTO(item)
+  // Resolve prices through product_links (same path as search)
+  const pricesMap = item.productId
+    ? await batchGetPricesViaProductLinks([item.productId])
+    : new Map<string, any[]>()
+
+  return mapToDTOWithResolvedPrices(item, pricesMap)
 }
 
 /**
@@ -315,18 +308,6 @@ export async function getSavedItemByProductId(
           brand: true,
           caliber: true,
           imageUrl: true,
-          prices: {
-            where: {
-              inStock: true,
-              ...visiblePriceWhere(),
-            },
-            orderBy: [{ price: 'asc' }],
-            take: 1,
-            select: {
-              price: true,
-              inStock: true,
-            },
-          },
         },
       },
     },
@@ -336,7 +317,12 @@ export async function getSavedItemByProductId(
     return null
   }
 
-  return mapToDTO(item)
+  // Resolve prices through product_links (same path as search)
+  const pricesMap = item.productId
+    ? await batchGetPricesViaProductLinks([item.productId])
+    : new Map<string, any[]>()
+
+  return mapToDTOWithResolvedPrices(item, pricesMap)
 }
 
 /**
@@ -629,32 +615,39 @@ type WatchlistItemWithProduct = Prisma.watchlist_itemsGetPayload<{
         brand: true
         caliber: true
         imageUrl: true
-        prices: {
-          select: {
-            price: true
-            inStock: true
-          }
-        }
       }
     }
   }
 }>
 
 /**
- * Map a WatchlistItem with product to SavedItemDTO.
+ * Map a WatchlistItem with product + resolved prices to SavedItemDTO.
  *
  * Per ADR-011A Section 18.5: API mapping layer must not assume product details
  * are always present. In v1 (SKU-only), products should always exist, but we
  * handle gracefully with fallback values.
+ *
+ * Per Spec v1.2 §0.0: Prices resolved through product_links → current_visible_prices
+ * to ensure watchlist shows the same stock/price data as search results.
  */
-function mapToDTO(item: WatchlistItemWithProduct): SavedItemDTO {
+function mapToDTOWithResolvedPrices(
+  item: WatchlistItemWithProduct,
+  pricesMap: Map<string, any[]>
+): SavedItemDTO {
   const products = item.products
-  const lowestPrice = products?.prices[0]
 
   // v1: SKU intent requires productId. Throw if missing (data integrity issue).
   if (!item.productId) {
     throw new Error(`WatchlistItem ${item.id} missing productId (required for SKU intent)`)
   }
+
+  // Get resolved prices for this product (sorted by retailer tier desc, price asc)
+  const resolvedPrices = pricesMap.get(item.productId) || []
+  // Find lowest price (already sorted by price asc within tier groups)
+  const lowestPrice = resolvedPrices[0]
+  // Check if any price is in stock
+  const hasInStock = resolvedPrices.some((p: any) => p.inStock === true)
+  const lowestInStockPrice = resolvedPrices.find((p: any) => p.inStock === true)
 
   return {
     id: item.id,
@@ -662,8 +655,12 @@ function mapToDTO(item: WatchlistItemWithProduct): SavedItemDTO {
     name: products?.name || 'Unknown Product',
     brand: products?.brand || '',
     caliber: products?.caliber || '',
-    price: lowestPrice ? parseFloat(lowestPrice.price.toString()) : null,
-    inStock: (products?.prices.length ?? 0) > 0 && lowestPrice?.inStock === true,
+    price: lowestInStockPrice
+      ? parseFloat(lowestInStockPrice.price.toString())
+      : lowestPrice
+        ? parseFloat(lowestPrice.price.toString())
+        : null,
+    inStock: hasInStock,
     imageUrl: products?.imageUrl || null,
     savedAt: item.createdAt.toISOString(),
 
