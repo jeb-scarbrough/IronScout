@@ -98,7 +98,8 @@ AI/Search:
 - Optional:
   - `EMBEDDING_MODEL`
   - `CHAT_MODEL`
-  - `ENABLE_LENS_V1=true|false` - Enable lens-based search filtering (default: false)
+  - `ENABLE_LENS_V1=true|false` - Enable lens-based search filtering (default: true)
+    - Set to `false` to disable lens behavior
     - When enabled, search results can be filtered and ordered by deterministic lens policies
     - Lenses: ALL, RANGE, DEFENSIVE, MATCH
     - See `context/specs/search-lens-v1.md` for full specification

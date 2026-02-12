@@ -140,7 +140,7 @@ export interface AISearchResult {
       embeddingMs?: number
     }
   }
-  /** Lens metadata (only present when ENABLE_LENS_V1=true) */
+  /** Lens metadata (only present when lens is enabled) */
   lens?: LensMetadata
 }
 
@@ -154,7 +154,7 @@ export interface AISearchOptions {
   useVectorSearch?: boolean
   explicitFilters?: ExplicitFilters
   userTier?: 'FREE' | 'PREMIUM'
-  /** Optional lens ID for lens-based filtering (requires ENABLE_LENS_V1=true) */
+  /** Optional lens ID for lens-based filtering (requires lens enabled) */
   lensId?: string
   /** Request ID for telemetry correlation */
   requestId?: string
@@ -405,7 +405,7 @@ export async function aiSearch(
   }
 
   // =============================================
-  // LENS PIPELINE (when ENABLE_LENS_V1=true)
+  // LENS PIPELINE (when lens is enabled)
   // =============================================
   if (isLensEnabled()) {
     const lensStart = Date.now()

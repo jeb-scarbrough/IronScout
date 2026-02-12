@@ -43,7 +43,7 @@ const semanticSearchSchema = z.object({
   page: z.number().int().positive().default(1),
   limit: z.number().int().min(1).max(100).default(20),
   sortBy: z.enum(['relevance', 'price_asc', 'price_desc', 'date_desc', 'date_asc', 'price_context']).default('relevance'),
-  // Optional lens ID for lens-based filtering (requires ENABLE_LENS_V1=true)
+  // Optional lens ID for lens-based filtering (requires lens enabled)
   lensId: z.string().optional(),
   // Explicit filters that override AI intent
   filters: z.object({
@@ -480,7 +480,7 @@ router.get('/premium-filters', async (_req: Request, res: Response) => {
  * Get available lenses for search
  * GET /api/search/lenses
  *
- * Returns available lens IDs and their descriptions when ENABLE_LENS_V1=true.
+ * Returns available lens IDs and their descriptions when lens is enabled.
  * Returns 503 when lens feature is disabled.
  */
 router.get('/lenses', async (_req: Request, res: Response) => {

@@ -404,8 +404,10 @@ export interface LensEvalTelemetry {
 
 /**
  * Check if the lens feature is enabled.
- * Default: false (off).
+ * Default: true (on). Set ENABLE_LENS_V1=false to disable.
  */
 export function isLensEnabled(): boolean {
-  return process.env.ENABLE_LENS_V1 === 'true'
+  const flag = process.env.ENABLE_LENS_V1
+  if (flag === undefined) return true
+  return flag === 'true'
 }
