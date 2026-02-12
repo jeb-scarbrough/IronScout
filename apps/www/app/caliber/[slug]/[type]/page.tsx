@@ -80,9 +80,25 @@ export default async function CaliberTypePage({
   const parentContent = readMarkdownContent('calibers', slug)
   const parentName = parentContent?.frontmatter.heading || slug
   const typeName = content.frontmatter.heading || type
+  const caliberLabel = `${parentName} ${typeName}`.trim()
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Dataset',
+            name: `${caliberLabel} Ammo Observed Pricing`,
+            description: 'Observed price and availability data with historical context. Summaries appear once sufficient observations are available.',
+            temporalCoverage: 'P30D',
+            variableMeasured: ['price_per_round', 'availability_status'],
+            measurementTechnique: 'Deterministic observation-based aggregation',
+            isAccessibleForFree: true,
+          }),
+        }}
+      />
       <BreadcrumbJsonLd
         items={[
           { name: 'Home', href: '/' },
@@ -98,6 +114,14 @@ export default async function CaliberTypePage({
         primaryCta={primaryCta}
         secondaryCta={secondaryCta}
         priceRange={priceRange}
+        observedMarketContext={{
+          caliberLabel,
+          lastUpdated: null,
+          sampleCount: null,
+          median: null,
+          min: null,
+          max: null,
+        }}
         breadcrumbs={[
           { label: 'Home', href: '/' },
           { label: 'Calibers', href: '/calibers' },

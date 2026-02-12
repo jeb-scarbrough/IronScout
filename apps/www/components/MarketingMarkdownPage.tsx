@@ -3,6 +3,10 @@ import remarkGfm from 'remark-gfm'
 import Link from 'next/link'
 import { Header } from '@/app/components/Header'
 import { MarketingFooter } from '@/components/MarketingFooter'
+import {
+  ObservedMarketContextBlock,
+  type ObservedMarketContextBlockProps,
+} from '@/components/ObservedMarketContextBlock'
 import { BRAND } from '@/lib/brand'
 
 interface BreadcrumbItem {
@@ -21,6 +25,7 @@ interface MarketingMarkdownPageProps {
   priceRange?: string
   /** Category label, e.g. "Handgun" or "Rifle" */
   category?: string
+  observedMarketContext?: ObservedMarketContextBlockProps
 }
 
 export function MarketingMarkdownPage({
@@ -32,6 +37,7 @@ export function MarketingMarkdownPage({
   breadcrumbs,
   priceRange,
   category,
+  observedMarketContext,
 }: MarketingMarkdownPageProps) {
   // Replace APP_URL placeholder with actual app URL for deep links
   const processedContent = content.replace(/APP_URL/g, BRAND.appUrl)
@@ -126,6 +132,12 @@ export function MarketingMarkdownPage({
             )}
           </div>
         </header>
+
+        {observedMarketContext && (
+          <div className="mb-8">
+            <ObservedMarketContextBlock {...observedMarketContext} />
+          </div>
+        )}
 
         {/* Article body */}
         <article className="prose prose-invert prose-iron max-w-none">
