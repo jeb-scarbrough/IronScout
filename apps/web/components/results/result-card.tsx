@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -235,9 +236,14 @@ export function ResultCard({
           </Tooltip>
         </TooltipProvider>
 
-        {/* 1. Product Title */}
+        {/* 1. Product Title - links to product detail page */}
         <h3 className="font-semibold text-foreground leading-tight pr-20 mb-2">
-          {productTitle}
+          <Link
+            href={`/products/${id}`}
+            className="hover:text-primary hover:underline transition-colors"
+          >
+            {productTitle}
+          </Link>
         </h3>
 
         {/* 2. Attribute Badges Row */}

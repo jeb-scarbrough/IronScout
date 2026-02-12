@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState, useEffect } from 'react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Bookmark, ArrowUpRight, ChevronUp, ChevronDown } from 'lucide-react'
@@ -117,14 +118,17 @@ export function ResultRow({
 
   return (
     <tr className="border-b border-border hover:bg-muted/50 transition-colors">
-      {/* Product */}
+      {/* Product - links to product detail page */}
       <td className="py-3 px-4">
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="font-medium text-foreground cursor-default">
+              <Link
+                href={`/products/${id}`}
+                className="font-medium text-foreground hover:text-primary hover:underline transition-colors"
+              >
                 {truncate(productTitle, 40)}
-              </span>
+              </Link>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs">
               <p className="text-xs">{productTitle}</p>
