@@ -25,13 +25,14 @@ export function ObservedMarketContextBlock({
     && typeof max === 'number'
   const summary = hasSummary
     ? {
-        median: median as number,
-        min: min as number,
-        max: max as number,
-        sampleCount: resolvedSampleCount as number,
+        median,
+        min,
+        max,
+        sampleCount: resolvedSampleCount,
         lastUpdated,
       }
     : null
+  const lastUpdatedSuffix = summary?.lastUpdated ? ` Last updated: ${summary.lastUpdated}.` : ''
 
   return (
     <section className="rounded-lg border border-iron-800 bg-iron-900/40 p-5 sm:p-6">
@@ -41,7 +42,7 @@ export function ObservedMarketContextBlock({
         </p>
         {summary ? (
           <p className="leading-relaxed">
-            Observed 30-Day Price Range (Per Round): median: {formatValue(summary.median)}, lowest: {formatValue(summary.min)}, highest: {formatValue(summary.max)}, sample size: {summary.sampleCount}.{summary.lastUpdated ? ` Last updated: ${summary.lastUpdated}.` : ''}
+            Observed 30-Day Price Range (Per Round): median: {formatValue(summary.median)}, lowest: {formatValue(summary.min)}, highest: {formatValue(summary.max)}, sample size: {summary.sampleCount}.{lastUpdatedSuffix}
           </p>
         ) : (
           <>
