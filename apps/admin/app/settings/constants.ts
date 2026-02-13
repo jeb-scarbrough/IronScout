@@ -14,6 +14,9 @@ export const SETTING_KEYS = {
   PRICE_HEARTBEAT_HOURS: 'PRICE_HEARTBEAT_HOURS',
   AFFILIATE_RUN_RETENTION_DAYS: 'AFFILIATE_RUN_RETENTION_DAYS',
   HARVESTER_LOG_LEVEL: 'HARVESTER_LOG_LEVEL',
+  HARVESTER_DEBUG_SAMPLE_RATE: 'HARVESTER_DEBUG_SAMPLE_RATE',
+  HARVESTER_DEBUG_FIRST_N: 'HARVESTER_DEBUG_FIRST_N',
+  HARVESTER_LOG_RAW_EXCERPTS: 'HARVESTER_LOG_RAW_EXCERPTS',
 
   // Queue History Settings - Bull Board job retention
   QUEUE_HISTORY_RETENTION_COUNT: 'QUEUE_HISTORY_RETENTION_COUNT',
@@ -56,6 +59,9 @@ export const OPERATIONS_KEYS = [
   SETTING_KEYS.PRICE_HEARTBEAT_HOURS,
   SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS,
   SETTING_KEYS.HARVESTER_LOG_LEVEL,
+  SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE,
+  SETTING_KEYS.HARVESTER_DEBUG_FIRST_N,
+  SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS,
 ] as const;
 
 export const QUEUE_HISTORY_KEYS = [
@@ -97,6 +103,9 @@ export const SETTING_DEFAULTS: Record<SettingKey, boolean | number | string> = {
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 24,
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 30,
   [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'info',
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: 0.05,
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: 25,
+  [SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS]: false,
 
   // Queue History (all enabled by default for visibility)
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 100,
@@ -136,6 +145,9 @@ export const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 'Hours between price heartbeat updates',
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 'Days to retain affiliate feed run history',
   [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'Log verbosity level for harvester (debug, info, warn, error, fatal). Takes effect without restart.',
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: 'Fraction of items logged at debug level per feed run (0 = none, 1 = all)',
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: 'Number of items always logged at the start of each feed run',
+  [SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS]: 'Include raw feed data excerpts in debug logs (useful for diagnosing parse issues)',
 
   // Queue History
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 'Number of completed/failed jobs to retain per queue',
@@ -177,6 +189,9 @@ export const SETTING_TYPES: Record<SettingKey, SettingType> = {
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 'number',
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 'number',
   [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'string',
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: 'number',
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: 'number',
+  [SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS]: 'boolean',
 
   // Queue History - one number, rest boolean
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 'number',
@@ -208,6 +223,8 @@ export const NUMBER_SETTING_RANGES: Record<string, { min: number; max: number }>
   [SETTING_KEYS.AFFILIATE_BATCH_SIZE]: { min: 100, max: 10000 },
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: { min: 1, max: 168 },
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: { min: 7, max: 365 },
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: { min: 0, max: 1 },
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: { min: 0, max: 10000 },
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: { min: 10, max: 1000 },
 };
 
@@ -301,6 +318,21 @@ export const SETTING_TOOLTIPS: Record<SettingKey, SettingTooltip> = {
     summary: 'Controls the verbosity of harvester log output.',
     note: 'Changes take effect immediately without requiring a harvester restart. Use "debug" for troubleshooting, "info" for normal operation.',
     warning: '"debug" level generates significant log volume and may impact performance.',
+  },
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: {
+    summary: 'Fraction of items that get detailed debug logging after the first-N window.',
+    note: 'Uses deterministic hashing so the same items are sampled consistently within a run. 0.05 = 5% of items.',
+    warning: 'Setting to 1.0 logs every item at debug level — high log volume on large feeds.',
+  },
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: {
+    summary: 'Number of items unconditionally logged at debug level at the start of each feed run.',
+    note: 'Useful for verifying parse/process behavior on the first few items. After this count, sampling rate takes over.',
+  },
+  [SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS]: {
+    summary: 'Includes truncated raw feed data in debug log entries.',
+    whenEnabled: 'Debug logs include up to 200 characters of raw feed data per item. Helps diagnose parse failures.',
+    whenDisabled: 'Raw feed data is omitted from logs. Reduces log size and avoids logging potentially sensitive retailer data.',
+    warning: 'Raw excerpts may contain retailer-specific data. Only enable when actively debugging feed issues.',
   },
 
   // Queue History

@@ -6,6 +6,39 @@ const DEFAULT_DEBUG_SAMPLE_RATE = 0.05
 const DEFAULT_DEBUG_FIRST_N = 25
 const RAW_EXCERPT_MAX_CHARS = 200
 
+// ---------------------------------------------------------------------------
+// Cached trace settings (refreshed by worker polling every 30s)
+// ---------------------------------------------------------------------------
+let cachedSampleRate = DEFAULT_DEBUG_SAMPLE_RATE
+let cachedFirstN = DEFAULT_DEBUG_FIRST_N
+let cachedRawExcerptsEnabled = false
+
+/**
+ * Refresh trace settings from admin DB (called by worker polling loop).
+ * Uses dynamic import to avoid top-level DB dependency in test environments.
+ * If the fetch fails the previous cached values are retained.
+ */
+export async function refreshTraceSettings(): Promise<void> {
+  try {
+    const {
+      getHarvesterDebugSampleRate,
+      getHarvesterDebugFirstN,
+      isHarvesterRawExcerptsEnabled,
+    } = await import('@ironscout/db')
+
+    const [sampleRate, firstN, rawExcerpts] = await Promise.all([
+      getHarvesterDebugSampleRate(),
+      getHarvesterDebugFirstN(),
+      isHarvesterRawExcerptsEnabled(),
+    ])
+    cachedSampleRate = parseSampleRate(String(sampleRate))
+    cachedFirstN = parseFirstN(String(firstN))
+    cachedRawExcerptsEnabled = rawExcerpts
+  } catch {
+    // Retain previous cached values on error
+  }
+}
+
 const SENSITIVE_KEY_PATTERNS = [
   /authorization/i,
   /password/i,
@@ -143,8 +176,8 @@ export function buildItemKey(input: ItemKeyInput): string {
 
 export function getItemDebugSampleConfig(): ItemDebugSampleConfig {
   return {
-    sampleRate: parseSampleRate(process.env.HARVESTER_DEBUG_SAMPLE_RATE),
-    firstN: parseFirstN(process.env.HARVESTER_DEBUG_FIRST_N),
+    sampleRate: cachedSampleRate,
+    firstN: cachedFirstN,
   }
 }
 
@@ -179,7 +212,7 @@ export function safeRawExcerpt(value: string): string | undefined {
 }
 
 export function isRawExcerptEnabled(): boolean {
-  return process.env.HARVESTER_LOG_RAW_EXCERPTS === 'true'
+  return cachedRawExcerptsEnabled
 }
 
 function shortHash(value: string): string {

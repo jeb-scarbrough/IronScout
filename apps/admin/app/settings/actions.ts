@@ -11,6 +11,7 @@ import {
   SETTING_TYPES,
   NUMBER_SETTING_RANGES,
   DANGER_ZONE_KEYS,
+  OPERATIONS_KEYS,
   QUEUE_HISTORY_KEYS,
   LOG_LEVELS,
   type SettingKey,
@@ -39,6 +40,9 @@ export interface AllSettings {
     priceHeartbeatHours: SettingValue;
     affiliateRunRetentionDays: SettingValue;
     harvesterLogLevel: SettingValue;
+    harvesterDebugSampleRate: SettingValue;
+    harvesterDebugFirstN: SettingValue;
+    harvesterLogRawExcerpts: SettingValue;
   };
   queueHistory: {
     retentionCount: SettingValue;
@@ -106,6 +110,9 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       priceHeartbeatHours,
       affiliateRunRetentionDays,
       harvesterLogLevel,
+      harvesterDebugSampleRate,
+      harvesterDebugFirstN,
+      harvesterLogRawExcerpts,
       // Queue history settings
       queueHistoryRetentionCount,
       queueHistoryCrawl,
@@ -134,6 +141,9 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
       getSystemSetting(SETTING_KEYS.PRICE_HEARTBEAT_HOURS),
       getSystemSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS),
       getSystemSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL),
+      getSystemSetting(SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE),
+      getSystemSetting(SETTING_KEYS.HARVESTER_DEBUG_FIRST_N),
+      getSystemSetting(SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS),
       // Queue history settings
       getSystemSetting(SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT),
       getSystemSetting(SETTING_KEYS.QUEUE_HISTORY_CRAWL),
@@ -169,6 +179,9 @@ export async function getAllSettings(): Promise<{ success: boolean; error?: stri
           priceHeartbeatHours,
           affiliateRunRetentionDays,
           harvesterLogLevel,
+          harvesterDebugSampleRate,
+          harvesterDebugFirstN,
+          harvesterLogRawExcerpts,
         },
         queueHistory: {
           retentionCount: queueHistoryRetentionCount,
@@ -269,6 +282,30 @@ export async function updateOperationsSetting(
     if (value < range.min || value > range.max) {
       return { success: false, error: `Value must be between ${range.min} and ${range.max}` };
     }
+  }
+
+  return updateSetting(key, value, session);
+}
+
+/**
+ * Update an operations boolean setting (e.g. raw excerpts toggle)
+ */
+export async function updateOperationsBooleanSetting(
+  key: SettingKey,
+  value: boolean
+) {
+  const session = await getAdminSession();
+
+  if (!session) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  // Verify this is an operations setting with boolean type
+  if (!OPERATIONS_KEYS.includes(key as any)) {
+    return { success: false, error: 'Not an operations setting' };
+  }
+  if (SETTING_TYPES[key] !== 'boolean') {
+    return { success: false, error: 'Invalid setting type' };
   }
 
   return updateSetting(key, value, session);
@@ -790,7 +827,6 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
       WHERE cvp."ingestionRunType" = 'SCRAPE'
         AND (
           s.id IS NULL
-          OR s."scrapeEnabled" = false
           OR s."robotsCompliant" = false
           OR s."tosReviewedAt" IS NULL
           OR s."tosApprovedBy" IS NULL
@@ -801,7 +837,7 @@ export async function runDataIntegrityChecks(): Promise<{ success: boolean; erro
     const scrapeViolationsCount = Number(scrapeViolations[0]?.count ?? 0);
     checks.push({
       name: 'SCRAPE Guardrail Compliance',
-      description: 'ADR-021: Visible SCRAPE data must pass all guardrails (scrapeEnabled, robots, ToS, adapter). Legal/compliance risk.',
+      description: 'ADR-021: Visible SCRAPE data must pass visibility guardrails (robots, ToS, adapter). Legal/compliance risk.',
       status: scrapeViolationsCount === 0 ? 'ok' : 'error',
       count: scrapeViolationsCount,
       message: scrapeViolationsCount === 0

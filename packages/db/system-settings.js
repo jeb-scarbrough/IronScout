@@ -23,6 +23,9 @@ export const SETTING_KEYS = {
   PRICE_HEARTBEAT_HOURS: 'PRICE_HEARTBEAT_HOURS',
   AFFILIATE_RUN_RETENTION_DAYS: 'AFFILIATE_RUN_RETENTION_DAYS',
   HARVESTER_LOG_LEVEL: 'HARVESTER_LOG_LEVEL',
+  HARVESTER_DEBUG_SAMPLE_RATE: 'HARVESTER_DEBUG_SAMPLE_RATE',
+  HARVESTER_DEBUG_FIRST_N: 'HARVESTER_DEBUG_FIRST_N',
+  HARVESTER_LOG_RAW_EXCERPTS: 'HARVESTER_LOG_RAW_EXCERPTS',
 
   // Queue History Settings
   QUEUE_HISTORY_RETENTION_COUNT: 'QUEUE_HISTORY_RETENTION_COUNT',
@@ -65,6 +68,9 @@ const DEFAULTS = {
   [SETTING_KEYS.PRICE_HEARTBEAT_HOURS]: 24,
   [SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS]: 30,
   [SETTING_KEYS.HARVESTER_LOG_LEVEL]: 'info',
+  [SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE]: 0.05,
+  [SETTING_KEYS.HARVESTER_DEBUG_FIRST_N]: 25,
+  [SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS]: false,
 
   // Queue History (all enabled by default)
   [SETTING_KEYS.QUEUE_HISTORY_RETENTION_COUNT]: 100,
@@ -125,7 +131,7 @@ export async function getNumberSetting(key) {
   // Check env var first (for local override)
   const envValue = process.env[key]
   if (envValue) {
-    const parsed = parseInt(envValue, 10)
+    const parsed = parseFloat(envValue)
     if (!isNaN(parsed)) return parsed
   }
 
@@ -191,6 +197,9 @@ export const getPriceHeartbeatHours = () => getNumberSetting(SETTING_KEYS.PRICE_
 export const getAffiliateRunRetentionDays = () => getNumberSetting(SETTING_KEYS.AFFILIATE_RUN_RETENTION_DAYS)
 export const getHarvesterLogLevel = () => getStringSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL)
 export const getHarvesterLogLevelOptional = () => getOptionalStringSetting(SETTING_KEYS.HARVESTER_LOG_LEVEL)
+export const getHarvesterDebugSampleRate = () => getNumberSetting(SETTING_KEYS.HARVESTER_DEBUG_SAMPLE_RATE)
+export const getHarvesterDebugFirstN = () => getNumberSetting(SETTING_KEYS.HARVESTER_DEBUG_FIRST_N)
+export const isHarvesterRawExcerptsEnabled = () => getBooleanSetting(SETTING_KEYS.HARVESTER_LOG_RAW_EXCERPTS)
 
 /**
  * Queue history settings - maps queue name to setting key

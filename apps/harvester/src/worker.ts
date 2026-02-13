@@ -25,6 +25,7 @@ import { setLogLevel, type LogLevel, flushLogs } from '@ironscout/logger'
 import { warmupRedis, closeSharedBullMQConnection } from './config/redis'
 import { initQueueSettings } from './config/queues'
 import { logger } from './config/logger'
+import { refreshTraceSettings } from './config/trace'
 import { alerterWorker, delayedNotificationWorker } from './alerter'
 
 // Retailer Portal Workers
@@ -111,9 +112,9 @@ let affiliateSchedulerEnabled = false
 const log = logger.worker
 const dbLog = logger.database
 
-// Log level polling interval handle
-let logLevelPollInterval: NodeJS.Timeout | null = null
-const LOG_LEVEL_POLL_MS = 30_000 // Check every 30 seconds
+// Settings polling interval handle (log level + trace settings)
+let settingsPollInterval: NodeJS.Timeout | null = null
+const SETTINGS_POLL_MS = 30_000 // Check every 30 seconds
 
 /**
  * Resolve desired log level.
@@ -137,44 +138,45 @@ async function resolveDesiredLogLevel(): Promise<{ level: LogLevel | null; sourc
 }
 
 /**
- * Poll for log level changes from admin settings
- * Updates the logger dynamically without restart
+ * Poll for settings changes from admin DB.
+ * Updates log level and trace config dynamically without restart.
  */
-async function pollLogLevel(): Promise<void> {
+async function pollSettings(): Promise<void> {
   try {
     const { level, source } = await resolveDesiredLogLevel()
     if (level) {
       setLogLevel(level)
-      // Info-level so we can see it even before debug is enabled
       log.info('Log level applied', { level, source })
     } else {
       log.info('Log level unchanged (no explicit setting found)')
     }
-  } catch (error) {
+  } catch {
     // Silently ignore errors - we'll retry next poll
-    // Don't log errors here to avoid spam if DB is temporarily unavailable
   }
+
+  // Refresh trace debug settings (sample rate, firstN, raw excerpts)
+  await refreshTraceSettings()
 }
 
 /**
- * Start log level polling
+ * Start settings polling (log level + trace config)
  */
-async function startLogLevelPolling(): Promise<void> {
-  // Set initial level (await so we confirm once at startup)
-  await pollLogLevel()
+async function startSettingsPolling(): Promise<void> {
+  // Set initial values (await so we confirm once at startup)
+  await pollSettings()
 
   // Poll periodically for changes
-  logLevelPollInterval = setInterval(pollLogLevel, LOG_LEVEL_POLL_MS)
-  log.info('Log level polling started', { intervalMs: LOG_LEVEL_POLL_MS })
+  settingsPollInterval = setInterval(pollSettings, SETTINGS_POLL_MS)
+  log.info('Settings polling started', { intervalMs: SETTINGS_POLL_MS })
 }
 
 /**
- * Stop log level polling
+ * Stop settings polling
  */
-function stopLogLevelPolling(): void {
-  if (logLevelPollInterval) {
-    clearInterval(logLevelPollInterval)
-    logLevelPollInterval = null
+function stopSettingsPolling(): void {
+  if (settingsPollInterval) {
+    clearInterval(settingsPollInterval)
+    settingsPollInterval = null
   }
 }
 
@@ -263,7 +265,7 @@ async function startup() {
   })
 
   // Start log level polling for dynamic updates
-  await startLogLevelPolling()
+  await startSettingsPolling()
 
   // Always start affiliate feed worker to process jobs (including manual ones)
   // The worker must run regardless of scheduler state to process manually-triggered jobs
@@ -345,7 +347,7 @@ const shutdown = async (signal: string) => {
 
   try {
     // 0. Stop log level polling
-    stopLogLevelPolling()
+    stopSettingsPolling()
 
     // 1. Stop scheduling new jobs (if scheduler was enabled)
     if (harvesterSchedulerEnabled) {
