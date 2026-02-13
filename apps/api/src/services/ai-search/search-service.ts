@@ -12,6 +12,7 @@ import { batchCalculatePriceSignalIndex, PriceSignalIndex } from './price-signal
 import { batchGetPricesWithConfidence } from './price-resolver'
 import { BulletType, PressureRating, BULLET_TYPE_CATEGORIES } from '../../types/product-metadata'
 import { loggers } from '../../config/logger'
+import { generateOutUrl } from '../outbound-url'
 import type { LensMetadata, ProductWithOffers } from '../lens'
 import { isLensEnabled, applyLensPipeline, InvalidLensError } from '../lens'
 
@@ -1311,6 +1312,7 @@ function formatProduct(product: any, isPremium: boolean): any {
       price: parseFloat(price.price.toString()),
       currency: price.currency,
       url: price.url,
+      out_url: generateOutUrl(price.url, price.retailers.id, product.id),
       inStock: price.inStock,
       retailer: {
         id: price.retailers.id,
@@ -1399,7 +1401,7 @@ async function buildFacets(where: any, isPremium: boolean): Promise<Record<strin
     baseFacets.map(([field]) =>
       prisma.products.groupBy({
         by: [field] as any,
-        where: { ...where, [field]: { not: null } },
+        where: { ...where, NOT: [{ [field]: null }] },
         _count: { [field]: true } as any,
         orderBy: { _count: { [field]: 'desc' } } as any,
       })

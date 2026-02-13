@@ -802,7 +802,7 @@ router.get('/calibers', async (req: Request, res: Response) => {
   try {
     const calibers = await prisma.products.groupBy({
       by: ['caliber'],
-      where: { caliber: { not: null } },
+      where: { NOT: [{ caliber: null }] },
       _count: { caliber: true },
       orderBy: { _count: { caliber: 'desc' } },
     })
