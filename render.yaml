@@ -131,7 +131,7 @@ services:
     region: ohio
     plan: free
     autoDeploy: false
-    buildCommand: pnpm install --filter @ironscout/web... && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/web build
+    buildCommand: pnpm install --filter @ironscout/web... && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/web build
     startCommand: cd apps/web && pnpm start
     healthCheckPath: /
     envVars:
