@@ -193,7 +193,7 @@ async function main() {
     // These are intentional and managed outside Prisma's migration system.
     const KNOWN_DRIFT_PATTERNS = [
       // GIN trigram indexes on products (migration 20260208220000)
-      /Removed index on columns \((brand|caliberNorm|caseMaterial|description|name|purpose|search_vector)\)/,
+      /Removed index on columns \((brand|caliberNorm|caseMaterial|description|embedding|name|purpose|search_vector)\)/,
       // Generated tsvector column default (Prisma can't represent GENERATED ALWAYS AS)
       /Altered column `search_vector` \(default changed/,
       // FK index on prices.affiliateFeedRunId added via raw SQL (migration 20260212000000)
