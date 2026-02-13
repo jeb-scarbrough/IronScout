@@ -31,7 +31,6 @@ interface SearchIntent {
 interface SearchHeaderProps {
   query: string
   resultCount?: number
-  priceCount?: number
   intent?: SearchIntent
   processingTimeMs?: number
   vectorSearchUsed?: boolean
@@ -42,7 +41,6 @@ interface SearchHeaderProps {
 export function SearchHeader({
   query,
   resultCount,
-  priceCount,
   intent,
   explicitFilters,
 }: SearchHeaderProps) {
@@ -139,9 +137,6 @@ export function SearchHeader({
             <div className="flex items-center gap-2">
               <span className="text-base font-medium text-foreground">
                 {resultCount.toLocaleString()} {resultCount === 1 ? 'product' : 'products'}
-                {priceCount !== undefined && (
-                  <span className="text-muted-foreground"> · {priceCount.toLocaleString()} {priceCount === 1 ? 'price' : 'prices'}</span>
-                )}
               </span>
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <RefreshCw className="h-3 w-3" />

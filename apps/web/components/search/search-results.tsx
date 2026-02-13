@@ -132,15 +132,11 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
     // which may be incorrect due to grouping or backend inconsistencies
     const displayCount = products.length > 0 ? Math.max(products.length, pagination.total) : pagination.total
 
-    // Calculate total prices across all products
-    const totalPriceCount = products.reduce((sum, product) => sum + (product.prices?.length || 0), 0)
-
     return (
       <>
         <SearchHeader
           query={query}
           resultCount={displayCount}
-          priceCount={totalPriceCount}
           intent={intent}
           processingTimeMs={searchMetadata.processingTimeMs}
           vectorSearchUsed={searchMetadata.vectorSearchUsed}
