@@ -10,6 +10,8 @@ playwright-report/
 # Next.js
 .next/
 out/
+# But allow the /out route handler (matched by out/ above)
+!apps/web/app/out/
 
 # Production
 build/
