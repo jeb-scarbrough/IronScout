@@ -70,7 +70,7 @@ export function AmmoPickerModal({
       // Focus input after a tick (dialog animation)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open])
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     setIsSearching(true)
