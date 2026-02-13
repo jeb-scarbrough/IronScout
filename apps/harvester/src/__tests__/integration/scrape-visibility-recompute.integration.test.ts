@@ -202,4 +202,97 @@ describeIntegration('SCRAPE guardrails - current_visible_prices', () => {
     expect(visible[0].productId).toBe(productOkId)
     expect(visible[0].sourceId).toBe(sourceOkId)
   })
+
+  it('keeps existing SCRAPE prices visible when source scraping is disabled', async () => {
+    const now = new Date()
+
+    const retailer = await prisma.retailers.create({
+      data: {
+        id: randomUUID(),
+        name: 'Disabled Scrape Retailer',
+        website: `https://retailer-${Date.now()}.example.com`,
+      },
+    })
+
+    const productId = randomUUID()
+    await prisma.products.create({
+      data: {
+        id: productId,
+        name: 'Existing SCRAPE Product',
+        category: 'HANDGUN',
+        caliber: '9mm',
+      },
+    })
+
+    const sourceId = randomUUID()
+    const adapterId = 'adapter-disabled-source'
+
+    await prisma.sources.create({
+      data: {
+        id: sourceId,
+        name: 'Source Disabled For New Scrapes',
+        url: 'https://source-disabled.example.com/feed',
+        retailerId: retailer.id,
+        adapterId,
+        scrapeEnabled: false,
+        robotsCompliant: true,
+        tosReviewedAt: now,
+        tosApprovedBy: 'admin-1',
+      },
+    })
+
+    await prisma.scrape_adapter_status.create({
+      data: { adapterId, enabled: true },
+    })
+
+    const sourceProductId = randomUUID()
+    await prisma.source_products.create({
+      data: {
+        id: sourceProductId,
+        sourceId,
+        title: 'Existing SCRAPE Source Product',
+        url: 'https://source-disabled.example.com/p/1',
+        caliber: '9mm',
+      },
+    })
+
+    await prisma.product_links.create({
+      data: {
+        sourceProductId,
+        productId,
+        matchType: 'FINGERPRINT',
+        status: 'MATCHED',
+        confidence: 1.0,
+        resolverVersion: 'test',
+        evidence: {},
+      },
+    })
+
+    await prisma.prices.create({
+      data: {
+        id: randomUUID(),
+        productId,
+        retailerId: retailer.id,
+        sourceId,
+        sourceProductId,
+        price: 12,
+        currency: 'USD',
+        url: 'https://source-disabled.example.com/p/1',
+        inStock: true,
+        observedAt: now,
+        ingestionRunType: 'SCRAPE',
+      },
+    })
+
+    await recomputeCurrentPrices('FULL', undefined, 'test-recompute-disabled-source')
+
+    const visible = await prisma.current_visible_prices.findMany({
+      where: { productId },
+      select: { productId: true, sourceId: true },
+    })
+
+    expect(visible).toHaveLength(1)
+    expect(visible[0].productId).toBe(productId)
+    expect(visible[0].sourceId).toBe(sourceId)
+  })
 })

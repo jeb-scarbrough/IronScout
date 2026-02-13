@@ -349,7 +349,6 @@ export function scrapeVisibilityPriceWhere(): Prisma.pricesWhereInput {
             sources: {
               is: {
                 adapterId: { not: null },
-                scrapeEnabled: true,
                 robotsCompliant: true,
                 tosReviewedAt: { not: null },
                 tosApprovedBy: { not: null },

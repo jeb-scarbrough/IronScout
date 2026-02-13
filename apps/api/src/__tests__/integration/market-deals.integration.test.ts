@@ -107,7 +107,7 @@ describe('/api/dashboard/market-deals', () => {
           url: 'https://source-ok.example.com/feed',
           retailerId: retailer.id,
           adapterId: adapterOk,
-          scrapeEnabled: true,
+          scrapeEnabled: false,
           robotsCompliant: true,
           tosReviewedAt: now,
           tosApprovedBy: 'admin-1',

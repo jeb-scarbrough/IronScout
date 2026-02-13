@@ -59,6 +59,7 @@ const expectScrapeGuardrail = (query: string) => {
   expect(query).toContain("= 'SCRAPE'")
   expect(query).toContain('scrape_adapter_status')
   expect(query).toContain('s."adapterId" IS NOT NULL')
+  expect(query).not.toContain('s."scrapeEnabled" = true')
 }
 
 describe('market deals ADR-021 compliance', () => {

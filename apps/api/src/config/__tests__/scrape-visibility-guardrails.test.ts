@@ -11,7 +11,7 @@ describe('Scrape Visibility Guardrails', () => {
     ]))
   })
 
-  it('requires allowlist + robots + ToS + adapter enabled for SCRAPE', () => {
+  it('requires allowlist + robots + ToS + adapter enabled for SCRAPE visibility', () => {
     const where = scrapeVisibilityPriceWhere() as any
 
     const scrapeClause = where.OR.find((clause: any) =>
@@ -24,7 +24,6 @@ describe('Scrape Visibility Guardrails', () => {
 
     expect(sourceClause).toMatchObject({
       adapterId: { not: null },
-      scrapeEnabled: true,
       robotsCompliant: true,
       tosReviewedAt: { not: null },
       tosApprovedBy: { not: null },
@@ -34,5 +33,8 @@ describe('Scrape Visibility Guardrails', () => {
         },
       },
     })
+
+    // scrapeEnabled is an ingestion control and must not hide existing visible prices.
+    expect(sourceClause).not.toHaveProperty('scrapeEnabled')
   })
 })

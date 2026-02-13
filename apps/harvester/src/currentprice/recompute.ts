@@ -289,7 +289,6 @@ async function buildDerivedTable(
         OR (
           pr."ingestionRunType" = 'SCRAPE'
           AND s."adapterId" IS NOT NULL
-          AND s."scrapeEnabled" = true
           AND s."robotsCompliant" = true
           AND s."tosReviewedAt" IS NOT NULL
           AND s."tosApprovedBy" IS NOT NULL
