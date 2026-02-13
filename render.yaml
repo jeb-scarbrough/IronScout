@@ -103,7 +103,7 @@ services:
     name: ironscout-api
     runtime: node
     region: ohio
-    plan: free
+    plan: starter
     autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
@@ -129,7 +129,7 @@ services:
     name: ironscout-web
     runtime: node
     region: ohio
-    plan: free
+    plan: starter
     autoDeploy: false
     buildCommand: pnpm install --filter @ironscout/web... && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/web build
     startCommand: cd apps/web && pnpm start
@@ -201,7 +201,7 @@ services:
     name: ironscout-www
     runtime: node
     region: ohio
-    plan: free
+    plan: starter
     autoDeploy: false
     buildCommand: pnpm install --filter @ironscout/www... && pnpm --filter @ironscout/www build
     startCommand: npx serve apps/www/out -l 3000
