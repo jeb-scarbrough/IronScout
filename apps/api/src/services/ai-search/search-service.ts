@@ -18,6 +18,28 @@ import { isLensEnabled, applyLensPipeline, InvalidLensError } from '../lens'
 
 const log = loggers.ai
 
+/**
+ * Expand combined caliber values (from Gun Locker canonical enum) into
+ * their individual normalized forms so that caliberNorm ILIKE filters
+ * match products stored as e.g. '5.56 NATO' or '.223 Remington'.
+ *
+ * Example: '.223/5.56' → ['.223', '5.56']
+ *          '.308/7.62x51' → ['.308', '7.62x51']
+ *          '9mm' → ['9mm']  (no change)
+ */
+function expandCaliberFilter(calibers: string[]): string[] {
+  const expanded: string[] = []
+  for (const cal of calibers) {
+    if (cal.includes('/')) {
+      // Split on '/' and trim each part
+      expanded.push(...cal.split('/').map(c => c.trim()).filter(Boolean))
+    } else {
+      expanded.push(cal)
+    }
+  }
+  return expanded
+}
+
 function toPriceNumber(value: unknown): number {
   if (typeof value === 'number') return value
   if (value && typeof (value as { toString?: () => string }).toString === 'function') {
@@ -730,12 +752,14 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
 
   // Caliber filter - ALWAYS apply if present (caliber is fundamental to search)
   // Use caliberNorm for filtering (normalized form, always populated by resolver)
-  const calibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
+  // Expand combined calibers like '.223/5.56' into individual parts for matching
+  const rawCalibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
+  const calibers = rawCalibers ? expandCaliberFilter(rawCalibers) : undefined
   if (calibers && calibers.length > 0) {
     where.OR = calibers.map(cal => ({
       caliberNorm: { contains: cal, mode: 'insensitive' }
     }))
-    log.debug('SEARCH_FILTER_CALIBER', { calibers, source: explicitFilters.caliber ? 'explicit' : 'intent' })
+    log.debug('SEARCH_FILTER_CALIBER', { calibers, rawCalibers, source: explicitFilters.caliber ? 'explicit' : 'intent' })
   }
 
   // Purpose filter - ONLY apply if user explicitly specified
@@ -1010,10 +1034,12 @@ async function vectorEnhancedSearch(
   const params: any[] = []
 
   // Caliber filter - use caliberNorm (normalized form, always populated by resolver)
-  const calibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
+  // Expand combined calibers like '.223/5.56' into individual parts for matching
+  const rawCalibers = explicitFilters.caliber ? [explicitFilters.caliber] : intent.calibers
+  const calibers = rawCalibers ? expandCaliberFilter(rawCalibers) : undefined
   if (calibers?.length) {
     const caliberPatterns = calibers.map(c => `%${c}%`)
-    conditions.push(`"caliberNorm" ILIKE ANY($${params.length + 1})`)
+    conditions.push(`"caliberNorm" ILIKE ANY(${params.length + 1})`)
     params.push(caliberPatterns)
   }
 

@@ -680,40 +680,30 @@ export function GunLockerManager() {
                           {group.preferences.map((pref) => (
                             <div
                               key={pref.id}
-                              className="flex items-center gap-3 p-3 rounded-lg border bg-card"
+                              className="p-3 rounded-lg border bg-card space-y-2"
                             >
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">
-                                  {pref.ammoSku.name}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {[
-                                    pref.ammoSku.brand,
-                                    pref.ammoSku.grainWeight && `${pref.ammoSku.grainWeight}gr`,
-                                    pref.ammoSku.roundCount && `${pref.ammoSku.roundCount}rd`,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' • ')}
-                                </p>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  // Navigate to search/compare for this product
-                                  window.location.href = `/search?q=${encodeURIComponent(pref.ammoSku.name)}`
-                                }}
-                              >
-                                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                                Compare prices
-                              </Button>
-                              {/* Use case selector */}
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 px-2">
-                                    <ChevronDown className="h-4 w-4" />
-                                  </Button>
-                                </PopoverTrigger>
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">
+                                    {pref.ammoSku.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {[
+                                      pref.ammoSku.brand,
+                                      pref.ammoSku.grainWeight && `${pref.ammoSku.grainWeight}gr`,
+                                      pref.ammoSku.roundCount && `${pref.ammoSku.roundCount}rd`,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' • ')}
+                                  </p>
+                                </div>
+                                {/* Use case selector */}
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-8 px-2 shrink-0">
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </PopoverTrigger>
                                 <PopoverContent align="end" className="w-40 p-1">
                                   <div className="space-y-1">
                                     <p className="px-2 py-1 text-xs text-muted-foreground">
@@ -740,7 +730,20 @@ export function GunLockerManager() {
                                     </button>
                                   </div>
                                 </PopoverContent>
-                              </Popover>
+                                </Popover>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => {
+                                  // Navigate to search/compare for this product
+                                  window.location.href = `/search?q=${encodeURIComponent(pref.ammoSku.name)}`
+                                }}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                                Compare prices
+                              </Button>
                             </div>
                           ))}
                         </div>
