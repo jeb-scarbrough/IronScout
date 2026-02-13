@@ -117,8 +117,8 @@ interface CaliberPriceStats {
   median: number
   min: number
   max: number
-  p30: number
-  p70: number
+  p25: number
+  p75: number
   sampleCount: number
   updatedAt: Date
 }
@@ -140,21 +140,11 @@ function calculatePricePerRound(price: Decimal | number, roundCount: number | nu
 }
 
 /**
- * Calculate percentile value from sorted array
- */
-function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0
-  const index = Math.ceil(p * sorted.length) - 1
-  return sorted[Math.max(0, Math.min(index, sorted.length - 1))]
-}
-
-/**
  * Get price statistics for a caliber.
  *
- * ADR-015 compliant: queries through product_links and applies
- * IGNORE/MULTIPLIER corrections over the full DEFAULT_WINDOW_DAYS window.
- * The previous Prisma-relation approach bypassed corrections and had its
- * 30-day window collapsed to CURRENT_PRICE_LOOKBACK_DAYS.
+ * ADR-023: Uses SQL PERCENTILE_CONT as the canonical median definition.
+ * Daily-best = MIN corrected visible price-per-round per product per UTC day.
+ * ADR-015 compliant: queries through product_links with full corrections overlay.
  */
 async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats> {
   const cacheKey = caliber.toLowerCase()
@@ -167,14 +157,69 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
   const windowStart = new Date()
   windowStart.setDate(windowStart.getDate() - DEFAULT_WINDOW_DAYS)
 
-  // ADR-015: Query through product_links with full corrections overlay.
-  // Returns the cheapest corrected in-stock price per product for this caliber.
-  const rows = await prisma.$queryRaw<Array<{ roundCount: number; cheapestPrice: any }>>`
-    SELECT
-      p."roundCount",
-      MIN(
-        pr.price * COALESCE((
-          SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+  // ADR-023: Canonical median via SQL PERCENTILE_CONT over daily-best prices.
+  // ADR-015: Full corrections overlay (IGNORE exclusion, MULTIPLIER application).
+  const rows = await prisma.$queryRaw<Array<{
+    median: any
+    min: any
+    max: any
+    p25: any
+    p75: any
+    sampleCount: number
+  }>>`
+    WITH daily_best AS (
+      SELECT
+        p.id as product_id,
+        DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as day,
+        MIN(
+          (pr.price * COALESCE((
+            SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
+            FROM price_corrections pc
+            WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
+              AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
+              AND (
+                (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+                (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+                (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+                (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+                (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+              )
+          ), 1.0)) / p."roundCount"
+        ) as price_per_round
+      FROM products p
+      JOIN product_links pl ON pl."productId" = p.id
+      JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
+      JOIN retailers r ON r.id = pr."retailerId"
+      LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
+      LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
+      LEFT JOIN sources s ON s.id = pr."sourceId"
+      LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
+      WHERE p.caliber ILIKE ${'%' + caliber + '%'}
+        AND p."roundCount" IS NOT NULL AND p."roundCount" > 0
+        AND pl.status IN ('MATCHED', 'CREATED')
+        AND pr."inStock" = true
+        AND pr."observedAt" >= ${windowStart}
+        AND r."visibilityStatus" = 'ELIGIBLE'
+        AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
+        AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
+        -- ADR-015: Exclude prices with active IGNORE corrections
+        AND NOT EXISTS (
+          SELECT 1 FROM price_corrections pc
+          WHERE pc."revokedAt" IS NULL
+            AND pc.action = 'IGNORE'
+            AND pr."observedAt" >= pc."startTs"
+            AND pr."observedAt" < pc."endTs"
+            AND (
+              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
+              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
+              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
+              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
+              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+            )
+        )
+        -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
+        AND (
+          SELECT COUNT(*)
           FROM price_corrections pc
           WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
             AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
@@ -185,99 +230,58 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
               (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
               (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
             )
-        ), 1.0)
-      ) as "cheapestPrice"
-    FROM products p
-    JOIN product_links pl ON pl."productId" = p.id
-    JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
-    JOIN retailers r ON r.id = pr."retailerId"
-    LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
-    LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
-    LEFT JOIN sources s ON s.id = pr."sourceId"
-    LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
-    WHERE p.caliber ILIKE ${'%' + caliber + '%'}
-      AND p."roundCount" IS NOT NULL AND p."roundCount" > 0
-      AND pl.status IN ('MATCHED', 'CREATED')
-      AND pr."inStock" = true
-      AND pr."observedAt" >= ${windowStart}
-      AND r."visibilityStatus" = 'ELIGIBLE'
-      AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
-      AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
-      -- ADR-015: Exclude prices with active IGNORE corrections
-      AND NOT EXISTS (
-        SELECT 1 FROM price_corrections pc
-        WHERE pc."revokedAt" IS NULL
-          AND pc.action = 'IGNORE'
-          AND pr."observedAt" >= pc."startTs"
-          AND pr."observedAt" < pc."endTs"
-          AND (
-            (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
-            (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
+        ) <= 2
+        -- ADR-021: Allow SCRAPE prices only when guardrails pass
+        AND (
+          pr."ingestionRunType" IS NULL
+          OR pr."ingestionRunType" != 'SCRAPE'
+          OR (
+            pr."ingestionRunType" = 'SCRAPE'
+            AND s."adapterId" IS NOT NULL
+            AND s."robotsCompliant" = true
+            AND s."tosReviewedAt" IS NOT NULL
+            AND s."tosApprovedBy" IS NOT NULL
+            AND sas."enabled" = true
           )
-      )
-      -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
-      AND (
-        SELECT COUNT(*)
-        FROM price_corrections pc
-        WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
-          AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-          AND (
-            (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
-            (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-            (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-            (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-            (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-          )
-      ) <= 2
-      -- ADR-021: Allow SCRAPE prices only when guardrails pass
-      AND (
-        pr."ingestionRunType" IS NULL
-        OR pr."ingestionRunType" != 'SCRAPE'
-        OR (
-          pr."ingestionRunType" = 'SCRAPE'
-          AND s."adapterId" IS NOT NULL
-          AND s."robotsCompliant" = true
-          AND s."tosReviewedAt" IS NOT NULL
-          AND s."tosApprovedBy" IS NOT NULL
-          AND sas."enabled" = true
         )
-      )
-    GROUP BY p.id, p."roundCount"
-    LIMIT 500
+      GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
+    )
+    SELECT
+      PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price_per_round) AS median,
+      MIN(price_per_round)   AS min,
+      MAX(price_per_round)   AS max,
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_round) AS p25,
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_round) AS p75,
+      COUNT(*)::int          AS "sampleCount"
+    FROM daily_best
+    WHERE price_per_round > 0 AND price_per_round < 10
+    HAVING COUNT(*) >= ${MIN_SAMPLES_FOR_CONTEXT}
   `
 
-  const pricesPerRound = rows
-    .filter((r) => r.cheapestPrice != null)
-    .map((r) => calculatePricePerRound(parseFloat(r.cheapestPrice.toString()), r.roundCount))
-    .filter((ppr) => ppr > 0 && ppr < 10) // Filter outliers
-    .sort((a, b) => a - b)
+  const row = rows[0]
 
-  if (pricesPerRound.length < MIN_SAMPLES_FOR_CONTEXT) {
+  if (!row) {
     return {
       median: 0,
       min: 0,
       max: 0,
-      p30: 0,
-      p70: 0,
-      sampleCount: pricesPerRound.length,
+      p25: 0,
+      p75: 0,
+      sampleCount: 0,
       updatedAt: new Date()
     }
   }
 
   const stats: CaliberPriceStats = {
-    median: percentile(pricesPerRound, 0.5),
-    min: pricesPerRound[0],
-    max: pricesPerRound[pricesPerRound.length - 1],
-    p30: percentile(pricesPerRound, LOW_THRESHOLD_PERCENTILE),
-    p70: percentile(pricesPerRound, HIGH_THRESHOLD_PERCENTILE),
-    sampleCount: pricesPerRound.length,
+    median: parseFloat(row.median.toString()),
+    min: parseFloat(row.min.toString()),
+    max: parseFloat(row.max.toString()),
+    p25: parseFloat(row.p25.toString()),
+    p75: parseFloat(row.p75.toString()),
+    sampleCount: row.sampleCount,
     updatedAt: new Date()
   }
 
-  // Cache the result
   priceStatsCache.set(cacheKey, stats)
 
   return stats

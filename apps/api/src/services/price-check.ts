@@ -73,13 +73,19 @@ export async function checkPrice(
   const caseMaterialPattern = caseMaterial ? `%${caseMaterial.toLowerCase()}%` : null
   const bulletTypeValue = bulletType ?? null
 
-  // Get daily best prices per product for the caliber in trailing 30 days
+  // Get daily best prices per product for the caliber in trailing 30 days,
+  // then compute canonical statistics via SQL PERCENTILE_CONT (ADR-023).
   // Per spec: "One daily best price per product per caliber (lowest visible offer price on a given UTC calendar day)"
   // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
-  const priceData = await prisma.$queryRaw<
+  const stats = await prisma.$queryRaw<
     Array<{
-      pricePerRound: any
-      observedDate: Date
+      medianPrice: any
+      minPrice: any
+      maxPrice: any
+      p25: any
+      p75: any
+      pricePointCount: number
+      daysWithData: number
     }>
   >`
     WITH daily_best AS (
@@ -182,15 +188,19 @@ export async function checkPrice(
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT
-      price_per_round as "pricePerRound",
-      observed_day as "observedDate"
+      PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price_per_round) AS "medianPrice",
+      MIN(price_per_round)   AS "minPrice",
+      MAX(price_per_round)   AS "maxPrice",
+      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_round) AS "p25",
+      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_round) AS "p75",
+      COUNT(*)::int          AS "pricePointCount",
+      COUNT(DISTINCT observed_day)::int AS "daysWithData"
     FROM daily_best
-    ORDER BY observed_day DESC
   `
 
-  const pricePointCount = priceData.length
-  const uniqueDays = new Set(priceData.map((p) => p.observedDate.toISOString().split('T')[0]))
-  const daysWithData = uniqueDays.size
+  const row = stats[0]
+  const pricePointCount = row?.pricePointCount ?? 0
+  const daysWithData = row?.daysWithData ?? 0
 
   // Handle sparse/no data per spec
   if (pricePointCount === 0) {
@@ -210,13 +220,10 @@ export async function checkPrice(
     }
   }
 
-  // Calculate statistics
-  const prices = priceData.map((p) => parseFloat(p.pricePerRound.toString()))
-  prices.sort((a, b) => a - b)
-
-  const minPrice = prices[0]
-  const maxPrice = prices[prices.length - 1]
-  const medianPrice = prices[Math.floor(prices.length / 2)]
+  // All statistics computed via SQL PERCENTILE_CONT (ADR-023: canonical median)
+  const minPrice = parseFloat(row.minPrice.toString())
+  const maxPrice = parseFloat(row.maxPrice.toString())
+  const medianPrice = parseFloat(row.medianPrice.toString())
 
   // Per spec: Classification requires ≥5 price points
   if (pricePointCount < 5) {
@@ -236,12 +243,9 @@ export async function checkPrice(
     }
   }
 
-  // Classify price relative to distribution
-  // Lower: at or below 25th percentile
-  // Higher: at or above 75th percentile
-  // Typical: between 25th and 75th percentile
-  const p25 = prices[Math.floor(prices.length * 0.25)]
-  const p75 = prices[Math.floor(prices.length * 0.75)]
+  // Classify price relative to SQL-computed percentiles (ADR-023)
+  const p25 = parseFloat(row.p25.toString())
+  const p75 = parseFloat(row.p75.toString())
 
   let classification: PriceClassification
   let message: string
