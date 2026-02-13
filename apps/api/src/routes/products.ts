@@ -126,8 +126,18 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 
     // Add ammo-specific filters
+    // Expand combined calibers like '.223/5.56' into individual parts
     if (caliber) {
-      where.caliber = { equals: caliber, mode: 'insensitive' }
+      if (caliber.includes('/')) {
+        const parts = caliber.split('/').map(c => c.trim()).filter(Boolean)
+        // Use AND to combine with any existing OR (text search)
+        if (!where.AND) where.AND = []
+        where.AND.push({
+          OR: parts.map(c => ({ caliberNorm: { contains: c, mode: 'insensitive' as const } }))
+        })
+      } else {
+        where.caliber = { equals: caliber, mode: 'insensitive' }
+      }
     }
     if (grainWeight) {
       where.grainWeight = parseInt(grainWeight)
