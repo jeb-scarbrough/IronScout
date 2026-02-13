@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Bot,
   Database,
+  HeartPulse,
 } from 'lucide-react';
 import type { AdminSession } from '@/lib/auth';
 
@@ -23,6 +24,7 @@ interface NavigationProps {
 }
 
 const navItems = [
+  { name: 'Data Health', href: '/data-health', icon: HeartPulse },
   { name: 'Merchants', href: '/merchants', icon: Users },
   { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Sources', href: '/sources', icon: Database },
