@@ -76,6 +76,22 @@ If unset, Slack notifications are skipped (fail open).
 
 ---
 
+## Monitoring (Log Health)
+
+Developer-local variables for the `/check-logs` Claude Code skill. These are NOT deployed service variables.
+
+Variables:
+- `GRAFANA_SA_TOKEN` — **Required** for `/check-logs`. Grafana service account token with Viewer role (read-only). Created via Grafana > Administration > Service Accounts. Prefix: `glsa_`. Never commit to files. Rotation: quarterly or on team member departure. Revocation: Grafana > Administration > Service Accounts > token > Delete.
+- `GRAFANA_URL` — Optional. Default: `http://10.10.9.28:3001`. Self-hosted Grafana instance URL.
+- `LOKI_DATASOURCE_UID` — Optional. Default: `loki`. Loki datasource UID string (not numeric ID). Resolved at runtime by querying the Grafana API; override only if the UID differs from the resolved value.
+
+Grafana host variables (set on the Grafana server, not locally):
+- `SLACK_DATAFEED_ALERTS_WEBHOOK_URL` — **Required**. Same Slack webhook used by the app. Set as environment variable on the Grafana server for alert contact point interpolation.
+- `LOKI_DATASOURCE_UID` — **Required**. The Loki datasource UID string used by provisioned alert rules. Must match the UID of the Loki datasource in Grafana (find it at Connections > Data sources > Loki > UID). If not set, alert rules will fail to load.
+- `GRAFANA_URL` — **Required**. The externally-reachable Grafana URL (e.g., `http://10.10.9.28:3001`). Used in alert annotation `dashboard_url` links. If not set, dashboard links in Slack messages will be broken.
+
+---
+
 ## apps/api
 
 Required:

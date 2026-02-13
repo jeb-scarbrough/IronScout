@@ -1,0 +1,28 @@
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: ironscout-alert
+    template: |
+      {{ define "ironscout-alert.title" }}
+      [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ (index .Alerts 0).Labels.alertname }}
+      {{ end }}
+
+      {{ define "ironscout-alert.text" }}
+      {{ range .Alerts }}
+      *{{ .Labels.alertname }}* — severity: `{{ .Labels.severity }}`
+
+      {{ if .Annotations.summary }}*Summary:* {{ .Annotations.summary }}{{ end }}
+      {{ if .Annotations.description }}*Description:* {{ .Annotations.description }}{{ end }}
+
+      {{ if .Annotations.runbook }}*Runbook:*
+      {{ .Annotations.runbook }}{{ end }}
+
+      {{ if .Annotations.owner }}*Owner:* {{ .Annotations.owner }}{{ end }}
+      {{ if .Annotations.dashboard_url }}*Dashboard:* {{ .Annotations.dashboard_url }}{{ end }}
+
+      *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+      {{ if .EndsAt }}*Ended:* {{ .EndsAt.Format "2006-01-02 15:04:05 UTC" }}{{ end }}
+      ---
+      {{ end }}
+      {{ end }}

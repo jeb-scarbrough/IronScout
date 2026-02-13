@@ -141,6 +141,80 @@ Alert fatigue is a failure mode.
 
 ---
 
+## Log Monitoring (v1)
+
+### Architecture
+
+Application logs flow through a centralized pipeline:
+
+```
+Render services → syslog → Grafana Alloy → Loki → Grafana → Slack
+```
+
+All Render-hosted services (API, Web, Admin, Merchant, Harvester) ship logs via syslog to a self-hosted Grafana Alloy instance, which forwards to Loki for storage and querying.
+
+### Two Pillars
+
+Log monitoring uses two complementary approaches:
+
+1. **Continuous Grafana Alerts** (11 rules) — Threshold-based rules evaluated on a schedule. Fire to Slack when conditions are met. No operator intervention required for detection.
+2. **On-demand `/check-logs` skill** — AI-powered log investigation via Claude Code. Queries all 22 LogQL patterns, compares to baseline, and produces a structured health report. Use for daily checks, incident triage, or alert follow-up.
+
+### Alert Rules Summary
+
+| # | Alertname | Severity | What It Catches |
+|---|-----------|----------|-----------------|
+| 1 | `ironscout-fatal-error` | critical | Any fatal-level log event |
+| 2 | `ironscout-api-restart-storm` | critical | API restarted 3+ times in 10m |
+| 3 | `ironscout-db-connectivity` | critical | Database connectivity failures (Prisma init, DNS, TCP, pool saturation) |
+| 4 | `ironscout-harvester-restart-storm` | critical | Harvester restarted 3+ times in 10m |
+| 5 | `ironscout-log-ingestion-stalled` | critical | Zero logs arriving in Loki (pipeline broken) |
+| 6 | `ironscout-error-rate-spike` | warning | >20 errors in 5m sustained |
+| 7 | `ironscout-prisma-errors` | warning | Sustained Prisma validation/request errors |
+| 8 | `ironscout-ingest-run-failures` | warning | 3+ failed ingest runs in 30m |
+| 9 | `ironscout-ingestion-stalled` | warning | Zero ingest summaries in 6h |
+| 10 | `ironscout-redis-connectivity` | warning | Redis connectivity errors |
+| W1 | `ironscout-watchdog` | warning | Dead man's switch (always firing; absence = broken alert pipeline) |
+
+### Provisioning
+
+Alert rules, contact points, notification policies, and message templates are provisioned via YAML files in:
+
+```
+infrastructure/grafana/provisioning/alerting/
+```
+
+Copy these files to the Grafana host's provisioning directory and restart Grafana to apply.
+
+### Detection Layers
+
+| Layer | What It Detects | Rules |
+|-------|----------------|-------|
+| Log pipeline health | Logs not arriving in Loki | #5 Log Ingestion Stalled |
+| Alert pipeline health | Grafana cannot evaluate or deliver alerts | W1 Watchdog |
+| Application health | Errors, crashes, connectivity, ingestion failures | #1-4, #6-10 |
+
+If log pipeline fails (no logs in Loki), all application health rules silently evaluate against empty data and report OK. Rule #5 is the only signal that this is happening.
+
+### Weekly Operator Checklist
+
+Open the Grafana Alerting page and confirm no rules are in Error state. This catches Loki partial failures and datasource auth drift that don't trigger Slack notifications.
+
+### Known Blind Spots
+
+| Signal | Why It's Blind | Workaround |
+|--------|---------------|------------|
+| Payment failures | DB audit writes, not log events | Query `admin_audit_logs` table |
+| Auth success rate | Plain messages without `event_name` | Regex pattern matching (may miss edge cases) |
+| Queue backlog depth | BullMQ depth not in Loki | Check Bull Board manually |
+| Degraded ingest runs | SUCCESS with low output not flagged | Review INGEST_RUN_SUMMARY fields via `/check-logs` |
+
+### Full Spec
+
+See `context/specs/log-monitoring-v1.md` for complete details including all LogQL expressions, runbooks, rationale, and verification steps.
+
+---
+
 ## Tier and Eligibility Monitoring
 
 Because eligibility is a trust boundary, it requires explicit observability.

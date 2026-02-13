@@ -1,0 +1,12 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: IronScout Slack
+    receivers:
+      - uid: ironscout-slack
+        type: slack
+        settings:
+          url: ${SLACK_DATAFEED_ALERTS_WEBHOOK_URL}
+          title: '{{ template "ironscout-alert.title" . }}'
+          text: '{{ template "ironscout-alert.text" . }}'
