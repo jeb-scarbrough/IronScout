@@ -71,15 +71,6 @@ export default function Home() {
     <div className="relative">
       <Header currentPage="home" />
 
-      {/* Early Access Banner */}
-      <div className="border-b border-primary/20 bg-primary/5">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 text-center text-sm text-iron-300">
-          <span className="font-semibold text-primary">Early Access</span>
-          <span className="mx-2 text-iron-700">—</span>
-          We&apos;re in launch testing. Retailer coverage is expanding&nbsp;&mdash; check back as selection grows.
-        </div>
-      </div>
-
       {/* Hero Section */}
       <section className="relative pt-16 pb-16">
         {/* Background decoration */}

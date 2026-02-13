@@ -43,7 +43,16 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-iron-800/50 bg-iron-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 w-full bg-iron-950/80 backdrop-blur-md">
+      {/* Early Access Banner */}
+      <div className="border-b border-primary/20 bg-primary/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 text-center text-xs text-iron-300">
+          <span className="font-semibold text-primary">Early Access</span>
+          <span className="mx-1.5 text-iron-700">&mdash;</span>
+          We&apos;re in launch testing. Retailer coverage is expanding&nbsp;&mdash; check back as selection grows.
+        </div>
+      </div>
+      <div className="border-b border-iron-800/50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -156,6 +165,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
             </div>
           </div>
         )}
+      </div>
       </div>
     </header>
   )
