@@ -7,23 +7,17 @@ import {
   Bell,
   BellOff,
   BellRing,
-  ExternalLink,
-  ChevronDown,
   Search,
-  TrendingDown,
-  PackageCheck,
 } from 'lucide-react'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { useSavedItems } from '@/hooks/use-saved-items'
-import { ProductImage } from '@/components/products/product-image'
 import { toast } from 'sonner'
 import type { SavedItem } from '@/lib/api'
 import { safeLogger } from '@/lib/safe-logger'
 
 /**
- * Alerts Manager — full-page view of all saved items with notification status.
+ * Alerts Manager — notification controls for saved items + status grouping.
  *
  * Per ADR-011: "Saving is the only user action; alerts are an implicit side effect."
  * This page surfaces the notification dimension of saved items:
@@ -32,7 +26,7 @@ import { safeLogger } from '@/lib/safe-logger'
  * - Status indicators for monitoring state
  *
  * This is NOT a separate data source — it's the same saved items
- * viewed through an alerts lens.
+ * viewed through an alerts-only lens (configuration + history).
  */
 export function AlertsManager() {
   const { items, loading, error, updatePrefs, refetch } = useSavedItems()
@@ -54,9 +48,11 @@ export function AlertsManager() {
     }
   }
 
-  // Split items by notification state for summary
-  const activeCount = items.filter((i) => i.notificationsEnabled).length
-  const pausedCount = items.filter((i) => !i.notificationsEnabled).length
+  // Split items by notification state for summary and sections
+  const activeItems = items.filter((i) => i.notificationsEnabled)
+  const pausedItems = items.filter((i) => !i.notificationsEnabled)
+  const activeCount = activeItems.length
+  const pausedCount = pausedItems.length
 
   if (loading) {
     return (
@@ -92,7 +88,7 @@ export function AlertsManager() {
     <div className="space-y-6">
       {/* Subheading — ADR-023 D2: no page h1, sidebar provides context */}
       <p className="text-muted-foreground">
-        Price drop and back-in-stock notifications for your saved items.
+        Control how you’re notified. Manage what you track on the Watchlist.
       </p>
 
       {/* Summary badges */}
@@ -133,27 +129,80 @@ export function AlertsManager() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <AlertItemRow
-              key={item.id}
-              item={item}
-              onUpdatePref={(field, value) => handleUpdatePref(item, field, value)}
-            />
-          ))}
+        <div className="space-y-6">
+          <AlertSection
+            title="Active Alerts"
+            description="Notifications are enabled for these items."
+            items={activeItems}
+            onUpdatePref={handleUpdatePref}
+            emptyMessage="No active alerts. Turn on notifications for saved items."
+          />
+          <AlertSection
+            title="Paused Alerts"
+            description="Notifications are paused for these items."
+            items={pausedItems}
+            onUpdatePref={handleUpdatePref}
+            emptyMessage="No paused alerts."
+          />
         </div>
       )}
 
       {/* Footer note */}
       {items.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Alerts fire when your configured thresholds are met or items come back in stock.
+          Alerts fire when price drops or items come back in stock.
           Manage your saved items on the{' '}
           <a href="/dashboard/saved" className="underline hover:text-foreground">
             Watchlist
-          </a>{' '}
-          page.
+          </a>
+          .
         </p>
+      )}
+    </div>
+  )
+}
+
+interface AlertSectionProps {
+  title: string
+  description: string
+  items: SavedItem[]
+  onUpdatePref: (
+    item: SavedItem,
+    field: 'notificationsEnabled' | 'priceDropEnabled' | 'backInStockEnabled',
+    value: boolean
+  ) => void
+  emptyMessage: string
+}
+
+function AlertSection({
+  title,
+  description,
+  items,
+  onUpdatePref,
+  emptyMessage,
+}: AlertSectionProps) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-medium">{title}</h3>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            {emptyMessage}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <AlertItemRow
+              key={item.id}
+              item={item}
+              onUpdatePref={(field, value) => onUpdatePref(item, field, value)}
+            />
+          ))}
+        </div>
       )}
     </div>
   )
@@ -171,21 +220,9 @@ function AlertItemRow({ item, onUpdatePref }: AlertItemRowProps) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-center gap-4">
-          {/* Product image */}
-          <div className="w-12 h-12 relative flex-shrink-0 rounded overflow-hidden bg-muted">
-            <ProductImage
-              imageUrl={item.imageUrl}
-              caliber={item.caliber}
-              brand={item.brand}
-              alt={item.name}
-              fill
-            />
-          </div>
-
-          {/* Product info */}
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-1">
               <p className="font-medium text-sm truncate">{item.name}</p>
               {!item.notificationsEnabled && (
                 <Badge variant="secondary" className="text-xs shrink-0">
@@ -193,115 +230,53 @@ function AlertItemRow({ item, onUpdatePref }: AlertItemRowProps) {
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {item.price && (
-                <span className="font-medium text-foreground">
-                  ${item.price.toFixed(2)}
-                </span>
-              )}
+            <div className="text-xs text-muted-foreground">
+              {item.brand && <span>{item.brand}</span>}
+              {item.brand && item.caliber && <span> • </span>}
               {item.caliber && <span>{item.caliber}</span>}
-              {item.inStock ? (
-                <span className="text-green-600">In stock</span>
-              ) : (
-                <span className="text-red-500">Out of stock</span>
-              )}
             </div>
           </div>
 
-          {/* Alert type indicators */}
-          <div className="hidden sm:flex items-center gap-2">
-            {item.priceDropEnabled && item.notificationsEnabled && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Price drop alerts on">
-                <TrendingDown className="h-3.5 w-3.5" />
-                Price
-              </span>
-            )}
-            {item.backInStockEnabled && item.notificationsEnabled && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Back in stock alerts on">
-                <PackageCheck className="h-3.5 w-3.5" />
-                Stock
-              </span>
-            )}
-          </div>
-
-          {/* Notification controls */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className={item.notificationsEnabled ? 'text-blue-600' : 'text-muted-foreground'}
+          <div className="min-w-[220px] space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`alert-master-${item.id}`} className="text-xs">
+                All notifications
+              </Label>
+              <Switch
+                id={`alert-master-${item.id}`}
+                checked={item.notificationsEnabled}
+                onCheckedChange={(checked) => onUpdatePref('notificationsEnabled', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label
+                htmlFor={`alert-price-${item.id}`}
+                className={`text-xs ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
               >
-                {item.notificationsEnabled ? (
-                  <Bell className="h-4 w-4" />
-                ) : (
-                  <BellOff className="h-4 w-4" />
-                )}
-                <ChevronDown className="h-3 w-3 ml-1" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <div className="space-y-4">
-                <h4 className="font-medium text-sm">Notification Settings</h4>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`alert-master-${item.id}`} className="text-sm">
-                    All notifications
-                  </Label>
-                  <Switch
-                    id={`alert-master-${item.id}`}
-                    checked={item.notificationsEnabled}
-                    onCheckedChange={(checked) => onUpdatePref('notificationsEnabled', checked)}
-                  />
-                </div>
-
-                <div className="border-t pt-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor={`alert-price-${item.id}`}
-                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
-                    >
-                      Price drops
-                    </Label>
-                    <Switch
-                      id={`alert-price-${item.id}`}
-                      checked={item.priceDropEnabled}
-                      onCheckedChange={(checked) => onUpdatePref('priceDropEnabled', checked)}
-                      disabled={!item.notificationsEnabled}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor={`alert-stock-${item.id}`}
-                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
-                    >
-                      Back in stock
-                    </Label>
-                    <Switch
-                      id={`alert-stock-${item.id}`}
-                      checked={item.backInStockEnabled}
-                      onCheckedChange={(checked) => onUpdatePref('backInStockEnabled', checked)}
-                      disabled={!item.notificationsEnabled}
-                    />
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground pt-1">
-                  {item.notificationsEnabled
-                    ? 'You\'ll be notified by email when conditions are met.'
-                    : 'Turn on to receive email alerts for this item.'}
-                </p>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* View product link */}
-          <Button size="sm" variant="outline" asChild title="View product">
-            <a href={`/products/${item.productId}`}>
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </Button>
+                Price drops
+              </Label>
+              <Switch
+                id={`alert-price-${item.id}`}
+                checked={item.priceDropEnabled}
+                onCheckedChange={(checked) => onUpdatePref('priceDropEnabled', checked)}
+                disabled={!item.notificationsEnabled}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label
+                htmlFor={`alert-stock-${item.id}`}
+                className={`text-xs ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
+              >
+                Back in stock
+              </Label>
+              <Switch
+                id={`alert-stock-${item.id}`}
+                checked={item.backInStockEnabled}
+                onCheckedChange={(checked) => onUpdatePref('backInStockEnabled', checked)}
+                disabled={!item.notificationsEnabled}
+              />
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

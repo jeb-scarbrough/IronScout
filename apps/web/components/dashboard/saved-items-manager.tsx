@@ -7,13 +7,7 @@ import {
   Bookmark,
   ExternalLink,
   Trash2,
-  Bell,
-  BellOff,
-  ChevronDown,
 } from 'lucide-react'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { useSavedItems } from '@/hooks/use-saved-items'
 import { ProductImage } from '@/components/products/product-image'
 import { toast } from 'sonner'
@@ -26,11 +20,10 @@ import { safeLogger } from '@/lib/safe-logger'
  * Per UX Charter and 05_alerting_and_notifications.md:
  * - Saving is the only user action
  * - Alerts are an implicit side effect with deterministic thresholds
- * - No user-defined thresholds in v1
- * - Simple pause/resume toggle for notifications
+ * - Saved Items is tracking-only (no alert configuration)
  */
 export function SavedItemsManager() {
-  const { items, meta, loading, error, remove, updatePrefs, refetch } = useSavedItems()
+  const { items, loading, error, remove, refetch } = useSavedItems()
 
   const handleRemove = async (productId: string, name: string) => {
     if (!confirm(`Remove "${name}" from your watchlist?`)) return
@@ -41,24 +34,6 @@ export function SavedItemsManager() {
     } catch (err) {
       safeLogger.dashboard.error('Failed to remove item', {}, err)
       toast.error('Failed to remove item')
-    }
-  }
-
-  const handleUpdateNotificationPref = async (
-    item: SavedItem,
-    field: 'notificationsEnabled' | 'priceDropEnabled' | 'backInStockEnabled',
-    value: boolean
-  ) => {
-    try {
-      await updatePrefs(item.productId, { [field]: value })
-
-      // Show toast for master toggle only
-      if (field === 'notificationsEnabled') {
-        toast.success(value ? 'Notifications resumed' : 'Notifications paused')
-      }
-    } catch (err) {
-      safeLogger.dashboard.error('Failed to update notification preference', { field }, err)
-      toast.error('Failed to update notifications')
     }
   }
 
@@ -110,7 +85,6 @@ export function SavedItemsManager() {
                 <SavedItemRow
                   key={item.id}
                   item={item}
-                  onUpdatePref={(field, value) => handleUpdateNotificationPref(item, field, value)}
                   onRemove={() => handleRemove(item.productId, item.name)}
                 />
               ))}
@@ -125,16 +99,11 @@ export function SavedItemsManager() {
 
 interface SavedItemRowProps {
   item: SavedItem
-  onUpdatePref: (
-    field: 'notificationsEnabled' | 'priceDropEnabled' | 'backInStockEnabled',
-    value: boolean
-  ) => void
   onRemove: () => void
 }
 
 function SavedItemRow({
   item,
-  onUpdatePref,
   onRemove,
 }: SavedItemRowProps) {
   return (
@@ -187,84 +156,14 @@ function SavedItemRow({
           </p>
         </div>
 
-        {/* Notification Controls Popover */}
-        <div className="flex items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                title="Notification settings"
-                data-testid={`saved-item-notifications-${item.id}`}
-                className={item.notificationsEnabled ? 'text-blue-600' : 'text-muted-foreground'}
-              >
-                {item.notificationsEnabled ? (
-                  <Bell className="h-4 w-4" />
-                ) : (
-                  <BellOff className="h-4 w-4" />
-                )}
-                <ChevronDown className="h-3 w-3 ml-1" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <div className="space-y-4">
-                <h4 className="font-medium text-sm">Notifications</h4>
-
-                {/* Master toggle */}
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`notif-master-${item.id}`} className="text-sm">
-                    All notifications
-                  </Label>
-                  <Switch
-                    id={`notif-master-${item.id}`}
-                    checked={item.notificationsEnabled}
-                    onCheckedChange={(checked) => onUpdatePref('notificationsEnabled', checked)}
-                    data-testid={`saved-item-notifications-toggle-${item.id}`}
-                  />
-                </div>
-
-                <div className="border-t pt-3 space-y-3">
-                  {/* Price drops toggle */}
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor={`notif-price-${item.id}`}
-                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
-                    >
-                      Price drops
-                    </Label>
-                    <Switch
-                      id={`notif-price-${item.id}`}
-                      checked={item.priceDropEnabled}
-                      onCheckedChange={(checked) => onUpdatePref('priceDropEnabled', checked)}
-                      disabled={!item.notificationsEnabled}
-                    />
-                  </div>
-
-                  {/* Back in stock toggle */}
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor={`notif-stock-${item.id}`}
-                      className={`text-sm ${!item.notificationsEnabled ? 'text-muted-foreground' : ''}`}
-                    >
-                      Back in stock
-                    </Label>
-                    <Switch
-                      id={`notif-stock-${item.id}`}
-                      checked={item.backInStockEnabled}
-                      onCheckedChange={(checked) => onUpdatePref('backInStockEnabled', checked)}
-                      disabled={!item.notificationsEnabled}
-                    />
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground pt-2">
-                  {item.notificationsEnabled
-                    ? 'Notifications enabled for this item'
-                    : 'Turn on to receive alerts'}
-                </p>
-              </div>
-            </PopoverContent>
-          </Popover>
+        {/* Alerts status */}
+        <div className="text-xs text-muted-foreground">
+          Alerts: {item.notificationsEnabled ? 'On' : 'Off'}
+          <div>
+            <a href="/dashboard/alerts" className="underline hover:text-foreground">
+              Manage alerts
+            </a>
+          </div>
         </div>
 
         {/* Actions */}
