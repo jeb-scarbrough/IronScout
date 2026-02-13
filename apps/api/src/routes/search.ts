@@ -802,14 +802,15 @@ router.get('/calibers', async (req: Request, res: Response) => {
   try {
     const calibers = await prisma.products.groupBy({
       by: ['caliber'],
-      where: { NOT: [{ caliber: null }] },
       _count: { caliber: true },
       orderBy: { _count: { caliber: 'desc' } },
     })
 
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600')
     res.json({
-      calibers: calibers.map((c: { caliber: string | null; _count: { caliber: number } }) => ({
+      calibers: calibers
+        .filter((c: { caliber: string | null }) => c.caliber != null)
+        .map((c: { caliber: string | null; _count: { caliber: number } }) => ({
         value: c.caliber!,
         count: c._count.caliber,
       })),

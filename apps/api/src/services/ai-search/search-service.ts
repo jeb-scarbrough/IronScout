@@ -1401,7 +1401,7 @@ async function buildFacets(where: any, isPremium: boolean): Promise<Record<strin
     baseFacets.map(([field]) =>
       prisma.products.groupBy({
         by: [field] as any,
-        where: { ...where, NOT: [{ [field]: null }] },
+        where,
         _count: { [field]: true } as any,
         orderBy: { _count: { [field]: 'desc' } } as any,
       })
@@ -1417,6 +1417,7 @@ async function buildFacets(where: any, isPremium: boolean): Promise<Record<strin
     const counts: Record<string, number> = {}
 
     for (const row of rows) {
+      if (row[field] == null) continue
       // Map value to string key (handles booleans like isSubsonic)
       const key = String(row[field])
       counts[key] = row._count[field]
