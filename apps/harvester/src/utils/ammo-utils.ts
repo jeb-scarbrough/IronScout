@@ -130,8 +130,8 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b7x57r?\b|7mm\s?mauser\b/i, normalized: '7x57mm Mauser' },
   { pattern: /\b7x64\b/i, normalized: '7x64mm Brenneke' },
   { pattern: /\b7x65r\b/i, normalized: '7x65R' },
-  { pattern: /\b7\.5x54\s?french\b|7\.5\s?french\s?mas\b|7\.5x54\s?mas\b/i, normalized: '7.5x54mm French' },
-  { pattern: /\b7\.5x55\s?swiss\b|7\.5\s?swiss\b/i, normalized: '7.5x55mm Swiss' },
+  { pattern: /\b7\.5[x×]54\s?french\b|7\.5\s?french\s?mas\b|7\.5[x×]54\s?mas\b/i, normalized: '7.5x54mm French' },
+  { pattern: /\b7\.5[x×]55\s?swiss\b|7\.5\s?swiss\b/i, normalized: '7.5x55mm Swiss' },
   { pattern: /\b7\.65x53\s?(?:argentine|arg)?\s?(?:mauser)?\b/i, normalized: '7.65x53mm Argentine' },
   { pattern: /\b7\.65\s?mm?\s?para(?:bellum)?\b|7\.65\s?para\b/i, normalized: '7.65mm Parabellum' },
   { pattern: /(?:^|\s|\W)\.?\s?280\s?rem(?:ingto[nm])?\b/i, normalized: '.280 Remington' },
@@ -587,6 +587,7 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\brio\b/i, normalized: 'Rio' },
   { pattern: /\brws\b/i, normalized: 'RWS' },
   { pattern: /\bsako\b/i, normalized: 'Sako' },
+  { pattern: /\bsellier\b/i, normalized: 'Sellier & Bellot' },
   { pattern: /\bsierra\b/i, normalized: 'Sierra' },
   { pattern: /\bspeer\b/i, normalized: 'Speer' },
   { pattern: /\btulammo\b/i, normalized: 'TulAmmo' },
@@ -615,6 +616,17 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bpdx1\b/i, normalized: 'Winchester' },
   { pattern: /\bsuper-?x\b/i, normalized: 'Winchester' },
   { pattern: /\bsupernova\b/i, normalized: 'Piney Mountain' },
+  { pattern: /\bsuperformance\b/i, normalized: 'Hornady' },
+
+  // Country-of-origin pseudo-brands (military surplus ammo)
+  // Placed last so real brands always take precedence
+  { pattern: /\bczech\s*(?:surplus|military)?\b/i, normalized: 'Czech Surplus' },
+  { pattern: /\byugo(?:slav)?\s*(?:surplus|military)?\b/i, normalized: 'Yugoslav Surplus' },
+  { pattern: /\bbulgarian\s*(?:surplus|military)?\b/i, normalized: 'Bulgarian Surplus' },
+  { pattern: /\bturkish\s*(?:surplus|military)?\b/i, normalized: 'Turkish Surplus' },
+  { pattern: /\bgerman\s*(?:surplus|military|srta|ammo|vintage)\b/i, normalized: 'German Surplus' },
+  { pattern: /\bkorean\s*arms\b/i, normalized: 'Korean Arms' },
+  { pattern: /\bmade\s+in\s+romania\b/i, normalized: 'Romanian Surplus' },
 ]
 
 /**

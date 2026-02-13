@@ -192,8 +192,53 @@ describe('extractBrand - new brands', () => {
     ['Maxxtech 9mm 115gr FMJ', 'Maxxtech'],
     ['ADI 308 Win 150gr SP', 'ADI'],
     ['Supernova 22LR Tracer Round', 'Piney Mountain'],
+    // Country-of-origin pseudo-brands
+    ['7.62x54R Czech 148 Grain FMJ Light Ball', 'Czech Surplus'],
+    ['8mm Mauser 155 Grain FMJ Turkish Surplus', 'Turkish Surplus'],
+    ['8mm Mauser 196 Grain FMJ Yugo 1950s', 'Yugoslav Surplus'],
+    ['9x18 Makarov Bulgarian 94 Grain FMJ', 'Bulgarian Surplus'],
+    ['7.62x51 German SRTA 147gr FMJ', 'German Surplus'],
+    ['WWII Vintage German Ammo 8mm Mauser', 'German Surplus'],
+    ['30-06 150 Grain FMJ M2 Ball By Korean Arms', 'Korean Arms'],
+    ['8mm Mauser 154 Grain FMJ Made in Romania', 'Romanian Surplus'],
+    // Standalone Sellier
+    ['Sellier 9mm 124gr FMJ', 'Sellier & Bellot'],
+    // Superformance product line (no SST/ELD/XTP tokens)
+    ['Superformance 308 Win 165gr SP', 'Hornady'],
   ])('extracts brand from "%s" → %s', (input, expected) => {
     expect(extractBrand(input)).toBe(expected)
+  })
+})
+
+// ============================================================================
+// BRAND PRECEDENCE: REAL BRANDS WIN OVER COUNTRY PSEUDO-BRANDS
+// ============================================================================
+
+describe('extractBrand - precedence: real brand wins over country token', () => {
+  it.each([
+    ['Federal Czech Surplus 9mm 115gr FMJ', 'Federal'],
+    ['Hornady Turkish Military 8mm 196gr', 'Hornady'],
+    ['Winchester German Surplus 308 Win', 'Winchester'],
+    ['PPU Yugoslav M67 7.62x39', 'Prvi Partizan'],
+  ])('real brand wins in "%s" → %s', (input, expected) => {
+    expect(extractBrand(input)).toBe(expected)
+  })
+
+  it('bare "German" without suffix does not match', () => {
+    expect(extractBrand('German 9mm 124gr FMJ')).toBeNull()
+  })
+})
+
+// ============================================================================
+// UNICODE CALIBER PATTERNS
+// ============================================================================
+
+describe('normalizeCaliberString - unicode multiplication sign', () => {
+  it.each([
+    ['7.5×55 Swiss GP11', '7.5x55mm Swiss'],
+    ['7.5×54 French MAS', '7.5x54mm French'],
+  ])('normalizes "%s" → %s', (input, expected) => {
+    expect(normalizeCaliberString(input)).toBe(expected)
   })
 })
 

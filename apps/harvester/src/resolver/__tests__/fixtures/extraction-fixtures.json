@@ -492,6 +492,46 @@
         "loadType": "00 Buck",
         "identityEligible": true
       }
+    },
+    {
+      "id": "surplus-czech-762x54r",
+      "title": "7.62x54R Czech 148 Grain FMJ Light Ball Surplus Ammo",
+      "expected": {
+        "caliber": "7.62x54R",
+        "grain": 148,
+        "identityEligible": false,
+        "reason": "missing packCount"
+      }
+    },
+    {
+      "id": "surplus-turkish-8mm",
+      "title": "8mm Mauser 155 Grain FMJ Turkish Surplus 70rd",
+      "expected": {
+        "caliber": "8mm Mauser",
+        "grain": 155,
+        "packCount": 70,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "surplus-yugo-8mm",
+      "title": "8mm Mauser 196 Grain FMJ Yugo 1950s 15 Round Box",
+      "expected": {
+        "caliber": "8mm Mauser",
+        "grain": 196,
+        "packCount": 15,
+        "identityEligible": true
+      }
+    },
+    {
+      "id": "surplus-bulgarian-9x18",
+      "title": "9x18 Makarov Bulgarian 94 Grain FMJ 50rd",
+      "expected": {
+        "caliber": "9x18mm Makarov",
+        "grain": 94,
+        "packCount": 50,
+        "identityEligible": true
+      }
     }
   ]
 }
