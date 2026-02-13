@@ -19,6 +19,8 @@ envVarGroups:
         value: 10.28.1
       - key: SKIP_INSTALL_DEPS
         value: "true"
+      - key: CURRENT_PRICE_LOOKBACK_DAYS
+        value: "30"
 
   - name: ironscout-urls
     envVars:
