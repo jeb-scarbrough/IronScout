@@ -38,8 +38,10 @@ export async function GET(request: NextRequest): Promise<Response> {
   const sig = params.get('sig')
   if (!sig) return reject()
 
-  // 3. u length ≤ 4096
-  if (decodedU.length > MAX_U_RAW_LENGTH) return reject()
+  // 3. Raw u length ≤ 4096 (check percent-encoded form, not decoded).
+  // Decoded URLs can be much shorter than their encoded form (e.g. non-ASCII
+  // chars expand to %XX sequences). Re-encode to measure the wire length.
+  if (encodeURIComponent(decodedU).length > MAX_U_RAW_LENGTH) return reject()
 
   // 4. Build canonical payload and verify signature BEFORE URL parsing.
   // computeOutboundSignature re-encodes decodedU with encodeURIComponent,

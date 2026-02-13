@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { computeOutboundSignature } from '@ironscout/crypto'
+import { computeOutboundSignature, buildOutboundUrl } from '@ironscout/crypto'
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
@@ -87,9 +87,22 @@ describe('GET /out', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 when raw u exceeds 4096 characters', async () => {
+  it('returns 400 when raw (encoded) u exceeds 4096 characters', async () => {
     const longUrl = 'https://example.com/' + 'a'.repeat(4090)
     const params = signUrl(longUrl)
+    const res = await GET(makeRequest(params))
+
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 400 when encoded u exceeds 4096 but decoded is shorter', async () => {
+    // Each non-ASCII char encodes to 6+ chars via encodeURIComponent (%XX%XX).
+    // 700 × 'ä' = 700 decoded chars but 700 × '%C3%A4' = 4200 encoded chars (>4096).
+    const nonAsciiUrl = 'https://example.com/' + 'ä'.repeat(700)
+    expect(nonAsciiUrl.length).toBeLessThan(4096) // decoded is short
+    expect(encodeURIComponent(nonAsciiUrl).length).toBeGreaterThan(4096) // encoded is long
+
+    const params = signUrl(nonAsciiUrl)
     const res = await GET(makeRequest(params))
 
     expect(res.status).toBe(400)
@@ -229,6 +242,33 @@ describe('GET /out', () => {
 
     expect(res.status).toBe(400)
     expect(await res.text()).toBe('Invalid outbound link')
+  })
+
+  // ── End-to-end: API generateOutUrl → /out → 302 ───────────────
+
+  it('round-trips a URL built by the API signing path through /out', async () => {
+    // Simulate what apps/api/src/services/outbound-url.ts does:
+    // 1. Build payload and sign with the same secret
+    // 2. Construct the absolute out_url via buildOutboundUrl
+    // 3. Feed that URL into the /out handler as if the browser navigated to it
+    const destination = 'https://midwayusa.com/product/456?sku=ABC-123&ref=search'
+    const rid = 'midway'
+    const pid = 'p_456'
+    const pl = '' // API sets pl=''
+
+    const payload = { u: destination, rid, pid, pl }
+    const sig = computeOutboundSignature(payload, TEST_SECRET)
+    const outUrl = buildOutboundUrl({
+      baseUrl: 'https://app.ironscout.ai',
+      payload,
+      sig,
+    })
+
+    // Parse the generated out_url and feed it directly to the handler
+    const res = await GET(new NextRequest(outUrl))
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location')).toBe(destination)
   })
 
   // ── Response headers ────────────────────────────────────────────

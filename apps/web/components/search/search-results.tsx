@@ -98,7 +98,6 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           <SearchHeader
             query={query}
             resultCount={0}
-            priceCount={0}
             intent={intent}
             processingTimeMs={searchMetadata.processingTimeMs}
             vectorSearchUsed={searchMetadata.vectorSearchUsed}

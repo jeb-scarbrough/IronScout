@@ -58,6 +58,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  outbound-link-audit:
+    name: Outbound Link Surface Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+
+      - name: Check for direct retailer links
+        run: node scripts/check-outbound-links.mjs
+
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
