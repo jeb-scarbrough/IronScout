@@ -41,10 +41,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   // 3. u length ≤ 4096
   if (decodedU.length > MAX_U_RAW_LENGTH) return reject()
 
-  // 4. u not empty (searchParams.get returns '' for ?u=&..., caught here)
-  if (!decodedU) return reject()
-
-  // 5. Build canonical payload and verify signature BEFORE URL parsing.
+  // 4. Build canonical payload and verify signature BEFORE URL parsing.
   // computeOutboundSignature re-encodes decodedU with encodeURIComponent,
   // matching the API signing path (which also encodes the raw destination URL).
   const rid = params.get('rid') ?? ''

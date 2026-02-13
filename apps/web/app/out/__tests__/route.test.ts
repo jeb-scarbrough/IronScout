@@ -219,6 +219,18 @@ describe('GET /out', () => {
     expect(res.status).toBe(400)
   })
 
+  // ── Fail-closed: missing secret ────────────────────────────────
+
+  it('returns 400 when OUTBOUND_LINK_SECRET is not configured', async () => {
+    delete process.env.OUTBOUND_LINK_SECRET
+
+    const params = signUrl('https://midwayusa.com/product/123', { rid: 'midway' })
+    const res = await GET(makeRequest(params))
+
+    expect(res.status).toBe(400)
+    expect(await res.text()).toBe('Invalid outbound link')
+  })
+
   // ── Response headers ────────────────────────────────────────────
 
   it('sets correct headers on 400 responses', async () => {
