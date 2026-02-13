@@ -117,6 +117,9 @@ export interface IngestRunSummary {
 
     /** Products missing grainWeight (excludes gauge/shotgun) */
     missingGrain: number
+
+    /** Products filtered as non-ammunition (zero ammo signals) */
+    nonAmmunitionFiltered?: number
   }
 }
 

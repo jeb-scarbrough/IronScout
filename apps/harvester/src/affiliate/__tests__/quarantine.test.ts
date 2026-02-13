@@ -346,7 +346,6 @@ describe('filterNonAmmunition', () => {
   function makeProduct(overrides: Partial<ParsedFeedProduct> & { name: string }) {
     return {
       product: {
-        name: overrides.name,
         url: 'https://example.com/test',
         price: 19.99,
         inStock: true,
