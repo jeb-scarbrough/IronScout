@@ -107,6 +107,7 @@ export function SearchResultRow({
       inStock={lowestPrice.inStock}
       retailerName={lowestPrice.retailer.name}
       retailerUrl={lowestPrice.url}
+      retailerOutUrl={lowestPrice.out_url}
       isTracked={isTracked}
       placement="search"
       onTrackToggle={handleTrackToggle}

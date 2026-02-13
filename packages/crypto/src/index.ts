@@ -2,7 +2,7 @@
  * @ironscout/crypto
  *
  * Cryptographic utilities for IronScout.
- * Provides credential encryption for affiliate and retailer feeds.
+ * Provides credential encryption and outbound link signing.
  */
 
 export {
@@ -15,3 +15,13 @@ export {
   encryptFeedPassword,
   decryptFeedPassword,
 } from './secrets'
+
+export {
+  buildCanonicalPayload,
+  computeOutboundSignature,
+  verifyOutboundSignature,
+} from './outbound-signing'
+export type { OutboundPayload } from './outbound-signing'
+
+export { buildOutboundUrl } from './outbound-url'
+export type { BuildOutboundUrlOptions } from './outbound-url'

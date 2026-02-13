@@ -81,6 +81,7 @@ export function ForYouResultCard({
       inStock={item.inStock}
       retailerName={item.retailer.name}
       retailerUrl={item.url}
+      retailerOutUrl={item.out_url}
       caliber={item.product.caliber}
       grain={item.product.grainWeight ?? undefined}
       caseMaterial={undefined} // Not in ProductFeedItem

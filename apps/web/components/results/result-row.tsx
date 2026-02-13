@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Bookmark, ArrowUpRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { trackAffiliateClick, trackTrackToggle } from '@/lib/analytics'
+import { trackRetailerClick, extractDomain, trackTrackToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
 import {
   Tooltip,
@@ -32,6 +32,7 @@ export interface ResultRowProps {
   inStock?: boolean
   retailerName: string
   retailerUrl: string
+  retailerOutUrl?: string | null
   isTracked: boolean
   placement?: 'search' | 'for_you' | 'product_detail'
   onTrackToggle: (id: string) => void
@@ -68,6 +69,7 @@ export function ResultRow({
   inStock,
   retailerName,
   retailerUrl,
+  retailerOutUrl,
   isTracked,
   placement = 'search',
   onTrackToggle,
@@ -79,17 +81,25 @@ export function ResultRow({
     setTrackingOptimistic(isTracked)
   }, [isTracked])
 
-  const isValidUrl = retailerUrl && retailerUrl.startsWith('http')
+  const isValidUrl = !!retailerOutUrl
 
   const handlePrimaryClick = useCallback(() => {
-    trackAffiliateClick(id, retailerName, pricePerRound, placement)
+    trackRetailerClick({
+      retailer: retailerName,
+      product_id: id,
+      placement,
+      destination_domain: extractDomain(retailerUrl),
+      price_per_round: pricePerRound,
+      price_total: totalPrice,
+      in_stock: inStock,
+    })
     if (onPrimaryClick) {
       onPrimaryClick(id)
     }
     if (isValidUrl) {
-      window.open(retailerUrl, '_blank', 'noopener,noreferrer')
+      window.open(retailerOutUrl!, '_blank', 'noopener,noreferrer')
     }
-  }, [id, retailerName, pricePerRound, placement, onPrimaryClick, isValidUrl, retailerUrl])
+  }, [id, retailerName, retailerUrl, retailerOutUrl, pricePerRound, totalPrice, inStock, placement, onPrimaryClick, isValidUrl])
 
   const handleTrackToggle = useCallback(() => {
     const nextState = !trackingOptimistic

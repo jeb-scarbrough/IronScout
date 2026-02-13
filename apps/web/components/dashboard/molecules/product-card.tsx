@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ContextChip } from '../atoms/context-chip'
 import { ExternalLink, Bookmark, ChevronDown, ChevronUp } from 'lucide-react'
 import type { ProductCardProps } from '@/types/dashboard'
+import { trackRetailerClick, extractDomain } from '@/lib/analytics'
 
 /**
  * ProductCard - Product card with price context (ADR-006 compliant)
@@ -27,10 +28,21 @@ export function ProductCard({
   const [expanded, setExpanded] = useState(false)
 
   const handleViewClick = () => {
+    if (!item.out_url) return
+    trackRetailerClick({
+      retailer: item.retailer.name,
+      product_id: item.product.id,
+      placement: 'dashboard',
+      destination_domain: extractDomain(item.url),
+      price_total: item.price,
+      price_per_round: item.pricePerRound ?? undefined,
+      in_stock: item.inStock,
+      caliber: item.product.caliber,
+    })
     if (onViewClick) {
       onViewClick()
     } else {
-      window.open(item.url, '_blank', 'noopener,noreferrer')
+      window.open(item.out_url, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -122,6 +134,7 @@ export function ProductCard({
         <div className="flex gap-2 pt-1">
           <Button
             onClick={handleViewClick}
+            disabled={!item.out_url}
             className="flex-1 h-10 bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             View at Retailer

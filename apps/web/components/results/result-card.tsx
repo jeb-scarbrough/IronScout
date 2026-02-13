@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Bookmark, ArrowUpRight } from 'lucide-react'
-import { trackAffiliateClick, trackTrackToggle } from '@/lib/analytics'
+import { trackRetailerClick, extractDomain, trackTrackToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
 import {
   Tooltip,
@@ -48,6 +48,8 @@ export interface ResultCardProps {
 
   retailerName: string
   retailerUrl: string
+  /** Signed outbound redirect URL (from API). Used for navigation. */
+  retailerOutUrl?: string | null
 
   /** Caliber (e.g., "9mm Luger", ".223 Rem") */
   caliber: string
@@ -141,6 +143,7 @@ export function ResultCard({
   inStock,
   retailerName,
   retailerUrl,
+  retailerOutUrl,
   caliber,
   bulletType,
   grain,
@@ -160,18 +163,26 @@ export function ResultCard({
     setTrackingOptimistic(isTracked)
   }, [isTracked])
 
-  const isValidUrl = retailerUrl && retailerUrl.startsWith('http')
+  const isValidUrl = !!retailerOutUrl
   const timeAgo = formatTimeAgo(updatedAt)
 
   const handlePrimaryClick = useCallback(() => {
-    trackAffiliateClick(id, retailerName, pricePerRound, placement)
+    trackRetailerClick({
+      retailer: retailerName,
+      product_id: id,
+      placement,
+      destination_domain: extractDomain(retailerUrl),
+      price_per_round: pricePerRound,
+      price_total: totalPrice,
+      in_stock: inStock,
+    })
     if (onPrimaryClick) {
       onPrimaryClick(id)
     }
     if (isValidUrl) {
-      window.open(retailerUrl, '_blank', 'noopener,noreferrer')
+      window.open(retailerOutUrl!, '_blank', 'noopener,noreferrer')
     }
-  }, [id, retailerName, pricePerRound, placement, onPrimaryClick, isValidUrl, retailerUrl])
+  }, [id, retailerName, retailerUrl, retailerOutUrl, pricePerRound, totalPrice, inStock, placement, onPrimaryClick, isValidUrl])
 
   const handleTrackToggle = useCallback(() => {
     const nextState = !trackingOptimistic

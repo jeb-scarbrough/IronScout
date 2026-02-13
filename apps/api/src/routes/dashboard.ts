@@ -23,6 +23,7 @@ import {
 import { getMarketDeals, getMarketDealsWithGunLocker } from '../services/market-deals'
 import { getUserCalibers, type CaliberValue } from '../services/gun-locker'
 import { getLoadoutData } from '../services/loadout'
+import { generateOutUrl } from '../services/outbound-url'
 
 const log = loggers.dashboard
 
@@ -602,6 +603,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         price: priceNum,
         pricePerRound: pricePerRound ? Math.round(pricePerRound * 1000) / 1000 : null,
         url: row.url,
+        out_url: generateOutUrl(row.url, row.retailerId, row.productId),
         inStock: row.inStock,
         updatedAt: row.observedAt?.toISOString() ?? null
       }

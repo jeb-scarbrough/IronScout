@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { trackAffiliateClick } from '@/lib/analytics'
+import { trackRetailerClick, extractDomain } from '@/lib/analytics'
 import type {
   RetailerPanelProps,
   RetailerPrice,
@@ -247,8 +247,17 @@ interface RetailerRowProps {
 
 function RetailerRow({ retailer, productId, roundCount }: RetailerRowProps) {
   const handleViewClick = useCallback(() => {
-    trackAffiliateClick(productId, retailer.retailerName, retailer.pricePerRound, 'panel')
-    window.open(retailer.url, '_blank', 'noopener,noreferrer')
+    if (!retailer.out_url) return
+    trackRetailerClick({
+      retailer: retailer.retailerName,
+      product_id: productId,
+      placement: 'panel',
+      destination_domain: extractDomain(retailer.url),
+      price_per_round: retailer.pricePerRound,
+      price_total: retailer.totalPrice,
+      in_stock: retailer.inStock,
+    })
+    window.open(retailer.out_url, '_blank', 'noopener,noreferrer')
   }, [productId, retailer])
 
   const shippingText = formatShippingInfo(retailer.shippingInfo)
@@ -299,6 +308,7 @@ function RetailerRow({ retailer, productId, roundCount }: RetailerRowProps) {
             size="sm"
             className="shrink-0"
             onClick={handleViewClick}
+            disabled={!retailer.out_url}
           >
             View
             <ArrowUpRight className="ml-1 h-3 w-3" />

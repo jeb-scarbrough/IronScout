@@ -10,16 +10,24 @@ import { createLogger } from './logger'
 const logger = createLogger('analytics')
 
 export type AnalyticsEvent =
-  | AffiliateClickEvent
+  | RetailerClickEvent
   | TrackToggleEvent
   | DetailsToggleEvent
 
-export interface AffiliateClickEvent {
-  event: 'affiliate_click'
-  id: string
+export interface RetailerClickEvent {
+  event: 'retailer_click'
   retailer: string
-  pricePerRound: number
-  placement: 'search' | 'for_you' | 'product_detail' | 'card' | 'panel'
+  product_id?: string
+  placement?: string
+  destination_domain?: string
+  search_query?: string
+  result_rank?: number
+  results_count?: number
+  caliber?: string
+  category?: string
+  price_total?: number
+  price_per_round?: number
+  in_stock?: boolean
 }
 
 export interface TrackToggleEvent {
@@ -67,21 +75,29 @@ export function trackEvent(event: AnalyticsEvent): void {
 }
 
 /**
- * Track affiliate click event
+ * Track retailer click event (outbound link)
+ *
+ * Best-effort, no-throw. Fires GA4 retailer_click event.
  */
-export function trackAffiliateClick(
-  id: string,
-  retailer: string,
-  pricePerRound: number,
-  placement: AffiliateClickEvent['placement']
+export function trackRetailerClick(
+  params: Omit<RetailerClickEvent, 'event'>
 ): void {
   trackEvent({
-    event: 'affiliate_click',
-    id,
-    retailer,
-    pricePerRound,
-    placement,
+    event: 'retailer_click',
+    ...params,
   })
+}
+
+/**
+ * Extract domain from a URL string (best-effort, no-throw)
+ */
+export function extractDomain(url: string | undefined | null): string | undefined {
+  if (!url) return undefined
+  try {
+    return new URL(url).hostname
+  } catch {
+    return undefined
+  }
 }
 
 /**

@@ -19,6 +19,12 @@ vi.mock('../../config/redis', () => ({
 }))
 
 vi.mock('../../config/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
   loggers: {
     dashboard: {
       info: vi.fn(),

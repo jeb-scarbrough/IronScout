@@ -6,6 +6,7 @@ import { getUserTier } from '../middleware/auth'
 import { loggers } from '../config/logger'
 import { batchGetPricesViaProductLinks, getPricesViaProductLinks } from '../services/ai-search/price-resolver'
 import { lookupByUpc } from '../services/upc-lookup'
+import { generateOutUrl } from '../services/outbound-url'
 
 const log = loggers.products
 
@@ -244,6 +245,7 @@ router.get('/search', async (req: Request, res: Response) => {
         price: parseFloat(price.price.toString()),
         currency: price.currency,
         url: price.url,
+        out_url: generateOutUrl(price.url, price.retailers.id, product.id),
         inStock: price.inStock,
         retailers: {
           id: price.retailers.id,
@@ -373,6 +375,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         price: parseFloat(price.price.toString()),
         currency: price.currency,
         url: price.url,
+        out_url: generateOutUrl(price.url, price.retailers?.id, product.id),
         inStock: price.inStock,
         retailers: {
           id: price.retailers?.id,
@@ -463,6 +466,7 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
         price: parseFloat(price.price.toString()),
         inStock: price.inStock,
         url: price.url,
+        out_url: generateOutUrl(price.url, price.retailers?.id, id),
         tier: price.retailers?.tier,
         lastUpdated: price.observedAt
       })),
@@ -470,12 +474,14 @@ router.get('/:id/prices', async (req: Request, res: Response) => {
         retailers: cheapest.retailers?.name,
         price: parseFloat(cheapest.price.toString()),
         inStock: cheapest.inStock,
-        url: cheapest.url
+        url: cheapest.url,
+        out_url: generateOutUrl(cheapest.url, cheapest.retailers?.id, id),
       } : null,
       cheapestInStock: cheapestInStock ? {
         retailers: cheapestInStock.retailers?.name,
         price: parseFloat(cheapestInStock.price.toString()),
-        url: cheapestInStock.url
+        url: cheapestInStock.url,
+        out_url: generateOutUrl(cheapestInStock.url, cheapestInStock.retailers?.id, id),
       } : null
     })
   } catch (error) {

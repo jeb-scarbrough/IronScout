@@ -75,6 +75,7 @@ export interface RetailerPrice {
   inStock: boolean
   shippingInfo: ShippingInfo
   url: string
+  out_url: string | null
   lastUpdated?: string // ISO date string
 }
 

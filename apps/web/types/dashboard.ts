@@ -90,6 +90,8 @@ export interface ProductFeedItem {
   pricePerRound: number | null
   /** Link to retailer product page */
   url: string
+  /** Signed outbound redirect URL */
+  out_url: string | null
   /** Stock availability */
   inStock: boolean
   /** Whether user has this product in watchlist */

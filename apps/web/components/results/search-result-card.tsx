@@ -112,6 +112,7 @@ export function SearchResultCard({
       inStock={lowestPrice.inStock}
       retailerName={lowestPrice.retailer.name}
       retailerUrl={lowestPrice.url}
+      retailerOutUrl={lowestPrice.out_url}
       caliber={product.caliber || 'Unknown'}
       bulletType={product.premium?.bulletType}
       grain={product.grainWeight}

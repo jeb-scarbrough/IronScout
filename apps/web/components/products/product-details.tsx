@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Bookmark, ExternalLink, TrendingDown, Store, Package } from 'lucide-react'
 import type { Product } from '@/lib/api'
+import { trackRetailerClick, extractDomain } from '@/lib/analytics'
 import { CreateAlertDialog } from './create-alert-dialog'
 import { PriceHistoryChart } from './price-history-chart'
 
@@ -120,17 +121,32 @@ export function ProductDetails({ product }: ProductDetailsProps) {
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <Button size="lg" className="flex-1" asChild>
-              <a
-                href={lowestPrice.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="h-4 w-4" />
+            {lowestPrice.out_url ? (
+              <Button size="lg" className="flex-1" asChild>
+                <a
+                  href={lowestPrice.out_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2"
+                  onClick={() => trackRetailerClick({
+                    retailer: lowestPrice.retailer?.name || 'Unknown',
+                    product_id: product.id,
+                    placement: 'product_detail',
+                    destination_domain: extractDomain(lowestPrice.url),
+                    price_total: lowestPrice.price,
+                    in_stock: lowestPrice.inStock,
+                  })}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Compare prices
+                </a>
+              </Button>
+            ) : (
+              <Button size="lg" className="flex-1" disabled>
+                <ExternalLink className="h-4 w-4 mr-2" />
                 Compare prices
-              </a>
-            </Button>
+              </Button>
+            )}
             <Button
               size="lg"
               variant="outline"
@@ -220,17 +236,32 @@ export function ProductDetails({ product }: ProductDetailsProps) {
                     )}
                   </div>
 
-                  <Button size="sm" asChild>
-                    <a
-                      href={price.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1"
-                    >
-                      <ExternalLink className="h-3 w-3" />
+                  {price.out_url ? (
+                    <Button size="sm" asChild>
+                      <a
+                        href={price.out_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1"
+                        onClick={() => trackRetailerClick({
+                          retailer: price.retailer?.name || 'Unknown',
+                          product_id: product.id,
+                          placement: 'product_detail',
+                          destination_domain: extractDomain(price.url),
+                          price_total: price.price,
+                          in_stock: price.inStock,
+                        })}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button size="sm" disabled>
+                      <ExternalLink className="h-3 w-3 mr-1" />
                       View
-                    </a>
-                  </Button>
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

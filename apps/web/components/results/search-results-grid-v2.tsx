@@ -42,6 +42,7 @@ function transformToRetailers(product: Product): RetailerPrice[] {
       inStock: price.inStock,
       shippingInfo,
       url: price.url,
+      out_url: price.out_url,
     }
   })
 }

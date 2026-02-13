@@ -13,6 +13,7 @@ import { prisma } from '@ironscout/db'
 import { CANONICAL_CALIBERS, normalizeCaliber, type CaliberValue } from './gun-locker'
 import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
+import { generateOutUrl } from './outbound-url'
 
 const log = loggers.dashboard
 
@@ -60,6 +61,7 @@ export interface MarketDeal {
   retailerName: string
   retailerId: string
   url: string
+  out_url: string | null
   contextLine: string
   detectedAt: Date
   reason: 'PRICE_DROP' | 'BACK_IN_STOCK' | 'LOWEST_90D'
@@ -625,6 +627,7 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
         retailerName: current.retailerName,
         retailerId: current.retailerId,
         url: current.url,
+        out_url: generateOutUrl(current.url, current.retailerId, current.productId),
         contextLine,
         detectedAt: current.observedAt,
         reason,

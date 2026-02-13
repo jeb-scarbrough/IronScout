@@ -260,6 +260,7 @@ export interface Price {
   price: number
   currency: string
   url: string
+  out_url: string | null
   inStock: boolean
   retailer: Retailer
 }
@@ -616,6 +617,7 @@ function getE2eSearchResponse(params: AISearchParams): AISearchResponse {
             price: 14.99,
             currency: 'USD',
             url: 'https://e2e.example/9mm-fmj',
+            out_url: null,
             inStock: true,
             retailer: {
               id: 'e2e-retailer-1',

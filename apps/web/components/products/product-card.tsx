@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatPrice } from '@/lib/utils'
 import { ExternalLink, Bookmark, Package, Sparkles } from 'lucide-react'
 import type { Product } from '@/lib/api'
+import { trackRetailerClick, extractDomain } from '@/lib/analytics'
 import { CreateAlertDialog } from './create-alert-dialog'
 import {
   PerformanceBadges,
@@ -263,17 +264,37 @@ export function ProductCard({ product, showRelevance = false }: ProductCardProps
 
       <CardFooter className="p-4 pt-0 space-y-2">
         <div className="flex space-x-2 w-full">
-          <Button size="sm" className="flex-1 shadow-sm hover:shadow-md transition-shadow" asChild>
-            <a
-              href={lowestPrice.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1"
+          {lowestPrice.out_url ? (
+            <Button
+              size="sm"
+              className="flex-1 shadow-sm hover:shadow-md transition-shadow"
+              asChild
             >
-              <ExternalLink className="h-3 w-3" />
+              <a
+                href={lowestPrice.out_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1"
+                onClick={() => trackRetailerClick({
+                  retailer: lowestPrice.retailer.name,
+                  product_id: product.id,
+                  placement: 'card',
+                  destination_domain: extractDomain(lowestPrice.url),
+                  price_total: lowestPrice.price,
+                  in_stock: lowestPrice.inStock,
+                  caliber: product.caliber,
+                })}
+              >
+                <ExternalLink className="h-3 w-3" />
+                Compare prices
+              </a>
+            </Button>
+          ) : (
+            <Button size="sm" className="flex-1" disabled>
+              <ExternalLink className="h-3 w-3 mr-1" />
               Compare prices
-            </a>
-          </Button>
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
