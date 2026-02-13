@@ -88,7 +88,10 @@ export function AlertsManager() {
     <div className="space-y-6">
       {/* Subheading — ADR-023 D2: no page h1, sidebar provides context */}
       <p className="text-muted-foreground">
-        Control how you’re notified. Manage what you track on the Watchlist.
+        Control alerts for saved items.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Why am I seeing this? Alerts come from your saved items.
       </p>
 
       {/* Summary badges */}
@@ -131,15 +134,15 @@ export function AlertsManager() {
       ) : (
         <div className="space-y-6">
           <AlertSection
-            title="Active Alerts"
-            description="Notifications are enabled for these items."
+            title="Alerts On"
+            description="Enabled."
             items={activeItems}
             onUpdatePref={handleUpdatePref}
-            emptyMessage="No active alerts. Turn on notifications for saved items."
+            emptyMessage="No alerts on yet."
           />
           <AlertSection
-            title="Paused Alerts"
-            description="Notifications are paused for these items."
+            title="Alerts Paused"
+            description="Paused."
             items={pausedItems}
             onUpdatePref={handleUpdatePref}
             emptyMessage="No paused alerts."
@@ -150,7 +153,7 @@ export function AlertsManager() {
       {/* Footer note */}
       {items.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Alerts fire when price drops or items come back in stock.
+          Alerts fire on price drops or back-in-stock.
           Manage your saved items on the{' '}
           <a href="/dashboard/saved" className="underline hover:text-foreground">
             Watchlist
