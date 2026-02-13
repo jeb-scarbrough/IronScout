@@ -196,6 +196,8 @@ async function main() {
       /Removed index on columns \((brand|caliberNorm|caseMaterial|description|name|purpose|search_vector)\)/,
       // Generated tsvector column default (Prisma can't represent GENERATED ALWAYS AS)
       /Altered column `search_vector` \(default changed/,
+      // FK index on prices.affiliateFeedRunId added via raw SQL (migration 20260212000000)
+      /Removed index on columns \(affiliateFeedRunId\)/,
     ]
 
     // Strip known drift lines and check if any unknown drift remains
