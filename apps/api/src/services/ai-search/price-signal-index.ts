@@ -25,7 +25,7 @@ type Decimal = Prisma.Decimal
 
 /**
  * Context band classification based on price position
- * Uses conservative thresholds (30th/70th percentile)
+ * Uses conservative thresholds (0.30/0.70 position in min-max range)
  */
 export type ContextBand = 'LOW' | 'TYPICAL' | 'HIGH' | 'INSUFFICIENT_DATA'
 
@@ -105,9 +105,9 @@ const MIN_SAMPLES_FOR_CONTEXT = 5
 /** Default window for price history */
 const DEFAULT_WINDOW_DAYS = 30
 
-/** Percentile thresholds for context bands */
-const LOW_THRESHOLD_PERCENTILE = 0.30
-const HIGH_THRESHOLD_PERCENTILE = 0.70
+/** Position-in-range thresholds for context bands (0 = min, 1 = max) */
+const LOW_THRESHOLD_POSITION = 0.30
+const HIGH_THRESHOLD_POSITION = 0.70
 
 // ============================================================================
 // CALIBER PRICE CACHE
@@ -142,7 +142,7 @@ function calculatePricePerRound(price: Decimal | number, roundCount: number | nu
 /**
  * Get price statistics for a caliber.
  *
- * ADR-023: Uses SQL PERCENTILE_CONT as the canonical median definition.
+ * ADR-024: Uses SQL PERCENTILE_CONT as the canonical median definition.
  * Daily-best = MIN corrected visible price-per-round per product per UTC day.
  * ADR-015 compliant: queries through product_links with full corrections overlay.
  */
@@ -157,7 +157,7 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
   const windowStart = new Date()
   windowStart.setDate(windowStart.getDate() - DEFAULT_WINDOW_DAYS)
 
-  // ADR-023: Canonical median via SQL PERCENTILE_CONT over daily-best prices.
+  // ADR-024: Canonical median via SQL PERCENTILE_CONT over daily-best prices.
   // ADR-015: Full corrections overlay (IGNORE exclusion, MULTIPLIER application).
   const rows = await prisma.$queryRaw<Array<{
     median: any
@@ -247,15 +247,17 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT
-      PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price_per_round) AS median,
+      CASE WHEN COUNT(*) >= ${MIN_SAMPLES_FOR_CONTEXT}
+        THEN PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price_per_round) END AS median,
       MIN(price_per_round)   AS min,
       MAX(price_per_round)   AS max,
-      PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_round) AS p25,
-      PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_round) AS p75,
+      CASE WHEN COUNT(*) >= ${MIN_SAMPLES_FOR_CONTEXT}
+        THEN PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_round) END AS p25,
+      CASE WHEN COUNT(*) >= ${MIN_SAMPLES_FOR_CONTEXT}
+        THEN PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_round) END AS p75,
       COUNT(*)::int          AS "sampleCount"
     FROM daily_best
     WHERE price_per_round > 0 AND price_per_round < 10
-    HAVING COUNT(*) >= ${MIN_SAMPLES_FOR_CONTEXT}
   `
 
   const row = rows[0]
@@ -273,11 +275,11 @@ async function getCaliberPriceStats(caliber: string): Promise<CaliberPriceStats>
   }
 
   const stats: CaliberPriceStats = {
-    median: parseFloat(row.median.toString()),
-    min: parseFloat(row.min.toString()),
-    max: parseFloat(row.max.toString()),
-    p25: parseFloat(row.p25.toString()),
-    p75: parseFloat(row.p75.toString()),
+    median: row.median != null ? parseFloat(row.median.toString()) : 0,
+    min: row.min != null ? parseFloat(row.min.toString()) : 0,
+    max: row.max != null ? parseFloat(row.max.toString()) : 0,
+    p25: row.p25 != null ? parseFloat(row.p25.toString()) : 0,
+    p75: row.p75 != null ? parseFloat(row.p75.toString()) : 0,
     sampleCount: row.sampleCount,
     updatedAt: new Date()
   }
@@ -321,9 +323,9 @@ function determineContextBand(positionInRange: number, sampleCount: number): Con
     return 'INSUFFICIENT_DATA'
   }
 
-  if (positionInRange <= LOW_THRESHOLD_PERCENTILE) {
+  if (positionInRange <= LOW_THRESHOLD_POSITION) {
     return 'LOW'
-  } else if (positionInRange >= HIGH_THRESHOLD_PERCENTILE) {
+  } else if (positionInRange >= HIGH_THRESHOLD_POSITION) {
     return 'HIGH'
   }
   return 'TYPICAL'

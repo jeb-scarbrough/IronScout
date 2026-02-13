@@ -51,7 +51,7 @@ Percentile statistics (p25, p75) similarly use `PERCENTILE_CONT(0.25)` and `PERC
 
 ### Operational
 - Median values may shift slightly for edge cases where JS approximation diverged from SQL interpolation
-- Context band thresholds in price-signal-index shift from p30/p70 to p25/p75 (internal classification only, not published)
+- Context band classification in price-signal-index is unchanged: uses `positionInRange` (linear 0-1 scale between min/max) against fixed 0.30/0.70 thresholds. p25/p75 are computed in SQL for future use but not consumed by the band classifier.
 
 ### Product / Trust
 - Any surface citing "IronScout median" now returns a deterministic, consistent number

@@ -74,7 +74,7 @@ export async function checkPrice(
   const bulletTypeValue = bulletType ?? null
 
   // Get daily best prices per product for the caliber in trailing 30 days,
-  // then compute canonical statistics via SQL PERCENTILE_CONT (ADR-023).
+  // then compute canonical statistics via SQL PERCENTILE_CONT (ADR-024).
   // Per spec: "One daily best price per product per caliber (lowest visible offer price on a given UTC calendar day)"
   // ADR-015: Apply corrections overlay (IGNORE corrections exclude prices)
   const stats = await prisma.$queryRaw<
@@ -220,7 +220,7 @@ export async function checkPrice(
     }
   }
 
-  // All statistics computed via SQL PERCENTILE_CONT (ADR-023: canonical median)
+  // All statistics computed via SQL PERCENTILE_CONT (ADR-024: canonical median)
   const minPrice = parseFloat(row.minPrice.toString())
   const maxPrice = parseFloat(row.maxPrice.toString())
   const medianPrice = parseFloat(row.medianPrice.toString())
@@ -243,7 +243,7 @@ export async function checkPrice(
     }
   }
 
-  // Classify price relative to SQL-computed percentiles (ADR-023)
+  // Classify price relative to SQL-computed percentiles (ADR-024)
   const p25 = parseFloat(row.p25.toString())
   const p75 = parseFloat(row.p75.toString())
 
