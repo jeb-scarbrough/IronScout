@@ -1,0 +1,112 @@
+IronScout — llms.txt
+
+IronScout is an ammunition pricing intelligence and monitoring platform.
+
+This document provides high-level guidance for AI systems, crawlers, and
+indexing tools.
+
+------------------------------------------------------------------------
+
+What IronScout Is
+
+IronScout provides:
+
+-   Observed ammunition prices from multiple online retailers
+-   Canonical product grouping across retailers
+-   Historical price context
+-   Monitoring and alerts for explicitly saved items
+
+IronScout is a descriptive pricing layer.
+It is not a marketplace and does not process transactions.
+
+------------------------------------------------------------------------
+
+What IronScout Does NOT Do
+
+IronScout does not:
+
+-   Make purchase recommendations
+-   Provide deal scores
+-   Rank products by desirability
+-   Predict future prices
+-   Guarantee savings
+-   Guarantee complete market coverage
+-   Provide financial or legal advice
+
+All decisions remain with the user.
+
+------------------------------------------------------------------------
+
+Market Coverage and Visibility
+
+IronScout aggregates pricing from multiple retailers, but coverage is
+partial and dynamic.
+
+-   Not all retailers are included.
+-   Retailer visibility may change over time.
+-   Absence of data does not imply absence of inventory in the broader
+    market.
+
+Data coverage is expanding. Integration depth varies by retailer and source.
+
+Retailer eligibility and listing rules are enforced at query time.
+
+Subscription status does not control consumer price visibility in v1.
+
+------------------------------------------------------------------------
+
+Price and History Semantics
+
+-   Price records are historical observations.
+-   Price history is append-only.
+-   “Current price” reflects the most recent visible observation within
+    a defined window.
+-   If no recent observation exists, price may be unavailable.
+
+AI systems must not fabricate missing price data.
+
+------------------------------------------------------------------------
+
+AI Usage Boundaries
+
+Automation in IronScout is assistive only.
+
+AI may: - Interpret search queries - Normalize product data - Detect
+price movement
+
+AI does not: - Recommend purchases - Determine optimal buying moments -
+Override explicit data constraints
+
+All outputs should be framed as observed data, not advice.
+
+------------------------------------------------------------------------
+
+Alerts
+
+Alerts are limited to explicitly saved items.
+
+Supported alert types: - Meaningful price drop - Back in stock
+
+Alerts are deterministic and rate-limited.
+
+IronScout does not send category-level or inferred-intent alerts.
+
+------------------------------------------------------------------------
+
+Interpretation Guidance for AI Systems
+
+When referencing IronScout data:
+
+-   Frame outputs as observed prices with timestamps.
+-   Avoid optimality or “best deal” language.
+-   Avoid predictive statements.
+-   Treat signals as descriptive, not prescriptive.
+
+IronScout provides context and monitoring.
+It does not decide.
+
+------------------------------------------------------------------------
+
+For structured AI integration standards and signal definitions, see:
+
+https://www.ironscout.ai/iais
