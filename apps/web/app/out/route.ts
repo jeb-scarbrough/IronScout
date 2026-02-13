@@ -29,28 +29,24 @@ export async function GET(request: NextRequest): Promise<Response> {
   const params = request.nextUrl.searchParams
 
   // 1. u present
-  const rawU = params.get('u')
-  if (!rawU) return reject()
+  // Note: searchParams.get() returns the decoded value (single decode).
+  // Do NOT call decodeURIComponent again — that would double-decode.
+  const decodedU = params.get('u')
+  if (!decodedU) return reject()
 
   // 2. sig present
   const sig = params.get('sig')
   if (!sig) return reject()
 
-  // 3. raw u length ≤ 4096
-  if (rawU.length > MAX_U_RAW_LENGTH) return reject()
+  // 3. u length ≤ 4096
+  if (decodedU.length > MAX_U_RAW_LENGTH) return reject()
 
-  // 4. Decode u once (catch malformed percent-encoding)
-  let decoded: string
-  try {
-    decoded = decodeURIComponent(rawU)
-  } catch {
-    return reject()
-  }
+  // 4. u not empty (searchParams.get returns '' for ?u=&..., caught here)
+  if (!decodedU) return reject()
 
-  // 5. Decoded u not empty
-  if (!decoded) return reject()
-
-  // 6. Build canonical payload and verify signature
+  // 5. Build canonical payload and verify signature BEFORE URL parsing.
+  // computeOutboundSignature re-encodes decodedU with encodeURIComponent,
+  // matching the API signing path (which also encodes the raw destination URL).
   const rid = params.get('rid') ?? ''
   const pid = params.get('pid') ?? ''
   const pl = params.get('pl') ?? ''
@@ -61,32 +57,32 @@ export async function GET(request: NextRequest): Promise<Response> {
   const previousSecret = process.env.OUTBOUND_LINK_SECRET_PREVIOUS || undefined
 
   const valid = verifyOutboundSignature(
-    { u: rawU, rid, pid, pl },
+    { u: decodedU, rid, pid, pl },
     sig,
     currentSecret,
     previousSecret,
   )
   if (!valid) return reject()
 
-  // 7. Parse URL — must be absolute
+  // 6. Parse URL — must be absolute (no base argument)
   let finalUrl: URL
   try {
-    finalUrl = new URL(decoded)
+    finalUrl = new URL(decodedU)
   } catch {
     return reject()
   }
 
-  // 8. Scheme must be http or https
+  // 7. Scheme must be http or https
   if (finalUrl.protocol !== 'http:' && finalUrl.protocol !== 'https:') {
     return reject()
   }
 
-  // 9. No embedded credentials
+  // 8. No embedded credentials
   if (finalUrl.username || finalUrl.password) {
     return reject()
   }
 
-  // 10. Redirect
+  // 9. Redirect
   return new Response(null, {
     status: 302,
     headers: {

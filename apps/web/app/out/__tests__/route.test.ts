@@ -95,8 +95,10 @@ describe('GET /out', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 for malformed percent-encoding (%ZZ)', async () => {
-    // Manually construct params with invalid encoding
+  it('returns 400 for malformed percent-encoding (%ZZ) — fails signature', async () => {
+    // %ZZ is not valid percent-encoding. searchParams.set double-encodes it,
+    // and the handler sees '%ZZbadencoding' as the decoded u value.
+    // Fails because the signature doesn't match.
     const url = new URL('https://app.ironscout.ai/out')
     url.searchParams.set('u', '%ZZbadencoding')
     url.searchParams.set('sig', 'fakesig')
@@ -171,6 +173,21 @@ describe('GET /out', () => {
     const res = await GET(makeRequest(params))
 
     expect(res.status).toBe(400)
+  })
+
+  // ── Single-decode correctness ──────────────────────────────────
+
+  it('preserves literal percent-sequences in URL (no double-decode)', async () => {
+    // URL contains %20 as a literal part of the path (already encoded by the retailer).
+    // Old bug: decodeURIComponent would double-decode %20→space, changing the redirect target.
+    // Fix: searchParams.get() decodes once; we use the value directly.
+    const destination = 'https://retailer.com/path%20name?q=100%25off'
+    const params = signUrl(destination, { rid: 'r1', pid: 'p1' })
+    const res = await GET(makeRequest(params))
+
+    expect(res.status).toBe(302)
+    // new URL(destination).toString() normalizes the URL
+    expect(res.headers.get('Location')).toBe(new URL(destination).toString())
   })
 
   // ── Dual-key rotation ──────────────────────────────────────────

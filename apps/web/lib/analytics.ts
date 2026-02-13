@@ -55,22 +55,31 @@ export function trackEvent(event: AnalyticsEvent): void {
     logger.debug('Track event', { event })
   }
 
+  // Analytics provider calls are wrapped in try/catch per spec:
+  // "Must not throw if analytics is unavailable or disabled."
+
   // Google Analytics 4 integration (if available)
   if (typeof window !== 'undefined' && (window as any).gtag) {
-    const { event: eventName, ...params } = event
-    ;(window as any).gtag('event', eventName, params)
+    try {
+      const { event: eventName, ...params } = event
+      ;(window as any).gtag('event', eventName, params)
+    } catch { /* best-effort */ }
   }
 
   // PostHog integration (if available)
   if (typeof window !== 'undefined' && (window as any).posthog) {
-    const { event: eventName, ...params } = event
-    ;(window as any).posthog.capture(eventName, params)
+    try {
+      const { event: eventName, ...params } = event
+      ;(window as any).posthog.capture(eventName, params)
+    } catch { /* best-effort */ }
   }
 
   // Datadog RUM integration (if available)
   if (typeof window !== 'undefined' && (window as any).DD_RUM) {
-    const { event: eventName, ...params } = event
-    ;(window as any).DD_RUM.addAction(eventName, params)
+    try {
+      const { event: eventName, ...params } = event
+      ;(window as any).DD_RUM.addAction(eventName, params)
+    } catch { /* best-effort */ }
   }
 }
 

@@ -19,6 +19,7 @@
     "doc:watch": "pnpm exec tsx agents/doc-watcher/doc-watcher.ts",
     "doc:watch:head": "pnpm exec tsx agents/doc-watcher/watch-head.ts",
     "generate:icons": "node scripts/generate-icons.mjs",
+    "check:outbound": "node scripts/check-outbound-links.mjs",
     "db:check": "pnpm --filter @ironscout/db check",
     "db:check:fast": "pnpm --filter @ironscout/db check:fast",
     "db:check:strict": "pnpm --filter @ironscout/db check:strict",
