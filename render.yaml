@@ -58,6 +58,8 @@ envVarGroups:
         sync: false  # Shared secret for admin→API proxy auth (must match in API and Admin)
       - key: INTERNAL_API_KEY
         sync: false  # SSR→API rate limit bypass (must match in API and Web)
+      - key: OUTBOUND_LINK_SECRET
+        sync: false  # HMAC secret for signed /out redirect URLs (must match in API and Web)
 
   - name: ironscout-redis
     envVars:
