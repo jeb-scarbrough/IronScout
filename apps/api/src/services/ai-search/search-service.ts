@@ -121,11 +121,8 @@ export interface ExplicitFilters {
 
   // Performance characteristic filters
   shortBarrelOptimized?: boolean
-  suppressorSafe?: boolean
   lowFlash?: boolean
-  lowRecoil?: boolean
   matchGrade?: boolean
-  controlledExpansion?: boolean
 
   // Velocity range (Premium)
   minVelocity?: number
@@ -240,7 +237,6 @@ export async function aiSearch(
   if (explicitFilters.pressureRating) premiumFeaturesUsed.push('pressureRating filter')
   if (explicitFilters.isSubsonic !== undefined) premiumFeaturesUsed.push('subsonic filter')
   if (explicitFilters.shortBarrelOptimized) premiumFeaturesUsed.push('shortBarrel filter')
-  if (explicitFilters.suppressorSafe) premiumFeaturesUsed.push('suppressorSafe filter')
   if (sortBy === 'price_context') premiumFeaturesUsed.push('price_context sort')
 
   // 1. Parse the natural language query into structured intent
@@ -724,9 +720,6 @@ function mergeFiltersWithIntent(intent: SearchIntent, filters: ExplicitFilters):
     if (filters.bulletType) {
       merged.premiumIntent.preferredBulletTypes = [filters.bulletType]
     }
-    if (filters.suppressorSafe) {
-      merged.premiumIntent.suppressorUse = true
-    }
   }
 
   return merged
@@ -843,20 +836,11 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
     if (explicitFilters.shortBarrelOptimized) {
       addCondition(where, { shortBarrelOptimized: true })
     }
-    if (explicitFilters.suppressorSafe) {
-      addCondition(where, { suppressorSafe: true })
-    }
     if (explicitFilters.lowFlash) {
       addCondition(where, { lowFlash: true })
     }
-    if (explicitFilters.lowRecoil) {
-      addCondition(where, { lowRecoil: true })
-    }
     if (explicitFilters.matchGrade) {
       addCondition(where, { matchGrade: true })
-    }
-    if (explicitFilters.controlledExpansion) {
-      addCondition(where, { controlledExpansion: true })
     }
 
     // Velocity range filter
