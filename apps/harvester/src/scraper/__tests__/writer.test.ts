@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ScrapedOffer } from '../types.js'
 
+// Valid CUID-format IDs (assertCuidFormat requires /^[a-z][a-z0-9]{23,}$/)
+const RUN_ID = 'cm1234567890abcdefghijkl'
+
 const mocks = vi.hoisted(() => ({
   mockSourceProducts: {
     findUnique: vi.fn(),
@@ -29,6 +32,7 @@ vi.mock('@ironscout/db', () => ({
     scrape_targets: mocks.mockScrapeTargets,
     scrape_runs: mocks.mockScrapeRuns,
   },
+  assertCuidFormat: vi.fn(), // Real validation not needed in unit tests
 }))
 
 import { writeScrapeOffer, updateTargetTracking, markTargetBroken, finalizeRun } from '../process/writer.js'
@@ -74,7 +78,7 @@ describe('writeScrapeOffer', () => {
     const result = await writeScrapeOffer(
       offer,
       { id: 'target-1', sourceProductId: null },
-      'run-1',
+      RUN_ID,
       logger
     )
 
@@ -97,7 +101,7 @@ describe('writeScrapeOffer', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           ingestionRunType: 'SCRAPE',
-          ingestionRunId: 'run-1',
+          ingestionRunId: RUN_ID,
           price: 19.99,
           inStock: true,
         }),
@@ -118,7 +122,7 @@ describe('writeScrapeOffer', () => {
     const result = await writeScrapeOffer(
       offer,
       { id: 'target-1', sourceProductId: 'sp-99' },
-      'run-1',
+      RUN_ID,
       logger
     )
 
@@ -136,7 +140,7 @@ describe('writeScrapeOffer', () => {
     const result = await writeScrapeOffer(
       offer,
       { id: 'target-1', sourceProductId: null },
-      'run-1',
+      RUN_ID,
       logger
     )
 
@@ -197,7 +201,7 @@ describe('finalizeRun', () => {
 
   it('updates run metrics and status', async () => {
     await finalizeRun(
-      'run-1',
+      RUN_ID,
       {
         urlsAttempted: 10,
         urlsSucceeded: 8,
@@ -215,7 +219,7 @@ describe('finalizeRun', () => {
     // (oosNoPriceCount is already excluded from urlsFailed, no subtraction needed)
     expect(mocks.mockScrapeRuns.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'run-1' },
+        where: { id: RUN_ID },
         data: expect.objectContaining({
           status: 'SUCCESS',
           urlsAttempted: 10,
