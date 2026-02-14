@@ -67,7 +67,9 @@ export async function computeCaliberSnapshots(
     try {
       const aliases = getCaliberAliases(caliber)
 
-      // Execute the ADR-025 snapshot SQL query
+      // Execute the ADR-025 snapshot SQL query.
+      // qualifying_prices CTE is defined once; stats, coverage, and bounds_dropped
+      // all read from it — no duplication.
       const stats = await prisma.$queryRaw<Array<{
         median: Prisma.Decimal | null
         p25: Prisma.Decimal | null
@@ -78,6 +80,7 @@ export async function computeCaliberSnapshots(
         daysWithData: number
         productCount: number
         retailerCount: number
+        droppedByBounds: number
       }>>`
         WITH qualifying_prices AS (
           SELECT
@@ -175,6 +178,11 @@ export async function computeCaliberSnapshots(
           FROM qualifying_prices
           WHERE price_per_round > 0 AND price_per_round < 10
         ),
+        bounds_dropped AS (
+          SELECT COUNT(*)::int AS count
+          FROM qualifying_prices
+          WHERE price_per_round <= 0 OR price_per_round >= 10
+        ),
         stats AS (
           SELECT
             CASE WHEN COUNT(*) >= 5
@@ -192,105 +200,16 @@ export async function computeCaliberSnapshots(
         SELECT
           s.median, s.p25, s.p75, s.min, s.max,
           s."sampleCount", s."daysWithData",
-          c.product_count  AS "productCount",
-          c.retailer_count AS "retailerCount"
+          c.product_count    AS "productCount",
+          c.retailer_count   AS "retailerCount",
+          bd.count           AS "droppedByBounds"
         FROM stats s
         CROSS JOIN coverage c
+        CROSS JOIN bounds_dropped bd
       `
 
       const row = stats[0]
-
-      // Count rows dropped by sanity bounds for instrumentation
-      const boundsResult = await prisma.$queryRaw<Array<{ count: number }>>`
-        WITH qualifying_prices AS (
-          SELECT
-            p.id AS product_id,
-            pr."retailerId",
-            DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') AS day,
-            MIN(
-              (pr.price * COALESCE((
-                SELECT CASE WHEN COUNT(*) = 0 THEN 1.0
-                            ELSE EXP(SUM(LN(pc.value))) END
-                FROM price_corrections pc
-                WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
-                  AND pc.value > 0
-                  AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-                  AND (
-                    (pc."scopeType" = 'PRODUCT'  AND pc."scopeId"::text = p.id::text) OR
-                    (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-                    (pc."scopeType" = 'SOURCE'   AND pc."scopeId" = pr."sourceId") OR
-                    (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-                    (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL
-                                                  AND pc."scopeId" = pr."ingestionRunId")
-                  )
-              ), 1.0)) / p."roundCount"
-            ) AS price_per_round
-          FROM products p
-          JOIN product_links pl ON pl."productId" = p.id
-          JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
-          JOIN retailers r ON r.id = pr."retailerId"
-          LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
-          LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
-          LEFT JOIN sources s ON s.id = pr."sourceId"
-          LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
-          WHERE LOWER(p.caliber) = ANY(${aliases}::text[])
-            AND p."roundCount" IS NOT NULL AND p."roundCount" > 0
-            AND pl.status IN ('MATCHED', 'CREATED')
-            AND pr."inStock" = true
-            AND pr."observedAt" >= ${windowStart}
-            AND pr."observedAt" < ${windowEnd}
-            AND r."visibilityStatus" = 'ELIGIBLE'
-            AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
-            AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL)
-            AND NOT EXISTS (
-              SELECT 1 FROM price_corrections pc
-              WHERE pc."revokedAt" IS NULL AND pc.action = 'IGNORE'
-                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-                AND (
-                  (pc."scopeType" = 'PRODUCT'  AND pc."scopeId"::text = p.id::text) OR
-                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-                  (pc."scopeType" = 'SOURCE'   AND pc."scopeId" = pr."sourceId") OR
-                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL
-                                                AND pc."scopeId" = pr."ingestionRunId")
-                )
-            )
-            AND (
-              SELECT COUNT(*)
-              FROM price_corrections pc
-              WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
-                AND pc.value > 0
-                AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-                AND (
-                  (pc."scopeType" = 'PRODUCT'  AND pc."scopeId"::text = p.id::text) OR
-                  (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-                  (pc."scopeType" = 'SOURCE'   AND pc."scopeId" = pr."sourceId") OR
-                  (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-                  (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL
-                                                AND pc."scopeId" = pr."ingestionRunId")
-                )
-            ) <= 2
-            AND (
-              pr."ingestionRunType" IS NULL
-              OR pr."ingestionRunType" != 'SCRAPE'
-              OR (
-                pr."ingestionRunType" = 'SCRAPE'
-                AND s."adapterId" IS NOT NULL
-                AND s."robotsCompliant" = true
-                AND s."tosReviewedAt" IS NOT NULL
-                AND s."tosApprovedBy" IS NOT NULL
-                AND sas."enabled" = true
-              )
-            )
-          GROUP BY p.id, pr."retailerId",
-                   DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
-        )
-        SELECT COUNT(*)::int AS count
-        FROM qualifying_prices
-        WHERE price_per_round <= 0 OR price_per_round >= 10
-      `
-
-      const droppedByBounds = boundsResult[0]?.count ?? 0
+      const droppedByBounds = row.droppedByBounds ?? 0
       const caliberDurationMs = Date.now() - caliberStart
       const computedAt = new Date()
 
