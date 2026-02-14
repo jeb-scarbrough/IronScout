@@ -152,6 +152,12 @@ async function main() {
     )
   }
 
+  // P1001 = database unreachable (common in CI with no real DB)
+  if (statusOutput.includes('P1001')) {
+    warn('Database not reachable, skipping database checks (schema-only validation passed)')
+    process.exit(0)
+  }
+
   if (statusOutput.includes('Database schema is up to date')) {
     success('All migrations applied')
   } else if (statusResult.status !== 0) {
