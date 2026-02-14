@@ -178,7 +178,7 @@ services:
     name: ironscout-admin
     runtime: node
     region: ohio
-    plan: free
+    plan: starter
     autoDeploy: false
     buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/admin build
     startCommand: cd apps/admin && pnpm start

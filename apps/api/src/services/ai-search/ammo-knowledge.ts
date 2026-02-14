@@ -6,10 +6,10 @@
 // Common platform-to-caliber mappings
 export const PLATFORM_CALIBER_MAP: Record<string, string[]> = {
   // Rifles
-  'ar15': ['.223 Remington', '5.56 NATO', '.223/5.56'],
-  'ar-15': ['.223 Remington', '5.56 NATO', '.223/5.56'],
-  'ar10': ['.308 Winchester', '7.62 NATO', '.308/7.62'],
-  'ar-10': ['.308 Winchester', '7.62 NATO', '.308/7.62'],
+  'ar15': ['.223 Remington', '5.56 NATO'],
+  'ar-15': ['.223 Remington', '5.56 NATO'],
+  'ar10': ['.308 Winchester', '7.62 NATO'],
+  'ar-10': ['.308 Winchester', '7.62 NATO'],
   'ak47': ['7.62x39mm'],
   'ak-47': ['7.62x39mm'],
   'ak74': ['5.45x39mm'],
@@ -76,10 +76,13 @@ export const PURPOSE_SYNONYMS: Record<string, string> = {
 export const CALIBER_ALIASES: Record<string, string[]> = {
   '9mm': ['9mm Luger', '9mm', '9x19mm', '9mm Parabellum'],
   '9mm luger': ['9mm Luger', '9mm', '9x19mm'],
-  '.223': ['.223 Remington', '.223/5.56', '5.56 NATO'],
-  '5.56': ['5.56 NATO', '.223/5.56', '.223 Remington'],
-  '.308': ['.308 Winchester', '.308/7.62', '7.62 NATO'],
-  '7.62': ['7.62 NATO', '.308/7.62', '.308 Winchester', '7.62x39mm', '7.62x51mm'],
+  '.223': ['.223 Remington', '5.56 NATO'],
+  '5.56': ['5.56 NATO', '.223 Remington'],
+  '.308': ['.308 Winchester', '7.62 NATO'],
+  '7.62': ['7.62 NATO', '.308 Winchester'],
+  '7.62x39': ['7.62x39mm'],
+  '7.62x51': ['7.62 NATO', '.308 Winchester'],
+  '7.62x54': ['7.62x54R'],
   '.45': ['.45 ACP', '.45 Auto'],
   '.45 acp': ['.45 ACP', '.45 Auto'],
   '.40': ['.40 S&W'],
