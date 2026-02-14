@@ -30,9 +30,7 @@ interface SearchPageProps {
     pressureRating?: string
     isSubsonic?: string
     shortBarrelOptimized?: string
-    suppressorSafe?: string
     lowFlash?: string
-    lowRecoil?: string
     matchGrade?: string
     minVelocity?: string
     maxVelocity?: string
