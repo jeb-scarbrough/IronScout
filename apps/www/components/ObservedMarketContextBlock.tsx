@@ -1,26 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-
-// ADR-025: Slug-to-CaliberValue mapping for www caliber pages.
-// Matches CALIBER_SLUG_MAP in packages/db/calibers.ts.
-// Inlined here to avoid build issues with packages/db in static export.
-const CALIBER_SLUG_MAP: Record<string, string> = {
-  '9mm': '9mm',
-  '556-nato': '.223/5.56',
-  '308-winchester': '.308/7.62x51',
-  '22-lr': '.22 LR',
-  '45-acp': '.45 ACP',
-  '300-blackout': '.300 AAC Blackout',
-  '30-06-springfield': '.30-06',
-  '65-creedmoor': '6.5 Creedmoor',
-  '223-remington': '.223/5.56',
-  '762x39': '7.62x39',
-  '380-acp': '.380 ACP',
-  '40-sw': '.40 S&W',
-  '10mm-auto': '10mm Auto',
-  '12-gauge': '12ga',
-}
+import { CALIBER_SLUG_MAP } from '@ironscout/db/calibers.js'
 
 export interface ObservedMarketContextBlockProps {
   caliberLabel: string
