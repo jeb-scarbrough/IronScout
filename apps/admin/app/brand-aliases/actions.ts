@@ -14,7 +14,7 @@ import { publishBrandAliasInvalidation } from '@/lib/queue';
 // Import normalization version from shared module to prevent drift
 // Note: We duplicate the normalization function here for admin-only use,
 // but the version must stay in sync with the resolver.
-const BRAND_NORMALIZATION_VERSION = 1; // TODO: Import from shared module when available
+const BRAND_NORMALIZATION_VERSION = 1; // Duplicated from harvester — see #247
 
 // Corporate suffix tokens to strip
 const CORPORATE_SUFFIXES = new Set([

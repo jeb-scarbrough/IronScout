@@ -917,7 +917,7 @@ async function attemptUpcMatch(
           canonicalKey,
           upcNorm,
           name: normalized.title,
-          category: 'ammunition', // TODO: Derive from data
+          category: 'ammunition', // See #246
           brand: normalized.brand ?? null,
           brandNorm: normalized.brandNorm,
           caliber: normalized.caliber ?? null,

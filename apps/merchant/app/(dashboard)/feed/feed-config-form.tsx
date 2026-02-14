@@ -23,8 +23,7 @@ const ACCESS_TYPE_OPTIONS: { value: FeedAccessType; label: string; description: 
   { value: 'AUTH_URL', label: 'Authenticated URL', description: 'URL requiring Basic Auth credentials' },
   { value: 'FTP', label: 'FTP', description: 'FTP server with credentials' },
   { value: 'SFTP', label: 'SFTP', description: 'Secure FTP server with credentials' },
-  // TODO: Manual upload feature - implement file upload handler
-  // { value: 'UPLOAD', label: 'Manual Upload', description: 'Upload CSV/XML files manually' },
+  // Manual upload deferred — see #244
 ];
 
 const FORMAT_TYPE_OPTIONS: { value: FeedFormatType; label: string; description: string }[] = [

@@ -631,7 +631,7 @@ export async function processFeedIngest(job: Job<RetailerFeedIngestJobData>) {
       },
       output: {
         listingsCreated: merchantSkuIds.length, // New SKUs created (retailer pipeline doesn't track updates separately)
-        listingsUpdated: 0, // TODO: Track updates when contentHash changes
+        listingsUpdated: 0, // See #245
         pricesWritten: 0, // Retailer pipeline doesn't write to prices table yet
         quarantined: quarantinedIds.length,
         rejected: errors.length,
