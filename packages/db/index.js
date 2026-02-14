@@ -115,3 +115,6 @@ export * from './embedding-text.js'
 
 // Re-export schema validation utilities (for startup checks)
 export * from './schema-validation.js'
+
+// Re-export shared caliber constants and utilities (ADR-025)
+export * from './calibers.js'

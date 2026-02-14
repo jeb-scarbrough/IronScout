@@ -19,7 +19,7 @@
  * - Actual row count from DB for accurate metrics
  */
 
-import { prisma } from '@ironscout/db'
+import { prisma, assertCuidFormat } from '@ironscout/db'
 import { createHash } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
 import { logger } from '../config/logger'
@@ -1977,6 +1977,13 @@ async function bulkInsertPrices(
   observedAt: Date
 ): Promise<number> {
   if (pricesToWrite.length === 0) return 0
+
+  // ADR-025 merge gate: assert all ingestionRunIds are cuid-format
+  for (const p of pricesToWrite) {
+    if (p.affiliateFeedRunId) {
+      assertCuidFormat(p.affiliateFeedRunId, 'ingestionRunId (affiliateFeedRunId)')
+    }
+  }
 
   // Extract arrays for unnest - per spec pattern
   const sourceProductIds = pricesToWrite.map((p) => p.sourceProductId)

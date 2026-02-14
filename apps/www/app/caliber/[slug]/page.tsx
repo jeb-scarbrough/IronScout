@@ -119,11 +119,8 @@ export default async function CaliberPage({
         priceRange={priceRange}
         observedMarketContext={{
           caliberLabel,
-          lastUpdated: null,
-          sampleCount: null,
-          median: null,
-          min: null,
-          max: null,
+          caliberSlug: slug,
+          apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.ironscout.ai',
         }}
         breadcrumbs={[
           { label: 'Home', href: '/' },

@@ -2429,3 +2429,37 @@ enum ScrapeAdapterDisableReason {
   /// Disabled due to ToS violation or legal concern
   TOS_VIOLATION
 }
+
+/// Lifecycle status for caliber market snapshots (ADR-025)
+enum CaliberSnapshotStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+/// Precomputed caliber-level market statistics (ADR-025)
+/// One CURRENT row per caliber per window size; old rows flip to SUPERSEDED.
+model caliber_market_snapshots {
+  id                    String                 @id @default(cuid())
+  caliber               String
+  windowDays            Int
+  windowStart           DateTime
+  windowEnd             DateTime
+  median                Decimal?               @db.Decimal(10, 6)
+  p25                   Decimal?               @db.Decimal(10, 6)
+  p75                   Decimal?               @db.Decimal(10, 6)
+  min                   Decimal?               @db.Decimal(10, 6)
+  max                   Decimal?               @db.Decimal(10, 6)
+  sampleCount           Int
+  daysWithData          Int
+  productCount          Int
+  retailerCount         Int
+  computedAt            DateTime
+  computationVersion    String
+  computationDurationMs Int?
+  status                CaliberSnapshotStatus  @default(CURRENT)
+  createdAt             DateTime               @default(now())
+
+  @@index([status])
+  @@index([computedAt])
+  @@map("caliber_market_snapshots")
+}
