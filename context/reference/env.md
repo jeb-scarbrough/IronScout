@@ -98,7 +98,7 @@ Required:
 - `PORT` (default 8000)
 - `DATABASE_URL`
 - `REDIS_URL` (if API enqueues jobs or reads queue state)
-- `NEXTAUTH_SECRET` - **Required for auth**. Must match `NEXTAUTH_SECRET` used by web/dealer [legacy path]/admin apps.
+- `NEXTAUTH_SECRET` - **Required for auth**. Must match `NEXTAUTH_SECRET` used by web/merchant/admin apps.
 
 Auth:
 - API signs and verifies JWTs using `NEXTAUTH_SECRET`
@@ -148,17 +148,6 @@ Optional:
 Stripe (client):
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (if checkout is embedded)
 - Server-side webhooks should live in API or a server route with `STRIPE_WEBHOOK_SECRET`.
-
----
-
-## apps/dealer (Merchant portal, legacy path)
-
-Required:
-- `NEXT_PUBLIC_API_URL` or Merchant-specific API URL (if separate)
-- `NEXTAUTH_SECRET` - Must match API's `NEXTAUTH_SECRET` for shared auth
-
-Optional:
-- Merchant onboarding keys if Retailer feeds are pulled from private endpoints
 
 ---
 
@@ -252,8 +241,8 @@ Bull Board (Queue Monitor):
 - `DATABASE_URL`
 - `REDIS_URL`
 - `OPENAI_API_KEY` (if AI search is enabled locally)
-- `NEXTAUTH_SECRET` - Same value across all apps (api, web, dealer [legacy path], admin)
-- `NEXT_PUBLIC_API_URL` (for web/dealer [legacy path]/admin)
+- `NEXTAUTH_SECRET` - Same value across all apps (api, web, merchant, admin)
+- `NEXT_PUBLIC_API_URL` (for web/merchant/admin)
 - `ALERTS_EMAIL_FROM` and `TRANSACTIONAL_EMAIL_FROM` (if email flows are tested locally)
 - `MERCHANT_EMAIL_FROM` and `OPERATIONS_EMAIL_TO` (if merchant/admin email flows are tested locally)
 

@@ -21,7 +21,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
   - Next.js App Router UI for consumers.
   - Includes user flows (signup, dashboard, search, pricing) and a lightweight admin area for embeddings/executions/logs/sources.
 
-- **Merchant Portal (`apps/dealer` legacy path)**
+- **Merchant Portal (`apps/merchant`)**
   - Next.js App Router UI for Merchant onboarding and feed management.
   - Merchant-specific dashboard and analytics surfaces.
 
@@ -37,7 +37,7 @@ IronScout is a multi-app system with a shared database and a queue-backed ingest
 
 - **Database:** Postgres via Prisma (`@ironscout/db`).
 - **Search:** Embeddings and vector search are implemented from the API side against the database (pgvector is assumed by docs and code references).
-- **Queues:** Redis + BullMQ for ingestion pipeline and Merchant portal background jobs (legacy dealer-* queue names).
+- **Queues:** Redis + BullMQ for ingestion pipeline and Merchant portal background jobs.
 
 ---
 
@@ -86,127 +86,16 @@ Retailer crawl/feed ingestion exists in code.
 
 ---
 
-### 3) Merchant Portal Feed Ingestion (legacy dealer pipeline naming)
+### 3) Merchant Portal Feed Ingestion
 
-Merchant portal ingestion exists in code. Harvester supports Merchant portal jobs (legacy dealer-* names):
-
-- feed ingest
-- SKU match
-- benchmark
-- insight generation
-
-Merchant portal job scheduling runs inside the worker process via a scheduler function (interval-based) and enqueues BullMQ jobs (legacy dealer-* queues).
-
-**Key components**
-- `src/merchant/feed-ingest.ts`
-- `src/merchant/sku-match.ts`
-- `src/merchant/benchmark.ts`
-- `src/merchant/insight.ts`
-- `src/merchant/scheduler.ts` (starts an interval scheduler)
-
----
-
-## Visibility Stack (Canonical)
-
-- **Eligibility** (Retailer): `retailers.visibilityStatus = ELIGIBLE`
-- **Entitlement** (Merchant-Retailer listing): `merchant_retailers.listingStatus = LISTED` AND relationship `status = ACTIVE` when a relationship exists.
-- **Corrections overlay**: Adjusts facts (prices) only; does not change eligibility/listing.
-- **Query-time predicate**: consumer offers must satisfy eligibility and listing where a relationship exists. Subscription status is not a consumer visibility gate.
-- **v1 constraint**: Retailers may have no Merchant relationship in v1; when a relationship exists, listing status still applies.
-
-This stack must be enforced in all consumer reads (search, product, dashboard, alerts).
-
----
-
-## High-Level Architecture
-
-IronScout is a multi-app system with a shared database and a queue-backed ingestion pipeline.
-
-### Applications
-
-- **API (`apps/api`)**
-  - Express service that exposes search, product, pricing, alerts, watchlist, and admin/ops endpoints.
-  - Hosts the AI search service integration (intent parsing, embeddings, ranking).
-
-- **Consumer Web (`apps/web`)**
-  - Next.js App Router UI for consumers.
-  - Includes user flows (signup, dashboard, search, pricing) and a lightweight admin area for embeddings/executions/logs/sources.
-
-- **Merchant Portal (`apps/dealer` legacy path)**
-  - Next.js App Router UI for Merchant onboarding and feed management.
-  - Merchant-specific dashboard and analytics surfaces.
-
-- **Admin Portal (`apps/admin`)**
-  - Next.js App Router UI for operations and Merchant lifecycle management.
-  - Includes Merchant approval/suspension/reactivation routes and Merchant detail views.
-
-- **Harvester (`apps/harvester`)**
-  - Node worker process using BullMQ queues to ingest and normalize affiliate feed data for consumer prices (v1).
-  - Retailer crawl/feed ingestion and Merchant portal jobs exist in code.
-
-### Shared Data Layer
-
-- **Database:** Postgres via Prisma (`@ironscout/db`).
-- **Search:** Embeddings and vector search are implemented from the API side against the database (pgvector is assumed by docs and code references).
-- **Queues:** Redis + BullMQ for ingestion pipeline and Merchant portal background jobs (legacy dealer-* queue names).
-
----
-
-## Core Data Flows
-
-### 1) Consumer Search and Product Discovery
-
-**Request path**
-1. Consumer uses `apps/web` search UI.
-2. `apps/web` calls `apps/api` search endpoints.
-3. `apps/api`:
-   - Parses intent (AI-assisted).
-   - Applies explicit filters (Zod schema).
-   - Queries canonical products and offers from Postgres.
-   - Applies uniform v1 shaping (no consumer tiers).
-4. Response is rendered in consumer UI (search results, product page, dashboard).
-
-**Key components in API**
-- `src/services/ai-search/*`
-  - intent parsing
-  - embedding service
-  - ranking strategies
-- `src/routes/search.ts`, `src/routes/products.ts`
-
-**Primary output**
-- Canonical product groups + offer list (Retailer-administered offers) with price and availability and optionally history.
-
----
-
-### 2) Affiliate Ingestion (Harvester Pipeline, v1)
-
-In v1, affiliate feeds and/or approved SCRAPE sources are the consumer-visible ingestion sources. The rough sequence is:
-
-1. **Schedule** enabled affiliate feeds -> create run record -> enqueue processing work
-2. **Fetch** feed files (FTP/SFTP)
-3. **Parse** offers and normalize ammo attributes
-4. **Write** append-only price records into Postgres
-5. **Alert** triggers as appropriate
-
-**Key components in Harvester**
-- `src/affiliate/*` for affiliate scheduling and processing
-- `src/normalizer/*`, `src/writer/*`, `src/alerter/*`
-- BullMQ queues defined in `src/config/queues.ts`
-
-Retailer crawl/feed ingestion exists in code.
-
----
-
-### 3) Merchant Portal Feed Ingestion (legacy dealer pipeline naming)
-
-Merchant portal ingestion exists in code. Harvester supports Merchant portal jobs (legacy dealer-* names):
+Merchant portal ingestion exists in code. Harvester supports Merchant portal jobs:
 
 - feed ingest
 - SKU match
 - benchmark
 - insight generation
 
-Merchant portal job scheduling runs inside the worker process via a scheduler function (interval-based) and enqueues BullMQ jobs (legacy dealer-* queues).
+Merchant portal job scheduling runs inside the worker process via a scheduler function (interval-based) and enqueues BullMQ jobs.
 
 **Key components**
 - `src/merchant/feed-ingest.ts`
@@ -238,13 +127,13 @@ This stack must be enforced in all consumer reads (search, product, dashboard, a
 
 ### Merchant identity
 
-- Merchant portal auth flows exist under `apps/dealer/app/api/auth/*` (legacy path),.
-- Retailer feed management and quarantine endpoints exist in the portal under `apps/dealer/app/api/feed/*` (legacy path).
+- Merchant portal auth flows exist under `apps/merchant/app/api/auth/*`.
+- Retailer feed management and quarantine endpoints exist in the portal under `apps/merchant/app/api/feed/*`.
 
 ### Admin identity
 
 - Admin portal uses NextAuth under `apps/admin/app/api/auth/[...nextauth]/route.ts`.
-- Admin routes exist for Merchant approval and lifecycle actions under `apps/admin/app/api/dealers/*` (legacy path naming).
+- Admin routes exist for Merchant approval and lifecycle actions under `apps/admin/app/api/merchants/*`.
 
 ### Subscription enforcement (merchant)
 
@@ -267,9 +156,9 @@ Operational needs are documented separately in `context/operations/*`.
 
 This section calls out concrete mismatches between code and current context docs. These require decisions and likely code changes.
 
-### 1) Merchant scheduler uses in-process interval scheduling (legacy dealer naming)
+### 1) Merchant scheduler uses in-process interval scheduling
 **Where**
-- `apps/harvester/src/dealer/scheduler.ts` contains `setInterval(...)` via `startMerchantScheduler()` (legacy `startDealerScheduler()`).
+- `apps/harvester/src/merchant/scheduler.ts` contains `setInterval(...)` via `startMerchantScheduler()`.
 
 **Why it matters**
 - If you run more than one harvester worker instance, you can double-schedule Merchant jobs unless a distributed lock or singleton deployment is enforced.

@@ -19,13 +19,13 @@ If this document conflicts with the actual repo layout, the repo wins. Update th
 - `apps/`
   - `api/` Backend API (Node, Express)
   - `web/` Consumer Next.js app (App Router)
-  - `merchant/` Merchant portal Next.js app (canonical name; may not exist yet)
-  - `dealer/` Merchant portal Next.js app (legacy path)
+  - `merchant/` Merchant portal Next.js app
   - `admin/` Admin Next.js app (App Router)
   - `harvester/` Worker app (Node + BullMQ)
+  - `www/` Marketing website (Next.js static export)
 - `context/` Authoritative product and system documentation
 - `context/decisions/` ADRs (immutable once accepted)
-- `packages/` Shared packages (common libs, db client, types) if present
+- `packages/` Shared packages (crypto, db, logger, notifications, redis, scraper-registry, ui)
 
 ---
 
@@ -39,7 +39,7 @@ Primary responsibilities:
 - Retailer visibility filtering at query time
 - AI search integration (intent parsing, embeddings, optional explanations)
 
-Likely structure (verify in repo):
+Structure:
 - `apps/api/src/routes/` Express route modules
 - `apps/api/src/services/`
   - `ai-search/` AI search, embeddings, ranking, explanations
@@ -63,9 +63,9 @@ Primary responsibilities:
 - Alerts/watchlist UI
 - Conservative copy and trust-safe UX
 
-Likely structure:
+Structure:
 - `apps/web/app/` App Router routes
-- `apps/web/app/api/auth/` NextAuth routes (if used)
+- `apps/web/app/api/auth/` NextAuth routes
 - `apps/web/components/` UI components
 
 Note:
@@ -75,13 +75,6 @@ Note:
 
 ## apps/merchant (Merchant Portal)
 
-Canonical name for the Merchant portal. The codebase may still use the legacy
-path `apps/dealer` during migration.
-
-## apps/dealer (Merchant Portal - legacy path)
-
-Legacy directory name for the Merchant portal.
-
 Primary responsibilities:
 - Merchant authentication
 - Feed configuration
@@ -90,10 +83,10 @@ Primary responsibilities:
 - Merchant context (benchmarks) by plan (inactive in v1)
 - Explicit enforcement of "no recommendations" stance in UI
 
-Likely structure (legacy path `apps/dealer/`):
-- `apps/dealer/app/` App Router routes
-- `apps/dealer/app/api/` Merchant portal API routes (feed ops, status)
-- `apps/dealer/components/`
+Structure:
+- `apps/merchant/app/` App Router routes
+- `apps/merchant/app/api/` Merchant portal API routes (feed ops, status)
+- `apps/merchant/components/`
 
 ---
 
@@ -105,7 +98,7 @@ Primary responsibilities:
 - Safe impersonation (must not bypass enforcement, inactive in v1)
 - Merchant lifecycle and billing (inactive in v1)
 
-Likely structure:
+Structure:
 - `apps/admin/app/` App Router routes
 - `apps/admin/app/api/auth/` NextAuth routes
 
@@ -116,21 +109,25 @@ Likely structure:
 Primary responsibilities:
 - Affiliate ingestion pipeline (v1)
 - Retailer ingestion pipeline (inactive in v1)
-- Merchant ingestion pipeline (legacy dealer naming: feed ingest → sku match → benchmarks → insights, inactive in v1)
+- Merchant ingestion pipeline (feed ingest → sku match → benchmarks → insights, inactive in v1)
 - BullMQ queues orchestration
 - Execution records + logs generation
-- Legacy queue names may be prefixed `dealer-*`; treat as Merchant ingestion queues only (consumer outputs remain Retailer-keyed).
 
-Likely structure:
+Structure:
 - `apps/harvester/src/`
-  - `scheduler/` scheduling logic
-  - `fetcher/` network fetch
-  - `extractor/` parsing/extraction
-  - `normalizer/` ammo normalization
-  - `writer/` DB writes
+  - `affiliate/` affiliate feed ingestion pipeline
   - `alerter/` alert triggers
-  - `dealer/` Merchant pipeline modules (legacy naming)
-  - `config/queues.ts` queue definitions
+  - `config/` configuration and queue definitions
+  - `currentprice/` current price tracking
+  - `embedding/` embedding generation
+  - `merchant/` Merchant pipeline modules
+  - `ops/` operational utilities
+  - `parsers/` data parsers
+  - `quarantine/` quarantine system for invalid products
+  - `resolver/` product resolver logic
+  - `scraper/` web scraping orchestration
+  - `utils/` helper utilities
+  - `worker.ts` main worker entry point
 
 Critical constraint:
 - Scheduler must be singleton or lock-protected (ADR-001).
@@ -139,8 +136,8 @@ Critical constraint:
 
 ## Shared Data Layer
 
-Source of truth should be:
-- `prisma/schema.prisma` or `packages/db/prisma/schema.prisma`
+Source of truth:
+- `packages/db/prisma/schema.prisma`
 
 Agents should not guess schema. If schema is not visible, expose it.
 

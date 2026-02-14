@@ -97,7 +97,7 @@ const { priceId, userId, successUrl, cancelUrl } = createCheckoutSchema.parse(re
 ### Files to Audit
 ```
 apps/api/src/routes/*.ts        (17 files)
-apps/dealer/app/api/**/*.ts     (Merchant portal, legacy path)
+apps/merchant/app/api/**/*.ts   (Merchant portal)
 apps/web/                       (likely validation)
 ```
 
@@ -279,7 +279,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 ## 5. Tailwind CSS (3.x → 4.x)
 
-**Affected:** `apps/web`, `apps/admin`, `apps/dealer` (legacy path)
+**Affected:** `apps/web`, `apps/admin`, `apps/merchant`
 
 ### Breaking Changes (Major Rewrite)
 - **CSS-first configuration** - no more `tailwind.config.js`

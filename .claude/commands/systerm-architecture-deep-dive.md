@@ -32,7 +32,7 @@ Major components (canonical map):
 - `apps/api` - enforcement and shaping
 - `apps/web` - consumer UI
 - `apps/admin` - operational controls
-- `apps/merchant` - canonical naming (codebase may still contain `apps/dealer` as a legacy artifact)
+- `apps/merchant` - merchant portal
 - `apps/harvester` - ingestion pipeline
 
 True system boundaries:
@@ -56,8 +56,8 @@ Intentional boundaries:
 - Harvester is the only writer of price facts.
 - `packages/db/visibility.js` is the canonical visibility predicate. Anything that re-implements it is a drift bug.
 
-Historical accidents:
-- `apps/dealer` is legacy naming for the merchant portal. Treat it as `apps/merchant`.
+Historical note:
+- Legacy documentation may reference `apps/dealer`; the canonical path is `apps/merchant`.
 
 Dependency reality:
 - Web depends on API contracts, not the database.

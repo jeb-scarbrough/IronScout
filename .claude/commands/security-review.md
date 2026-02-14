@@ -14,7 +14,7 @@ Scope (scan all apps + shared packages)
 - apps/api (Express API: auth, search, products, pricing, alerts, admin/ops endpoints)
 - apps/web (consumer Next.js)
 - apps/admin (admin portal)
-- apps/dealer (merchant portal; may be legacy-named)
+- apps/merchant (merchant portal)
 - apps/harvester (ingestion worker + schedulers)
 - packages/* or libs/* (shared auth, db, logging, utils)
 - Infrastructure config: env handling, secrets, CI, docker, deployment scripts, queue config

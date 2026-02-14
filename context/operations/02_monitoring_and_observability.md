@@ -38,7 +38,7 @@ Each deployed app must expose basic health signals:
 Applies to:
 - `apps/api`
 - `apps/web`
-- `apps/dealer` (legacy path, Merchant portal)
+- `apps/merchant` (Merchant portal)
 - `apps/admin`
 - `apps/harvester`
 
