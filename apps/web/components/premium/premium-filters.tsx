@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { VolumeX, Eye, Gauge, Target, Crosshair, RotateCcw } from 'lucide-react'
+import { VolumeX, Eye, Gauge, Crosshair, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -68,9 +68,7 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
     pressureRating: searchParams.get('pressureRating') || '',
     isSubsonic: searchParams.get('isSubsonic') === 'true',
     shortBarrelOptimized: searchParams.get('shortBarrelOptimized') === 'true',
-    suppressorSafe: searchParams.get('suppressorSafe') === 'true',
     lowFlash: searchParams.get('lowFlash') === 'true',
-    lowRecoil: searchParams.get('lowRecoil') === 'true',
     matchGrade: searchParams.get('matchGrade') === 'true',
     minVelocity: searchParams.get('minVelocity') || '',
     maxVelocity: searchParams.get('maxVelocity') || '',
@@ -110,8 +108,10 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
     // Remove all performance filter params
     const performanceParams = [
       'bulletType', 'pressureRating', 'isSubsonic',
-      'shortBarrelOptimized', 'suppressorSafe', 'lowFlash',
-      'lowRecoil', 'matchGrade', 'minVelocity', 'maxVelocity'
+      'shortBarrelOptimized', 'lowFlash',
+      'matchGrade', 'minVelocity', 'maxVelocity',
+      // Legacy soft-disabled params: clear if present in old links.
+      'suppressorSafe', 'lowRecoil', 'controlledExpansion'
     ]
     performanceParams.forEach(p => params.delete(p))
     params.delete('page')
@@ -245,19 +245,6 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
             </div>
           </FilterWrapper>
 
-          <FilterWrapper label="suppressor safe filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <VolumeX className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Suppressor Safe</span>
-              </div>
-              <Switch
-                checked={filters.suppressorSafe}
-                onCheckedChange={(checked) => applyFilter('suppressorSafe', checked)}
-              />
-            </div>
-          </FilterWrapper>
-
           <FilterWrapper label="low flash filter">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -267,19 +254,6 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
               <Switch
                 checked={filters.lowFlash}
                 onCheckedChange={(checked) => applyFilter('lowFlash', checked)}
-              />
-            </div>
-          </FilterWrapper>
-
-          <FilterWrapper label="low recoil filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Target className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Low Recoil</span>
-              </div>
-              <Switch
-                checked={filters.lowRecoil}
-                onCheckedChange={(checked) => applyFilter('lowRecoil', checked)}
               />
             </div>
           </FilterWrapper>
