@@ -383,7 +383,7 @@ const shutdown = async (signal: string) => {
       stopScrapeScheduler()
 
       log.info('Stopping caliber snapshot scheduler')
-      stopCaliberSnapshotScheduler()
+      await stopCaliberSnapshotScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)

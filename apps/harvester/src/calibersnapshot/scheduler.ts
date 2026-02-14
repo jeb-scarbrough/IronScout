@@ -51,12 +51,7 @@ export function startCaliberSnapshotScheduler(): void {
 async function setupRepeatableJob(): Promise<void> {
   try {
     // Remove any existing repeatable jobs first
-    const repeatableJobs = await caliberSnapshotQueue.getRepeatableJobs()
-    for (const job of repeatableJobs) {
-      if (job.name === 'SCHEDULED_CALIBER_SNAPSHOT') {
-        await caliberSnapshotQueue.removeRepeatableByKey(job.key)
-      }
-    }
+    await removeScheduledSnapshotJobs()
 
     // Add scheduled snapshot job
     await caliberSnapshotQueue.add(
@@ -91,14 +86,46 @@ async function setupRepeatableJob(): Promise<void> {
   }
 }
 
+async function removeScheduledSnapshotJobs(): Promise<number> {
+  const repeatableJobs = await caliberSnapshotQueue.getRepeatableJobs()
+  let removedCount = 0
+
+  for (const job of repeatableJobs) {
+    if (job.name === 'SCHEDULED_CALIBER_SNAPSHOT') {
+      await caliberSnapshotQueue.removeRepeatableByKey(job.key)
+      removedCount += 1
+    }
+  }
+
+  return removedCount
+}
+
 /**
  * Stop the Caliber Snapshot scheduler
  */
-export function stopCaliberSnapshotScheduler(): void {
-  if (isEnabled) {
-    log.info('CALIBER_SNAPSHOT_SCHEDULER_STOP', {
-      event_name: 'CALIBER_SNAPSHOT_SCHEDULER_STOP',
+export async function stopCaliberSnapshotScheduler(): Promise<void> {
+  if (!isEnabled) return
+
+  log.info('CALIBER_SNAPSHOT_SCHEDULER_STOP', {
+    event_name: 'CALIBER_SNAPSHOT_SCHEDULER_STOP',
+  })
+
+  try {
+    const removedRepeatableJobs = await removeScheduledSnapshotJobs()
+    log.info('CALIBER_SNAPSHOT_SCHEDULER_REPEATABLE_JOBS_REMOVED', {
+      event_name: 'CALIBER_SNAPSHOT_SCHEDULER_REPEATABLE_JOBS_REMOVED',
+      removedRepeatableJobs,
     })
+  } catch (error) {
+    log.error(
+      'CALIBER_SNAPSHOT_SCHEDULER_STOP_FAILED',
+      {
+        event_name: 'CALIBER_SNAPSHOT_SCHEDULER_STOP_FAILED',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      error instanceof Error ? error : new Error(String(error))
+    )
+  } finally {
     isEnabled = false
   }
 }

@@ -9,6 +9,7 @@
 
 import { Worker, Job } from 'bullmq'
 import { randomUUID } from 'crypto'
+import { createId } from '@paralleldrive/cuid2'
 import { prisma, Prisma, isCircuitBreakerBypassed } from '@ironscout/db'
 import { getSharedBullMQConnection } from '../config/redis'
 import {
@@ -56,6 +57,7 @@ const MAX_CONSECUTIVE_FAILURES = 3
 // Missing-brand threshold for data quality alerts (env-configurable)
 const _mbRaw = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
 const MISSING_BRAND_THRESHOLD_PERCENT = Number.isFinite(_mbRaw) ? _mbRaw : 10
+const CUID_REGEX = /^[a-z][a-z0-9]{23,}$/
 // Minimum products to consider for threshold alerting (avoid noise on small/partial runs)
 const MIN_PRODUCTS_FOR_QUALITY_ALERT = 50
 
@@ -364,7 +366,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         orderBy: { startedAt: 'desc' },
       })
 
-      if (orphanedRun) {
+      if (orphanedRun && CUID_REGEX.test(orphanedRun.id)) {
         log.warn('ORPHANED_RUN_RECOVERY', {
           feedId,
           trigger,
@@ -374,9 +376,19 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         })
         run = orphanedRun
       } else {
+        if (orphanedRun) {
+          log.warn('ORPHANED_RUN_RECOVERY_SKIPPED_NON_CUID', {
+            feedId,
+            trigger,
+            orphanedRunId: orphanedRun.id,
+            orphanedRunStartedAt: orphanedRun.startedAt.toISOString(),
+            message: 'Found RUNNING run with legacy non-cuid ID - creating a new run instead of reusing',
+          })
+        }
+
         run = await prisma.affiliate_feed_runs.create({
           data: {
-            id: randomUUID(),
+            id: createId(),
             feedId,
             sourceId: feed.sourceId,
             trigger,

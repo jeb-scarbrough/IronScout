@@ -46,4 +46,4 @@ CREATE INDEX "caliber_market_snapshots_computed_at_idx"
 -- Prevents LN(<=0) crash in snapshot computation SQL.
 -- Pre-migration audit: SELECT id, value FROM price_corrections WHERE action = 'MULTIPLIER' AND (value IS NULL OR value <= 0);
 ALTER TABLE "price_corrections" ADD CONSTRAINT "price_corrections_multiplier_value_positive"
-  CHECK (action != 'MULTIPLIER' OR value > 0);
+  CHECK (action != 'MULTIPLIER' OR (value IS NOT NULL AND value > 0));
