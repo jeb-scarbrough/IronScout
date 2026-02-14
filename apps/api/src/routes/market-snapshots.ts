@@ -14,6 +14,7 @@
 
 import { Router, Request, Response } from 'express'
 import { prisma, Prisma } from '@ironscout/db'
+import type { caliber_market_snapshots } from '@ironscout/db'
 import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
 
@@ -37,7 +38,7 @@ function formatDecimal6(value: Prisma.Decimal | null): number | null {
 /**
  * Map a DB snapshot row to the public API shape.
  */
-function toPublicSnapshot(row: any) {
+function toPublicSnapshot(row: caliber_market_snapshots) {
   return {
     caliber: row.caliber,
     windowDays: row.windowDays,
@@ -65,7 +66,10 @@ marketSnapshotsRouter.get('/calibers', async (_req: Request, res: Response) => {
     const redis = getRedisClient()
 
     // Check cache
-    const cached = await redis.get(CACHE_KEY_ALL).catch(() => null)
+    const cached = await redis.get(CACHE_KEY_ALL).catch((err: unknown) => {
+      log.warn('Redis cache read failed', { key: CACHE_KEY_ALL, error: String(err) })
+      return null
+    })
     if (cached) {
       res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
       return res.json(JSON.parse(cached))
@@ -96,7 +100,9 @@ marketSnapshotsRouter.get('/calibers', async (_req: Request, res: Response) => {
     }
 
     // Cache in Redis
-    await redis.set(CACHE_KEY_ALL, JSON.stringify(response), 'EX', CACHE_TTL_SECONDS).catch(() => {})
+    await redis.set(CACHE_KEY_ALL, JSON.stringify(response), 'EX', CACHE_TTL_SECONDS).catch((err: unknown) => {
+      log.warn('Redis cache write failed', { key: CACHE_KEY_ALL, error: String(err) })
+    })
 
     res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
     return res.json(response)
@@ -116,7 +122,10 @@ marketSnapshotsRouter.get('/calibers/:caliber', async (req: Request<{ caliber: s
     const cacheKey = `${CACHE_KEY_PREFIX}${caliberParam}`
 
     // Check cache
-    const cached = await redis.get(cacheKey).catch(() => null)
+    const cached = await redis.get(cacheKey).catch((err: unknown) => {
+      log.warn('Redis cache read failed', { key: cacheKey, error: String(err) })
+      return null
+    })
     if (cached) {
       const parsed = JSON.parse(cached)
       if (parsed === null) {
@@ -133,14 +142,18 @@ marketSnapshotsRouter.get('/calibers/:caliber', async (req: Request<{ caliber: s
 
     if (!row) {
       // Cache the miss to avoid repeated DB queries for unknown calibers
-      await redis.set(cacheKey, JSON.stringify(null), 'EX', CACHE_TTL_SECONDS).catch(() => {})
+      await redis.set(cacheKey, JSON.stringify(null), 'EX', CACHE_TTL_SECONDS).catch((err: unknown) => {
+        log.warn('Redis cache write failed', { key: cacheKey, error: String(err) })
+      })
       return res.status(404).json({ error: 'Caliber not found' })
     }
 
     const snapshot = toPublicSnapshot(row)
 
     // Cache in Redis
-    await redis.set(cacheKey, JSON.stringify(snapshot), 'EX', CACHE_TTL_SECONDS).catch(() => {})
+    await redis.set(cacheKey, JSON.stringify(snapshot), 'EX', CACHE_TTL_SECONDS).catch((err: unknown) => {
+      log.warn('Redis cache write failed', { key: cacheKey, error: String(err) })
+    })
 
     res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
     return res.json(snapshot)
