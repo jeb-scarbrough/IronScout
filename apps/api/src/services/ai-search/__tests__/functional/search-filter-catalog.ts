@@ -28,3 +28,11 @@ export const FUNCTIONAL_FILTER_DIMENSIONS: FilterDimension[] = [
   { key: 'maxPrice', values: [undefined, 1.0] },
   { key: 'inStock', values: [undefined, true] },
 ]
+
+// Nightly exhaustive matrix adds an explicit false path for isSubsonic
+// to validate interactions with all other filters.
+export const EXHAUSTIVE_FILTER_DIMENSIONS: FilterDimension[] = FUNCTIONAL_FILTER_DIMENSIONS.map((d) => (
+  d.key === 'isSubsonic'
+    ? { ...d, values: [undefined, true, false] }
+    : d
+))

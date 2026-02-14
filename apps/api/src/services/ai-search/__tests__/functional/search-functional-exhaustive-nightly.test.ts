@@ -73,7 +73,7 @@ vi.mock('../../../config/logger', () => ({
 import type { ExplicitFilters } from '../../search-service'
 import { _testExports } from '../../search-service'
 import { countExhaustiveFilterCombos, generateExhaustiveFilterCombos } from './exhaustive-generator'
-import { FUNCTIONAL_FILTER_DIMENSIONS } from './search-filter-catalog'
+import { EXHAUSTIVE_FILTER_DIMENSIONS } from './search-filter-catalog'
 import {
   matchesExplicitFilterContract,
   matchesPriceConditions,
@@ -117,11 +117,11 @@ const exhaustiveIt = process.env.RUN_EXHAUSTIVE_SEARCH_MATRIX === '1' ? it : it.
 
 describe('Search Functional Exhaustive Matrix (Nightly)', () => {
   exhaustiveIt('checks every explicit-filter permutation for FREE and PREMIUM parity', () => {
-    const expectedCount = countExhaustiveFilterCombos(FUNCTIONAL_FILTER_DIMENSIONS)
-    expect(expectedCount).toBeGreaterThan(1_000_000)
+    const expectedCount = countExhaustiveFilterCombos(EXHAUSTIVE_FILTER_DIMENSIONS)
+    expect(expectedCount).toBe(1_572_864)
 
     let visited = 0
-    for (const filters of generateExhaustiveFilterCombos(FUNCTIONAL_FILTER_DIMENSIONS)) {
+    for (const filters of generateExhaustiveFilterCombos(EXHAUSTIVE_FILTER_DIMENSIONS)) {
       visited++
 
       const premiumActual = builderMask(filters, true)

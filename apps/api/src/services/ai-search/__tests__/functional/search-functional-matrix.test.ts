@@ -180,4 +180,14 @@ describe('Search Functional Matrix', () => {
       expect(baseIds.has(id)).toBe(true)
     }
   })
+
+  it('expands slash caliber filters into alternative caliber parts', () => {
+    const filters: ExplicitFilters = { caliber: '.223/5.56' }
+
+    const actual = runBuilder(filters, true)
+    const expected = runContract(filters, true)
+
+    expect(actual).toEqual(expected)
+    expect(actual).toContain('p3-223-target-federal')
+  })
 })
