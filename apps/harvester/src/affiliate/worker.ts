@@ -10,7 +10,7 @@
 import { Worker, Job } from 'bullmq'
 import { randomUUID } from 'crypto'
 import { createId } from '@paralleldrive/cuid2'
-import { prisma, Prisma, isCircuitBreakerBypassed } from '@ironscout/db'
+import { prisma, Prisma, isCircuitBreakerBypassed, assertCuidFormat } from '@ironscout/db'
 import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
@@ -57,9 +57,17 @@ const MAX_CONSECUTIVE_FAILURES = 3
 // Missing-brand threshold for data quality alerts (env-configurable)
 const _mbRaw = Number(process.env.MISSING_BRAND_THRESHOLD_PERCENT ?? 10)
 const MISSING_BRAND_THRESHOLD_PERCENT = Number.isFinite(_mbRaw) ? _mbRaw : 10
-const CUID_REGEX = /^[a-z][a-z0-9]{23,}$/
 // Minimum products to consider for threshold alerting (avoid noise on small/partial runs)
 const MIN_PRODUCTS_FOR_QUALITY_ALERT = 50
+
+function isCuidFormat(value: string): boolean {
+  try {
+    assertCuidFormat(value, 'affiliateFeedRun.id')
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Create and start the affiliate feed worker
@@ -366,7 +374,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         orderBy: { startedAt: 'desc' },
       })
 
-      if (orphanedRun && CUID_REGEX.test(orphanedRun.id)) {
+      if (orphanedRun && isCuidFormat(orphanedRun.id)) {
         log.warn('ORPHANED_RUN_RECOVERY', {
           feedId,
           trigger,
