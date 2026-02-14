@@ -81,7 +81,7 @@ export function encryptSecret(plaintext: string, aad?: string): Buffer {
   const key = loadCredentialKey()
   const iv = crypto.randomBytes(IV_LEN)
 
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_LEN })
   if (aad) {
     cipher.setAAD(Buffer.from(aad, 'utf8'))
   }
@@ -126,7 +126,7 @@ export function decryptSecret(payload: Buffer, aad?: string): string {
   const ciphertext = payload.subarray(1 + IV_LEN + TAG_LEN)
 
   const key = loadCredentialKey()
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_LEN })
   if (aad) {
     decipher.setAAD(Buffer.from(aad, 'utf8'))
   }
