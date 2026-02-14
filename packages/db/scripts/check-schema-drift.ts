@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * CI Gate: Comprehensive schema and database validation
  *
@@ -79,7 +79,7 @@ async function main() {
   // Step 1: Validate schema syntax
   info('Validating schema syntax...')
 
-  const validateResult = spawnSync('npx', ['prisma', 'validate'], {
+  const validateResult = spawnSync('prisma', ['validate'], {
     cwd: DB_PACKAGE_ROOT,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -131,7 +131,7 @@ async function main() {
 
   info('Checking migration status...')
 
-  const statusResult = spawnSync('npx', ['prisma', 'migrate', 'status'], {
+  const statusResult = spawnSync('prisma', ['migrate', 'status'], {
     cwd: DB_PACKAGE_ROOT,
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -165,9 +165,8 @@ async function main() {
   info('Checking schema-to-database diff...')
 
   const diffResult = spawnSync(
-    'npx',
+    'prisma',
     [
-      'prisma',
       'migrate',
       'diff',
       '--from-config-datasource',

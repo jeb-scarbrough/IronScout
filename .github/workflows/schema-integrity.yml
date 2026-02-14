@@ -117,7 +117,7 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
         run: |
           # This should find no diff if migrations are correctly generating the schema
-          npx --yes prisma migrate diff \
+          pnpm --filter @ironscout/db exec prisma migrate diff \
             --from-schema-datasource packages/db/schema.prisma \
             --to-schema-datamodel packages/db/schema.prisma \
             --exit-code
