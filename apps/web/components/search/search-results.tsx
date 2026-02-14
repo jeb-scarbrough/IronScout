@@ -29,9 +29,7 @@ interface SearchResultsProps {
     pressureRating?: string
     isSubsonic?: string
     shortBarrelOptimized?: string
-    suppressorSafe?: string
     lowFlash?: string
-    lowRecoil?: string
     matchGrade?: string
     minVelocity?: string
     maxVelocity?: string
@@ -65,9 +63,7 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
   if (searchParams.pressureRating) explicitFilters.pressureRating = searchParams.pressureRating as any
   if (searchParams.isSubsonic === 'true') explicitFilters.isSubsonic = true
   if (searchParams.shortBarrelOptimized === 'true') explicitFilters.shortBarrelOptimized = true
-  if (searchParams.suppressorSafe === 'true') explicitFilters.suppressorSafe = true
   if (searchParams.lowFlash === 'true') explicitFilters.lowFlash = true
-  if (searchParams.lowRecoil === 'true') explicitFilters.lowRecoil = true
   if (searchParams.matchGrade === 'true') explicitFilters.matchGrade = true
   if (searchParams.minVelocity) explicitFilters.minVelocity = parseInt(searchParams.minVelocity)
   if (searchParams.maxVelocity) explicitFilters.maxVelocity = parseInt(searchParams.maxVelocity)

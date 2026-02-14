@@ -36,7 +36,7 @@ const PRESSURE_RATINGS = ['STANDARD', 'PLUS_P', 'PLUS_P_PLUS', 'NATO', 'UNKNOWN'
  * 
  * Also accepts explicit filters that override/narrow AI intent:
  * - Basic: caliber, purpose, caseMaterial, minPrice, maxPrice, minGrain, maxGrain, inStock
- * - Premium: bulletType, pressureRating, isSubsonic, shortBarrelOptimized, suppressorSafe, etc.
+ * - Premium: bulletType, pressureRating, isSubsonic, shortBarrelOptimized, lowFlash, etc.
  */
 const semanticSearchSchema = z.object({
   query: z.string().min(1).max(500),
@@ -63,11 +63,8 @@ const semanticSearchSchema = z.object({
     pressureRating: z.enum(PRESSURE_RATINGS).optional(),
     isSubsonic: z.boolean().optional(),
     shortBarrelOptimized: z.boolean().optional(),
-    suppressorSafe: z.boolean().optional(),
     lowFlash: z.boolean().optional(),
-    lowRecoil: z.boolean().optional(),
     matchGrade: z.boolean().optional(),
-    controlledExpansion: z.boolean().optional(),
     minVelocity: z.number().optional(),
     maxVelocity: z.number().optional(),
   }).optional(),
@@ -321,20 +318,12 @@ router.post('/nl-to-filters', redisRateLimit({
         advancedFilters.bulletTypeOptions = intent.premiumIntent.preferredBulletTypes
       }
 
-      if (intent.premiumIntent.suppressorUse) {
-        advancedFilters.suppressorSafe = true
-      }
-
       if (intent.premiumIntent.barrelLength === 'short') {
         advancedFilters.shortBarrelOptimized = true
       }
 
       if (intent.premiumIntent.safetyConstraints?.includes('low-flash')) {
         advancedFilters.lowFlash = true
-      }
-
-      if (intent.premiumIntent.safetyConstraints?.includes('low-recoil')) {
-        advancedFilters.lowRecoil = true
       }
     }
 
@@ -441,20 +430,10 @@ router.get('/premium-filters', async (_req: Request, res: Response) => {
           type: 'boolean',
           description: 'Designed for compact pistols (<4" barrel)'
         },
-        suppressorSafe: {
-          label: 'Suppressor Safe',
-          type: 'boolean',
-          description: 'Safe for use with suppressors'
-        },
         lowFlash: {
           label: 'Low Flash',
           type: 'boolean',
           description: 'Reduced muzzle flash for low-light'
-        },
-        lowRecoil: {
-          label: 'Low Recoil',
-          type: 'boolean',
-          description: 'Reduced felt recoil'
         },
         matchGrade: {
           label: 'Match Grade',

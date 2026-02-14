@@ -98,14 +98,8 @@ export function SearchHeader({
     if (explicitFilters.shortBarrelOptimized) {
       activeFilters.push({ label: 'Opt.', value: 'Short Barrel', color: 'amber' })
     }
-    if (explicitFilters.suppressorSafe) {
-      activeFilters.push({ label: 'Type', value: 'Suppressor Safe', color: 'amber' })
-    }
     if (explicitFilters.lowFlash) {
       activeFilters.push({ label: 'Type', value: 'Low Flash', color: 'amber' })
-    }
-    if (explicitFilters.lowRecoil) {
-      activeFilters.push({ label: 'Type', value: 'Low Recoil', color: 'amber' })
     }
     if (explicitFilters.matchGrade) {
       activeFilters.push({ label: 'Grade', value: 'Match Grade', color: 'amber' })
