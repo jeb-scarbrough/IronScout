@@ -45,28 +45,54 @@ export function ObservedMarketContextBlock({
 }: ObservedMarketContextBlockProps) {
   const [data, setData] = useState<SnapshotData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hasFetchError, setHasFetchError] = useState(false)
+  const [hasUnknownCaliber, setHasUnknownCaliber] = useState(false)
 
   useEffect(() => {
+    let isCancelled = false
+    setLoading(true)
+    setHasFetchError(false)
+    setHasUnknownCaliber(false)
+
     const caliberValue = CALIBER_SLUG_MAP[caliberSlug]
     if (!caliberValue) {
-      setLoading(false)
+      if (!isCancelled) {
+        setLoading(false)
+        setHasUnknownCaliber(true)
+      }
       return
     }
 
     fetch(`${apiBaseUrl}/api/market-snapshots/calibers/${encodeURIComponent(caliberValue)}`)
       .then(res => {
-        if (!res.ok) return null
+        if (!res.ok) {
+          throw new Error(`Snapshot API request failed with status ${res.status}`)
+        }
         return res.json()
       })
       .then(snapshot => {
+        if (isCancelled) return
+
         if (snapshot && typeof snapshot.sampleCount === 'number') {
-          setData(snapshot)
+          setData(snapshot as SnapshotData)
+        } else {
+          setData(null)
         }
         setLoading(false)
+        setHasFetchError(false)
+        setHasUnknownCaliber(false)
       })
       .catch(() => {
+        if (isCancelled) return
+        setData(null)
+        setHasFetchError(true)
+        setHasUnknownCaliber(false)
         setLoading(false)
       })
+
+    return () => {
+      isCancelled = true
+    }
   }, [caliberSlug, apiBaseUrl])
 
   const hasSummary = data !== null
@@ -74,6 +100,7 @@ export function ObservedMarketContextBlock({
     && typeof data.median === 'number'
     && typeof data.min === 'number'
     && typeof data.max === 'number'
+  const hasInsufficientData = data !== null && !hasSummary
 
   return (
     <section className="rounded-lg border border-iron-800 bg-iron-900/40 p-5 sm:p-6">
@@ -90,7 +117,20 @@ export function ObservedMarketContextBlock({
           <p className="leading-relaxed">
             Observed 30-Day Price Range (Per Round): median: {formatValue(data!.median!)}, lowest: {formatValue(data!.min!)}, highest: {formatValue(data!.max!)}, sample size: {data!.sampleCount}.
           </p>
-        ) : (
+        ) : hasUnknownCaliber ? (
+          <p className="leading-relaxed">
+            Market context is not configured for this caliber page.
+          </p>
+        ) : hasFetchError ? (
+          <>
+            <p className="leading-relaxed">
+              Market context is temporarily unavailable for this caliber right now.
+            </p>
+            <p className="leading-relaxed">
+              Please check back shortly while we refresh observed pricing data.
+            </p>
+          </>
+        ) : hasInsufficientData ? (
           <>
             <p className="leading-relaxed">
               At this time, there are not yet enough recent observations to summarize a reliable 30-day price range for this caliber.
@@ -100,6 +140,15 @@ export function ObservedMarketContextBlock({
             </p>
             <p className="leading-relaxed">
               Coverage is partial and integration depth varies by retailer and source. Absence of listings does not imply absence of inventory in the broader market.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="leading-relaxed">
+              Market context is temporarily unavailable for this caliber right now.
+            </p>
+            <p className="leading-relaxed">
+              Please check back shortly while we refresh observed pricing data.
             </p>
           </>
         )}
