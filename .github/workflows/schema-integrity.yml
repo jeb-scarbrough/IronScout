@@ -115,12 +115,7 @@ jobs:
       - name: Verify schema matches migrations
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-        run: |
-          # This should find no diff if migrations are correctly generating the schema
-          pnpm --filter @ironscout/db exec prisma migrate diff \
-            --from-config-datasource \
-            --to-schema schema.prisma \
-            --exit-code
+        run: pnpm db:check:drift --skip-git-check
 
       - name: Run schema integrity tests
         env:
