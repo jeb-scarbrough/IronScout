@@ -35,6 +35,7 @@ const PROJECT_ROOT = resolve(__dirname, '../..')
 
 // Apps to build (in dependency order)
 const APPS = [
+  { name: 'brand', filter: '@ironscout/brand', command: 'build' },
   { name: 'notifications', filter: '@ironscout/notifications', command: 'build' },
   { name: 'api', filter: '@ironscout/api', command: 'build' },
   { name: 'web', filter: '@ironscout/web', command: 'build' },

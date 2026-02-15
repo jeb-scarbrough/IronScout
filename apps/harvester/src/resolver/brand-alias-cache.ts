@@ -22,7 +22,7 @@ import {
   slackContext,
   SLACK_CONFIG,
 } from '@ironscout/notifications'
-import { BRAND_NORMALIZATION_VERSION } from './brand-normalization'
+import { BRAND_NORMALIZATION_VERSION } from '@ironscout/brand'
 import { logger } from '../config/logger'
 import { redisConnection } from '../config/redis'
 

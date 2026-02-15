@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeBrandString } from '../brand-normalization'
+import { normalizeBrandString } from '@ironscout/brand'
 
 describe('normalizeBrandString', () => {
   it('strips trademark symbols but preserves real letters', () => {

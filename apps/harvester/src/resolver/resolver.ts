@@ -38,7 +38,7 @@ import {
   extractSlugWeight,
 } from '../utils/ammo-utils'
 import { DEFAULT_SCORING_STRATEGY } from './scoring'
-import { normalizeBrandString } from './brand-normalization'
+import { normalizeBrandString } from '@ironscout/brand'
 import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
 import { recordMatchPath, recordMissingFields, type MissingFieldLabel } from './metrics'
 
