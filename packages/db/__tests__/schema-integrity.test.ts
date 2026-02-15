@@ -24,7 +24,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { execSync } from 'child_process'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { Client } from 'pg'
+import { Client, Pool } from 'pg'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DB_PACKAGE_ROOT = resolve(__dirname, '..')
@@ -153,12 +154,10 @@ describe('Schema Integrity', () => {
       // Columns required by harvester resolver
       const requiredColumns = [
         'id',
-        'productId',
-        'retailerId',
+        'sourceId',
         'url',
-        'identityType',
-        'identityValue',
-        'lastSeenSuccessAt',
+        'identityKey',
+        'productId',
         'createdAt',
       ]
 
@@ -210,24 +209,23 @@ describe('Schema Integrity', () => {
     // to prove the full code path works
 
     const { PrismaClient } = await import('../generated/prisma/index.js')
-    const prisma = new PrismaClient({
-      datasourceUrl: connectionString,
-    })
+    const pool = new Pool({ connectionString })
+    const adapter = new PrismaPg(pool)
+    const prisma = new PrismaClient({ adapter })
 
     try {
       // Query pattern used by harvester resolver
       // This is the exact query shape that triggered P2022 in production
       const result = await prisma.source_products.findMany({
         where: {
-          retailerId: 'nonexistent-retailer', // Won't match anything, but validates schema
+          sourceId: 'nonexistent-source', // Won't match anything, but validates schema
         },
         select: {
           id: true,
-          productId: true,
+          sourceId: true,
           url: true,
-          identityType: true,
-          identityValue: true,
-          lastSeenSuccessAt: true,
+          identityKey: true,
+          productId: true,
         },
         take: 1,
       })
@@ -243,9 +241,9 @@ describe('Schema Integrity', () => {
   it('should execute an alert query without P2022', async ({ skip }) => {
     if (skipReason) return skip()
     const { PrismaClient } = await import('../generated/prisma/index.js')
-    const prisma = new PrismaClient({
-      datasourceUrl: connectionString,
-    })
+    const pool = new Pool({ connectionString })
+    const adapter = new PrismaPg(pool)
+    const prisma = new PrismaClient({ adapter })
 
     try {
       // Query pattern used by alert processor
@@ -283,7 +281,7 @@ describe('Schema Integrity', () => {
         SELECT t.typname, e.enumlabel
         FROM pg_type t
         JOIN pg_enum e ON t.oid = e.enumtypid
-        WHERE t.typname IN ('IdentityType', 'TrustTier', 'AffiliateFeedStatus')
+        WHERE t.typname IN ('IdentifierType', 'TrustTier', 'AffiliateFeedStatus')
         ORDER BY t.typname, e.enumsortorder
       `)
 
@@ -295,11 +293,11 @@ describe('Schema Integrity', () => {
         enums.get(row.typname)!.add(row.enumlabel)
       }
 
-      // IdentityType must include these values used by harvester
-      const identityType = enums.get('IdentityType')
-      expect(identityType?.has('IMPACT_ITEM_ID')).toBe(true)
-      expect(identityType?.has('SKU')).toBe(true)
-      expect(identityType?.has('URL_HASH')).toBe(true)
+      // IdentifierType must include these values used by harvester
+      const identifierType = enums.get('IdentifierType')
+      expect(identifierType?.has('NETWORK_ITEM_ID')).toBe(true)
+      expect(identifierType?.has('SKU')).toBe(true)
+      expect(identifierType?.has('URL_HASH')).toBe(true)
     } finally {
       await client.end()
     }

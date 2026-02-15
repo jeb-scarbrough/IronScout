@@ -14,7 +14,7 @@
  * - Prices are in cents internally, converted to Decimal on write
  */
 
-import { prisma } from '@ironscout/db'
+import { prisma, assertCuidFormat } from '@ironscout/db'
 import type { ScrapedOffer } from '../types.js'
 import { mapAvailabilityToInStock } from '../types.js'
 import type { ILogger } from '@ironscout/logger'
@@ -210,6 +210,9 @@ async function writePrice(
   offer: ScrapedOffer,
   runId: string
 ): Promise<string> {
+  // ADR-025 merge gate: assert cuid format on ingestionRunId
+  assertCuidFormat(runId, 'ingestionRunId (scrape runId)')
+
   const result = await prisma.prices.create({
     data: {
       retailerId: offer.retailerId,

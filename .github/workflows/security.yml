@@ -36,12 +36,8 @@ jobs:
           node-version: '25'
           cache: 'pnpm'
 
-      - name: Install dependencies
-        env:
-          # Required by packages/db postinstall (prisma generate).
-          # A real database connection is not needed for client generation.
-          DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies (no lifecycle scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Audit for high/critical vulnerabilities
         run: pnpm audit --audit-level=high

@@ -64,6 +64,14 @@ import {
   stopCurrentPriceScheduler,
 } from './currentprice'
 
+// Caliber Market Snapshot Worker (ADR-025)
+import {
+  startCaliberSnapshotWorker,
+  stopCaliberSnapshotWorker,
+  startCaliberSnapshotScheduler,
+  stopCaliberSnapshotScheduler,
+} from './calibersnapshot'
+
 // Scrape URL Worker (scraper-framework-01 spec v0.5)
 import {
   startScrapeWorker,
@@ -96,6 +104,9 @@ let currentPriceRecomputeWorker: Worker | null = null
 
 // Scrape URL worker (scraper-framework-01, lazy initialization)
 let scrapeWorker: Worker | null = null
+
+// Caliber snapshot worker (ADR-025, lazy initialization)
+let caliberSnapshotWorkerInstance: Worker | null = null
 
 /**
  * Scheduler enabled flags (set during startup from database)
@@ -214,6 +225,7 @@ log.info('Starting IronScout.ai Harvester Workers', {
     'quarantine-reprocess',
     'current-price-recompute',
     'scrape-url',
+    'caliber-snapshot',
   ],
   retailerWorkers: [
     'feed-ingest',
@@ -299,6 +311,11 @@ async function startup() {
   log.info('Starting scrape URL worker')
   scrapeWorker = await startScrapeWorker({ concurrency: 3 })
 
+  // Start caliber snapshot worker (ADR-025 - always on, concurrency: 1)
+  // Worker processes jobs regardless of scheduler state (supports manual triggers)
+  log.info('Starting caliber snapshot worker')
+  caliberSnapshotWorkerInstance = await startCaliberSnapshotWorker({ concurrency: 1 })
+
   // Start stuck PROCESSING sweeper (recovers jobs that crash mid-processing)
   log.info('Starting product resolver sweeper')
   startProcessingSweeper()
@@ -317,6 +334,11 @@ async function startup() {
     // Per ADR-001: Only one scheduler instance should run
     log.info('Starting scrape URL scheduler')
     startScrapeScheduler()
+
+    // Start caliber snapshot scheduler (ADR-025)
+    // Per ADR-001: Only one scheduler instance should run
+    log.info('Starting caliber snapshot scheduler')
+    startCaliberSnapshotScheduler()
   }
 
   // Start affiliate feed scheduler only if enabled
@@ -359,6 +381,9 @@ const shutdown = async (signal: string) => {
 
       log.info('Stopping scrape URL scheduler')
       stopScrapeScheduler()
+
+      log.info('Stopping caliber snapshot scheduler')
+      await stopCaliberSnapshotScheduler()
     }
 
     // 2. Close workers (waits for current jobs to complete)
@@ -384,6 +409,8 @@ const shutdown = async (signal: string) => {
       stopCurrentPriceRecomputeWorker(),
       // Scrape URL worker (scraper-framework-01)
       stopScrapeWorker(),
+      // Caliber snapshot worker (ADR-025)
+      stopCaliberSnapshotWorker(),
     ])
     log.info('All workers closed')
 

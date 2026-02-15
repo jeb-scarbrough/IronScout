@@ -23,6 +23,8 @@ export const QUEUE_NAMES = {
   CURRENT_PRICE_RECOMPUTE: 'current-price-recompute',
   // Scraper Framework queue (scraper-framework-01 spec v0.5)
   SCRAPE_URL: 'scrape-url',
+  // ADR-025: Caliber Market Snapshots
+  CALIBER_SNAPSHOT: 'caliber-snapshot',
 } as const
 
 // Job data interfaces
@@ -99,6 +101,7 @@ export async function initQueueSettings(): Promise<void> {
         'quarantine-reprocess': true,
         'current-price-recompute': true,
         'scrape-url': true,
+        'caliber-snapshot': true,
       },
     }
   }
@@ -828,6 +831,68 @@ export async function getScrapeQueueStats(): Promise<{
   }
 }
 
+// ============================================================================
+// CALIBER MARKET SNAPSHOT QUEUE (ADR-025)
+// ============================================================================
+
+/**
+ * ADR-025: Caliber Market Snapshot job data
+ * Triggers computation of caliber-level market statistics
+ */
+export interface CaliberSnapshotJobData {
+  trigger: 'SCHEDULED' | 'MANUAL'
+  triggeredBy: string
+  correlationId: string
+  windowDays: number // 30 for v1
+}
+
+/**
+ * Caliber Snapshot queue
+ * Per ADR-025:
+ * - Concurrency: 1 (one job covers all 26 calibers)
+ * - Retry: 3 attempts with exponential backoff (5s, 15s, 45s)
+ */
+export const caliberSnapshotQueue = new Queue<CaliberSnapshotJobData>(
+  QUEUE_NAMES.CALIBER_SNAPSHOT,
+  {
+    connection: getSharedBullMQConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000,
+      },
+      ...getJobOptions('caliber-snapshot'),
+    },
+  }
+)
+
+/**
+ * Enqueue a caliber snapshot computation job
+ *
+ * @param trigger - What triggered the computation
+ * @param triggeredBy - Who triggered it (admin user ID or 'scheduler')
+ * @param windowDays - Window size in days (30 for v1)
+ * @returns Correlation ID for tracing
+ */
+export async function enqueueCaliberSnapshot(
+  trigger: CaliberSnapshotJobData['trigger'],
+  triggeredBy: string,
+  windowDays: number = 30
+): Promise<string> {
+  const correlationId = `caliber-snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
+  await caliberSnapshotQueue.add(
+    'COMPUTE_CALIBER_SNAPSHOTS',
+    { trigger, triggeredBy, correlationId, windowDays },
+    {
+      jobId: `CALIBER_SNAPSHOT_${correlationId}`,
+    }
+  )
+
+  return correlationId
+}
+
 // Export all queues
 export const queues = {
   alert: alertQueue,
@@ -846,5 +911,7 @@ export const queues = {
   currentPriceRecompute: currentPriceRecomputeQueue,
   // Scraper Framework queue
   scrapeUrl: scrapeUrlQueue,
+  // Caliber Market Snapshot queue (ADR-025)
+  caliberSnapshot: caliberSnapshotQueue,
 }
 

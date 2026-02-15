@@ -54,7 +54,7 @@ IronScout is a pnpm monorepo with multiple deployable apps:
 
 1. `apps/api` — Backend API (search, enforcement, alerts)
 2. `apps/web` — Consumer-facing Next.js app
-3. `apps/dealer` — Dealer portal (feeds, visibility, context)
+3. `apps/merchant` — Merchant portal (feeds, visibility, context)
 4. `apps/admin` — Admin and operations portal
 5. `apps/harvester` — Background ingestion worker (BullMQ)
 
@@ -137,6 +137,31 @@ Key warnings:
 - Never point local dev at staging or production DB/Redis
 - Never use real billing credentials locally
 - Never run multiple Harvester schedulers
+
+---
+
+## Prisma Migration Safety
+
+Prisma **cannot represent** GIN trigram indexes, `GENERATED ALWAYS AS` columns, or
+other raw-SQL database objects. When `prisma migrate dev` generates a migration, it
+will try to "fix" this drift by emitting destructive SQL (dropping indexes, invalid
+`ALTER COLUMN ... DROP DEFAULT` on generated columns).
+
+**Never blindly commit output from `prisma migrate dev`.** Follow this workflow:
+
+1. Run `prisma migrate dev --create-only` to generate the migration SQL without applying it
+2. **Review the generated SQL** and strip any drift artifacts:
+   - `DROP INDEX` for GIN trigram indexes (`*_trgm_idx`, `*_search_vector_idx`)
+   - `DROP INDEX "idx_prices_affiliate_feed_run_id"` (raw-SQL FK index)
+   - `ALTER COLUMN "search_vector" DROP DEFAULT` (invalid — it's a generated column)
+   - Any other changes to objects managed via raw SQL in earlier migrations
+3. Apply the cleaned migration with `prisma migrate dev` or `prisma migrate deploy`
+
+The `check-schema-drift.ts` script allowlists known drift patterns, but it cannot
+prevent bad SQL from being baked into migration files. The migration SQL is the last
+line of defense and **must be reviewed before committing**.
+
+If a migration fails with P3018 or references `search_vector`, check for this issue first.
 
 ---
 
