@@ -1,40 +1,17 @@
 'use server';
 
 import { prisma } from '@ironscout/db';
-import { BrandAliasStatus, BrandAliasSourceType, Prisma } from '@ironscout/db/generated/prisma';
+import { BrandAliasSourceType, Prisma } from '@ironscout/db/generated/prisma';
+import {
+  BRAND_NORMALIZATION_VERSION,
+  canAutoActivate,
+  normalizeBrandString,
+  validateAliasForCreation,
+} from '@ironscout/brand';
 import { revalidatePath } from 'next/cache';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
 import { loggers } from '@/lib/logger';
 import { publishBrandAliasInvalidation } from '@/lib/queue';
-
-// =============================================================================
-// Constants (from brand-aliases-v1 spec)
-// =============================================================================
-
-// Import normalization version from shared module to prevent drift
-// Note: We duplicate the normalization function here for admin-only use,
-// but the version must stay in sync with the resolver.
-const BRAND_NORMALIZATION_VERSION = 1; // TODO: Import from shared module when available
-
-// Corporate suffix tokens to strip
-const CORPORATE_SUFFIXES = new Set([
-  'inc', 'incorporated', 'llc', 'ltd', 'limited', 'co', 'corp', 'corporation',
-  'gmbh', 'sarl', 'sa', 'bv', 'nv',
-]);
-
-// Generic tokens that should not be standalone aliases
-const GENERIC_TOKEN_BLOCKLIST = new Set([
-  'ammo', 'ammunition', 'bulk', 'sale', 'discount', 'special', 'new', 'best', 'premium',
-]);
-
-// Short aliases (2-3 chars) that are explicitly allowed
-const SHORT_ALIAS_ALLOWLIST = new Set([
-  'pmc', 'cci', 'imi', 'ppu', 'cbc', 'wpa', 'tul', 'hsm', 'hpr',
-]);
-
-// Impact thresholds
-const AUTO_ACTIVATE_THRESHOLD = 500;
-const HIGH_IMPACT_ALERT_THRESHOLD = 1000;
 
 // =============================================================================
 // Types
@@ -74,91 +51,6 @@ export interface BrandAliasDTO {
   estimatedDailyImpact?: number;
   canAutoActivate?: boolean;
   autoActivateReason?: string;
-}
-
-// =============================================================================
-// Normalization (mirrors harvester/resolver/brand-normalization.ts)
-// =============================================================================
-
-function normalizeBrandString(brand?: string | null): string | undefined {
-  if (!brand || brand.trim().length === 0) {
-    return undefined;
-  }
-
-  let normalized = brand;
-
-  // Strip trademark symbols BEFORE NFKD normalization
-  // NFKD converts ™ to "TM", so we must strip these first
-  // ™ (U+2122), ® (U+00AE), © (U+00A9)
-  normalized = normalized.replace(/[\u2122\u00AE\u00A9]/g, '');
-  normalized = normalized.replace(/\(tm\)/gi, '');
-  normalized = normalized.replace(/\(r\)/gi, '');
-  normalized = normalized.replace(/\(c\)/gi, '');
-
-  // Unicode normalization (NFKD) + strip diacritics
-  normalized = normalized.normalize('NFKD');
-  normalized = normalized.replace(/[\u0300-\u036f]/g, '');
-
-  // Lowercase
-  normalized = normalized.toLowerCase();
-
-  // Normalize ampersand to "and"
-  normalized = normalized.replace(/&/g, ' and ');
-
-  // Collapse punctuation/separators to whitespace
-  normalized = normalized.replace(/[\/|\\-_.,;:'"!?()[\]{}]/g, ' ');
-
-  // Collapse repeated whitespace
-  normalized = normalized.replace(/\s+/g, ' ').trim();
-
-  // Strip corporate suffixes from end
-  const tokens = normalized.split(' ');
-  const filteredTokens = tokens.filter((token, index) => {
-    if (index === tokens.length - 1 || index === tokens.length - 2) {
-      return !CORPORATE_SUFFIXES.has(token);
-    }
-    return true;
-  });
-
-  normalized = filteredTokens.join(' ').replace(/\s+/g, ' ').trim();
-
-  return normalized.length === 0 ? undefined : normalized;
-}
-
-// =============================================================================
-// Validation
-// =============================================================================
-
-function validateAliasInput(aliasNorm: string, canonicalNorm: string): string[] {
-  const errors: string[] = [];
-
-  if (!aliasNorm || aliasNorm.length === 0) {
-    errors.push('Alias cannot be empty');
-    return errors;
-  }
-
-  if (aliasNorm.length < 2) {
-    errors.push('Alias must be at least 2 characters');
-  }
-
-  // Require allowlist for 2-3 character aliases
-  if (aliasNorm.length >= 2 && aliasNorm.length <= 3) {
-    if (!SHORT_ALIAS_ALLOWLIST.has(aliasNorm)) {
-      errors.push(`Short aliases (2-3 chars) must be on the allowlist. "${aliasNorm}" is not allowed.`);
-    }
-  }
-
-  // Block generic tokens
-  if (GENERIC_TOKEN_BLOCKLIST.has(aliasNorm)) {
-    errors.push(`"${aliasNorm}" is a generic term and cannot be used as an alias`);
-  }
-
-  // Reject aliasNorm == canonicalNorm
-  if (aliasNorm === canonicalNorm) {
-    errors.push('Alias cannot be the same as the canonical name');
-  }
-
-  return errors;
 }
 
 // =============================================================================
@@ -225,27 +117,17 @@ function determineAutoActivate(
   canonicalInProducts: boolean,
   canonicalInActiveAliases: boolean
 ): { canActivate: boolean; reason: string } {
-  if (sourceType === 'MANUAL') {
-    return { canActivate: false, reason: 'Manual aliases require review' };
-  }
-
-  if (aliasNorm.length < 4) {
-    return { canActivate: false, reason: 'Short aliases require review' };
-  }
-
-  if (GENERIC_TOKEN_BLOCKLIST.has(aliasNorm)) {
-    return { canActivate: false, reason: 'Generic terms require review' };
-  }
-
-  if (!canonicalInProducts && !canonicalInActiveAliases) {
-    return { canActivate: false, reason: 'Unknown canonical brand requires review' };
-  }
-
-  if (estimatedImpact >= AUTO_ACTIVATE_THRESHOLD) {
-    return { canActivate: false, reason: 'High-impact aliases require review' };
-  }
-
-  return { canActivate: true, reason: 'Meets auto-activation criteria' };
+  const result = canAutoActivate(
+    aliasNorm,
+    sourceType,
+    estimatedImpact,
+    canonicalInProducts,
+    canonicalInActiveAliases
+  );
+  return {
+    canActivate: result.canActivate,
+    reason: result.reason ?? 'Meets auto-activation criteria',
+  };
 }
 
 // =============================================================================
@@ -275,7 +157,7 @@ export async function createAlias(data: CreateAliasInput) {
   }
 
   // Validate
-  const validationErrors = validateAliasInput(aliasNorm, canonicalNorm);
+  const validationErrors = validateAliasForCreation(aliasNorm, canonicalNorm);
   if (validationErrors.length > 0) {
     return { success: false, error: validationErrors.join('; ') };
   }

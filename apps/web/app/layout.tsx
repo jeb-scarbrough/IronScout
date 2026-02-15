@@ -24,8 +24,17 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://app.ironscout.ai'),
   title: 'IronScout - AI-Powered Ammo Search',
   description: 'Intent-aware ammunition search and price comparison. Compare prices and view historical context with natural language search.',
+  robots: {
+    index: false,
+    follow: true,
+    googleBot: {
+      index: false,
+      follow: true,
+    },
+  },
   keywords: 'ammunition, ammo, price comparison, ammo search, price history, AI search, gun ammunition, bulk ammo, ammo alerts',
   manifest: '/manifest.json',
   appleWebApp: {

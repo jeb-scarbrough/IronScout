@@ -7,10 +7,14 @@ export const dynamic = 'force-static'
 const baseUrl = BRAND.wwwUrl.replace(/\/$/, '')
 
 function buildUrl(path: string): string {
-  if (!path.startsWith('/')) {
-    return `${baseUrl}/${path}`
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+  if (normalizedPath === '/') {
+    return `${baseUrl}/`
   }
-  return `${baseUrl}${path}`
+
+  const canonicalPath = normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
+  return `${baseUrl}${canonicalPath}`
 }
 
 function withDefaults(
