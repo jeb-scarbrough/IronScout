@@ -97,7 +97,7 @@ export function MarketingMarkdownPage({
           )}
 
           {/* Price summary + CTA row */}
-          <div className="mt-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4">
+          <div className="mt-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-start gap-3 sm:gap-4">
             {priceRange && (
               <div className="flex items-baseline gap-2 px-4 py-2 rounded-lg bg-iron-900/60 border border-iron-800 w-full sm:w-auto">
                 <span className="text-xs text-iron-500 uppercase tracking-wider font-medium">Price range</span>
