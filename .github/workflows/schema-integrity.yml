@@ -118,8 +118,8 @@ jobs:
         run: |
           # This should find no diff if migrations are correctly generating the schema
           pnpm --filter @ironscout/db exec prisma migrate diff \
-            --from-schema-datasource packages/db/schema.prisma \
-            --to-schema-datamodel packages/db/schema.prisma \
+            --from-config-datasource \
+            --to-schema schema.prisma \
             --exit-code
 
       - name: Run schema integrity tests
