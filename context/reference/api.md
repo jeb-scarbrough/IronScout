@@ -99,6 +99,10 @@ Query params (typical):
 - paging: `page`, `pageSize`
 - sorting: `sort`
 
+Performance filter status (explicit filters):
+- Active: `isSubsonic`, `shortBarrelOptimized`, `lowFlash`, `matchGrade`, `minVelocity`, `maxVelocity`
+- Soft-disabled until data-coverage strategy is in place: `suppressorSafe`, `lowRecoil`, `controlledExpansion`
+
 Response (conceptual):
 - `results[]`: canonical products
   - `product` (canonical fields)
