@@ -142,6 +142,39 @@ export async function assertPricingSnapshotValid(data) {
 }
 
 // =============================================================================
+// cuid Format Validation (ADR-025 merge gate)
+// =============================================================================
+
+/**
+ * Regex for cuid2 format: starts with a lowercase letter, followed by
+ * 23 or more lowercase alphanumeric characters. cuid2 generates 24-char
+ * IDs by default but the spec allows variable length.
+ *
+ * Also accepts legacy cuid (c + 24 lowercase alphanumeric).
+ */
+const CUID_REGEX = /^[a-z][a-z0-9]{23,}$/
+
+/**
+ * Asserts that a value matches cuid/cuid2 format.
+ *
+ * ADR-025 merge-blocking requirement: all ingestion code paths must validate
+ * that ingestionRunId is cuid-format when non-null. Non-cuid constants
+ * (e.g., 'backfill-legacy') MUST NOT be used.
+ *
+ * @param {string} value - The value to check
+ * @param {string} [fieldName='id'] - Name of the field for error messages
+ * @throws {Error} if the value is not cuid-format
+ */
+export function assertCuidFormat(value, fieldName = 'id') {
+  if (!CUID_REGEX.test(value)) {
+    throw new Error(
+      `${fieldName} must be cuid format (got "${value.slice(0, 30)}${value.length > 30 ? '...' : ''}"). ` +
+      'Non-cuid constants are not allowed per ADR-025.'
+    )
+  }
+}
+
+// =============================================================================
 // Batch Validation
 // =============================================================================
 

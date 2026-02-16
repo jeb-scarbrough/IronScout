@@ -5,6 +5,7 @@ import type { ScrapedOffer } from '../types.js'
 const RUN_ID = 'cm1234567890abcdefghijkl'
 
 const mocks = vi.hoisted(() => ({
+  assertCuidFormat: vi.fn(),
   mockSourceProducts: {
     findUnique: vi.fn(),
     upsert: vi.fn(),
@@ -32,7 +33,7 @@ vi.mock('@ironscout/db', () => ({
     scrape_targets: mocks.mockScrapeTargets,
     scrape_runs: mocks.mockScrapeRuns,
   },
-  assertCuidFormat: vi.fn(), // Real validation not needed in unit tests
+  assertCuidFormat: mocks.assertCuidFormat, // Real validation not needed in unit tests
 }))
 
 import { writeScrapeOffer, updateTargetTracking, markTargetBroken, finalizeRun } from '../process/writer.js'
@@ -106,6 +107,10 @@ describe('writeScrapeOffer', () => {
           inStock: true,
         }),
       })
+    )
+    expect(mocks.assertCuidFormat).toHaveBeenCalledWith(
+      RUN_ID,
+      'ingestionRunId (scrape runId)'
     )
 
     expect(mocks.mockIdentifiers.upsert).toHaveBeenCalledTimes(2)
