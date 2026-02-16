@@ -109,7 +109,7 @@ services:
     region: ohio
     plan: starter
     autoDeploy: false
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/api type-check
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/upc build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/api type-check
     startCommand: cd apps/api && pnpm start
     healthCheckPath: /health
     envVars:
@@ -224,7 +224,7 @@ services:
     region: ohio
     plan: starter  # Workers require paid plan
     autoDeploy: false
-    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/brand build && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
+    buildCommand: pnpm install && pnpm --filter @ironscout/db db:generate && pnpm --filter @ironscout/brand build && pnpm --filter @ironscout/upc build && pnpm --filter @ironscout/crypto build && pnpm --filter @ironscout/redis build && pnpm --filter @ironscout/notifications build && pnpm --filter @ironscout/harvester build
     startCommand: cd apps/harvester && pnpm worker
     envVars:
       - fromGroup: ironscout-common

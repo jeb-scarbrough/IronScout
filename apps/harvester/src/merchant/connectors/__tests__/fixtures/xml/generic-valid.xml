@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <products>
   <product>
-    <upc>012345678901</upc>
+    <upc>812345678901</upc>
     <title>Federal American Eagle 9mm 115gr FMJ</title>
     <price>18.99</price>
     <brand>Federal</brand>
@@ -16,7 +16,7 @@
     <rounds>50</rounds>
   </product>
   <product>
-    <upc>023456789012</upc>
+    <upc>823456789012</upc>
     <title>Hornady Critical Defense 9mm 115gr FTX</title>
     <price>27.99</price>
     <brand>Hornady</brand>

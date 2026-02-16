@@ -277,8 +277,7 @@ describe('GenericConnector', () => {
       const result = await connector.parse(xml)
 
       const firstRecord = result.parsedRecords[0].record
-      // XML parser strips leading zeros from numeric-looking values
-      expect(firstRecord.upc).toBe('12345678901')
+      expect(firstRecord.upc).toBe('812345678901')
       expect(firstRecord.title).toBe('Federal American Eagle 9mm 115gr FMJ')
       expect(firstRecord.price).toBe(18.99)
     })

@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@ironscout/db'
+import { normalizeUpc } from '@ironscout/upc'
 import { loggers } from '../config/logger'
 
 const log = loggers.products
@@ -32,41 +33,30 @@ export interface UpcLookupResult {
 }
 
 /**
- * Normalize a UPC code to standard 12-digit format
- * - Strips non-numeric characters
- * - Handles EAN-13 (removes leading 0 if present)
- * - Zero-pads shorter codes
+ * Normalize a UPC for lookup purposes.
+ *
+ * Uses shared validation first (rejects invalid lengths), then applies
+ * API-specific conversions:
+ * - EAN-13 starting with '0' → strip to 12-digit UPC-A
+ * - UPC-E (8 digits) → expand to UPC-A via GS1 rules
+ *
+ * @returns Normalized UPC string for DB lookup, or null if invalid
  */
-export function normalizeUpc(upc: string): string | null {
-  // Strip all non-numeric characters
-  const digits = upc.replace(/\D/g, '')
+export function normalizeUpcForLookup(upc: string): string | null {
+  const validated = normalizeUpc(upc)
+  if (!validated) return null
 
-  if (digits.length === 0) {
-    return null
+  // EAN-13 starting with 0 → strip to get UPC-A
+  if (validated.length === 13 && validated.startsWith('0')) {
+    return validated.slice(1)
   }
 
-  // Handle EAN-13 (13 digits) - if starts with 0, it's likely a UPC-A with check digit
-  if (digits.length === 13 && digits.startsWith('0')) {
-    return digits.slice(1) // Remove leading 0 to get 12-digit UPC-A
+  // UPC-E → expand to UPC-A for lookup
+  if (validated.length === 8) {
+    return expandUpcE(validated)
   }
 
-  // Handle UPC-A (12 digits)
-  if (digits.length === 12) {
-    return digits
-  }
-
-  // Handle UPC-E (8 digits) - expand to 12 digits
-  if (digits.length === 8) {
-    return expandUpcE(digits)
-  }
-
-  // Handle short codes - zero-pad to 12 digits
-  if (digits.length < 12) {
-    return digits.padStart(12, '0')
-  }
-
-  // Longer codes are invalid UPCs
-  return null
+  return validated
 }
 
 /**
@@ -117,7 +107,7 @@ function expandUpcE(upcE: string): string {
  * @returns UpcLookupResult with found status and product data if found
  */
 export async function lookupByUpc(upc: string): Promise<UpcLookupResult> {
-  const normalizedUpc = normalizeUpc(upc)
+  const normalizedUpc = normalizeUpcForLookup(upc)
 
   if (!normalizedUpc) {
     log.warn('Invalid UPC format', { upc })

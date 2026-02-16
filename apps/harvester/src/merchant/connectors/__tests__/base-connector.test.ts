@@ -571,6 +571,18 @@ describe('validateUPC', () => {
       expect(validateUPC('1234567')).toBeNull()
     })
 
+    it('rejects 9-digit code', () => {
+      expect(validateUPC('123456789')).toBeNull()
+    })
+
+    it('rejects 10-digit code', () => {
+      expect(validateUPC('1234567890')).toBeNull()
+    })
+
+    it('rejects 11-digit code', () => {
+      expect(validateUPC('12345678901')).toBeNull()
+    })
+
     it('rejects 15-digit UPC', () => {
       expect(validateUPC('123456789012345')).toBeNull()
     })

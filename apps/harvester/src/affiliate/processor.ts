@@ -32,6 +32,7 @@ import {
 } from '../config/trace'
 import { computeUrlHash, normalizeUrl } from './parser'
 import { ProductMatcher } from './product-matcher'
+import { normalizeUpc as sharedNormalizeUpc } from '@ironscout/upc'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
 import { RESOLVER_VERSION } from '../resolver'
 import type {
@@ -989,7 +990,7 @@ function extractAllIdentifiers(product: ParsedFeedProduct): ExtractedIdentifier[
       idValue: product.upc.trim(),
       namespace: '', // Empty string, not null
       isCanonical: false, // UPC is never canonical identity
-      normalizedValue: product.upc.trim().replace(/^0+/, ''), // Strip leading zeros
+      normalizedValue: sharedNormalizeUpc(product.upc) ?? product.upc.trim().replace(/\D/g, ''),
     })
   }
 

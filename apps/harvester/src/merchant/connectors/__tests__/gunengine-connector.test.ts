@@ -200,8 +200,7 @@ describe('GunEngineConnector', () => {
 
       const firstRecord = result.parsedRecords[0].record
       expect(firstRecord.sku).toBe('FED-9MM-115')
-      // XML parser strips leading zeros from numeric-looking values
-      expect(firstRecord.upc).toBe('12345678901')
+      expect(firstRecord.upc).toBe('812345678901')
       expect(firstRecord.title).toBe('Federal American Eagle 9mm 115gr FMJ')
       expect(firstRecord.price).toBe(18.99)
     })

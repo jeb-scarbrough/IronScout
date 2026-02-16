@@ -170,14 +170,16 @@ export function createXmlFeed(products: Record<string, unknown>[]): string {
 
 export const INVALID_UPCS = [
   '', // Empty
-  '123', // Too short
-  '12345', // Still too short
-  '1234567', // 7 digits (minimum is 8)
+  '123', // Too short (3 digits)
+  '12345', // 5 digits — not a valid barcode length
+  '1234567', // 7 digits — not a valid barcode length
+  '123456789', // 9 digits — not a valid barcode length
+  '1234567890', // 10 digits — not a valid barcode length
+  '12345678901', // 11 digits — not a valid barcode length
   '123456789012345', // 15 digits (max is 14)
   '12345678901234567890', // Way too long
   'ABCDEFGHIJKL', // Non-numeric
-  'ABC12345DEF', // Mixed
-  // Note: '12.345.678.901' is actually VALID - dots get stripped leaving 11 digits
+  'ABC12345DEF', // Mixed (strips to 5 digits — invalid)
 ]
 
 export const VALID_UPCS = [

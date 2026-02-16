@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { normalizeUpc as sharedNormalizeUpc } from '@ironscout/upc'
 
 /**
  * Ammunition Normalization Utilities
@@ -435,18 +436,12 @@ export function generateProductId(product: {
 }
 
 /**
- * Normalize UPC to a consistent format
+ * Normalize UPC to a consistent format.
+ * Uses shared validation, but falls back to raw digits for invalid lengths
+ * because this feeds generateProductId (hash input, not a match key).
  */
 function normalizeUPC(upc: string): string {
-  // Remove any non-digit characters
-  const digits = upc.replace(/\D/g, '')
-
-  // Pad UPC-A (12 digits) or UPC-E (6 or 8 digits)
-  if (digits.length === 11) {
-    return '0' + digits // Pad 11-digit UPC to 12
-  }
-
-  return digits
+  return sharedNormalizeUpc(upc) ?? upc.replace(/\D/g, '')
 }
 
 /**
