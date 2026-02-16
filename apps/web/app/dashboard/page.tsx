@@ -161,8 +161,7 @@ export default function DashboardPage() {
   const hasFirearms = data.gunLocker.firearms.length > 0
   const hasWatchedItems = data.watching.items.length > 0
   const bothEmpty = !hasFirearms && !hasWatchedItems
-  // TODO: wire up real alert check once alerts API is ready
-  const hasAlerts = false
+  const hasAlerts = false // See #243
 
   return (
     <DashboardContent>

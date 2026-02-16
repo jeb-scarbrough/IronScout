@@ -3,12 +3,6 @@
 /**
  * Harvester Worker
  * Starts all pipeline workers to process ingestion jobs
- *
- * TODO: Improve database resilience for maintenance windows
- * - Add infinite retry with longer backoff for scheduler during extended outages
- * - Consider health check endpoint that reports DB connectivity status
- * - Evaluate graceful degradation (queue jobs locally, replay when DB returns)
- * See: https://github.com/your-org/ironscout/issues/XXX (create ticket when ready)
  */
 
 // Load environment variables first, before any other imports

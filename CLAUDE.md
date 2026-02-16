@@ -32,7 +32,7 @@ IronScout is a **pricing intelligence and discovery platform** for ammunition.
 
 It provides:
 - Canonical product grouping
-- Cross-retailer and eligible-dealer price comparison
+- Cross-retailer and eligible-merchant price comparison
 - Historical price context
 - Alerts for price and availability changes
 - Assistive AI for search interpretation and explanations
@@ -42,7 +42,7 @@ It does **not**:
 - Provide deal scores or verdicts
 - Predict future prices
 - Guarantee outcomes or savings
-- Automate dealer pricing decisions
+- Automate merchant pricing decisions
 
 All decisions remain with the user.
 
@@ -68,7 +68,7 @@ All enforcement happens server-side.
 Claude must **never violate** the following:
 
 - Tier enforcement is server-side only (ADR-002)
-- Dealer visibility is filtered at query time (ADR-005)
+- Retailer visibility is filtered at query time (ADR-005)
 - Price history is append-only (ADR-004)
 - Fail closed on eligibility or trust ambiguity (ADR-009)
 - AI is assistive only, never prescriptive (ADR-003)
@@ -90,7 +90,7 @@ The Harvester is trust-critical.
 - Scheduler is controlled via Admin Settings (database is single source of truth)
 - Use Emergency Stop in admin to disable scheduler and clear queues
 - Never duplicate ingestion or mutate historical data
-- Never write data for ineligible dealers
+- Never write data for ineligible retailers
 
 If ingestion behavior is ambiguous, fail closed.
 
@@ -188,7 +188,7 @@ Local development uses **Caddy** as a reverse proxy with local DNS URLs:
 
 Tests must protect:
 - Tier enforcement
-- Dealer eligibility
+- Retailer eligibility
 - Append-only history
 - Alert correctness
 - Fail-closed behavior

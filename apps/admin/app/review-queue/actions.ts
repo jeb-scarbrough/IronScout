@@ -140,7 +140,7 @@ export async function linkToProduct(
  * Create a new canonical product and link the source product to it
  *
  * Note: This is an authorized exception to "resolver-only product creation"
- * for NEEDS_REVIEW items that require human intervention. See ADR-XXX.
+ * for NEEDS_REVIEW items that require human intervention. See ADR-019.
  *
  * Guards:
  * - Only allows update if current status is NEEDS_REVIEW or UNMATCHED

@@ -1,6 +1,6 @@
-# Merchant Portal (legacy path: apps/dealer)
+# Merchant Portal (`apps/merchant`)
 
-> NOTE: This doc describes the Merchant portal. File path may remain `apps/dealer` temporarily for migration reasons.
+> This doc describes the Merchant portal.
 
 This document describes the **merchant-facing application** for IronScout.  
 It defines what merchants can do, see, and expect, and where explicit constraints apply.
