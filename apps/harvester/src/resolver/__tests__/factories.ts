@@ -16,6 +16,10 @@ export interface MockSourceProduct {
   sourceId: string
   title: string
   brand?: string | null
+  category?: string | null
+  caliber?: string | null
+  grainWeight?: number | null
+  roundCount?: number | null
   url: string
   normalizedUrl?: string | null
   sources: MockSource
@@ -34,6 +38,8 @@ export interface MockIdentifier {
   sourceProductId: string
   idType: 'UPC' | 'SKU' | 'ASIN' | 'MPN'
   idValue: string
+  normalizedValue?: string | null
+  isCanonical?: boolean
 }
 
 export interface MockProductLink {
@@ -145,6 +151,8 @@ export function createSkuIdentifier(
     sourceProductId,
     idType: 'SKU',
     idValue: sku,
+    normalizedValue: sku,
+    isCanonical: true,
   }
 }
 

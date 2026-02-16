@@ -21,6 +21,7 @@ import {
   createProductLink,
   createTrustConfig,
   createUpcIdentifier,
+  createSkuIdentifier,
   createProductAlias,
   GOLDEN_SCENARIOS,
   NORMALIZATION_CASES,
@@ -48,6 +49,7 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const mockPrisma = vi.hoisted(() => ({
+  $queryRaw: vi.fn(),
   source_products: {
     findUnique: vi.fn(),
   },
@@ -139,9 +141,13 @@ function setupMocks(config: {
     const aliases = config.aliases ?? []
     return aliases.find(a => a.fromProductId === args?.where?.fromProductId) ?? null
   })
+
+  // Identifier match raw query (default: no SKU-based matches)
+  mockPrisma.$queryRaw.mockResolvedValue([])
 }
 
 function resetMocks() {
+  mockPrisma.$queryRaw.mockReset()
   Object.values(mockPrisma).forEach(table => {
     Object.values(table).forEach(method => {
       if (typeof method === 'function' && 'mockReset' in method) {
@@ -473,6 +479,52 @@ describe('A. Inputs and Validation', () => {
       expect(result.evidence.inputNormalized.caliberNorm).toBe('5.56 NATO')
     })
   })
+
+  describe('A9. Out-of-scope skipping', () => {
+    it('returns SKIPPED for clearly non-ammo category items', async () => {
+      const sourceProduct = createSourceProduct({
+        title: '100 Count Box - 30 Cal 230 Grain A-Tip Match Projectile For Handloading .308" by Hornady',
+        brand: 'Hornady',
+        category: 'reloading-components',
+      })
+      sourceProduct.source_product_identifiers = [
+        createSkuIdentifier(sourceProduct.id, '3091'),
+      ]
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(result.status).toBe('SKIPPED')
+      expect(result.matchType).toBe('NONE')
+      expect(result.reasonCode).toBeNull()
+      assertRulesFired(result, ['OUT_OF_SCOPE_SKIPPED'])
+      expect(mockPrisma.$queryRaw).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('A10. Shotgun normalization signals', () => {
+    it('marks .410 gauge titles as shotshell and derives loadType fallback', async () => {
+      const sourceProduct = createSourceProduct({
+        title: '25 Round Box - 410 Gauge 3 Inch Dual Sized Pellet Buckshot Load Sellier Bellot Ammo - SB410SDB',
+        brand: 'Sellier & Bellot',
+      })
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+      })
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      expect(result.evidence.inputNormalized.caliberNorm).toBe('.410 Bore')
+      expect(result.evidence.inputNormalized.isShotshell).toBe(true)
+      expect(result.evidence.inputNormalized.loadType).toBe('Buckshot')
+    })
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -485,6 +537,32 @@ describe('B. Matching Logic', () => {
     resetFactories()
     resetMetrics()
     clearTrustConfigCache()
+  })
+
+  describe('B0. SKU identifier pre-match', () => {
+    it('matches by canonical SKU before fingerprint when caliber is missing', async () => {
+      const sourceProduct = createSourceProduct({
+        title: '20 Round Box - 223 69 Grain BTHP Match Prvi Partizan Ammo - PP57',
+        brand: null,
+      })
+      sourceProduct.source_product_identifiers = [
+        createSkuIdentifier(sourceProduct.id, 'PP57'),
+      ]
+
+      setupMocks({
+        sourceProduct,
+        trustConfig: createTrustConfig({ sourceId: sourceProduct.sourceId, upcTrusted: false }),
+      })
+      mockPrisma.$queryRaw.mockResolvedValue([{ productId: 'matched_by_sku' }])
+
+      const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
+
+      assertMatched(result, 'matched_by_sku')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.status).toBe('MATCHED')
+      expect(result.reasonCode).toBeNull()
+      assertRulesFired(result, ['SKU_IDENTIFIER_MATCH_ATTEMPTED', 'SKU_IDENTIFIER_MATCHED'])
+    })
   })
 
   describe('B1. UPC exact match', () => {
@@ -738,7 +816,7 @@ describe('B. Matching Logic', () => {
       assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
     })
 
-    it('returns NEEDS_REVIEW for shotgun when loadType is missing', async () => {
+    it('creates product for shotgun when generic loadType fallback is available', async () => {
       const sourceProduct = createSourceProduct({
         brand: 'TestBrand',
         title: 'TestBrand 12 Gauge Buckshot 25rd',
@@ -752,8 +830,11 @@ describe('B. Matching Logic', () => {
 
       const result = await resolveSourceProduct(sourceProduct.id, 'INGEST')
 
-      assertNeedsReview(result, 'INSUFFICIENT_DATA')
-      assertRulesFired(result, ['FINGERPRINT_INSUFFICIENT_DATA'])
+      expect(result.status).toBe('CREATED')
+      expect(result.matchType).toBe('FINGERPRINT')
+      expect(result.createdProduct?.canonicalKey?.startsWith('FP_SG:')).toBe(true)
+      expect(result.evidence.inputNormalized.loadType).toBe('Buckshot')
+      assertRulesFired(result, ['IDENTITY_KEY_CREATED'])
     })
   })
 

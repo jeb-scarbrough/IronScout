@@ -12,7 +12,6 @@
  */
 
 import { prisma } from '@ironscout/db'
-import type { Prisma } from '@ironscout/db/generated/prisma'
 import { createHash } from 'crypto'
 import {
   ResolverResult,
@@ -48,8 +47,10 @@ const baseLog = createWorkflowLogger(logger.resolver, {
   stage: 'resolve',
 })
 
+const RESOLVER_TRACE_ENABLED = /^(1|true|yes)$/i.test(process.env.RESOLVER_TRACE ?? '')
+
 // Current resolver version - bump on algorithm changes
-export const RESOLVER_VERSION = '1.3.1'
+export const RESOLVER_VERSION = '1.3.2'
 
 // Dictionary version - bump on normalization dictionary changes
 const DICTIONARY_VERSION = '1.4.0'
@@ -57,6 +58,15 @@ const DICTIONARY_VERSION = '1.4.0'
 // Identity key version - bump on identity key format changes
 // This allows coexistence of products created with different identity key algorithms
 export const IDENTITY_KEY_VERSION = 'v1'
+const SKU_IDENTIFIER_CONFIDENCE = 0.93
+
+const OUT_OF_SCOPE_CATEGORY_SLUGS = new Set([
+  'reloading-components',
+  'magsclips',
+  'long-term-storage-foods',
+  'ammo-cans-and-crates',
+  'ar-15-stuff',
+])
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Trust Config Cache
@@ -112,6 +122,17 @@ function createResolverLog(sourceProductId: string, trigger: string, affiliateFe
     trigger,
   }
   return {
+    trace: (event: string, meta?: Record<string, unknown>) => {
+      if (!RESOLVER_TRACE_ENABLED) return
+      log.debug(event, { trigger, trace: true, ...meta })
+      logResolverDetail(
+        'debug',
+        sourceProductId,
+        `TRACE_${event}`,
+        { ...fileBaseMeta, trace: true, ...meta },
+        affiliateFeedRunId
+      )
+    },
     debug: (event: string, meta?: Record<string, unknown>) => {
       log.debug(event, { trigger, ...meta })
       logResolverDetail('debug', sourceProductId, event, { ...fileBaseMeta, ...meta }, affiliateFeedRunId)
@@ -182,7 +203,7 @@ export async function resolveSourceProduct(
       sources: { select: { sourceKind: true } },
       // Only fetch fields we actually use (Finding 5 optimization)
       source_product_identifiers: {
-        select: { idType: true, idValue: true },
+        select: { idType: true, idValue: true, normalizedValue: true, isCanonical: true },
       },
       product_links: {
         select: {
@@ -336,6 +357,53 @@ export async function resolveSourceProduct(
 
   // Check if we can skip (same inputHash = same result)
   const existingEvidence = existingLink?.evidence as unknown as ResolverEvidence | null
+  const outOfScope = shouldSkipAsOutOfScope(sourceProduct, normalized)
+  rlog.trace('OUT_OF_SCOPE_EVAL', {
+    shouldSkip: outOfScope.shouldSkip,
+    reason: outOfScope.reason,
+    signals: outOfScope.signals,
+    sourceCategory: sourceProduct.category ?? null,
+    urlCategory: extractCategorySlugFromUrl(sourceProduct.url) ?? null,
+  })
+  if (outOfScope.shouldSkip) {
+    rulesFired.push('OUT_OF_SCOPE_SKIPPED')
+    rlog.info('OUT_OF_SCOPE_SKIPPED', {
+      phase: 'decision',
+      decision: 'SKIPPED',
+      reason: outOfScope.reason,
+      signals: outOfScope.signals,
+      sourceCategory: sourceProduct.category ?? null,
+      urlCategory: extractCategorySlugFromUrl(sourceProduct.url) ?? null,
+    })
+
+    // Keep idempotent behavior for already-skipped items.
+    if (existingLink && existingLink.status === 'SKIPPED' && existingEvidence?.inputHash === inputHash) {
+      return {
+        productId: existingLink.productId,
+        matchType: existingLink.matchType,
+        status: existingLink.status,
+        reasonCode: existingLink.reasonCode,
+        confidence: Number(existingLink.confidence),
+        resolverVersion: RESOLVER_VERSION,
+        evidence: existingEvidence,
+        sourceKind,
+        skipped: true,
+        isRelink: false,
+        relinkBlocked: false,
+      }
+    }
+
+    return createSkippedResult(
+      normalized,
+      inputHash,
+      trustConfig,
+      rulesFired,
+      sourceKind,
+      outOfScope.reason,
+      outOfScope.signals
+    )
+  }
+
   if (existingLink && existingEvidence?.inputHash === inputHash) {
     rulesFired.push('SKIP_SAME_INPUT')
     rlog.info('SKIP_SAME_INPUT', {
@@ -438,6 +506,37 @@ export async function resolveSourceProduct(
       reason: 'No UPC available after normalization',
       rawUpc: sourceProduct.source_product_identifiers.find(i => i.idType === 'UPC')?.idValue,
     })
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 4.5: Attempt deterministic SKU identifier match within same source
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const skuIdentifierResult = await attemptSkuIdentifierMatch(
+    sourceProduct,
+    normalized,
+    inputHash,
+    trustConfig,
+    existingLink,
+    rulesFired,
+    sourceKind,
+    rlog
+  )
+  if (skuIdentifierResult) {
+    rlog.info('RESOLVER_END', {
+      phase: 'complete',
+      matchPath: 'IDENTIFIER_SKU',
+      matchType: skuIdentifierResult.matchType,
+      status: skuIdentifierResult.status,
+      reasonCode: skuIdentifierResult.reasonCode,
+      productId: skuIdentifierResult.productId,
+      confidence: skuIdentifierResult.confidence,
+      isRelink: skuIdentifierResult.isRelink,
+      relinkBlocked: skuIdentifierResult.relinkBlocked,
+      rulesFired,
+      durationMs: Date.now() - startTime,
+    })
+    return skuIdentifierResult
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -699,7 +798,6 @@ function normalizeInput(
 
   // Normalize title
   const normalizedTitle = normalizeTitle(rawTitle)
-  const isShotshell = isShotshellTitle(rawTitle)
   const titleSignature = computeTitleSignature(rawTitle)
 
   // Extract caliber, grain, and round count from title
@@ -718,6 +816,7 @@ function normalizeInput(
   const resolvedCaliber = sourceProduct.caliber || extractedCaliber
   const resolvedGrain = sourceProduct.grainWeight ?? extractedGrain
   const resolvedRoundCount = sourceProduct.roundCount ?? extractedRoundCount
+  const isShotshell = isShotshellTitle(rawTitle, resolvedCaliber)
   const resolvedShotSize = extractedShotSize ?? undefined
   const resolvedSlugWeight = extractedSlugWeight ?? undefined
   const resolvedShellLength = extractedShellLength ?? undefined
@@ -784,6 +883,75 @@ function normalizeInput(
   }
 }
 
+function normalizeCategoryToken(value?: string | null): string | undefined {
+  if (!value) return undefined
+  const normalized = value
+    .toLowerCase()
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/[_\s]+/g, '-')
+  return normalized || undefined
+}
+
+function extractCategorySlugFromUrl(rawUrl?: string | null): string | undefined {
+  if (!rawUrl) return undefined
+  try {
+    const parsed = new URL(rawUrl)
+    const segments = parsed.pathname.split('/').filter(Boolean)
+    if (segments.length === 0) return undefined
+    if (segments[0] === 'product' && segments.length > 1) {
+      return normalizeCategoryToken(segments[1])
+    }
+    return normalizeCategoryToken(segments[0])
+  } catch {
+    return undefined
+  }
+}
+
+function shouldSkipAsOutOfScope(
+  sourceProduct: any,
+  normalized: NormalizedInput
+): { shouldSkip: boolean; reason: string; signals: string[] } {
+  const signals: string[] = []
+  const categoryCandidates: string[] = []
+  const sourceCategory = normalizeCategoryToken(sourceProduct.category)
+  const urlCategory = extractCategorySlugFromUrl(sourceProduct.url)
+  if (sourceCategory) categoryCandidates.push(sourceCategory)
+  if (urlCategory) categoryCandidates.push(urlCategory)
+
+  const categoryHit = categoryCandidates.find(category => OUT_OF_SCOPE_CATEGORY_SLUGS.has(category))
+  if (categoryHit) {
+    signals.push(`category:${categoryHit}`)
+  }
+
+  const titleNorm = normalized.titleNorm ?? normalizeTitle(normalized.title || '')
+  if (/\b(projectile\s+for\s+handloading|for\s+handloading)\b/i.test(titleNorm)) {
+    signals.push('title:handloading')
+  }
+  if (/\b(magazine|clip)\b/i.test(titleNorm) || /\bmag\s*-\s*(ar|ak|glock|sig|m&p|beretta|springfield|cz|mp5)\b/i.test(titleNorm)) {
+    signals.push('title:magazine')
+  }
+  if (/\b(less\s+lethal|fn303|sabre|impact\s+bag|rubber\s+fin)\b/i.test(titleNorm)) {
+    signals.push('title:less-lethal')
+  }
+
+  if (signals.length === 0) {
+    return { shouldSkip: false, reason: 'in_scope', signals }
+  }
+
+  return {
+    shouldSkip: true,
+    reason: signals[0],
+    signals,
+  }
+}
+
+function normalizeSkuIdentifier(value?: string | null): string | undefined {
+  if (!value) return undefined
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized || undefined
+}
+
 /**
  * Normalize title for matching
  */
@@ -805,9 +973,12 @@ function computeTitleSignature(title: string): string {
   return createHash('sha256').update(tokens.join('|')).digest('hex').slice(0, 16)
 }
 
-function isShotshellTitle(title?: string | null): boolean {
+function isShotshellTitle(title?: string | null, caliberNorm?: string | null): boolean {
+  if (caliberNorm && (caliberNorm.includes('Gauge') || caliberNorm === '.410 Bore')) {
+    return true
+  }
   if (!title) return false
-  return /\bshot[-\s]*shells?\b/i.test(title)
+  return /\bshot[-\s]*shells?\b|\b\d{1,2}\s?ga(?:uge)?\b|\b\.?410\b|\bbuck(?:shot)?\b|\bslug\b/i.test(title)
 }
 
 /**
@@ -1029,6 +1200,140 @@ async function attemptUpcMatch(
     sourceKind,
     skipped: false, // UPC match requires persistence
     createdProduct: isCreated ? { id: product.id, canonicalKey } : undefined,
+    isRelink,
+    relinkBlocked,
+  }
+}
+
+/**
+ * Attempt deterministic SKU identifier match against previously resolved items
+ * from the same source.
+ *
+ * This stage runs before fingerprint matching and can resolve cases where
+ * caliber/grain extraction is incomplete but SKU identity is stable.
+ */
+async function attemptSkuIdentifierMatch(
+  sourceProduct: any,
+  normalized: NormalizedInput,
+  inputHash: string,
+  trustConfig: SourceTrustConfig,
+  existingLink: any,
+  rulesFired: string[],
+  sourceKind: import('@ironscout/db/generated/prisma').SourceKind | null,
+  rlog: ReturnType<typeof createResolverLog>
+): Promise<ResolverResult | null> {
+  const canonicalSku =
+    sourceProduct.source_product_identifiers.find((identifier: any) => identifier.idType === 'SKU' && identifier.isCanonical)
+    || sourceProduct.source_product_identifiers.find((identifier: any) => identifier.idType === 'SKU')
+
+  const skuValue = (canonicalSku?.normalizedValue || canonicalSku?.idValue) as string | undefined
+  const normalizedSku = normalizeSkuIdentifier(skuValue)
+  rlog.trace('SKU_IDENTIFIER_EVAL', {
+    hasCanonicalSku: Boolean(canonicalSku),
+    skuValue,
+    normalizedSku,
+    sourceId: sourceProduct.sourceId,
+  })
+  if (!normalizedSku) {
+    return null
+  }
+
+  rulesFired.push('SKU_IDENTIFIER_MATCH_ATTEMPTED')
+  rlog.debug('SKU_IDENTIFIER_MATCH_START', {
+    phase: 'identifier_match',
+    skuValue,
+    normalizedSku,
+    sourceId: sourceProduct.sourceId,
+  })
+
+  const productRows = await prisma.$queryRaw<Array<{ productId: string }>>`
+      SELECT DISTINCT pl."productId" AS "productId"
+      FROM "source_product_identifiers" spi
+      JOIN "source_products" sp ON sp.id = spi."sourceProductId"
+      JOIN "product_links" pl ON pl."sourceProductId" = sp.id
+      JOIN "products" p ON p.id = pl."productId"
+      WHERE sp."sourceId" = ${sourceProduct.sourceId}
+        AND spi."idType" = 'SKU'
+        AND spi."sourceProductId" <> ${sourceProduct.id}
+        AND pl.status IN ('MATCHED', 'CREATED')
+        AND pl."productId" IS NOT NULL
+        AND p.category = 'ammunition'
+        AND lower(regexp_replace(coalesce(spi."normalizedValue", spi."idValue"), '[^a-zA-Z0-9]', '', 'g')) = ${normalizedSku}
+      LIMIT 25
+    `
+  rlog.trace('SKU_IDENTIFIER_QUERY_RESULT', {
+    normalizedSku,
+    candidateCount: productRows.length,
+    candidateProductIds: productRows.map(row => row.productId),
+  })
+
+  if (productRows.length === 0) {
+    rlog.debug('SKU_IDENTIFIER_MATCH_NONE', {
+      phase: 'identifier_match',
+      normalizedSku,
+      reason: 'No previously resolved product with matching normalized SKU',
+    })
+    return null
+  }
+
+  const distinctProductIds = [...new Set(productRows.map(row => row.productId).filter(Boolean))]
+  if (distinctProductIds.length !== 1) {
+    rulesFired.push('SKU_IDENTIFIER_AMBIGUOUS')
+    rlog.info('SKU_IDENTIFIER_MATCH_AMBIGUOUS', {
+      phase: 'identifier_match',
+      normalizedSku,
+      distinctProductIds,
+      matchCount: productRows.length,
+      decision: 'fallback_to_fingerprint',
+    })
+    return null
+  }
+
+  rulesFired.push('SKU_IDENTIFIER_MATCHED')
+  const matchedProductId = distinctProductIds[0]
+  const activeProductId = await resolveAliases(matchedProductId, rulesFired, rlog)
+
+  const isRelink = existingLink && existingLink.productId !== activeProductId
+  const relinkBlocked = isRelink && !shouldRelink(existingLink, 'FINGERPRINT', SKU_IDENTIFIER_CONFIDENCE, rulesFired, rlog)
+  const finalProductId = relinkBlocked ? existingLink.productId : activeProductId
+
+  rlog.info('SKU_IDENTIFIER_MATCH_RESULT', {
+    phase: 'identifier_match',
+    decision: 'MATCHED',
+    skuValue,
+    normalizedSku,
+    matchedProductId,
+    activeProductId,
+    finalProductId,
+    confidence: SKU_IDENTIFIER_CONFIDENCE,
+    isRelink,
+    relinkBlocked,
+  })
+
+  return {
+    productId: finalProductId,
+    matchType: 'FINGERPRINT',
+    status: 'MATCHED',
+    reasonCode: relinkBlocked ? 'RELINK_BLOCKED_HYSTERESIS' : null,
+    confidence: SKU_IDENTIFIER_CONFIDENCE,
+    resolverVersion: RESOLVER_VERSION,
+    evidence: {
+      dictionaryVersion: DICTIONARY_VERSION,
+      trustConfigVersion: trustConfig.version,
+      inputNormalized: normalized,
+      inputHash,
+      rulesFired,
+      candidates: [],
+      previousDecision: isRelink ? {
+        productId: existingLink.productId,
+        matchType: existingLink.matchType,
+        confidence: Number(existingLink.confidence),
+        resolverVersion: existingLink.resolverVersion,
+        resolvedAt: existingLink.resolvedAt,
+      } : undefined,
+    },
+    sourceKind,
+    skipped: false,
     isRelink,
     relinkBlocked,
   }
@@ -2114,6 +2419,41 @@ function createNeedsReviewResult(
     },
     sourceKind,
     skipped: false, // NEEDS_REVIEW still needs persistence for human review queue
+    isRelink: false,
+    relinkBlocked: false,
+  }
+}
+
+/**
+ * Create SKIPPED result for clearly out-of-scope catalog items.
+ * These are intentionally excluded from the review queue.
+ */
+function createSkippedResult(
+  normalized: NormalizedInput,
+  inputHash: string,
+  trustConfig: SourceTrustConfig,
+  rulesFired: string[],
+  sourceKind: import('@ironscout/db/generated/prisma').SourceKind | null,
+  skipReason: string,
+  signals: string[]
+): ResolverResult {
+  return {
+    productId: null,
+    matchType: 'NONE',
+    status: 'SKIPPED',
+    reasonCode: null,
+    confidence: 0,
+    resolverVersion: RESOLVER_VERSION,
+    evidence: {
+      dictionaryVersion: DICTIONARY_VERSION,
+      trustConfigVersion: trustConfig.version,
+      inputNormalized: normalized,
+      inputHash,
+      rulesFired,
+      normalizationErrors: [`SKIPPED:${skipReason}`, ...signals],
+    },
+    sourceKind,
+    skipped: false, // Must persist to remove from active review queue.
     isRelink: false,
     relinkBlocked: false,
   }

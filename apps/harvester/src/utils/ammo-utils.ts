@@ -25,7 +25,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?45\s?acp\b|45\s?acp\b|45\s?auto\b/i, normalized: '.45 ACP' },
   { pattern: /(?:^|\s|\W)\.?\s?45\s?gap\b|45\s?gap\b/i, normalized: '.45 GAP' },
   { pattern: /(?:^|\s|\W)\.?\s?45\s?colt\b|45\s?long\s?colt\b|\.?45\s?lc\b/i, normalized: '.45 Colt' },
-  { pattern: /(?:^|\s|\W)\.?\s?40\s?s&w\b|40\s?s&w\b|40\s?sw\b|40\s?cal\b/i, normalized: '.40 S&W' },
+  { pattern: /(?:^|\s|\W)\.?\s?40\s?s&w\b|40\s?s&w\b|40\s?sw\b|40\s?cal\b|(?:^|\s|\W)\.?\s?40\b(?!\s?(?:mm|s&w|sw|cal|super))/i, normalized: '.40 S&W' },
   { pattern: /(?:^|\s|\W)\.?\s?38\s?special\b|38\s?spl\b/i, normalized: '.38 Special' },
   { pattern: /(?:^|\s|\W)\.?\s?38\s?super\b/i, normalized: '.38 Super' },
   { pattern: /(?:^|\s|\W)\.?\s?38\s?sw\b/i, normalized: '.38 S&W' },
@@ -85,6 +85,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /(?:^|\s|\W)\.?\s?224\s?valkyrie\b/i, normalized: '.224 Valkyrie' },
   { pattern: /(?:^|\s|\W)\.?\s?22-250\b|22-250\s?rem(?:ingto[nm])?\b/i, normalized: '.22-250 Remington' },
   { pattern: /(?:^|\s|\W)\.?\s?223\s?wssm\b/i, normalized: '.223 WSSM' },
+  { pattern: /(?:^|\s|\W)\.?\s?223\b(?!\s?wssm)(?!\s?rem(?:ingto[nm])?)/i, normalized: '.223 Remington' },
   { pattern: /(?:^|\s|\W)\.?\s?22\s?creedmoor\b/i, normalized: '.22 Creedmoor' },
   { pattern: /(?:^|\s|\W)\.?\s?220\s?swift\b/i, normalized: '.220 Swift' },
   { pattern: /(?:^|\s|\W)\.?\s?204\s?ruger\b/i, normalized: '.204 Ruger' },
@@ -251,7 +252,7 @@ const CALIBER_PATTERNS: CaliberPattern[] = [
   { pattern: /\b16\s?ga|16\s?gauge\b/i, normalized: '16 Gauge' },
   { pattern: /\b28\s?ga|28\s?gauge\b/i, normalized: '28 Gauge' },
   { pattern: /\b10\s?ga(?:uge)?\b/i, normalized: '10 Gauge' },
-  { pattern: /\b\.410\s?bore|410\s?bore\b|410\s?gauge\b|410\s?judge\b/i, normalized: '.410 Bore' },
+  { pattern: /\b\.410\s?bore|410\s?bore\b|410\s?gauge\b|410\s?judge\b|\b\.?\s?410\b(?=[^\n]{0,30}\bjudge\b)/i, normalized: '.410 Bore' },
 ]
 
 export function extractCaliber(productName: string): string | null {
@@ -710,7 +711,7 @@ export function extractShotSize(productName: string): string | null {
     return `${buckMatch[1]} Buck`
   }
 
-  const shotMatch = name.match(/(?:^|\s)(?:#|no\.?\s*)?([1-9](?:\.5)?)\s*(?:shot|birdshot)\b/i)
+  const shotMatch = name.match(/(?:^|\s)(?:#|no\.?\s*|number\s*)?([1-9](?:\.5)?)\s*(?:shot|birdshot)\b/i)
   if (shotMatch) {
     return `${shotMatch[1]} Shot`
   }
@@ -788,6 +789,14 @@ export function deriveShotgunLoadType(
   // Adjacent "Rubber Buck" without "shot"
   if (/\brubber\s*buck\b/i.test(productName)) {
     return 'Rubber Buck'
+  }
+
+  // Generic buckshot/shot fallback when size/weight is missing.
+  if (/\bbuck\s*shot\b/i.test(productName)) {
+    return 'Buckshot'
+  }
+  if (/\bshot\b/i.test(productName)) {
+    return 'Shot'
   }
 
   return null

@@ -135,6 +135,14 @@ describe('deriveShotgunLoadType', () => {
     expect(deriveShotgunLoadType('Rubber Buck 12ga Round')).toBe('Rubber Buck')
     expect(deriveShotgunLoadType('Sellier & Bellot Rubber 12 Gauge Buck Shot Ammunition')).toBe('Rubber Buck')
   })
+
+  it('extracts "Number X Shot" pattern', () => {
+    expect(deriveShotgunLoadType('410 Federal Judge Handgun Number 4 Shot 2.5 inch Ammo')).toBe('4 Shot')
+  })
+
+  it('falls back to generic buckshot when size is missing', () => {
+    expect(deriveShotgunLoadType('25 Round Box - 410 Gauge Dual Sized Pellet Buckshot Load')).toBe('Buckshot')
+  })
 })
 
 // ============================================================================
@@ -168,7 +176,10 @@ describe('normalizeCaliberString - new/fixed patterns', () => {
     ['22 Cal Long Rifle Federal', '.22 LR'],
     ['22 Cal Long Rifle 36gr HP', '.22 LR'],
     ['410 Judge Handgun Load', '.410 Bore'],
+    ['410 Federal Judge Handgun Number 4 Shot 2.5 inch Ammo', '.410 Bore'],
     ['410 Judge 000 Buck', '.410 Bore'],
+    ['20 Round Box - 223 69 Grain BTHP Match Ammo', '.223 Remington'],
+    ['1000 Round Case - 40 HST Federal LE 165 Grain Hollow Point Ammo', '.40 S&W'],
     ['.223 WSSM 55gr', '.223 WSSM'],
     ['223 WSSM 64 grain SP', '.223 WSSM'],
   ])('normalizes "%s" → %s', (input, expected) => {
