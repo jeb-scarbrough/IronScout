@@ -15,6 +15,7 @@ import { prisma } from '@ironscout/db'
 import { ProductLinkStatus } from '@ironscout/db/generated/prisma'
 import { logger } from '../config/logger'
 import { createId } from '@paralleldrive/cuid2'
+import { normalizeUpc as sharedNormalizeUpc, toCanonicalUpc } from '@ironscout/upc'
 
 const log = logger.affiliate
 
@@ -43,46 +44,14 @@ interface ProductLinkWriteResult {
 }
 
 // ============================================================================
-// UPC NORMALIZATION
+// UPC NORMALIZATION (delegates to @ironscout/upc)
 // ============================================================================
 
 /**
- * Normalize UPC string for consistent matching
- *
- * Rules:
- * - Strip non-digit characters (hyphens, spaces, etc.)
- * - Preserve leading zeros (UPC/EAN/GTIN are fixed-length codes)
- * - Return null for empty/invalid UPCs
- *
- * Note: Leading zeros are significant in UPC codes. A UPC-A code is always
- * 12 digits, and "020892215513" is different from "20892215513". Stripping
- * leading zeros causes matching failures across sources that handle them
- * differently.
- *
- * Examples:
- * - "012345678901" -> "012345678901" (preserved)
- * - "0-12345-67890-1" -> "012345678901" (hyphens stripped)
- * - "020892215513" -> "020892215513" (12-digit UPC preserved)
- * - "" -> null
- * - "N/A" -> null
+ * Re-export shared normalizeUpc for external callers.
+ * Validates length against GS1 standard: 8, 12, 13, 14 digits only.
  */
-export function normalizeUpc(upc: string | null | undefined): string | null {
-  if (!upc) return null
-
-  // Strip non-digit characters (hyphens, spaces, etc.)
-  const digits = upc.replace(/\D/g, '')
-
-  // Empty or all non-digits
-  if (!digits) return null
-
-  // Preserve leading zeros - UPC/EAN/GTIN are fixed-length codes where
-  // leading zeros are significant (e.g., 020892215513 is a valid 12-digit UPC)
-
-  // UPCs should be at least 3 digits (reject garbage values)
-  if (digits.length < 3) return null
-
-  return digits
-}
+export const normalizeUpc = sharedNormalizeUpc
 
 // ============================================================================
 // PRODUCT MATCHER
@@ -155,7 +124,8 @@ export class ProductMatcher {
     for (const sp of sourceProducts) {
       this.stats.totalLookups++
 
-      const normalizedUpc = normalizeUpc(sp.upc)
+      // Use canonical form (padded to 12) for matching against products.upcNorm
+      const normalizedUpc = toCanonicalUpc(sp.upc)
       if (!normalizedUpc) {
         // No valid UPC - needs resolver
         noUpcCount++
@@ -457,34 +427,46 @@ export class ProductMatcher {
   }
 
   /**
-   * Fetch products by normalized UPC from database
+   * Fetch products by canonical UPC from database
    *
-   * Products table has a unique UPC field, but we need to handle:
-   * 1. Products may store UPC with or without leading zeros
-   * 2. We normalize both for comparison
+   * Primary: exact match on products.upcNorm (indexed, consistently normalized)
+   * Fallback: regex-clean raw upc for legacy products with upc but no upcNorm
    */
   private async fetchProductsByUpc(
-    normalizedUpcs: string[]
+    canonicalUpcs: string[]
   ): Promise<Map<string, string>> {
-    if (normalizedUpcs.length === 0) return new Map()
+    if (canonicalUpcs.length === 0) return new Map()
 
-    // Query products and normalize their UPCs for matching
-    // Use raw SQL for efficient batch lookup
-    // Note: Products may have UPCs stored differently, so we normalize on comparison
-    const results = await prisma.$queryRaw<Array<{ id: string; upc: string }>>`
-      SELECT id, upc
+    const results = await prisma.$queryRaw<
+      Array<{ id: string; upcNorm: string | null; upc: string | null; fallback: boolean }>
+    >`
+      SELECT id, "upcNorm", upc,
+        CASE WHEN "upcNorm" IS NOT NULL THEN false ELSE true END AS fallback
       FROM products
-      WHERE upc IS NOT NULL
-        AND TRIM(LEADING '0' FROM regexp_replace(upc, '[^0-9]', '', 'g'))
-          = ANY(${normalizedUpcs}::text[])
+      WHERE ("upcNorm" IS NOT NULL AND "upcNorm" = ANY(${canonicalUpcs}::text[]))
+         OR ("upcNorm" IS NULL AND upc IS NOT NULL
+             AND (
+               CASE
+                 WHEN length(regexp_replace(upc, '[^0-9]', '', 'g')) = 8
+                   THEN lpad(regexp_replace(upc, '[^0-9]', '', 'g'), 12, '0')
+                 ELSE regexp_replace(upc, '[^0-9]', '', 'g')
+               END
+             ) = ANY(${canonicalUpcs}::text[]))
     `
 
-    // Build map: normalizedUpc -> productId
+    // Build map: canonicalUpc -> productId
     const matchMap = new Map<string, string>()
     for (const row of results) {
-      const normalizedRowUpc = normalizeUpc(row.upc)
-      if (normalizedRowUpc) {
-        matchMap.set(normalizedRowUpc, row.id)
+      const key = row.upcNorm ?? toCanonicalUpc(row.upc)
+      if (key) {
+        if (row.fallback) {
+          log.warn('PRODUCT_MATCH_LEGACY_FALLBACK', {
+            productId: row.id,
+            rawUpc: row.upc?.substring(0, 20),
+            message: 'Product matched via raw upc (no upcNorm). Backfill needed.',
+          })
+        }
+        matchMap.set(key, row.id)
       }
     }
 

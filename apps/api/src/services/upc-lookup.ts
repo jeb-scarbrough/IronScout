@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@ironscout/db'
+import { toCanonicalUpc } from '@ironscout/upc'
 import { loggers } from '../config/logger'
 
 const log = loggers.products
@@ -32,78 +33,15 @@ export interface UpcLookupResult {
 }
 
 /**
- * Normalize a UPC code to standard 12-digit format
- * - Strips non-numeric characters
- * - Handles EAN-13 (removes leading 0 if present)
- * - Zero-pads shorter codes
+ * Normalize a UPC for lookup purposes.
+ *
+ * Uses shared canonical normalization to align lookup behavior with
+ * resolver/matcher storage in products.upcNorm.
+ *
+ * @returns Canonical UPC string for DB lookup, or null if invalid
  */
-export function normalizeUpc(upc: string): string | null {
-  // Strip all non-numeric characters
-  const digits = upc.replace(/\D/g, '')
-
-  if (digits.length === 0) {
-    return null
-  }
-
-  // Handle EAN-13 (13 digits) - if starts with 0, it's likely a UPC-A with check digit
-  if (digits.length === 13 && digits.startsWith('0')) {
-    return digits.slice(1) // Remove leading 0 to get 12-digit UPC-A
-  }
-
-  // Handle UPC-A (12 digits)
-  if (digits.length === 12) {
-    return digits
-  }
-
-  // Handle UPC-E (8 digits) - expand to 12 digits
-  if (digits.length === 8) {
-    return expandUpcE(digits)
-  }
-
-  // Handle short codes - zero-pad to 12 digits
-  if (digits.length < 12) {
-    return digits.padStart(12, '0')
-  }
-
-  // Longer codes are invalid UPCs
-  return null
-}
-
-/**
- * Expand UPC-E (8 digit) to UPC-A (12 digit)
- */
-function expandUpcE(upcE: string): string {
-  if (upcE.length !== 8) {
-    return upcE.padStart(12, '0')
-  }
-
-  const numberSystem = upcE[0]
-  const lastDigit = upcE[6]
-  let manufacturer = ''
-  let product = ''
-
-  // UPC-E to UPC-A conversion rules
-  switch (lastDigit) {
-    case '0':
-    case '1':
-    case '2':
-      manufacturer = upcE.slice(1, 3) + lastDigit + '00'
-      product = '00' + upcE.slice(3, 6)
-      break
-    case '3':
-      manufacturer = upcE.slice(1, 4) + '00'
-      product = '000' + upcE.slice(4, 6)
-      break
-    case '4':
-      manufacturer = upcE.slice(1, 5) + '0'
-      product = '0000' + upcE[5]
-      break
-    default:
-      manufacturer = upcE.slice(1, 6)
-      product = '0000' + lastDigit
-  }
-
-  return numberSystem + manufacturer + product + upcE[7]
+export function normalizeUpcForLookup(upc: string): string | null {
+  return toCanonicalUpc(upc)
 }
 
 /**
@@ -117,7 +55,7 @@ function expandUpcE(upcE: string): string {
  * @returns UpcLookupResult with found status and product data if found
  */
 export async function lookupByUpc(upc: string): Promise<UpcLookupResult> {
-  const normalizedUpc = normalizeUpc(upc)
+  const normalizedUpc = normalizeUpcForLookup(upc)
 
   if (!normalizedUpc) {
     log.warn('Invalid UPC format', { upc })

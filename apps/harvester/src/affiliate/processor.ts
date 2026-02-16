@@ -32,6 +32,7 @@ import {
 } from '../config/trace'
 import { computeUrlHash, normalizeUrl } from './parser'
 import { ProductMatcher } from './product-matcher'
+import { normalizeUpc as sharedNormalizeUpc } from '@ironscout/upc'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
 import { RESOLVER_VERSION } from '../resolver'
 import type {
@@ -989,7 +990,8 @@ function extractAllIdentifiers(product: ParsedFeedProduct): ExtractedIdentifier[
       idValue: product.upc.trim(),
       namespace: '', // Empty string, not null
       isCanonical: false, // UPC is never canonical identity
-      normalizedValue: product.upc.trim().replace(/^0+/, ''), // Strip leading zeros
+      // Keep raw idValue for audit; drop invalid UPCs from normalizedValue.
+      normalizedValue: sharedNormalizeUpc(product.upc),
     })
   }
 
@@ -1427,17 +1429,18 @@ async function batchUpsertSourceProducts(
 
     // Batch update using unnest pattern
     // Note: brand/description/category are persisted for resolver fingerprinting
+    // COALESCE on optional fields: preserve existing non-null values when feed omits a field (#224)
     await prisma.$executeRaw`
       UPDATE source_products AS sp SET
         "title" = u.title,
         "url" = u.url,
-        "imageUrl" = u."imageUrl",
-        "brand" = u.brand,
-        "description" = u.description,
-        "category" = u.category,
-        "caliber" = u.caliber,
-        "grainWeight" = u."grainWeight",
-        "roundCount" = u."roundCount",
+        "imageUrl" = COALESCE(u."imageUrl", sp."imageUrl"),
+        "brand" = COALESCE(u.brand, sp.brand),
+        "description" = COALESCE(u.description, sp.description),
+        "category" = COALESCE(u.category, sp.category),
+        "caliber" = COALESCE(u.caliber, sp.caliber),
+        "grainWeight" = COALESCE(u."grainWeight", sp."grainWeight"),
+        "roundCount" = COALESCE(u."roundCount", sp."roundCount"),
         "normalizedUrl" = u."normalizedUrl",
         "lastUpdatedByRunId" = ${runId},
         "updatedAt" = NOW()

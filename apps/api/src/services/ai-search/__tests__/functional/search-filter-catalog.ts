@@ -17,11 +17,10 @@ export const FUNCTIONAL_FILTER_DIMENSIONS: FilterDimension[] = [
   { key: 'pressureRating', values: [undefined, 'STANDARD'] },
   { key: 'isSubsonic', values: [undefined, true] },
   { key: 'shortBarrelOptimized', values: [undefined, true] },
-  { key: 'suppressorSafe', values: [undefined, true] },
+  // suppressorSafe, lowRecoil, controlledExpansion omitted — soft-removed
+  // from buildWhereClause due to limited data coverage
   { key: 'lowFlash', values: [undefined, true] },
-  { key: 'lowRecoil', values: [undefined, true] },
   { key: 'matchGrade', values: [undefined, true] },
-  { key: 'controlledExpansion', values: [undefined, true] },
   { key: 'minVelocity', values: [undefined, 1000] },
   { key: 'maxVelocity', values: [undefined, 1200] },
   { key: 'minPrice', values: [undefined, 0.3] },

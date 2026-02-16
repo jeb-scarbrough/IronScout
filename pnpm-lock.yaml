@@ -183,6 +183,9 @@ importers:
       '@ironscout/redis':
         specifier: workspace:*
         version: link:../../packages/redis
+      '@ironscout/upc':
+        specifier: workspace:*
+        version: link:../../packages/upc
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -274,6 +277,9 @@ importers:
       '@ironscout/redis':
         specifier: workspace:*
         version: link:../../packages/redis
+      '@ironscout/upc':
+        specifier: workspace:*
+        version: link:../../packages/upc
       '@paralleldrive/cuid2':
         specifier: ^3.3.0
         version: 3.3.0
@@ -807,6 +813,18 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/upc:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.2.2
+        version: 25.2.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 

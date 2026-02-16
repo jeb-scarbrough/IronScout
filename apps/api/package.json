@@ -18,6 +18,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
     "@ironscout/crypto": "workspace:*",
+    "@ironscout/upc": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",

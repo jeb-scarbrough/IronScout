@@ -426,8 +426,7 @@ describe('AmmoSeekConnector', () => {
       const result = await connector.parse(xml)
 
       const firstRecord = result.parsedRecords[0].record
-      // XML parser strips leading zeros from numeric-looking values
-      expect(firstRecord.upc).toBe('12345678901')
+      expect(firstRecord.upc).toBe('012345678901')
       expect(firstRecord.title).toBe('Federal American Eagle 9mm 115gr FMJ')
       expect(firstRecord.price).toBe(17.99) // sale_price preferred
       expect(firstRecord.salePrice).toBe(17.99)
