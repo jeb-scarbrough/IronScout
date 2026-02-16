@@ -101,16 +101,30 @@ export async function enqueueAffiliateFeedJob(
 }
 
 /**
- * Check if a job exists for a feed (waiting or active)
+ * Check the state of the most recent job for a feed.
+ * Returns 'active' if a job is currently being processed,
+ * 'waiting' if a job is queued but not started, or null if no job exists.
  */
-export async function hasActiveJob(feedId: string): Promise<boolean> {
+export async function getJobState(feedId: string): Promise<'active' | 'waiting' | null> {
   try {
     const queue = getAffiliateFeedQueue();
-    console.log(`[Redis Queue] Checking active jobs for feed: ${feedId}`);
-    const jobs = await queue.getJobs(['waiting', 'active']);
-    const hasJob = jobs.some((j) => j.data.feedId === feedId);
-    console.log(`[Redis Queue] Active job check: ${hasJob ? 'found' : 'none'}`);
-    return hasJob;
+    console.log(`[Redis Queue] Checking job state for feed: ${feedId}`);
+
+    // Check active first (more important for manualRunPending decision)
+    const activeJobs = await queue.getJobs(['active']);
+    if (activeJobs.some((j) => j.data.feedId === feedId)) {
+      console.log(`[Redis Queue] Job state: active`);
+      return 'active';
+    }
+
+    const waitingJobs = await queue.getJobs(['waiting']);
+    if (waitingJobs.some((j) => j.data.feedId === feedId)) {
+      console.log(`[Redis Queue] Job state: waiting`);
+      return 'waiting';
+    }
+
+    console.log(`[Redis Queue] Job state: none`);
+    return null;
   } catch (error) {
     const err = error as Error & { code?: string };
     console.error('[Redis Queue] Connection error', { message: err.message, code: err.code });

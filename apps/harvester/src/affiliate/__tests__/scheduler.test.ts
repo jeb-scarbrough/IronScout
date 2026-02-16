@@ -23,14 +23,24 @@ const mockIsAffiliateSchedulerEnabled = vi.fn()
 
 vi.mock('@ironscout/db', () => ({
   prisma: {
-    $transaction: mockTransaction,
+    $transaction: (...args: unknown[]) => mockTransaction(...args),
     $queryRaw: mockQueryRaw,
     affiliateFeed: {
       update: mockFeedUpdate,
       findMany: mockFeedFindMany,
       count: mockFeedCount,
     },
+    // scheduler.ts uses snake_case model names (Prisma @@map)
+    affiliate_feeds: {
+      update: mockFeedUpdate,
+      findMany: mockFeedFindMany,
+      count: mockFeedCount,
+    },
     affiliateFeedRun: {
+      findMany: mockRunFindMany,
+      deleteMany: mockRunDeleteMany,
+    },
+    affiliate_feed_runs: {
       findMany: mockRunFindMany,
       deleteMany: mockRunDeleteMany,
     },
@@ -247,6 +257,46 @@ describe('Affiliate Feed Scheduler', () => {
         expect.objectContaining({
           data: expect.objectContaining({ manualRunPending: false }),
         })
+      )
+    })
+  })
+
+  describe('Behavioral: triggerSchedulerTick()', () => {
+    it('should enqueue deterministic manual job when manualRunPending feed exists', async () => {
+      const { triggerSchedulerTick } = await import('../scheduler')
+
+      // One scheduled feed due so we get past the early return,
+      // plus one manual-pending feed.
+      const scheduledFeed = {
+        id: 'feed-sched-1',
+        sourceId: 'src-1',
+        scheduleFrequencyHours: 24,
+        nextRunAt: new Date(Date.now() - 3600000), // 1 hr ago
+      }
+
+      mockTransaction.mockImplementation(async (cb: (tx: any) => Promise<any>) =>
+        cb({
+          $queryRaw: vi.fn().mockResolvedValue([scheduledFeed]),
+          affiliate_feeds: { update: vi.fn() },
+        })
+      )
+
+      // One manual-pending feed
+      mockFeedFindMany.mockResolvedValue([{ id: 'feed-manual-1' }])
+      mockQueueAdd.mockResolvedValue({})
+
+      const result = await triggerSchedulerTick()
+
+      // 1 scheduled + 1 manual = 2
+      expect(result.processed).toBe(2)
+      expect(mockQueueAdd).toHaveBeenCalledWith(
+        'process',
+        { feedId: 'feed-manual-1', trigger: 'MANUAL' },
+        {
+          jobId: 'feed-manual-1-manual',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
       )
     })
   })

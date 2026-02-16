@@ -722,20 +722,43 @@ export async function triggerManualRun(feedId: string) {
       };
     }
 
-    // No run in progress - directly enqueue the job to BullMQ
-    // Import dynamically to avoid issues during build
-    const { enqueueAffiliateFeedJob, hasActiveJob } = await import('@/lib/queue');
+    // No RUNNING row — check BullMQ queue state
+    const { enqueueAffiliateFeedJob, getJobState } = await import('@/lib/queue');
 
-    // Check if there's already a job in the queue
-    const hasJob = await hasActiveJob(feedId);
-    if (hasJob) {
+    const jobState = await getJobState(feedId);
+
+    if (jobState === 'active') {
+      // Job is actively being processed but no RUNNING row yet
+      // (worker hasn't created the run record). Treat like runningRun:
+      // set pending flag so the follow-up is not lost.
+      await prisma.affiliate_feeds.update({
+        where: { id: feedId },
+        data: { manualRunPending: true },
+      });
+
+      await logAdminAction(session.userId, 'TRIGGER_MANUAL_RUN', {
+        resource: 'AffiliateFeed',
+        resourceId: feedId,
+        newValue: { manualRunPending: true, reason: 'active_job_no_run_row' },
+      });
+
+      revalidatePath('/affiliate-feeds');
+      revalidatePath(`/affiliate-feeds/${feedId}`);
+
+      return {
+        success: true,
+        message: 'Manual run queued. A job is currently active - this will execute after it completes.',
+      };
+    }
+
+    if (jobState === 'waiting') {
       return {
         success: true,
         message: 'A job is already queued for this feed.',
       };
     }
 
-    // Enqueue the job
+    // No job in queue — enqueue fresh
     const { jobId } = await enqueueAffiliateFeedJob(feedId, 'MANUAL');
 
     await logAdminAction(session.userId, 'TRIGGER_MANUAL_RUN', {
