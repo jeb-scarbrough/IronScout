@@ -197,16 +197,16 @@ async function processAffiliateRecord(
 
   if (existingSourceProduct) {
     sourceProductId = existingSourceProduct.id
-    // Update existing
+    // Update existing — only set fields that have non-null incoming values (#224)
     await prisma.source_products.update({
       where: { id: sourceProductId },
       data: {
-        title: rawData.name || 'Unknown',
-        imageUrl: rawData.imageUrl,
-        brand: rawData.brand,
-        caliber: rawData.caliber,
-        grainWeight: rawData.grainWeight,
-        roundCount: rawData.roundCount,
+        ...(rawData.name && { title: rawData.name }),
+        ...(rawData.imageUrl != null && { imageUrl: rawData.imageUrl }),
+        ...(rawData.brand != null && { brand: rawData.brand }),
+        ...(rawData.caliber != null && { caliber: rawData.caliber }),
+        ...(rawData.grainWeight != null && { grainWeight: rawData.grainWeight }),
+        ...(rawData.roundCount != null && { roundCount: rawData.roundCount }),
         lastUpdatedByRunId: reprocessRunId,
         updatedAt: now,
       },
