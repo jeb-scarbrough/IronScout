@@ -9,6 +9,12 @@
  */
 
 import Redis, { RedisOptions } from 'ioredis'
+import {
+  acquireRedisLockWithClient as acquireRedisLockInternal,
+  releaseRedisLockWithClient as releaseRedisLockInternal,
+  extendRedisLockWithClient as extendRedisLockInternal,
+  DEFAULT_LOCK_TTL_MS as DEFAULT_LOCK_TTL_MS_INTERNAL,
+} from './lock.js'
 
 // =============================================================================
 // Configuration Parsing
@@ -338,3 +344,29 @@ export function getRedisConnectionInfo(): string {
 // Re-export Redis class and types for convenience
 export { Redis }
 export type { RedisOptions }
+
+// Distributed lock primitives
+export interface RedisLockHandle {
+  key: string
+  token: string
+}
+
+export const DEFAULT_LOCK_TTL_MS = DEFAULT_LOCK_TTL_MS_INTERNAL
+
+export async function acquireRedisLock(
+  key: string,
+  ttlMs = DEFAULT_LOCK_TTL_MS
+): Promise<RedisLockHandle | null> {
+  return acquireRedisLockInternal(getRedisClient(), key, ttlMs)
+}
+
+export async function releaseRedisLock(handle: RedisLockHandle): Promise<boolean> {
+  return releaseRedisLockInternal(getRedisClient(), handle)
+}
+
+export async function extendRedisLock(
+  handle: RedisLockHandle,
+  ttlMs = DEFAULT_LOCK_TTL_MS
+): Promise<boolean> {
+  return extendRedisLockInternal(getRedisClient(), handle, ttlMs)
+}

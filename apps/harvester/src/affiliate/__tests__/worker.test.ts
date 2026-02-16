@@ -38,6 +38,8 @@ const mocks = vi.hoisted(() => ({
   mockPrismaFindUniqueOrThrow: vi.fn(),
   mockAcquireLock: vi.fn(),
   mockReleaseLock: vi.fn(),
+  mockStartLockRenewal: vi.fn(),
+  mockStopLockRenewal: vi.fn(),
   mockDownloadFeed: vi.fn(),
   mockParseFeed: vi.fn(),
   mockProcessProducts: vi.fn(),
@@ -90,8 +92,9 @@ vi.mock('@ironscout/db', () => ({
 }))
 
 vi.mock('../lock', () => ({
-  acquireAdvisoryLock: mocks.mockAcquireLock,
-  releaseAdvisoryLock: mocks.mockReleaseLock,
+  acquireFeedLock: mocks.mockAcquireLock,
+  startLockRenewal: mocks.mockStartLockRenewal,
+  stopLockRenewal: mocks.mockStopLockRenewal,
 }))
 
 vi.mock('../fetcher', () => ({
@@ -169,6 +172,8 @@ const {
   mockPrismaFindUniqueOrThrow,
   mockAcquireLock,
   mockReleaseLock,
+  mockStartLockRenewal,
+  mockStopLockRenewal,
   mockDownloadFeed,
   mockParseFeed,
   mockProcessProducts,
@@ -264,6 +269,12 @@ describe('Affiliate Feed Worker', () => {
     vi.clearAllMocks()
     workerMocks.state.processor = null
     mockIsCircuitBreakerBypassed.mockResolvedValue(false)
+    mockReleaseLock.mockResolvedValue(true)
+    mockAcquireLock.mockResolvedValue({
+      feedId: 'feed-123',
+      handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+      release: mockReleaseLock,
+    })
   })
 
   describe('Feed Eligibility', () => {
@@ -300,14 +311,14 @@ describe('Affiliate Feed Worker', () => {
 
   describe('Lock Acquisition', () => {
     it('should skip job when lock cannot be acquired for scheduled trigger', async () => {
-      mockAcquireLock.mockResolvedValue(false)
+      mockAcquireLock.mockResolvedValue(null)
 
       // Lock not acquired, job should be skipped silently
       expect(mockAcquireLock).toBeDefined()
     })
 
     it('should keep manualRunPending for MANUAL trigger when lock busy', async () => {
-      mockAcquireLock.mockResolvedValue(false)
+      mockAcquireLock.mockResolvedValue(null)
 
       // Per spec §6.3.2: Keep manualRunPending = true
       // This is handled in the worker logic
@@ -315,18 +326,39 @@ describe('Affiliate Feed Worker', () => {
     })
 
     it('should release lock after job completion', async () => {
-      mockAcquireLock.mockResolvedValue(true)
-      mockReleaseLock.mockResolvedValue(undefined)
+      mockAcquireLock.mockResolvedValue({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
+      mockReleaseLock.mockResolvedValue(true)
 
       expect(mockReleaseLock).toBeDefined()
     })
 
     it('should release lock even if job fails', async () => {
-      mockAcquireLock.mockResolvedValue(true)
-      mockReleaseLock.mockResolvedValue(undefined)
+      mockAcquireLock.mockResolvedValue({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
+      mockReleaseLock.mockResolvedValue(true)
 
       // Lock should be released in finally block
       expect(mockReleaseLock).toBeDefined()
+    })
+
+    it('releases lock if run creation throws before phase try/catch', async () => {
+      const processor = getProcessor()
+      const mockJob = createMockJob()
+
+      mockPrismaFind.mockResolvedValue(createMockFeed())
+      mockPrismaFindFirst.mockResolvedValue(null)
+      mockPrismaCreate.mockRejectedValue(new Error('run create failed'))
+
+      await expect(processor(mockJob)).rejects.toThrow('run create failed')
+      expect(mockReleaseLock).toHaveBeenCalled()
+      expect(mockStopLockRenewal).toHaveBeenCalled()
     })
   })
 
@@ -337,14 +369,18 @@ describe('Affiliate Feed Worker', () => {
 
       mockPrismaFind.mockResolvedValue(mockFeed)
       mockPrismaCreate.mockResolvedValue(mockRun)
-      mockAcquireLock.mockResolvedValue(true)
+      mockAcquireLock.mockResolvedValue({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
 
       expect(mockPrismaCreate).toBeDefined()
     })
 
     it('should reuse existing run record on retry', async () => {
       const mockRun = createMockRun()
-      const mockJob = createMockJob({ runId: 'run-abc', feedLockId: '12345' })
+      const mockJob = createMockJob({ runId: 'run-abc' })
 
       mockPrismaFindUniqueOrThrow.mockResolvedValue(mockRun)
 
@@ -633,8 +669,12 @@ describe('SKIPPED run classification', () => {
       .mockResolvedValueOnce({ manualRunPending: false, status: 'ENABLED' })
     mockPrismaCreate.mockResolvedValue(run)
     mockPrismaUpdate.mockResolvedValue(undefined)
-    mockAcquireLock.mockResolvedValue(true)
-    mockReleaseLock.mockResolvedValue(undefined)
+    mockAcquireLock.mockResolvedValue({
+      feedId: 'feed-123',
+      handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+      release: mockReleaseLock,
+    })
+    mockReleaseLock.mockResolvedValue(true)
 
     return { feed, run }
   }

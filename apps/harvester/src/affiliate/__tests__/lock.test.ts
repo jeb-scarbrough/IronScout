@@ -1,19 +1,18 @@
-/**
- * Tests for Advisory Lock mechanism
- *
- * Tests feed-level mutual exclusion using PostgreSQL advisory locks.
- */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-// Mock at the top level
-vi.mock('@ironscout/db', () => ({
-  prisma: {
-    $queryRaw: vi.fn(),
-  },
+const mocks = vi.hoisted(() => ({
+  acquireRedisLock: vi.fn(),
+  releaseRedisLock: vi.fn(),
+  extendRedisLock: vi.fn(),
 }))
 
-// Mock the logger to avoid side effects
+vi.mock('@ironscout/redis', () => ({
+  acquireRedisLock: mocks.acquireRedisLock,
+  releaseRedisLock: mocks.releaseRedisLock,
+  extendRedisLock: mocks.extendRedisLock,
+  DEFAULT_LOCK_TTL_MS: 120_000,
+}))
+
 vi.mock('../../config/logger', () => ({
   logger: {
     affiliate: {
@@ -24,185 +23,80 @@ vi.mock('../../config/logger', () => ({
   },
 }))
 
-// Import after mocking
-import { prisma } from '@ironscout/db'
 import {
-  acquireAdvisoryLock,
-  releaseAdvisoryLock,
-  isLockHeld,
-  withAdvisoryLock,
+  acquireFeedLock,
+  startLockRenewal,
+  stopLockRenewal,
+  extendFeedLock,
 } from '../lock'
 
-// Cast to mock for type-safe mock access
-const mockQueryRaw = prisma.$queryRaw as ReturnType<typeof vi.fn>
-
-describe('Advisory Lock', () => {
+describe('Feed lock', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  describe('acquireAdvisoryLock', () => {
-    it('should return true when lock is acquired', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-
-      const feedLockId = BigInt(12345)
-      const acquired = await acquireAdvisoryLock(feedLockId)
-
-      expect(acquired).toBe(true)
-      expect(mockQueryRaw).toHaveBeenCalled()
-    })
-
-    it('should return false when lock is already held', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
-
-      const feedLockId = BigInt(12345)
-      const acquired = await acquireAdvisoryLock(feedLockId)
-
-      expect(acquired).toBe(false)
-    })
-
-    it('should use pg_try_advisory_lock for non-blocking acquisition', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-
-      await acquireAdvisoryLock(BigInt(12345))
-
-      // Verify the query uses pg_try_advisory_lock (non-blocking)
-      expect(mockQueryRaw).toHaveBeenCalled()
-    })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  describe('releaseAdvisoryLock', () => {
-    it('should call pg_advisory_unlock', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ result: true }])
+  it('returns a lock handle when acquire succeeds', async () => {
+    mocks.acquireRedisLock.mockResolvedValueOnce({ key: 'feed-lock:feed-1', token: 'token-123' })
 
-      const feedLockId = BigInt(12345)
-      await releaseAdvisoryLock(feedLockId)
+    const lock = await acquireFeedLock('feed-1')
 
-      expect(mockQueryRaw).toHaveBeenCalled()
-    })
-
-    it('should not throw on release error', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ result: false }])
-
-      // Should not throw even if release returns false
-      await expect(releaseAdvisoryLock(BigInt(12345))).resolves.not.toThrow()
-    })
+    expect(lock).not.toBeNull()
+    expect(lock?.feedId).toBe('feed-1')
+    expect(mocks.acquireRedisLock).toHaveBeenCalledWith('feed-lock:feed-1', 120_000)
   })
 
-  describe('isLockHeld', () => {
-    it('should return true when lock is held by current session', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ held: true }])
+  it('returns null when lock is already held', async () => {
+    mocks.acquireRedisLock.mockResolvedValueOnce(null)
 
-      const feedLockId = BigInt(12345)
-      const held = await isLockHeld(feedLockId)
+    const lock = await acquireFeedLock('feed-1')
 
-      expect(held).toBe(true)
-    })
-
-    it('should return false when lock is not held', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ held: false }])
-
-      const feedLockId = BigInt(12345)
-      const held = await isLockHeld(feedLockId)
-
-      expect(held).toBe(false)
-    })
+    expect(lock).toBeNull()
   })
 
-  describe('withAdvisoryLock', () => {
-    it('should execute callback when lock is acquired', async () => {
-      mockQueryRaw
-        .mockResolvedValueOnce([{ acquired: true }]) // acquire
-        .mockResolvedValueOnce([{ result: true }]) // release
+  it('release delegates to releaseRedisLock', async () => {
+    mocks.acquireRedisLock.mockResolvedValueOnce({ key: 'feed-lock:feed-1', token: 'token-123' })
+    mocks.releaseRedisLock.mockResolvedValueOnce(true)
 
-      const callback = vi.fn().mockResolvedValue('result')
+    const lock = await acquireFeedLock('feed-1')
+    const released = await lock!.release()
 
-      const result = await withAdvisoryLock(BigInt(12345), callback)
-
-      expect(callback).toHaveBeenCalled()
-      expect(result).toEqual({ success: true, result: 'result' })
-    })
-
-    it('should not execute callback when lock cannot be acquired', async () => {
-      mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
-
-      const callback = vi.fn()
-
-      const result = await withAdvisoryLock(BigInt(12345), callback)
-
-      expect(callback).not.toHaveBeenCalled()
-      expect(result).toEqual({ success: false, reason: 'LOCK_NOT_AVAILABLE' })
-    })
-
-    it('should release lock even if callback throws', async () => {
-      mockQueryRaw
-        .mockResolvedValueOnce([{ acquired: true }]) // acquire
-        .mockResolvedValueOnce([{ result: true }]) // release
-
-      const callback = vi.fn().mockRejectedValue(new Error('test error'))
-
-      await expect(withAdvisoryLock(BigInt(12345), callback)).rejects.toThrow('test error')
-
-      // Verify release was called (second call)
-      expect(mockQueryRaw).toHaveBeenCalledTimes(2)
-    })
-  })
-})
-
-describe('Lock ID Generation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+    expect(released).toBe(true)
+    expect(mocks.releaseRedisLock).toHaveBeenCalledWith({ key: 'feed-lock:feed-1', token: 'token-123' })
   })
 
-  it('should support large lock IDs (bigint)', async () => {
-    mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
+  it('extendFeedLock delegates to extendRedisLock', async () => {
+    mocks.acquireRedisLock.mockResolvedValueOnce({ key: 'feed-lock:feed-1', token: 'token-123' })
+    mocks.extendRedisLock.mockResolvedValueOnce(true)
 
-    // Large lock ID that exceeds 32-bit integer
-    const largeLockId = BigInt('9223372036854775807') // Max 64-bit signed integer
+    const lock = await acquireFeedLock('feed-1')
+    const extended = await extendFeedLock(lock!, 30_000)
 
-    await expect(acquireAdvisoryLock(largeLockId)).resolves.not.toThrow()
+    expect(extended).toBe(true)
+    expect(mocks.extendRedisLock).toHaveBeenCalledWith(
+      { key: 'feed-lock:feed-1', token: 'token-123' },
+      30_000
+    )
   })
 
-  it('should handle lock ID of 0', async () => {
-    mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
+  it('starts and stops renewal interval', async () => {
+    vi.useFakeTimers()
+    mocks.acquireRedisLock.mockResolvedValueOnce({ key: 'feed-lock:feed-1', token: 'token-123' })
+    mocks.extendRedisLock.mockResolvedValue(true)
 
-    await expect(acquireAdvisoryLock(BigInt(0))).resolves.not.toThrow()
-  })
-})
+    const lock = await acquireFeedLock('feed-1')
+    startLockRenewal(lock!, 120_000)
 
-describe('Mutual Exclusion Guarantee', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.advanceTimersByTime(30_000)
+    await Promise.resolve()
+    expect(mocks.extendRedisLock).toHaveBeenCalledTimes(1)
 
-  it('should prevent concurrent processing of same feed', async () => {
-    // First call acquires lock
-    mockQueryRaw.mockResolvedValueOnce([{ acquired: true }])
-    // Second call finds lock held
-    mockQueryRaw.mockResolvedValueOnce([{ acquired: false }])
-
-    const feedLockId = BigInt(12345)
-
-    const first = await acquireAdvisoryLock(feedLockId)
-    const second = await acquireAdvisoryLock(feedLockId)
-
-    expect(first).toBe(true)
-    expect(second).toBe(false)
-  })
-
-  it('should allow different feeds to be processed concurrently', async () => {
-    // Both locks can be acquired (different lock IDs)
-    mockQueryRaw
-      .mockResolvedValueOnce([{ acquired: true }])
-      .mockResolvedValueOnce([{ acquired: true }])
-
-    const feed1LockId = BigInt(11111)
-    const feed2LockId = BigInt(22222)
-
-    const first = await acquireAdvisoryLock(feed1LockId)
-    const second = await acquireAdvisoryLock(feed2LockId)
-
-    expect(first).toBe(true)
-    expect(second).toBe(true)
+    stopLockRenewal(lock!)
+    vi.advanceTimersByTime(60_000)
+    await Promise.resolve()
+    expect(mocks.extendRedisLock).toHaveBeenCalledTimes(1)
   })
 })

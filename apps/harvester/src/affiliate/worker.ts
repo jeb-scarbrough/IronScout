@@ -34,7 +34,8 @@ import {
   notifyAffiliateFeedRecovered,
   notifyDataQualityWarning,
 } from '@ironscout/notifications'
-import { acquireAdvisoryLock, releaseAdvisoryLock } from './lock'
+import { acquireFeedLock, startLockRenewal, stopLockRenewal } from './lock'
+import type { FeedLockHandle } from './lock'
 import { downloadFeed } from './fetcher'
 import { parseFeed } from './parser'
 import { processProducts } from './processor'
@@ -106,9 +107,9 @@ export function createAffiliateFeedWorker() {
  *
  * Per spec §6.4.1: Run Record Creation Invariant
  * On first attempt, these steps MUST complete atomically before any throwable I/O:
- * 1. Acquire advisory lock
+ * 1. Acquire feed lock
  * 2. Create run record
- * 3. Call job.updateData({ runId, feedLockId })
+ * 3. Call job.updateData({ runId })
  *
  * On retry (runId in job.data): Reuse existing run record.
  */
@@ -126,7 +127,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
   })
 
   return withTrace(initialTrace, async () => {
-    const { feedId, trigger, runId: existingRunId, feedLockId: cachedLockIdStr } = job.data
+    const { feedId, trigger, runId: existingRunId } = job.data
     const t0 = new Date()
     const jobStartedAt = t0.toISOString()
     let trace = initialTrace
@@ -148,12 +149,11 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       feedId,
       trigger,
       existingRunId: existingRunId || null,
-      cachedLockIdStr: cachedLockIdStr || null,
       jobAttempts: job.attemptsMade,
       maxAttempts: job.opts?.attempts,
     })
 
-    // Load feed configuration (use cached feedLockId on retry if available)
+    // Load feed configuration
     log.debug('Loading feed configuration', { feedId })
     const feedLoadStart = Date.now()
     const feed = await prisma.affiliate_feeds.findUnique({
@@ -178,14 +178,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       step: 'feed.loaded',
     })
     log = log.child(traceLogFields(trace))
-
-    // Parse cached feedLockId from string (BigInt can't be JSON serialized)
-    const feedLockId = cachedLockIdStr ? BigInt(cachedLockIdStr) : feed.feedLockId
-    log.debug('Feed lock ID resolved', {
-      feedId,
-      feedLockId: feedLockId.toString(),
-      usedCached: !!cachedLockIdStr,
-    })
 
     // Log feed configuration details
     log.debug('Feed configuration details', {
@@ -262,11 +254,13 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     // LOCK ACQUISITION + RUN RECORD CREATION
     // Per spec §6.4.1: These steps must be atomic with job.updateData()
     // ═══════════════════════════════════════════════════════════════════════════
-    let run: Awaited<ReturnType<typeof prisma.affiliate_feed_runs.findUniqueOrThrow>>
-    let lockAcquired: boolean
+    let run: Awaited<ReturnType<typeof prisma.affiliate_feed_runs.findUniqueOrThrow>> | null = null
+    let feedLock: FeedLockHandle | null = null
     let runFileLogger: RunFileLogger | null = null
+    let shouldEnqueueFollowUp = false
 
-    if (existingRunId) {
+    try {
+      if (existingRunId) {
       // ═══════════════════════════════════════════════════════════════════════
       // RETRY PATH: Reuse existing run record
       // Per spec §6.4.1: runId in job.data means we already created a run
@@ -302,14 +296,13 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         return
       }
 
-      // Re-acquire lock (may have been released on previous failure)
-      lockAcquired = await acquireAdvisoryLock(feedLockId)
-      if (!lockAcquired) {
+        // Re-acquire lock (may have expired on previous failure)
+        feedLock = await acquireFeedLock(feedId)
+        if (!feedLock) {
         log.warn('RETRY_LOCK_CONFLICT', {
           runId: existingRunId,
           feedId,
           feedName: feed.sources.name,
-          feedLockId: feedLockId.toString(),
           reasonCode: TRACE_REASON_CODES.RETRY_LOCK_CONFLICT,
           message: 'Another run started - this retry is obsolete',
         })
@@ -324,44 +317,44 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
           status: 'skipped',
           skipReason: 'RETRY_LOCK_CONFLICT',
         })
-        return
-      }
-    } else {
+          return
+        }
+        startLockRenewal(feedLock)
+      } else {
       // ═══════════════════════════════════════════════════════════════════════
       // FIRST ATTEMPT: Atomic lock acquisition + run creation + updateData
       // Per spec §6.4.1: No throwable operations between these three steps
       // ═══════════════════════════════════════════════════════════════════════
-      lockAcquired = await acquireAdvisoryLock(feedLockId)
+        feedLock = await acquireFeedLock(feedId)
 
-      if (!lockAcquired) {
-        if (trigger === 'MANUAL' || trigger === 'MANUAL_PENDING') {
-          log.debug('MANUAL_RUN_DEFERRED', {
+        if (!feedLock) {
+          if (trigger === 'MANUAL' || trigger === 'MANUAL_PENDING') {
+            log.debug('MANUAL_RUN_DEFERRED', {
+              feedId,
+              reasonCode: TRACE_REASON_CODES.LOCK_BUSY,
+            })
+          } else {
+            log.debug('SKIPPED_LOCK_BUSY', {
+              feedId,
+              trigger,
+              reasonCode: TRACE_REASON_CODES.LOCK_BUSY,
+            })
+          }
+          log.info('AFFILIATE_JOB_END', {
             feedId,
-            feedLockId: feedLockId.toString(),
-            reasonCode: TRACE_REASON_CODES.LOCK_BUSY,
-          })
-        } else {
-          log.debug('SKIPPED_LOCK_BUSY', {
-            feedId,
-            feedLockId: feedLockId.toString(),
             trigger,
-            reasonCode: TRACE_REASON_CODES.LOCK_BUSY,
+            jobId: job.id,
+            startedAt: jobStartedAt,
+            endedAt: new Date().toISOString(),
+            durationMs: Date.now() - t0.getTime(),
+            status: 'skipped',
+            skipReason: 'LOCK_BUSY',
           })
+          return
         }
-        log.info('AFFILIATE_JOB_END', {
-          feedId,
-          trigger,
-          jobId: job.id,
-          startedAt: jobStartedAt,
-          endedAt: new Date().toISOString(),
-          durationMs: Date.now() - t0.getTime(),
-          status: 'skipped',
-          skipReason: 'LOCK_BUSY',
-        })
-        return
-      }
+        startLockRenewal(feedLock)
 
-      log.debug('ADVISORY_LOCK_ACQUIRED', { feedLockId: feedLockId.toString(), feedId })
+        log.debug('FEED_LOCK_ACQUIRED', { feedId })
 
       const recentRunCutoff = new Date(t0.getTime() - 10 * 60 * 1000) // 10 minutes ago
       const orphanedRun = await prisma.affiliate_feed_runs.findFirst({
@@ -406,21 +399,24 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         })
       }
 
-      await job.updateData({
-        ...job.data,
-        runId: run.id,
-        feedLockId: feedLockId.toString(),
-      })
+        await job.updateData({
+          ...job.data,
+          runId: run.id,
+        })
 
-      log.info('RUN_START', {
-        runId: run.id,
-        feedId,
-        sourceName: feed.sources.name,
-        retailerName: feed.sources.retailers?.name,
-        trigger,
-        workerPid: process.pid,
-      })
-    }
+        log.info('RUN_START', {
+          runId: run.id,
+          feedId,
+          sourceName: feed.sources.name,
+          retailerName: feed.sources.retailers?.name,
+          trigger,
+          workerPid: process.pid,
+        })
+      }
+
+      if (!feedLock || !run) {
+        throw new Error('Invariant violation: lock/run not initialized')
+      }
 
     const retailerName = feed.sources.retailers?.name
     runFileLogger = createRunFileLogger({
@@ -458,9 +454,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       retailerId: feed.sources.retailerId,
       trace,
     }
-
-  // Track whether we should enqueue follow-up (read while holding lock)
-    let shouldEnqueueFollowUp = false
 
     try {
     // Phase 1: Download → Parse → Process
@@ -720,15 +713,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
         pending: feedState?.manualRunPending,
         enqueuingFollowUp: shouldEnqueueFollowUp,
       })
-
-      await releaseAdvisoryLock(feedLockId)
-      log.debug('ADVISORY_LOCK_RELEASED', { feedLockId: feedLockId.toString(), runId: run.id })
-
-      if (runFileLogger) {
-        await runFileLogger.close().catch((err) => {
-          moduleLog.warn('Failed to close run file logger', { runId: run.id }, err)
-        })
-      }
     }
 
     if (shouldEnqueueFollowUp) {
@@ -753,7 +737,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       feedId,
       trigger,
       jobId: job.id,
-      runId: run.id,
+      runId: run?.id,
       startedAt: jobStartedAt,
       endedAt: new Date().toISOString(),
       durationMs: Date.now() - t0.getTime(),
@@ -761,6 +745,19 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       workerPid: process.pid,
       ...traceLogFields(trace),
     })
+    } finally {
+      if (feedLock) {
+        stopLockRenewal(feedLock)
+        await feedLock.release()
+        log.debug('FEED_LOCK_RELEASED', { feedId, runId: run?.id })
+      }
+
+      if (runFileLogger) {
+        await runFileLogger.close().catch((err) => {
+          moduleLog.warn('Failed to close run file logger', { runId: run?.id }, err)
+        })
+      }
+    }
   })
 }
 

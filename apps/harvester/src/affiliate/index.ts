@@ -21,10 +21,11 @@ export {
   getExpiryStatus,
 } from './circuit-breaker'
 export {
-  acquireAdvisoryLock,
-  releaseAdvisoryLock,
-  isLockHeld,
-  withAdvisoryLock,
+  acquireFeedLock,
+  extendFeedLock,
+  startLockRenewal,
+  stopLockRenewal,
+  type FeedLockHandle,
 } from './lock'
 
 // Type exports

@@ -30,6 +30,8 @@ const mockJobUpdateData = vi.fn()
 const mockJobDiscard = vi.fn()
 const mockAcquireLock = vi.fn()
 const mockReleaseLock = vi.fn()
+const mockStartLockRenewal = vi.fn()
+const mockStopLockRenewal = vi.fn()
 
 vi.mock('@ironscout/db', () => ({
   prisma: {
@@ -69,8 +71,9 @@ vi.mock('../../config/queues', () => ({
 }))
 
 vi.mock('../../affiliate/lock', () => ({
-  acquireAdvisoryLock: mockAcquireLock,
-  releaseAdvisoryLock: mockReleaseLock,
+  acquireFeedLock: mockAcquireLock,
+  startLockRenewal: mockStartLockRenewal,
+  stopLockRenewal: mockStopLockRenewal,
 }))
 
 vi.mock('../../config/redis', () => ({
@@ -177,6 +180,12 @@ function expectValidJobId(jobId: string) {
 describe('BullMQ Job Deduplication', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockReleaseLock.mockResolvedValue(true)
+    mockAcquireLock.mockResolvedValue({
+      feedId: 'feed-123',
+      handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+      release: mockReleaseLock,
+    })
   })
 
   describe('JobId-based deduplication', () => {
@@ -276,34 +285,28 @@ describe('BullMQ Job Deduplication', () => {
       expect(scheduledJobId).not.toBe(manualJobId)
     })
 
-    it('should use feedLockId for advisory lock deduplication', async () => {
-      // Arrange
-      const feed = createMockFeed()
-      const feedLockId = feed.feedLockId
+    it('should use feedId key for lock deduplication', async () => {
+      const feedId = 'feed-123'
+      const activeLocks = new Set<string>()
 
-      // Track lock acquisitions
-      const activeLocks = new Set<bigint>()
-
-      mockAcquireLock.mockImplementation(async (lockId: bigint) => {
-        if (activeLocks.has(lockId)) {
-          return false // Lock busy
+      mockAcquireLock.mockImplementation(async (candidateFeedId: string) => {
+        if (activeLocks.has(candidateFeedId)) {
+          return null
         }
-        activeLocks.add(lockId)
-        return true
+        activeLocks.add(candidateFeedId)
+        return {
+          feedId: candidateFeedId,
+          handle: { key: `feed-lock:${candidateFeedId}`, token: 'token-123' },
+          release: mockReleaseLock,
+        }
       })
 
-      mockReleaseLock.mockImplementation(async (lockId: bigint) => {
-        activeLocks.delete(lockId)
-      })
-
-      // Act - concurrent lock attempts
       const results = await Promise.all([
-        mockAcquireLock(feedLockId),
-        mockAcquireLock(feedLockId),
-        mockAcquireLock(feedLockId),
+        mockAcquireLock(feedId),
+        mockAcquireLock(feedId),
+        mockAcquireLock(feedId),
       ])
 
-      // Assert - only one lock acquired
       const acquired = results.filter(Boolean)
       expect(acquired.length).toBe(1)
     })
@@ -319,11 +322,15 @@ describe('BullMQ Retry Safety', () => {
     it('should reuse existing run on retry (runId in job.data)', async () => {
       // Arrange
       const existingRunId = 'run-existing-123'
-      const job = createMockJob({ runId: existingRunId, feedLockId: '12345' })
+      const job = createMockJob({ runId: existingRunId })
       const existingRun = createMockRun({ id: existingRunId, status: 'RUNNING' })
 
       mockPrismaRunFind.mockResolvedValue(existingRun)
-      mockAcquireLock.mockResolvedValue(true)
+      mockAcquireLock.mockResolvedValue({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
 
       // Act - simulate retry path
       const isRetry = !!job.data.runId
@@ -344,7 +351,11 @@ describe('BullMQ Retry Safety', () => {
       const newRun = createMockRun({ id: 'run-new-456' })
 
       mockPrismaFeedFind.mockResolvedValue(createMockFeed())
-      mockAcquireLock.mockResolvedValue(true)
+      mockAcquireLock.mockResolvedValue({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
       mockPrismaRunCreate.mockResolvedValue(newRun)
       mockJobUpdateData.mockResolvedValue(undefined)
 
@@ -367,7 +378,6 @@ describe('BullMQ Retry Safety', () => {
       await mockJobUpdateData({
         ...job.data,
         runId: run.id,
-        feedLockId: '12345',
       })
 
       // Assert
@@ -426,40 +436,44 @@ describe('BullMQ Retry Safety', () => {
     it('should re-acquire lock on retry', async () => {
       // Arrange
       const existingRunId = 'run-existing'
-      const job = createMockJob({ runId: existingRunId, feedLockId: '12345' })
+      const job = createMockJob({ runId: existingRunId })
 
       mockPrismaRunFind.mockResolvedValue(
         createMockRun({ id: existingRunId, status: 'RUNNING' })
       )
 
       // First retry - lock available
-      mockAcquireLock.mockResolvedValueOnce(true)
+      mockAcquireLock.mockResolvedValueOnce({
+        feedId: 'feed-123',
+        handle: { key: 'feed-lock:feed-123', token: 'token-123' },
+        release: mockReleaseLock,
+      })
 
       // Act
-      const lockAcquired = await mockAcquireLock(BigInt(12345))
+      const lockAcquired = await mockAcquireLock('feed-123')
 
       // Assert
-      expect(lockAcquired).toBe(true)
-      expect(mockAcquireLock).toHaveBeenCalledWith(BigInt(12345))
+      expect(lockAcquired).toBeTruthy()
+      expect(mockAcquireLock).toHaveBeenCalledWith('feed-123')
     })
 
     it('should skip obsolete retry if lock is held by new run', async () => {
       // Arrange
       const existingRunId = 'run-old'
-      const job = createMockJob({ runId: existingRunId, feedLockId: '12345' })
+      const job = createMockJob({ runId: existingRunId })
 
       mockPrismaRunFind.mockResolvedValue(
         createMockRun({ id: existingRunId, status: 'RUNNING' })
       )
 
       // Lock held by another run
-      mockAcquireLock.mockResolvedValue(false)
+      mockAcquireLock.mockResolvedValue(null)
 
       // Act
-      const lockAcquired = await mockAcquireLock(BigInt(12345))
+      const lockAcquired = await mockAcquireLock('feed-123')
 
       // Assert - retry should be skipped
-      expect(lockAcquired).toBe(false)
+      expect(lockAcquired).toBeNull()
     })
   })
 })

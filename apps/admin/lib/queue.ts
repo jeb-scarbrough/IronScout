@@ -55,7 +55,6 @@ export interface AffiliateFeedJobData {
   feedId: string;
   trigger: 'SCHEDULED' | 'MANUAL' | 'MANUAL_PENDING' | 'ADMIN_TEST' | 'RETRY';
   runId?: string;
-  feedLockId?: string;
 }
 
 let affiliateFeedQueue: Queue<AffiliateFeedJobData> | null = null;

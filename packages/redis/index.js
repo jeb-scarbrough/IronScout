@@ -8,6 +8,7 @@
  * directly from ioredis to ensure consistent configuration.
  */
 import Redis from 'ioredis';
+import { acquireRedisLockWithClient as acquireRedisLockInternal, releaseRedisLockWithClient as releaseRedisLockInternal, extendRedisLockWithClient as extendRedisLockInternal, DEFAULT_LOCK_TTL_MS as DEFAULT_LOCK_TTL_MS_INTERNAL, } from './lock.js';
 // =============================================================================
 // Configuration Parsing
 // =============================================================================
@@ -292,4 +293,14 @@ export function getRedisConnectionInfo() {
 }
 // Re-export Redis class and types for convenience
 export { Redis };
+export const DEFAULT_LOCK_TTL_MS = DEFAULT_LOCK_TTL_MS_INTERNAL;
+export async function acquireRedisLock(key, ttlMs = DEFAULT_LOCK_TTL_MS) {
+    return acquireRedisLockInternal(getRedisClient(), key, ttlMs);
+}
+export async function releaseRedisLock(handle) {
+    return releaseRedisLockInternal(getRedisClient(), handle);
+}
+export async function extendRedisLock(handle, ttlMs = DEFAULT_LOCK_TTL_MS) {
+    return extendRedisLockInternal(getRedisClient(), handle, ttlMs);
+}
 //# sourceMappingURL=index.js.map

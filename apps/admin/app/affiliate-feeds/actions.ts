@@ -19,6 +19,7 @@ import {
   ValidationError,
 } from '@/lib/affiliate-feed-validation';
 import { encryptSecret, decryptSecret } from '@ironscout/crypto';
+import { acquireRedisLock, releaseRedisLock } from '@ironscout/redis';
 
 // =============================================================================
 // Types
@@ -799,14 +800,10 @@ export async function approveActivation(runId: string) {
       };
     }
 
-    // Per spec §8.7: Acquire advisory lock to prevent race with active ingest
-    const feedLockId = run.affiliate_feeds.feedLockId;
-    const lockResult = await prisma.$queryRaw<[{ acquired: boolean }]>`
-      SELECT pg_try_advisory_lock(${feedLockId}::bigint) as acquired
-    `;
-    const lockAcquired = lockResult[0]?.acquired ?? false;
-
-    if (!lockAcquired) {
+    // Acquire feed lock to prevent race with active ingest
+    const lockKey = `feed-lock:${run.feedId}`;
+    const lockHandle = await acquireRedisLock(lockKey);
+    if (!lockHandle) {
       return {
         success: false,
         error: 'Feed is currently being processed. Please try again in a few minutes.'
@@ -849,7 +846,7 @@ export async function approveActivation(runId: string) {
       return { success: true, message: 'Run approved and products promoted' };
     } finally {
       // Always release the lock
-      await prisma.$queryRaw`SELECT pg_advisory_unlock(${feedLockId}::bigint)`;
+      await releaseRedisLock(lockHandle);
     }
   } catch (error) {
     loggers.feeds.error('Failed to approve activation', { runId }, error instanceof Error ? error : new Error(String(error)));

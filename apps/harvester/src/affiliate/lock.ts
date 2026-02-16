@@ -1,108 +1,103 @@
 /**
- * PostgreSQL Advisory Lock Management for Affiliate Feeds
+ * Redis lock management for affiliate feed mutual exclusion.
  *
- * Uses pg_try_advisory_lock() for non-blocking feed-level mutual exclusion.
- * Each feed has a unique feedLockId (bigint) that maps to a PostgreSQL advisory lock.
- *
- * Per spec Section 8.6: Only one run per feed can be active at a time.
+ * Uses tokenized Redis locks to ensure cross-process safety:
+ * - acquire: SET NX PX with random owner token
+ * - release/extend: Lua compare-and-delete / compare-and-pexpire
  */
 
-import { prisma } from '@ironscout/db'
+import {
+  acquireRedisLock,
+  releaseRedisLock,
+  extendRedisLock,
+  DEFAULT_LOCK_TTL_MS,
+  type RedisLockHandle,
+} from '@ironscout/redis'
 import { logger } from '../config/logger'
 
 const log = logger.affiliate
 
-/**
- * Attempt to acquire an advisory lock for a feed.
- * Non-blocking: returns immediately with true/false.
- *
- * @param feedLockId - The unique lock ID for the feed (bigint)
- * @returns true if lock was acquired, false if already held
- */
-export async function acquireAdvisoryLock(feedLockId: bigint): Promise<boolean> {
-  try {
-    const result = await prisma.$queryRaw<[{ acquired: boolean }]>`
-      SELECT pg_try_advisory_lock(${feedLockId}::bigint) as acquired
-    `
-    const acquired = result[0]?.acquired ?? false
+const LOCK_PREFIX = 'feed-lock:'
+const RENEWAL_INTERVAL_MS = 30_000
 
-    if (acquired) {
-      log.debug('Advisory lock acquired', { feedLockId: feedLockId.toString() })
-    } else {
-      log.debug('Advisory lock not available', { feedLockId: feedLockId.toString() })
+export interface FeedLockHandle {
+  feedId: string
+  handle: RedisLockHandle
+  release: () => Promise<boolean>
+  renewalTimer?: ReturnType<typeof setInterval>
+}
+
+function lockKey(feedId: string): string {
+  return `${LOCK_PREFIX}${feedId}`
+}
+
+export async function acquireFeedLock(
+  feedId: string,
+  ttlMs = DEFAULT_LOCK_TTL_MS
+): Promise<FeedLockHandle | null> {
+  try {
+    const handle = await acquireRedisLock(lockKey(feedId), ttlMs)
+    if (!handle) {
+      log.debug('Feed lock not available', { feedId })
+      return null
     }
 
-    return acquired
+    log.debug('Feed lock acquired', { feedId })
+
+    return {
+      feedId,
+      handle,
+      release: async () => {
+        try {
+          const released = await releaseRedisLock(handle)
+          if (released) {
+            log.debug('Feed lock released', { feedId })
+          } else {
+            log.warn('Feed lock release failed (token mismatch or expired)', { feedId })
+          }
+          return released
+        } catch (error) {
+          log.warn('Feed lock release error', { feedId }, error as Error)
+          return false
+        }
+      },
+    }
   } catch (error) {
-    log.error('Failed to acquire advisory lock', { feedLockId: feedLockId.toString() }, error as Error)
+    log.error('Failed to acquire feed lock', { feedId }, error as Error)
+    return null
+  }
+}
+
+export async function extendFeedLock(
+  feedLock: FeedLockHandle,
+  ttlMs = DEFAULT_LOCK_TTL_MS
+): Promise<boolean> {
+  try {
+    return await extendRedisLock(feedLock.handle, ttlMs)
+  } catch (error) {
+    log.warn('Feed lock extend error', { feedId: feedLock.feedId }, error as Error)
     return false
   }
 }
 
-/**
- * Release an advisory lock for a feed.
- * Safe to call even if lock is not held (no-op).
- *
- * @param feedLockId - The unique lock ID for the feed (bigint)
- */
-export async function releaseAdvisoryLock(feedLockId: bigint): Promise<void> {
-  try {
-    await prisma.$queryRaw`
-      SELECT pg_advisory_unlock(${feedLockId}::bigint)
-    `
-    log.debug('Advisory lock released', { feedLockId: feedLockId.toString() })
-  } catch (error) {
-    // Log but don't throw - lock release failure is not critical
-    // (locks are automatically released when connection closes)
-    log.warn('Failed to release advisory lock', { feedLockId: feedLockId.toString() }, error as Error)
-  }
+export function startLockRenewal(feedLock: FeedLockHandle, ttlMs = DEFAULT_LOCK_TTL_MS): void {
+  feedLock.renewalTimer = setInterval(async () => {
+    try {
+      const extended = await extendFeedLock(feedLock, ttlMs)
+      if (!extended) {
+        log.warn('Feed lock renewal failed - lock may have expired', { feedId: feedLock.feedId })
+        stopLockRenewal(feedLock)
+      }
+    } catch (error) {
+      log.warn('Feed lock renewal error', { feedId: feedLock.feedId }, error as Error)
+      stopLockRenewal(feedLock)
+    }
+  }, RENEWAL_INTERVAL_MS)
 }
 
-/**
- * Check if an advisory lock is currently held (for diagnostics).
- * Note: This is a point-in-time check and may be stale.
- *
- * @param feedLockId - The unique lock ID for the feed (bigint)
- * @returns true if lock is currently held by any session
- */
-export async function isLockHeld(feedLockId: bigint): Promise<boolean> {
-  try {
-    const result = await prisma.$queryRaw<[{ held: boolean }]>`
-      SELECT EXISTS(
-        SELECT 1 FROM pg_locks
-        WHERE locktype = 'advisory'
-        AND objid = ${feedLockId}::bigint
-      ) as held
-    `
-    return result[0]?.held ?? false
-  } catch (error) {
-    log.error('Failed to check advisory lock status', { feedLockId: feedLockId.toString() }, error as Error)
-    return false
-  }
-}
-
-/**
- * Execute a function while holding an advisory lock.
- * Ensures lock is released even if the function throws.
- *
- * @param feedLockId - The unique lock ID for the feed
- * @param fn - Function to execute while holding the lock
- * @returns Result of the function, or null if lock could not be acquired
- */
-export async function withAdvisoryLock<T>(
-  feedLockId: bigint,
-  fn: () => Promise<T>
-): Promise<{ success: true; result: T } | { success: false; reason: 'LOCK_NOT_AVAILABLE' }> {
-  const acquired = await acquireAdvisoryLock(feedLockId)
-
-  if (!acquired) {
-    return { success: false, reason: 'LOCK_NOT_AVAILABLE' }
-  }
-
-  try {
-    const result = await fn()
-    return { success: true, result }
-  } finally {
-    await releaseAdvisoryLock(feedLockId)
+export function stopLockRenewal(feedLock: FeedLockHandle): void {
+  if (feedLock.renewalTimer) {
+    clearInterval(feedLock.renewalTimer)
+    feedLock.renewalTimer = undefined
   }
 }

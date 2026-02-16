@@ -82,4 +82,12 @@ export declare function warmupRedis(maxAttempts?: number): Promise<boolean>;
 export declare function getRedisConnectionInfo(): string;
 export { Redis };
 export type { RedisOptions };
+export interface RedisLockHandle {
+    key: string;
+    token: string;
+}
+export declare const DEFAULT_LOCK_TTL_MS = 120000;
+export declare function acquireRedisLock(key: string, ttlMs?: number): Promise<RedisLockHandle | null>;
+export declare function releaseRedisLock(handle: RedisLockHandle): Promise<boolean>;
+export declare function extendRedisLock(handle: RedisLockHandle, ttlMs?: number): Promise<boolean>;
 //# sourceMappingURL=index.d.ts.map

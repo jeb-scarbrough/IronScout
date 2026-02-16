@@ -150,10 +150,8 @@ export const retailerFeedIngestQueue = new Queue<RetailerFeedIngestJobData>(
 export interface AffiliateFeedJobData {
   feedId: string
   trigger: 'SCHEDULED' | 'MANUAL' | 'MANUAL_PENDING' | 'ADMIN_TEST' | 'RETRY'
-  // Per spec §6.4.1: Set after first lock acquisition, reused on retry
+  // Set after first run creation, reused on retry.
   runId?: string
-  // Cached to avoid re-query on retry (stored as string for JSON serialization)
-  feedLockId?: string
 }
 
 export interface AffiliateFeedSchedulerJobData {
