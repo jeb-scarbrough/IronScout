@@ -317,23 +317,9 @@ async function schedulerTick(job?: Job<AffiliateFeedSchedulerJobData>): Promise<
 
     for (const feed of manualPendingFeeds) {
       try {
-        // Check if there's already a job for this feed
-        const existingJobs = await affiliateFeedQueue.getJobs(['waiting', 'active'])
-        const hasExisting = existingJobs.some(
-          (j) => j.data.feedId === feed.id && j.data.trigger === 'MANUAL'
-        )
-
-        if (hasExisting) {
-          log.debug('AFFILIATE_MANUAL_FEED_ALREADY_QUEUED', {
-            feedId: feed.id,
-            decision: 'SKIP',
-            reasonCode: TRACE_REASON_CODES.MANUAL_ALREADY_QUEUED,
-          })
-          continue
-        }
-
-        // Use unique jobId to avoid BullMQ dedupe issues with manualRunPending follow-ups
-        const jobId = `${feed.id}-manual-${Date.now()}`
+        // Deterministic manual jobId for BullMQ-native deduplication.
+        // If a matching job already exists (waiting/active/delayed), add() is a no-op.
+        const jobId = `${feed.id}-manual`
         log.debug('AFFILIATE_MANUAL_FEED_ENQUEUEING', {
           feedId: feed.id,
           trigger: 'MANUAL',
@@ -343,10 +329,15 @@ async function schedulerTick(job?: Job<AffiliateFeedSchedulerJobData>): Promise<
         await affiliateFeedQueue.add(
           'process',
           { feedId: feed.id, trigger: 'MANUAL' },
-          { jobId }
+          {
+            jobId,
+            removeOnComplete: true,
+            removeOnFail: true,
+          }
         )
+        // We cannot distinguish a fresh add from a dedup no-op here.
         processed++
-        log.info('AFFILIATE_MANUAL_FEED_ENQUEUED', {
+        log.debug('AFFILIATE_MANUAL_FEED_ENQUEUE_ATTEMPTED', {
           feedId: feed.id,
           trigger: 'MANUAL',
           jobId,

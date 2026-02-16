@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   mockPrismaFind: vi.fn(),
   mockPrismaCreate: vi.fn(),
   mockPrismaUpdate: vi.fn(),
+  mockPrismaUpdateMany: vi.fn(),
   mockPrismaFindFirst: vi.fn(),
   mockPrismaFindUniqueOrThrow: vi.fn(),
   mockAcquireLock: vi.fn(),
@@ -76,6 +77,7 @@ vi.mock('@ironscout/db', () => ({
     affiliate_feeds: {
       findUnique: mocks.mockPrismaFind,
       update: mocks.mockPrismaUpdate,
+      updateMany: mocks.mockPrismaUpdateMany,
     },
     affiliate_feed_runs: {
       create: mocks.mockPrismaCreate,
@@ -168,6 +170,7 @@ const {
   mockPrismaFind,
   mockPrismaCreate,
   mockPrismaUpdate,
+  mockPrismaUpdateMany,
   mockPrismaFindFirst,
   mockPrismaFindUniqueOrThrow,
   mockAcquireLock,
@@ -185,7 +188,6 @@ const {
   mockNotifyCircuitBreaker,
   mockNotifyAutoDisabled,
   mockNotifyRecovered,
-  mockQueueAdd,
 } = mocks
 
 import { createAffiliateFeedWorker } from '../worker'
@@ -209,6 +211,7 @@ const createMockFeed = (overrides = {}) => ({
   maxRowCount: 500000,
   network: 'IMPACT',
   manualRunPending: false,
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
   sources: {
     id: 'source-456',
     name: 'Test Source',
@@ -444,29 +447,54 @@ describe('Affiliate Feed Worker', () => {
     })
   })
 
-  describe('Manual Run Follow-up', () => {
-    it('should check manualRunPending before releasing lock', async () => {
-      // Per spec §6.4: Read manualRunPending WHILE HOLDING the advisory lock
-      expect(mockPrismaFind).toBeDefined()
-    })
-
-    it('should enqueue follow-up job if manualRunPending is true', async () => {
-      mockQueueAdd.mockResolvedValue(undefined)
-
-      expect(mockQueueAdd).toBeDefined()
-    })
-
-    it('should clear manualRunPending after enqueueing follow-up', async () => {
+  describe('Manual Run Flag Lifecycle', () => {
+    const setupRunMocks = (trigger: 'MANUAL' | 'SCHEDULED' = 'MANUAL') => {
+      const feed = createMockFeed({ manualRunPending: true })
+      const run = createMockRun({ trigger })
+      mockPrismaFind.mockResolvedValue(feed)
+      mockPrismaFindFirst.mockResolvedValue(null)
+      mockPrismaCreate.mockResolvedValue(run)
       mockPrismaUpdate.mockResolvedValue(undefined)
+      mockPrismaUpdateMany.mockResolvedValue({ count: 1 })
+      mockDownloadFeed.mockResolvedValue(createSkippedDownload('FILE_NOT_FOUND'))
+      return { feed, run }
+    }
 
-      expect(mockPrismaUpdate).toBeDefined()
+    it('should clear manualRunPending after run creation + job.updateData for MANUAL trigger', async () => {
+      const processor = getProcessor()
+      const job = createMockJob({ trigger: 'MANUAL' })
+      const { feed } = setupRunMocks('MANUAL')
+
+      await processor(job)
+
+      expect(mockPrismaUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: feed.id,
+          manualRunPending: true,
+          updatedAt: feed.updatedAt,
+        },
+        data: { manualRunPending: false },
+      })
     })
 
-    it('should not enqueue follow-up if feed is no longer ENABLED', async () => {
-      const mockFeed = createMockFeed({ status: 'PAUSED', manualRunPending: true })
+    it('should not clear manualRunPending for SCHEDULED trigger', async () => {
+      const processor = getProcessor()
+      setupRunMocks('SCHEDULED')
 
-      // Per spec §6.4: Only enqueue if feed is still ENABLED
-      expect(mockFeed.status).not.toBe('ENABLED')
+      await processor(createMockJob({ trigger: 'SCHEDULED' }))
+
+      expect(mockPrismaUpdateMany).not.toHaveBeenCalled()
+    })
+
+    it('should continue processing if pending-clear update fails', async () => {
+      const processor = getProcessor()
+      setupRunMocks('MANUAL')
+      mockPrismaUpdateMany.mockRejectedValueOnce(new Error('pending clear failed'))
+
+      await processor(createMockJob({ trigger: 'MANUAL' }))
+
+      expect(mockReleaseLock).toHaveBeenCalled()
+      expect(mockPrismaUpdate).toHaveBeenCalled()
     })
   })
 })
@@ -664,9 +692,7 @@ describe('SKIPPED run classification', () => {
     const feed = createMockFeed()
     const run = createMockRun()
 
-    mockPrismaFind
-      .mockResolvedValueOnce(feed)
-      .mockResolvedValueOnce({ manualRunPending: false, status: 'ENABLED' })
+    mockPrismaFind.mockResolvedValueOnce(feed)
     mockPrismaCreate.mockResolvedValue(run)
     mockPrismaUpdate.mockResolvedValue(undefined)
     mockAcquireLock.mockResolvedValue({

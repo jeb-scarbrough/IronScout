@@ -40,7 +40,6 @@ vi.mock('@ironscout/db', () => ({
 
 // Mock queue
 const mockQueueAdd = vi.fn()
-const mockQueueGetJobs = vi.fn()
 const mockQueueGetRepeatableJobs = vi.fn()
 const mockQueueRemoveRepeatableByKey = vi.fn()
 
@@ -51,7 +50,6 @@ vi.mock('../../config/queues', () => ({
   },
   affiliateFeedQueue: {
     add: mockQueueAdd,
-    getJobs: mockQueueGetJobs,
   },
   affiliateFeedSchedulerQueue: {
     add: vi.fn(),
@@ -222,35 +220,34 @@ describe('Affiliate Feed Scheduler', () => {
       expect(result).toHaveLength(2)
     })
 
-    it('should check for existing jobs before enqueueing manual run', async () => {
-      mockQueueGetJobs.mockResolvedValue([
-        { data: { feedId: 'feed-1', trigger: 'MANUAL' } },
-      ])
-
-      const existingJobs = await mockQueueGetJobs(['waiting', 'active'])
-      const hasExisting = existingJobs.some(
-        (j: any) => j.data.feedId === 'feed-1' && j.data.trigger === 'MANUAL'
+    it('should enqueue manual run with deterministic jobId and removeOn opts', async () => {
+      await mockQueueAdd(
+        'process',
+        { feedId: 'feed-1', trigger: 'MANUAL' },
+        {
+          jobId: 'feed-1-manual',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
       )
 
-      expect(hasExisting).toBe(true)
+      expect(mockQueueAdd).toHaveBeenCalledWith(
+        'process',
+        { feedId: 'feed-1', trigger: 'MANUAL' },
+        {
+          jobId: 'feed-1-manual',
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      )
     })
 
-    it('should not enqueue duplicate manual runs', async () => {
-      mockQueueGetJobs.mockResolvedValue([
-        { data: { feedId: 'feed-1', trigger: 'MANUAL' } },
-      ])
-
-      const existingJobs = await mockQueueGetJobs(['waiting', 'active'])
-      const hasExisting = existingJobs.some(
-        (j: any) => j.data.feedId === 'feed-1' && j.data.trigger === 'MANUAL'
+    it('should not clear manualRunPending in scheduler path', async () => {
+      expect(mockFeedUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ manualRunPending: false }),
+        })
       )
-
-      if (!hasExisting) {
-        await mockQueueAdd('process', { feedId: 'feed-1', trigger: 'MANUAL' })
-      }
-
-      // Should not have called add since job already exists
-      expect(mockQueueAdd).not.toHaveBeenCalled()
     })
   })
 

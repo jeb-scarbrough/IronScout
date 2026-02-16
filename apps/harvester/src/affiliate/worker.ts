@@ -15,7 +15,6 @@ import { getSharedBullMQConnection } from '../config/redis'
 import {
   QUEUE_NAMES,
   AffiliateFeedJobData,
-  affiliateFeedQueue,
 } from '../config/queues'
 import { logger } from '../config/logger'
 import { createWorkflowLogger } from '../config/structured-log'
@@ -257,7 +256,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
     let run: Awaited<ReturnType<typeof prisma.affiliate_feed_runs.findUniqueOrThrow>> | null = null
     let feedLock: FeedLockHandle | null = null
     let runFileLogger: RunFileLogger | null = null
-    let shouldEnqueueFollowUp = false
 
     try {
       if (existingRunId) {
@@ -403,6 +401,35 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
           ...job.data,
           runId: run.id,
         })
+
+        // Clear pending intent once the manual run is fully established.
+        // If this conditional update does not match, keep the flag true
+        // and let the scheduler retry a follow-up enqueue safely.
+        if (trigger === 'MANUAL' || trigger === 'MANUAL_PENDING') {
+          try {
+            const cleared = await prisma.affiliate_feeds.updateMany({
+              where: {
+                id: feedId,
+                manualRunPending: true,
+                updatedAt: feed.updatedAt,
+              },
+              data: { manualRunPending: false },
+            })
+            log.debug('MANUAL_RUN_PENDING_CLEARED', {
+              feedId,
+              trigger,
+              runId: run.id,
+              cleared: cleared.count > 0,
+            })
+          } catch (error) {
+            log.warn('MANUAL_RUN_PENDING_CLEAR_FAILED', {
+              feedId,
+              trigger,
+              runId: run.id,
+              error: error instanceof Error ? error.message : String(error),
+            }, error as Error)
+          }
+        }
 
         log.info('RUN_START', {
           runId: run.id,
@@ -699,38 +726,6 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
       })
 
       throw error
-    } finally {
-      // Read follow-up state while holding lock
-      const feedState = await prisma.affiliate_feeds.findUnique({
-        where: { id: feedId },
-        select: { manualRunPending: true, status: true },
-      })
-      shouldEnqueueFollowUp =
-        feedState?.manualRunPending === true && feedState?.status === 'ENABLED'
-
-      log.debug('MANUAL_RUN_PENDING_CHECK', {
-        feedId,
-        pending: feedState?.manualRunPending,
-        enqueuingFollowUp: shouldEnqueueFollowUp,
-      })
-    }
-
-    if (shouldEnqueueFollowUp) {
-      moduleLog.info('Queuing follow-up manual run', {
-        feedId,
-        ...traceLogFields(trace),
-      })
-
-      await affiliateFeedQueue.add(
-        'process',
-        { feedId, trigger: 'MANUAL_PENDING' },
-        { jobId: `${feedId}-manual-followup-${Date.now()}` }
-      )
-
-      await prisma.affiliate_feeds.update({
-        where: { id: feedId },
-        data: { manualRunPending: false },
-      })
     }
 
     moduleLog.info('AFFILIATE_JOB_END', {

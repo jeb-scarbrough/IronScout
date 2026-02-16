@@ -77,13 +77,18 @@ export async function enqueueAffiliateFeedJob(
 ): Promise<{ jobId: string }> {
   try {
     const queue = getAffiliateFeedQueue();
-    const jobId = `${feedId}-${trigger.toLowerCase()}-${Date.now()}`;
+    // Deterministic jobId for BullMQ-native deduplication.
+    const jobId = `${feedId}-${trigger.toLowerCase()}`;
 
     console.log(`[Redis Queue] Enqueuing job: ${jobId}`);
     await queue.add(
       'process',
       { feedId, trigger },
-      { jobId }
+      {
+        jobId,
+        removeOnComplete: true,
+        removeOnFail: true,
+      }
     );
     console.log(`[Redis Queue] Job enqueued successfully: ${jobId}`);
 

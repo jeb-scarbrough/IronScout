@@ -1319,7 +1319,7 @@ async function handleFeedIngestJob(feedId: string, trigger: TriggerType) {
     if (skipReason) {
       // File unchanged - exit early with SUCCEEDED + skippedReason
       // Clear manualRunPending in same transaction (handles all trigger types)
-      await markRunSucceededAndClearPending(run, feedId, { skippedReason: skipReason });
+      await markRunSucceeded(run, feedId, { skippedReason: skipReason });
       return; // finally block still runs (releases lock, checks pending)
     }
 
@@ -1329,40 +1329,12 @@ async function handleFeedIngestJob(feedId: string, trigger: TriggerType) {
     // ═══════════════════════════════════════════════════════════
     await executePhase2Promotion(run);
 
-    // Clear manualRunPending on any successful completion
-    await markRunSucceededAndClearPending(run, feedId);
+    // Finalize run status; manualRunPending is managed separately
+    // (cleared at run establishment for manual triggers).
+    await markRunSucceeded(run, feedId);
   } catch (error) {
     await markRunFailed(run, feedId, error as Error);
     throw error; // Let BullMQ handle retry policy
-  } finally {
-    // Step 4: Read follow-up state WHILE STILL HOLDING LOCK
-    // ═══════════════════════════════════════════════════════════════════════
-    // INVARIANT: Read manualRunPending WHILE HOLDING the advisory lock.
-    // Moving this read AFTER unlock introduces a lost-run race:
-    //   1. We release lock
-    //   2. New job acquires lock, clears manualRunPending, runs
-    //   3. We read manualRunPending (now false), skip follow-up
-    //   4. User's pending request was silently dropped
-    //
-    // By reading before unlock, we capture the flag state atomically with
-    // our run's completion. The subsequent enqueue may race with other jobs,
-    // but the READ is protected.
-    // ═══════════════════════════════════════════════════════════════════════
-    const feedState = await prisma.affiliateFeed.findUnique({
-      where: { id: feedId },
-      select: { manualRunPending: true, status: true, feedLockId: true }
-    });
-    const shouldEnqueueFollowUp = feedState?.manualRunPending && feedState?.status === 'ENABLED';
-
-    // Step 5: Release lock (AFTER reading manualRunPending - see invariant above)
-    await releaseAdvisoryLock(feed.feedLockId);
-
-    // Step 6: Enqueue follow-up AFTER lock release (if needed)
-    // Only enqueue if: (1) pending flag was set, (2) feed is still ENABLED
-    // This prevents surprise runs after admin pauses feed mid-run
-    if (shouldEnqueueFollowUp) {
-      enqueueJob(feedId, { trigger: 'MANUAL_PENDING' });
-    }
   }
 }
 
@@ -1372,9 +1344,9 @@ async function handleFeedIngestJob(feedId: string, trigger: TriggerType) {
 // BullMQ handlers (onCompleted, onFailed) must NOT mutate run records.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Clear pending flag on ANY successful run (including skipped)
-// Regardless of trigger type - the user's request has been honored
-async function markRunSucceededAndClearPending(
+// Successful run finalization updates run/feed status only.
+// manualRunPending is cleared at run establishment for manual triggers.
+async function markRunSucceeded(
   run: AffiliateFeedRun,
   feedId: string,
   options?: { skippedReason?: string }
@@ -1395,7 +1367,6 @@ async function markRunSucceededAndClearPending(
     await tx.affiliateFeed.update({
       where: { id: feedId },
       data: {
-        manualRunPending: false,
         consecutiveFailures: 0,
         lastRunAt: finishedAt,
       }
@@ -1619,34 +1590,23 @@ if (run.status === 'RUNNING' && run.id !== job.data.runId) {
 
 ### 6.5 Run Now Button
 
-**Problem with naive approach:** If "Run Now" enqueues a job while a run is active, the job executes immediately, fails to acquire lock, and the user's request is dropped.
+**Problem with naive approach:** timestamp-based job IDs allow duplicate manual jobs for the same feed, and scan-based dedup is race-prone.
 
-**Solution:** Always set `manualRunPending = true`, then enqueue. No race-prone `hasActiveRun` check needed.
+**Solution:** deterministic job IDs + scheduler-driven follow-up:
+- Manual job ID is always `${feedId}-manual`
+- Admin test job ID is always `${feedId}-admin_test`
+- Scheduler attempts idempotent enqueue for feeds with `manualRunPending=true`
+- Worker clears `manualRunPending` only after run record + `job.updateData({ runId })` are established
 
-**On "Run Now" click (atomic, idempotent):**
-```typescript
-async function handleRunNowClick(feedId: string): Promise<{ status: 'queued' }> {
-  // Always set pending flag - idempotent, no race condition
-  await prisma.affiliateFeed.update({
-    where: { id: feedId },
-    data: { manualRunPending: true }
-  });
-
-  // Enqueue job - will either:
-  // 1. Acquire lock, clear flag, run immediately
-  // 2. Find lock busy, exit (flag remains true for active run to pick up)
-  enqueueJob(feedId, { trigger: 'MANUAL' });
-
-  return { status: 'queued' };
-}
-```
+**On "Run Now" click:**
+- If no active run, enqueue deterministic MANUAL job (BullMQ dedup handles duplicates atomically).
+- If active run exists, set `manualRunPending=true` and return queued-for-followup.
 
 **Why this works:**
-- Setting `manualRunPending = true` is idempotent (multiple clicks are harmless)
-- The enqueued job either runs immediately or finds the lock busy
-- If lock busy: flag stays true, active run's completion handler picks it up
-- If lock acquired: job clears flag and runs
-- No TOCTOU race between checking `hasActiveRun` and setting flag
+- Duplicate manual enqueues collapse to one BullMQ job per feed
+- Scheduler no longer performs O(n) queue scans
+- Pending follow-up intent is not cleared by scheduler on dedup no-op
+- Follow-up latency is bounded by scheduler tick cadence (<= 60s)
 
 **UI feedback:**
 - Always show: "Run queued" (job will execute immediately or after current run)
@@ -2359,7 +2319,7 @@ When a run is skipped due to unchanged content (mtime or hash match):
 | `lastSeenSuccessAt` | **NOT updated** | No products were actually observed |
 | Circuit breaker | **NOT run** | No new data to evaluate |
 
-**Important:** `manualRunPending` is cleared on **any** successful run completion, regardless of trigger type (`scheduled`, `manual`, or `manual_pending`). This is done in the same transaction as marking the run `SUCCEEDED`. See `markRunSucceededAndClearPending()` in Section 6.4.
+**Important:** `manualRunPending` is not cleared at completion. It is cleared when a manual run is established (run record created + job `runId` persisted). This avoids dropping pending intent on scheduler dedup no-ops.
 
 **Why create a run record:**
 - Ops visibility: "Why didn't my feed update?" → "File unchanged"
@@ -2523,7 +2483,7 @@ Separate ticket immediately after affiliate feeds ship. The `packages/crypto/sec
 
 **State mutation ownership (critical):**
 
-All run finalization happens in the worker job function via `markRunSucceededAndClearPending()` and `markRunFailed()`. BullMQ event handlers (`onCompleted`, `onFailed`) must **not** mutate database state.
+All run finalization happens in the worker job function via `markRunSucceeded()` and `markRunFailed()`. BullMQ event handlers (`onCompleted`, `onFailed`) must **not** mutate database state.
 
 | Responsibility | Owner | NOT Owner |
 |----------------|-------|-----------|
@@ -3396,15 +3356,15 @@ This appendix records all architecture decisions made during the specification p
 | Q5.1.3 | Computing nextRunAt | Use explicit `nextRunAt` field. Scheduler queries `nextRunAt <= now()`, then sets `nextRunAt = now() + frequency`. Prevents drift and defines backlog behavior (1 run, not N). |
 | Q5.1.4 | Atomic Feed Claiming | Use `FOR UPDATE SKIP LOCKED` in scheduler to atomically claim due feeds. Prevents duplicate scheduling even with multiple scheduler instances. |
 | Q5.1.5 | Scheduler Delivery Guarantee | At-most-once per interval. If scheduler crashes after claim but before enqueue, run is skipped until next `nextRunAt`. Acceptable for v1; outbox pattern documented for future use if needed. |
-| Q5.3.1 | Run Mutual Exclusion | Advisory lock only, no BullMQ jobId dedupe. JobId dedupe interacts badly with `manualRunPending` follow-up enqueues (can strand pending=true). Lock-busy handling is sufficient: multiple jobs may queue but only one runs, others exit cleanly. |
-| Q5.3.2 | Run Now Button | Always set `manualRunPending=true` then enqueue (idempotent, no TOCTOU race). Job either acquires lock and clears flag, or finds lock busy and exits (flag stays true for active run to pick up). |
+| Q5.3.1 | Run Mutual Exclusion | Redis feed lock (`feed-lock:{feedId}`) serializes execution, and deterministic BullMQ jobId (`${feedId}-manual`) deduplicates manual enqueues. Together they prevent duplicate manual work while preserving idempotent retries. |
+| Q5.3.2 | Run Now Button | Active run path sets `manualRunPending=true`; scheduler performs idempotent manual enqueue each tick. Worker clears pending only once the run is established (`run` created + `job.updateData`). |
 | Q5.3.3 | Lock-Busy Behavior | No CANCELED run records. Scheduled runs: skip silently (DEBUG log). Manual runs: keep `manualRunPending=true` for retry. Run records created only after lock acquired. |
 | Q5.3.4 | Advisory Lock Scope | Lock held through **both** Phase 1 and Phase 2. Released only after promotion completes or circuit breaker blocks. Prevents race where Run B's Phase 1 corrupts Run A's Phase 2 promotion. |
-| Q5.3.5 | Run Finalization Ownership | Worker finalize functions (`markRunSucceededAndClearPending`, `markRunFailed`) own all terminal state mutations: `finishedAt`, `durationMs`, status, `consecutiveFailures`. BullMQ handlers must NOT mutate DB state. Prevents race between job completion and handler execution. |
+| Q5.3.5 | Run Finalization Ownership | Worker finalize functions (`markRunSucceeded`, `markRunFailed`) own all terminal state mutations: `finishedAt`, `durationMs`, status, `consecutiveFailures`. BullMQ handlers must NOT mutate DB state. Prevents race between job completion and handler execution. |
 | Q5.3.6 | Timestamp Naming | Use `startedAt`/`finishedAt` (not `completedAt`). "Finished" is neutral and applies to both SUCCEEDED and FAILED. `durationMs` computed once in finalize function as `finishedAt - startedAt`. |
 | Q5.3.7 | Run Trigger Tracking | Persist `trigger` enum (`SCHEDULED`, `MANUAL`, `MANUAL_PENDING`, `ADMIN_TEST`) on `AffiliateFeedRun`. Set once at run creation, immutable across BullMQ retries. Enables audit trails, UI filters, and metrics splits. Index on `(feedId, trigger, startedAt)` for filtered queries. |
-| Q5.3.8 | Advisory Lock Key Type | Use `AffiliateFeed.feedLockId` (BIGINT auto-increment) for PostgreSQL advisory locks. Feed IDs (cuid strings) are never hashed or converted. Eliminates collision risk, aligns model with database semantics. Worker loads feed first to get `feedLockId` (already required for config/credentials). |
-| Q5.3.9 | Follow-Up Enqueue Timing | Read `manualRunPending` and `status` while still holding advisory lock. Release lock. Then enqueue follow-up only if `pending && status === 'ENABLED'`. Eliminates race ambiguity and prevents surprise runs after admin pauses feed mid-run. |
+| Q5.3.8 | Redis Lock Key Pattern | Use Redis lock key `feed-lock:{feedId}` with tokenized ownership and TTL renewal. Feed lock IDs are no longer used for lock acquisition. |
+| Q5.3.9 | Follow-Up Enqueue Timing | Worker does not enqueue follow-up at completion. Scheduler owns follow-up enqueue by polling `manualRunPending=true` feeds and attempting deterministic manual enqueue each tick. |
 | Q5.3.10 | Run Record Creation Invariant | On first attempt: (1) acquire lock, (2) create run record, (3) call `job.updateData({ runId })` - these three steps MUST complete before any throwable I/O. If `updateData` isn't called before FTP/download fails, retry creates duplicate run. Invariant ensures one run per job execution. |
 | Q5.4.1 | Multi-Network Scheduling | v1: Single scheduler claims all feeds regardless of network (Impact-only). No network predicate needed. v2: Keep unified tick by default. Add network partitioning only if networks need different cadence/SLAs/throttling. Rate limits via worker concurrency, not scheduler filtering. |
 
