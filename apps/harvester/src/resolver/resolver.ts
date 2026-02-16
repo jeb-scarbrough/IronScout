@@ -47,8 +47,6 @@ const baseLog = createWorkflowLogger(logger.resolver, {
   stage: 'resolve',
 })
 
-const RESOLVER_TRACE_ENABLED = /^(1|true|yes)$/i.test(process.env.RESOLVER_TRACE ?? '')
-
 // Current resolver version - bump on algorithm changes
 export const RESOLVER_VERSION = '1.3.2'
 
@@ -122,17 +120,6 @@ function createResolverLog(sourceProductId: string, trigger: string, affiliateFe
     trigger,
   }
   return {
-    trace: (event: string, meta?: Record<string, unknown>) => {
-      if (!RESOLVER_TRACE_ENABLED) return
-      log.debug(event, { trigger, trace: true, ...meta })
-      logResolverDetail(
-        'debug',
-        sourceProductId,
-        `TRACE_${event}`,
-        { ...fileBaseMeta, trace: true, ...meta },
-        affiliateFeedRunId
-      )
-    },
     debug: (event: string, meta?: Record<string, unknown>) => {
       log.debug(event, { trigger, ...meta })
       logResolverDetail('debug', sourceProductId, event, { ...fileBaseMeta, ...meta }, affiliateFeedRunId)
@@ -358,13 +345,6 @@ export async function resolveSourceProduct(
   // Check if we can skip (same inputHash = same result)
   const existingEvidence = existingLink?.evidence as unknown as ResolverEvidence | null
   const outOfScope = shouldSkipAsOutOfScope(sourceProduct, normalized)
-  rlog.trace('OUT_OF_SCOPE_EVAL', {
-    shouldSkip: outOfScope.shouldSkip,
-    reason: outOfScope.reason,
-    signals: outOfScope.signals,
-    sourceCategory: sourceProduct.category ?? null,
-    urlCategory: extractCategorySlugFromUrl(sourceProduct.url) ?? null,
-  })
   if (outOfScope.shouldSkip) {
     rulesFired.push('OUT_OF_SCOPE_SKIPPED')
     rlog.info('OUT_OF_SCOPE_SKIPPED', {
@@ -403,6 +383,13 @@ export async function resolveSourceProduct(
       outOfScope.signals
     )
   }
+  rlog.debug('OUT_OF_SCOPE_EVALUATED', {
+    phase: 'decision',
+    decision: 'continue',
+    shouldSkip: false,
+    sourceCategory: sourceProduct.category ?? null,
+    urlCategory: extractCategorySlugFromUrl(sourceProduct.url) ?? null,
+  })
 
   if (existingLink && existingEvidence?.inputHash === inputHash) {
     rulesFired.push('SKIP_SAME_INPUT')
@@ -1228,13 +1215,13 @@ async function attemptSkuIdentifierMatch(
 
   const skuValue = (canonicalSku?.normalizedValue || canonicalSku?.idValue) as string | undefined
   const normalizedSku = normalizeSkuIdentifier(skuValue)
-  rlog.trace('SKU_IDENTIFIER_EVAL', {
-    hasCanonicalSku: Boolean(canonicalSku),
-    skuValue,
-    normalizedSku,
-    sourceId: sourceProduct.sourceId,
-  })
   if (!normalizedSku) {
+    rlog.debug('SKU_IDENTIFIER_SKIPPED', {
+      phase: 'identifier_match',
+      reason: 'No usable SKU identifier',
+      hasSkuIdentifier: Boolean(canonicalSku),
+      sourceId: sourceProduct.sourceId,
+    })
     return null
   }
 
@@ -1261,10 +1248,11 @@ async function attemptSkuIdentifierMatch(
         AND lower(regexp_replace(coalesce(spi."normalizedValue", spi."idValue"), '[^a-zA-Z0-9]', '', 'g')) = ${normalizedSku}
       LIMIT 25
     `
-  rlog.trace('SKU_IDENTIFIER_QUERY_RESULT', {
+  rlog.debug('SKU_IDENTIFIER_QUERY_COMPLETE', {
+    phase: 'identifier_match',
     normalizedSku,
     candidateCount: productRows.length,
-    candidateProductIds: productRows.map(row => row.productId),
+    candidateProductIds: productRows.slice(0, 5).map(row => row.productId),
   })
 
   if (productRows.length === 0) {
@@ -1384,6 +1372,24 @@ async function attemptFingerprintMatch(
     hasGrainOrShotshell &&
     hasPackCount
   )
+  rlog.debug('IDENTITY_KEY_ELIGIBILITY', {
+    phase: 'identity_key',
+    isShotgun,
+    isShotshell,
+    hasShotgunIdentity,
+    hasCompleteIdentity,
+    fields: {
+      brandNorm: Boolean(normalized.brandNorm),
+      caliberNorm: Boolean(normalized.caliberNorm),
+      titleSignature: Boolean(normalized.titleSignature),
+      hasGrain,
+      hasGrainOrShotshell,
+      hasPackCount,
+      loadType: Boolean(normalized.loadType),
+      shellLength: Boolean(normalized.shellLength),
+      hasShellOrSignature,
+    },
+  })
 
   if (hasShotgunIdentity) {
     const shellOrSignature = normalized.shellLength || normalized.titleSignature || ''

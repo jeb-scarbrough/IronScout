@@ -15,7 +15,7 @@
 
 import { createWriteStream, mkdirSync, readdirSync, statSync, unlinkSync, rmdirSync, WriteStream } from 'fs'
 import { join, dirname } from 'path'
-import type { ILogger, LogContext } from '@ironscout/logger'
+import { getCurrentLogLevel, type ILogger, type LogContext } from '@ironscout/logger'
 
 // Base directory for datafeed logs (relative to repo root)
 const DATAFEED_LOG_DIR = join(process.cwd(), 'logs', 'datafeeds')
@@ -38,16 +38,17 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 }
 
 /**
- * Get the configured file log level from environment
- * DATAFEED_FILE_LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
- * Defaults to 'info'
+ * Resolve file log threshold.
+ * Precedence:
+ * 1) DATAFEED_FILE_LOG_LEVEL env override (optional)
+ * 2) Effective logger level from @ironscout/logger (LOG_LEVEL or dynamic setLogLevel)
  */
 function getFileLogLevel(): LogLevel {
   const envLevel = process.env.DATAFEED_FILE_LOG_LEVEL?.toLowerCase()
   if (envLevel && envLevel in LOG_LEVEL_PRIORITY) {
     return envLevel as LogLevel
   }
-  return 'info'
+  return getCurrentLogLevel()
 }
 
 /**
@@ -514,7 +515,7 @@ export function logResolverError(
 
 /**
  * Log detailed resolver activity to per-run log file.
- * Respects DATAFEED_FILE_LOG_LEVEL environment variable.
+ * Uses the effective logger level by default, with optional DATAFEED_FILE_LOG_LEVEL override.
  *
  * Use this for detailed debug/info logs during resolution.
  */
