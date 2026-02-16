@@ -366,16 +366,38 @@ function generateOptionCombos(dimensions: Array<OptionDimension<any>>): AISearch
   return combos
 }
 
+function getComparablePricePerRound(row: any): number {
+  const prices = Array.isArray(row?.prices) ? row.prices : []
+  if (prices.length === 0) return Infinity
+
+  const inStock = prices.filter((price: any) => price?.inStock)
+  const source = inStock.length > 0 ? inStock : prices
+
+  const minTotal = Math.min(
+    ...source.map((price: any) => {
+      const parsed = parseFloat(String(price?.price))
+      return Number.isFinite(parsed) ? parsed : Infinity
+    })
+  )
+
+  const roundCount = Number(row?.roundCount)
+  if (!Number.isFinite(roundCount) || roundCount <= 0) {
+    return minTotal
+  }
+
+  return minTotal / roundCount
+}
+
 function isPriceSortedAsc(rows: any[]): boolean {
   for (let i = 1; i < rows.length; i++) {
-    if ((rows[i - 1].prices[0]?.price ?? Infinity) > (rows[i].prices[0]?.price ?? Infinity)) return false
+    if (getComparablePricePerRound(rows[i - 1]) > getComparablePricePerRound(rows[i])) return false
   }
   return true
 }
 
 function isPriceSortedDesc(rows: any[]): boolean {
   for (let i = 1; i < rows.length; i++) {
-    if ((rows[i - 1].prices[0]?.price ?? -Infinity) < (rows[i].prices[0]?.price ?? -Infinity)) return false
+    if (getComparablePricePerRound(rows[i - 1]) < getComparablePricePerRound(rows[i])) return false
   }
   return true
 }

@@ -7,7 +7,7 @@ vi.mock('../../config/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), 
 vi.mock('../../services/ai-search/price-resolver', () => ({ batchGetPricesViaProductLinks: vi.fn(), getPricesViaProductLinks: vi.fn() }))
 vi.mock('../../services/upc-lookup', () => ({ lookupByUpc: vi.fn() }))
 
-import { dedupeLatestByRetailer } from '../products'
+import { dedupeLatestByRetailer, getProductSortPricePerRound } from '../products'
 
 describe('dedupeLatestByRetailer', () => {
   it('keeps the latest observedAt entry per retailer', () => {
@@ -47,5 +47,37 @@ describe('dedupeLatestByRetailer', () => {
 
     expect(result.find((p) => p.retailers?.id === 'r1')?.id).toBe('p1')
     expect(result.filter((p) => !p.retailers?.id)).toHaveLength(2)
+  })
+})
+
+describe('getProductSortPricePerRound', () => {
+  it('prefers in-stock prices and divides by round count', () => {
+    const value = getProductSortPricePerRound({
+      roundCount: 20,
+      prices: [
+        { price: 40, inStock: false },
+        { price: 22, inStock: true },
+        { price: 30, inStock: true },
+      ],
+    })
+
+    expect(value).toBe(1.1)
+  })
+
+  it('falls back to total price when round count is missing', () => {
+    const value = getProductSortPricePerRound({
+      prices: [{ price: 18, inStock: true }],
+    })
+
+    expect(value).toBe(18)
+  })
+
+  it('returns infinity when no prices exist', () => {
+    const value = getProductSortPricePerRound({
+      roundCount: 1000,
+      prices: [],
+    })
+
+    expect(value).toBe(Number.POSITIVE_INFINITY)
   })
 })

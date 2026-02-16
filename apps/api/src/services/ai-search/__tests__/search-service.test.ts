@@ -19,6 +19,7 @@ vi.mock('@ironscout/db', () => ({
   prisma: {
     products: {
       findMany: vi.fn().mockResolvedValue([]),
+      groupBy: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
     $queryRawUnsafe: vi.fn().mockResolvedValue([]),
@@ -50,7 +51,10 @@ vi.mock('../embedding-service', () => ({
 
 vi.mock('../price-resolver', () => ({
   batchGetPricesViaProductLinks: vi.fn().mockResolvedValue(new Map()),
-  batchGetPricesWithConfidence: vi.fn().mockResolvedValue({ confidenceMap: new Map() }),
+  batchGetPricesWithConfidence: vi.fn().mockResolvedValue({
+    pricesMap: new Map(),
+    confidenceMap: new Map(),
+  }),
 }))
 
 vi.mock('../price-signal-index', () => ({
@@ -99,7 +103,7 @@ vi.mock('../cache', () => ({
   cacheEmbedding: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { _testExports, ExplicitFilters } from '../search-service'
+import { aiSearch, _testExports, ExplicitFilters } from '../search-service'
 import { SearchIntent } from '../intent-parser'
 
 const {
@@ -110,6 +114,7 @@ const {
   formatProduct,
   addCondition,
   vectorEnhancedSearch,
+  getProductSortPricePerRound,
 } = _testExports
 
 // =============================================
@@ -707,6 +712,168 @@ describe('buildPriceConditions', () => {
 
     expect(conditions.price?.gte).toBe(20)
     expect(conditions.price?.lte).toBe(45)
+  })
+})
+
+describe('getProductSortPricePerRound', () => {
+  it('uses lowest in-stock price and normalizes by round count', () => {
+    const value = getProductSortPricePerRound({
+      roundCount: 20,
+      prices: [
+        { price: 40, inStock: false },
+        { price: 24, inStock: true },
+        { price: 22, inStock: true },
+      ],
+    })
+
+    expect(value).toBe(1.1)
+  })
+
+  it('falls back to total price when round count is invalid', () => {
+    const value = getProductSortPricePerRound({
+      roundCount: 0,
+      prices: [{ price: 18, inStock: true }],
+    })
+
+    expect(value).toBe(18)
+  })
+})
+
+describe('aiSearch sort behavior', () => {
+  const baseRows = [
+    createProduct({
+      id: 'p-middle',
+      name: 'Middle Date',
+      roundCount: 100,
+      createdAt: new Date('2026-02-02T00:00:00Z'),
+    }),
+    createProduct({
+      id: 'p-newest',
+      name: 'Newest Date',
+      roundCount: 20,
+      createdAt: new Date('2026-02-03T00:00:00Z'),
+    }),
+    createProduct({
+      id: 'p-oldest',
+      name: 'Oldest Date',
+      roundCount: 50,
+      createdAt: new Date('2026-02-01T00:00:00Z'),
+    }),
+  ]
+
+  let mockFindMany: ReturnType<typeof vi.fn>
+  let mockGroupBy: ReturnType<typeof vi.fn>
+  let mockCount: ReturnType<typeof vi.fn>
+  let mockBatchGetPricesWithConfidence: ReturnType<typeof vi.fn>
+  let mockApplyPremiumRanking: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    const { prisma } = await import('@ironscout/db')
+    mockFindMany = prisma.products.findMany as ReturnType<typeof vi.fn>
+    mockGroupBy = prisma.products.groupBy as ReturnType<typeof vi.fn>
+    mockCount = prisma.products.count as ReturnType<typeof vi.fn>
+
+    const { batchGetPricesWithConfidence } = await import('../price-resolver')
+    mockBatchGetPricesWithConfidence = batchGetPricesWithConfidence as ReturnType<typeof vi.fn>
+
+    const { applyPremiumRanking } = await import('../premium-ranking')
+    mockApplyPremiumRanking = applyPremiumRanking as ReturnType<typeof vi.fn>
+
+    mockFindMany.mockResolvedValue(baseRows)
+    mockGroupBy.mockResolvedValue([])
+    mockCount.mockResolvedValue(baseRows.length)
+    mockBatchGetPricesWithConfidence.mockResolvedValue({
+      pricesMap: new Map([
+        ['p-newest', [{ price: 24, inStock: true, retailers: { id: 'r1', name: 'R1', tier: 'PREMIUM' } }]],
+        ['p-middle', [{ price: 65, inStock: true, retailers: { id: 'r2', name: 'R2', tier: 'PREMIUM' } }]],
+        ['p-oldest', [{ price: 20, inStock: true, retailers: { id: 'r3', name: 'R3', tier: 'PREMIUM' } }]],
+      ]),
+      confidenceMap: new Map(),
+    })
+    mockApplyPremiumRanking.mockImplementation((products: any[]) => products)
+  })
+
+  it('sorts date_asc by oldest createdAt first', async () => {
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'date_asc',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-oldest', 'p-middle', 'p-newest'])
+  })
+
+  it('sorts date_desc by newest createdAt first', async () => {
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'date_desc',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-newest', 'p-middle', 'p-oldest'])
+  })
+
+  it('sorts price_asc by lowest in-stock price per round first', async () => {
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'price_asc',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-oldest', 'p-middle', 'p-newest'])
+  })
+
+  it('sorts price_desc by highest in-stock price per round first', async () => {
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'price_desc',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-newest', 'p-middle', 'p-oldest'])
+  })
+
+  it('sorts price_context by lowest positionInRange first', async () => {
+    const positionById: Record<string, number> = {
+      'p-newest': 0.1,
+      'p-oldest': 0.4,
+      'p-middle': 0.9,
+    }
+
+    mockApplyPremiumRanking.mockImplementation((products: any[]) =>
+      products.map((product) => ({
+        ...product,
+        premiumRanking: {
+          finalScore: 50,
+          breakdown: {},
+          badges: [],
+          priceSignal: {
+            positionInRange: positionById[product.id],
+            relativePricePct: 0,
+            contextBand: 'TYPICAL',
+            meta: { windowDays: 30, sampleCount: 10, asOf: '2026-02-01' },
+          },
+        },
+      }))
+    )
+
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'price_context',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-newest', 'p-oldest', 'p-middle'])
+  })
+
+  it('keeps premium ranking order for relevance sort', async () => {
+    mockApplyPremiumRanking.mockImplementation((products: any[]) => [
+      products.find((p) => p.id === 'p-oldest'),
+      products.find((p) => p.id === 'p-middle'),
+      products.find((p) => p.id === 'p-newest'),
+    ].filter(Boolean))
+
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      sortBy: 'relevance',
+    })
+
+    expect(result.products.map((p) => p.id)).toEqual(['p-oldest', 'p-middle', 'p-newest'])
   })
 })
 

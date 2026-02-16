@@ -33,6 +33,28 @@ export function toPriceNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
 }
 
+export function getProductSortPricePerRound(product: { roundCount?: unknown; prices?: any[] }): number {
+  const prices = Array.isArray(product.prices) ? product.prices : []
+  if (prices.length === 0) return Number.POSITIVE_INFINITY
+
+  const inStockPrices = prices.filter((price: any) => price?.inStock)
+  const sourcePrices = inStockPrices.length > 0 ? inStockPrices : prices
+
+  let lowestTotal = Number.POSITIVE_INFINITY
+  for (const price of sourcePrices) {
+    lowestTotal = Math.min(lowestTotal, toPriceNumber(price?.price))
+  }
+
+  if (!Number.isFinite(lowestTotal)) return Number.POSITIVE_INFINITY
+
+  const roundCount = Number(product.roundCount)
+  if (!Number.isFinite(roundCount) || roundCount <= 0) {
+    return lowestTotal
+  }
+
+  return lowestTotal / roundCount
+}
+
 export function dedupeLatestByRetailer(prices: any[]): any[] {
   const byRetailer = new Map<string, any>()
   const unkeyed: any[] = []
@@ -228,9 +250,8 @@ router.get('/search', async (req: Request, res: Response) => {
     // Apply price sorting if needed (sort by lowest price)
     if (sortBy === 'price_asc' || sortBy === 'price_desc') {
       products = products.sort((a: any, b: any) => {
-        const aPrice = a.prices[0]?.price || Infinity
-        const bPrice = b.prices[0]?.price || Infinity
-        const comparison = parseFloat(aPrice.toString()) - parseFloat(bPrice.toString())
+        const comparison =
+          getProductSortPricePerRound(a) - getProductSortPricePerRound(b)
         return sortBy === 'price_asc' ? comparison : -comparison
       })
     }

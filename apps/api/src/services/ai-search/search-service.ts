@@ -98,6 +98,28 @@ function dedupeAndSortPrices(prices: any[]): any[] {
   return [...deduped].sort((a, b) => toPriceNumber(a.price) - toPriceNumber(b.price))
 }
 
+function getProductSortPricePerRound(product: any): number {
+  const prices = Array.isArray(product?.prices) ? product.prices : []
+  if (prices.length === 0) return Number.POSITIVE_INFINITY
+
+  const inStockPrices = prices.filter((price: any) => price?.inStock)
+  const sourcePrices = inStockPrices.length > 0 ? inStockPrices : prices
+
+  let lowestTotal = Number.POSITIVE_INFINITY
+  for (const price of sourcePrices) {
+    lowestTotal = Math.min(lowestTotal, toPriceNumber(price?.price))
+  }
+
+  if (!Number.isFinite(lowestTotal)) return Number.POSITIVE_INFINITY
+
+  const roundCount = Number(product?.roundCount)
+  if (!Number.isFinite(roundCount) || roundCount <= 0) {
+    return lowestTotal
+  }
+
+  return lowestTotal / roundCount
+}
+
 /**
  * Explicit filters that can override AI intent
  */
@@ -561,21 +583,28 @@ export async function aiSearch(
 
   timing.rankingMs = Date.now() - rankingStart
 
-  // 8. Apply price sorting if requested
+  // 8. Apply date sorting if requested
+  // CRITICAL: Skip when lens ordering is active - lens determines order
+  if (!lensOrderingActive && (sortBy === 'date_asc' || sortBy === 'date_desc')) {
+    rankedProducts = rankedProducts.sort((a: any, b: any) => {
+      const comparison = getObservedAtMs(a.createdAt) - getObservedAtMs(b.createdAt)
+      return sortBy === 'date_asc' ? comparison : -comparison
+    })
+  }
+
+  // 9. Apply price sorting if requested
   // CRITICAL: Skip when lens ordering is active - lens determines order
   if (!lensOrderingActive && (sortBy === 'price_asc' || sortBy === 'price_desc')) {
     rankedProducts = rankedProducts.sort((a: any, b: any) => {
-      const aPrice = a.prices[0]?.price || Infinity
-      const bPrice = b.prices[0]?.price || Infinity
-      const comparison = parseFloat(aPrice.toString()) - parseFloat(bPrice.toString())
+      const comparison = getProductSortPricePerRound(a) - getProductSortPricePerRound(b)
       return sortBy === 'price_asc' ? comparison : -comparison
     })
   }
 
-  // 9. Trim to requested limit
+  // 10. Trim to requested limit
   rankedProducts = rankedProducts.slice(0, limit)
 
-  // 10. Calculate price context for ALL users (verdict for everyone, depth for premium)
+  // 11. Calculate price context for ALL users (verdict for everyone, depth for premium)
   // For premium users with premiumRanking, use existing priceSignal
   // For all others, calculate it now
   const priceResolveStart = Date.now()
@@ -600,10 +629,10 @@ export async function aiSearch(
     }
   })
 
-  // 11. Format products (with Premium data if applicable)
+  // 12. Format products (with Premium data if applicable)
   const formattedProducts = rankedProducts.map(p => formatProduct(p, isPremium))
 
-  // 12. Build facets (with Premium facets if applicable)
+  // 13. Build facets (with Premium facets if applicable)
   const facets = await buildFacets(where, isPremium)
 
   const processingTimeMs = Date.now() - startTime
@@ -1503,4 +1532,5 @@ export const _testExports = {
   formatProduct,
   addCondition,
   vectorEnhancedSearch,
+  getProductSortPricePerRound,
 }
