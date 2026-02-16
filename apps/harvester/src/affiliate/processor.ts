@@ -990,7 +990,8 @@ function extractAllIdentifiers(product: ParsedFeedProduct): ExtractedIdentifier[
       idValue: product.upc.trim(),
       namespace: '', // Empty string, not null
       isCanonical: false, // UPC is never canonical identity
-      normalizedValue: sharedNormalizeUpc(product.upc) ?? product.upc.trim().replace(/\D/g, ''),
+      // Keep raw idValue for audit; drop invalid UPCs from normalizedValue.
+      normalizedValue: sharedNormalizeUpc(product.upc),
     })
   }
 

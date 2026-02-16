@@ -445,13 +445,19 @@ export class ProductMatcher {
       FROM products
       WHERE ("upcNorm" IS NOT NULL AND "upcNorm" = ANY(${canonicalUpcs}::text[]))
          OR ("upcNorm" IS NULL AND upc IS NOT NULL
-             AND regexp_replace(upc, '[^0-9]', '', 'g') = ANY(${canonicalUpcs}::text[]))
+             AND (
+               CASE
+                 WHEN length(regexp_replace(upc, '[^0-9]', '', 'g')) = 8
+                   THEN lpad(regexp_replace(upc, '[^0-9]', '', 'g'), 12, '0')
+                 ELSE regexp_replace(upc, '[^0-9]', '', 'g')
+               END
+             ) = ANY(${canonicalUpcs}::text[]))
     `
 
     // Build map: canonicalUpc -> productId
     const matchMap = new Map<string, string>()
     for (const row of results) {
-      const key = row.upcNorm ?? (row.upc ? row.upc.replace(/\D/g, '') : null)
+      const key = row.upcNorm ?? toCanonicalUpc(row.upc)
       if (key) {
         if (row.fallback) {
           log.warn('PRODUCT_MATCH_LEGACY_FALLBACK', {

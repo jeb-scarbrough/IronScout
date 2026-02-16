@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@ironscout/db'
-import { normalizeUpc } from '@ironscout/upc'
+import { toCanonicalUpc } from '@ironscout/upc'
 import { loggers } from '../config/logger'
 
 const log = loggers.products
@@ -35,65 +35,13 @@ export interface UpcLookupResult {
 /**
  * Normalize a UPC for lookup purposes.
  *
- * Uses shared validation first (rejects invalid lengths), then applies
- * API-specific conversions:
- * - EAN-13 starting with '0' → strip to 12-digit UPC-A
- * - UPC-E (8 digits) → expand to UPC-A via GS1 rules
+ * Uses shared canonical normalization to align lookup behavior with
+ * resolver/matcher storage in products.upcNorm.
  *
- * @returns Normalized UPC string for DB lookup, or null if invalid
+ * @returns Canonical UPC string for DB lookup, or null if invalid
  */
 export function normalizeUpcForLookup(upc: string): string | null {
-  const validated = normalizeUpc(upc)
-  if (!validated) return null
-
-  // EAN-13 starting with 0 → strip to get UPC-A
-  if (validated.length === 13 && validated.startsWith('0')) {
-    return validated.slice(1)
-  }
-
-  // UPC-E → expand to UPC-A for lookup
-  if (validated.length === 8) {
-    return expandUpcE(validated)
-  }
-
-  return validated
-}
-
-/**
- * Expand UPC-E (8 digit) to UPC-A (12 digit)
- */
-function expandUpcE(upcE: string): string {
-  if (upcE.length !== 8) {
-    return upcE.padStart(12, '0')
-  }
-
-  const numberSystem = upcE[0]
-  const lastDigit = upcE[6]
-  let manufacturer = ''
-  let product = ''
-
-  // UPC-E to UPC-A conversion rules
-  switch (lastDigit) {
-    case '0':
-    case '1':
-    case '2':
-      manufacturer = upcE.slice(1, 3) + lastDigit + '00'
-      product = '00' + upcE.slice(3, 6)
-      break
-    case '3':
-      manufacturer = upcE.slice(1, 4) + '00'
-      product = '000' + upcE.slice(4, 6)
-      break
-    case '4':
-      manufacturer = upcE.slice(1, 5) + '0'
-      product = '0000' + upcE[5]
-      break
-    default:
-      manufacturer = upcE.slice(1, 6)
-      product = '0000' + lastDigit
-  }
-
-  return numberSystem + manufacturer + product + upcE[7]
+  return toCanonicalUpc(upc)
 }
 
 /**

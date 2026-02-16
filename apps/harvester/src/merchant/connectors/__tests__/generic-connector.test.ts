@@ -277,7 +277,7 @@ describe('GenericConnector', () => {
       const result = await connector.parse(xml)
 
       const firstRecord = result.parsedRecords[0].record
-      expect(firstRecord.upc).toBe('812345678901')
+      expect(firstRecord.upc).toBe('012345678901')
       expect(firstRecord.title).toBe('Federal American Eagle 9mm 115gr FMJ')
       expect(firstRecord.price).toBe(18.99)
     })

@@ -82,6 +82,8 @@ export function parseXML(content: string): Record<string, unknown>[] {
     ignoreAttributes: false,
     attributeNamePrefix: '',
     textNodeName: '_text',
+    parseTagValue: false,
+    parseAttributeValue: false,
   })
 
   const result = parser.parse(content)

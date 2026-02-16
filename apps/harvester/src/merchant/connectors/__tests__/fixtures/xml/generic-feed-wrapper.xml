@@ -2,7 +2,7 @@
 <feed>
   <products>
     <product>
-      <gtin>812345678901</gtin>
+      <gtin>012345678901</gtin>
       <product_name>Federal 9mm</product_name>
       <current_price>18.99</current_price>
       <vendor>Federal</vendor>
