@@ -17,8 +17,8 @@ export const FUNCTIONAL_FILTER_DIMENSIONS: FilterDimension[] = [
   { key: 'pressureRating', values: [undefined, 'STANDARD'] },
   { key: 'isSubsonic', values: [undefined, true] },
   { key: 'shortBarrelOptimized', values: [undefined, true] },
-  // suppressorSafe, lowRecoil, controlledExpansion omitted — soft-removed
-  // from buildWhereClause due to limited data coverage
+  // suppressorSafe, lowRecoil, controlledExpansion remain soft-disabled
+  // until a data-coverage strategy supports deterministic filtering.
   { key: 'lowFlash', values: [undefined, true] },
   { key: 'matchGrade', values: [undefined, true] },
   { key: 'minVelocity', values: [undefined, 1000] },

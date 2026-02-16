@@ -59,6 +59,8 @@ const semanticSearchSchema = z.object({
     brand: z.string().optional(),
     
     // Premium filters (PREMIUM only - will be ignored for FREE users)
+    // NOTE: suppressorSafe, lowRecoil, and controlledExpansion are
+    // intentionally soft-disabled until a data coverage strategy is in place.
     bulletType: z.enum(BULLET_TYPES).optional(),
     pressureRating: z.enum(PRESSURE_RATINGS).optional(),
     isSubsonic: z.boolean().optional(),
@@ -390,7 +392,9 @@ function generateExplanation(intent: any): string {
  */
 router.get('/premium-filters', async (_req: Request, res: Response) => {
   try {
-    // V1: All filters available to all users
+    // V1: All filters available to all users.
+    // NOTE: suppressorSafe, lowRecoil, and controlledExpansion remain
+    // soft-disabled in explicit filtering due to data coverage gaps.
     res.json({
       available: true,
       filters: {

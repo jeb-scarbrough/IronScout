@@ -120,6 +120,9 @@ export interface ExplicitFilters {
   isSubsonic?: boolean
 
   // Performance characteristic filters
+  // NOTE: suppressorSafe, lowRecoil, and controlledExpansion are intentionally
+  // soft-disabled for explicit filtering until we implement a data coverage
+  // strategy that can support deterministic query-time behavior.
   shortBarrelOptimized?: boolean
   lowFlash?: boolean
   matchGrade?: boolean
@@ -833,6 +836,8 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
     }
 
     // Performance characteristic filters
+    // NOTE: suppressorSafe, lowRecoil, and controlledExpansion are intentionally
+    // omitted from hard filtering due to current data coverage gaps.
     if (explicitFilters.shortBarrelOptimized) {
       addCondition(where, { shortBarrelOptimized: true })
     }

@@ -111,6 +111,7 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
       'shortBarrelOptimized', 'lowFlash',
       'matchGrade', 'minVelocity', 'maxVelocity',
       // Legacy soft-disabled params: clear if present in old links.
+      // Do not re-enable until a backend data coverage strategy is implemented.
       'suppressorSafe', 'lowRecoil', 'controlledExpansion'
     ]
     performanceParams.forEach(p => params.delete(p))

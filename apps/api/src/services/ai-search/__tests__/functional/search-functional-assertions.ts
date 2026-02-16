@@ -114,8 +114,8 @@ export function matchesExplicitFilterContract(
   if (filters.isSubsonic !== undefined && product.isSubsonic !== filters.isSubsonic) return false
 
   if (filters.shortBarrelOptimized && !product.shortBarrelOptimized) return false
-  // suppressorSafe, lowRecoil, controlledExpansion are soft-removed from
-  // buildWhereClause due to limited data coverage — do not assert them here.
+  // suppressorSafe, lowRecoil, controlledExpansion are intentionally
+  // soft-disabled pending a data-coverage strategy — do not assert here.
   if (filters.lowFlash && !product.lowFlash) return false
   if (filters.matchGrade && !product.matchGrade) return false
 
