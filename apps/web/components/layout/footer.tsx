@@ -9,8 +9,8 @@ const WWW_URL = BRAND.website
 export function Footer() {
   const pathname = usePathname()
 
-  // Don't render footer on auth pages
-  if (pathname?.startsWith('/auth')) {
+  // Don't render footer on auth pages or dashboard (uses SidebarNav)
+  if (pathname?.startsWith('/auth') || pathname?.startsWith('/dashboard')) {
     return null
   }
 
