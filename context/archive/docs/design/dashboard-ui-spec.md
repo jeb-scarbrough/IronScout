@@ -295,7 +295,7 @@ Premium users save an average of $X/month
 
 ## Design Tokens
 
-> **Note:** All tokens align with `docs/design/style-guide.md` and `docs/design/design-principles.md`
+> **Note:** All tokens align with `context/archive/docs/design/style-guide.md` and `context/archive/docs/design/design-principles.md`
 
 ### Spacing (Tailwind Scale)
 
