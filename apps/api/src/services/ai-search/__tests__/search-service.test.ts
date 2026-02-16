@@ -1083,6 +1083,75 @@ describe('reRankProducts', () => {
   })
 })
 
+describe('aiSearch stock filtering with lens enabled', () => {
+  let mockFindMany: ReturnType<typeof vi.fn>
+  let mockGroupBy: ReturnType<typeof vi.fn>
+  let mockCount: ReturnType<typeof vi.fn>
+  let mockBatchGetPricesWithConfidence: ReturnType<typeof vi.fn>
+  let mockApplyPremiumRanking: ReturnType<typeof vi.fn>
+  let mockIsLensEnabled: ReturnType<typeof vi.fn>
+  let mockApplyLensPipeline: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    const { prisma } = await import('@ironscout/db')
+    mockFindMany = prisma.products.findMany as ReturnType<typeof vi.fn>
+    mockGroupBy = prisma.products.groupBy as ReturnType<typeof vi.fn>
+    mockCount = prisma.products.count as ReturnType<typeof vi.fn>
+
+    const { batchGetPricesWithConfidence } = await import('../price-resolver')
+    mockBatchGetPricesWithConfidence = batchGetPricesWithConfidence as ReturnType<typeof vi.fn>
+
+    const { applyPremiumRanking } = await import('../premium-ranking')
+    mockApplyPremiumRanking = applyPremiumRanking as ReturnType<typeof vi.fn>
+
+    const lensModule = await import('../../lens')
+    mockIsLensEnabled = lensModule.isLensEnabled as ReturnType<typeof vi.fn>
+    mockApplyLensPipeline = lensModule.applyLensPipeline as ReturnType<typeof vi.fn>
+
+    mockFindMany.mockResolvedValue([
+      createProduct({
+        id: 'p-oos',
+        name: 'Out of Stock Product',
+      }),
+    ])
+    mockGroupBy.mockResolvedValue([])
+    mockCount.mockResolvedValue(1)
+    mockBatchGetPricesWithConfidence.mockResolvedValue({
+      pricesMap: new Map([
+        ['p-oos', [{ id: 'pr-oos', price: 24.99, inStock: false, retailers: { id: 'r-oos', name: 'Retailer OOS', tier: 'PREMIUM' } }]],
+      ]),
+      confidenceMap: new Map([['p-oos', 0.82]]),
+    })
+    mockApplyPremiumRanking.mockImplementation((products: any[]) => products)
+    mockIsLensEnabled.mockReturnValue(true)
+    mockApplyLensPipeline.mockImplementation(async ({ products }: any) => ({
+      products: products.map((product: any) => ({
+        productId: product.id,
+        _originalProduct: product,
+      })),
+      metadata: {
+        id: 'ALL',
+        autoApplied: false,
+        reasonCode: 'NO_MATCH',
+      },
+      extraction: {
+        status: 'OK',
+      },
+      zeroResults: false,
+    }))
+  })
+
+  it('removes products with no in-stock offers when inStock filter is active', async () => {
+    const result = await aiSearch('9mm', {
+      useVectorSearch: false,
+      explicitFilters: { inStock: true },
+    })
+
+    expect(mockApplyLensPipeline).toHaveBeenCalled()
+    expect(result.products).toHaveLength(0)
+  })
+})
+
 // =============================================
 // formatProduct Tests
 // =============================================

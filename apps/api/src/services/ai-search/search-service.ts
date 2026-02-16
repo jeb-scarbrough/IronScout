@@ -423,7 +423,10 @@ export async function aiSearch(
   // EXCEPTION: When lens is enabled, keep zero-offer products per spec
   // (they'll have price=null, availability=OUT_OF_STOCK and sort last)
   const originalCount = products.length
-  if (!isLensEnabled()) {
+  const hasPriceOrStockConditions = Object.keys(priceConditions).length > 0
+  const keepZeroOfferProductsForLens = isLensEnabled() && !hasPriceOrStockConditions
+
+  if (!keepZeroOfferProductsForLens) {
     products = products.filter((p: any) => p.prices && p.prices.length > 0)
 
     if (products.length !== originalCount) {
@@ -442,6 +445,7 @@ export async function aiSearch(
       requestId,
       totalProducts: originalCount,
       withPrices: products.filter((p: any) => p.prices && p.prices.length > 0).length,
+      reason: 'lens_enabled_without_price_or_stock_conditions',
     })
   }
 
