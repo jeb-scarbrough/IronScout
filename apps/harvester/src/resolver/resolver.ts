@@ -38,7 +38,8 @@ import {
   extractSlugWeight,
 } from '../utils/ammo-utils'
 import { DEFAULT_SCORING_STRATEGY } from './scoring'
-import { normalizeBrandString } from './brand-normalization'
+import { normalizeBrandString } from '@ironscout/brand'
+import { toCanonicalUpc } from '@ironscout/upc'
 import { brandAliasCache, recordAliasApplication } from './brand-alias-cache'
 import { recordMatchPath, recordMissingFields, type MissingFieldLabel } from './metrics'
 
@@ -836,20 +837,13 @@ function normalizeBrand(brand?: string | null): {
 }
 
 /**
- * Normalize UPC code
- * Per Spec v1.2: 12-digit, no check digit issues
+ * Normalize UPC code to canonical 12+ digit form.
+ * Delegates to @ironscout/upc for validation (8/12/13/14 digits only).
+ * Rejects 10-11 digit codes (previously accepted — not valid barcodes).
+ * Now accepts 8-digit UPC-E (previously rejected when range was 10-14).
  */
 function normalizeUpc(upc?: string | null): string | undefined {
-  if (!upc) return undefined
-
-  // Remove non-digits
-  const digits = upc.replace(/\D/g, '')
-
-  // Validate length (12 for UPC-A, 13 for EAN-13, 14 for GTIN-14)
-  if (digits.length < 10 || digits.length > 14) return undefined
-
-  // Pad to 12 digits if shorter
-  return digits.padStart(12, '0')
+  return toCanonicalUpc(upc) ?? undefined
 }
 
 /**

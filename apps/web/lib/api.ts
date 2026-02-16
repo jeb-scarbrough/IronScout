@@ -521,11 +521,8 @@ export interface ExplicitFilters {
   pressureRating?: PressureRating
   isSubsonic?: boolean
   shortBarrelOptimized?: boolean
-  suppressorSafe?: boolean
   lowFlash?: boolean
-  lowRecoil?: boolean
   matchGrade?: boolean
-  controlledExpansion?: boolean
   minVelocity?: number
   maxVelocity?: number
 }

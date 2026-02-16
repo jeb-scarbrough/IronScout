@@ -25,6 +25,8 @@
   "dependencies": {
     "@bull-board/api": "^6.17.0",
     "@bull-board/express": "^6.17.0",
+    "@ironscout/brand": "workspace:*",
+    "@ironscout/upc": "workspace:*",
     "@ironscout/crypto": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",

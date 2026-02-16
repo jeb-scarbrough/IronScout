@@ -78,7 +78,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
@@ -115,12 +115,7 @@ jobs:
       - name: Verify schema matches migrations
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-        run: |
-          # This should find no diff if migrations are correctly generating the schema
-          npx --yes prisma migrate diff \
-            --from-schema-datasource packages/db/schema.prisma \
-            --to-schema-datamodel packages/db/schema.prisma \
-            --exit-code
+        run: pnpm db:check:drift --skip-git-check
 
       - name: Run schema integrity tests
         env:

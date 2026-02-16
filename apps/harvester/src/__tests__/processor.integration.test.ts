@@ -332,6 +332,196 @@ describeIntegration('Processor Integration Tests', () => {
 })
 
 /**
+ * Null-overwrite protection (#224)
+ *
+ * Verifies that the batch UPDATE SQL preserves existing non-null values
+ * when incoming feed data has NULL for optional fields.
+ */
+describeIntegration('source_products null-overwrite protection', () => {
+  let testSourceId: string
+  let testRetailerId: string
+
+  beforeAll(async () => {
+    const retailer = await prisma.retailers.create({
+      data: {
+        id: randomUUID(),
+        name: `NullOverwrite Retailer ${Date.now()}`,
+        website: `https://null-overwrite-${Date.now()}.example.com`,
+        updatedAt: new Date(),
+      },
+    })
+    testRetailerId = retailer.id
+
+    const source = await prisma.sources.create({
+      data: {
+        id: randomUUID(),
+        name: `NullOverwrite Source ${Date.now()}`,
+        url: 'https://null-overwrite.example.com/feed',
+        retailerId: retailer.id,
+        type: 'FEED_CSV',
+        sourceKind: 'AFFILIATE_FEED',
+        updatedAt: new Date(),
+      },
+    })
+    testSourceId = source.id
+  })
+
+  async function createSourceProduct(overrides: Record<string, unknown> = {}) {
+    const id = randomUUID()
+    await prisma.source_products.create({
+      data: {
+        id,
+        sourceId: testSourceId,
+        title: 'Test Product',
+        url: `https://example.com/product/${id}`,
+        updatedAt: new Date(),
+        ...overrides,
+      },
+    })
+    return id
+  }
+
+  async function runBatchUpdate(
+    ids: string[],
+    fields: {
+      titles: string[]
+      urls: string[]
+      imageUrls: (string | null)[]
+      brands: (string | null)[]
+      descriptions: (string | null)[]
+      categories: (string | null)[]
+      calibers: (string | null)[]
+      grainWeights: (number | null)[]
+      roundCounts: (number | null)[]
+      normalizedUrls: string[]
+    }
+  ) {
+    const runId = `test-run-${Date.now()}`
+    // This is the EXACT SQL from processor.ts with COALESCE
+    await prisma.$executeRaw`
+      UPDATE source_products AS sp SET
+        "title" = u.title,
+        "url" = u.url,
+        "imageUrl" = COALESCE(u."imageUrl", sp."imageUrl"),
+        "brand" = COALESCE(u.brand, sp.brand),
+        "description" = COALESCE(u.description, sp.description),
+        "category" = COALESCE(u.category, sp.category),
+        "caliber" = COALESCE(u.caliber, sp.caliber),
+        "grainWeight" = COALESCE(u."grainWeight", sp."grainWeight"),
+        "roundCount" = COALESCE(u."roundCount", sp."roundCount"),
+        "normalizedUrl" = u."normalizedUrl",
+        "lastUpdatedByRunId" = ${runId},
+        "updatedAt" = NOW()
+      FROM (
+        SELECT
+          unnest(${ids}::text[]) AS id,
+          unnest(${fields.titles}::text[]) AS title,
+          unnest(${fields.urls}::text[]) AS url,
+          unnest(${fields.imageUrls}::text[]) AS "imageUrl",
+          unnest(${fields.brands}::text[]) AS brand,
+          unnest(${fields.descriptions}::text[]) AS description,
+          unnest(${fields.categories}::text[]) AS category,
+          unnest(${fields.calibers}::text[]) AS caliber,
+          unnest(${fields.grainWeights}::int[]) AS "grainWeight",
+          unnest(${fields.roundCounts}::int[]) AS "roundCount",
+          unnest(${fields.normalizedUrls}::text[]) AS "normalizedUrl"
+      ) AS u
+      WHERE sp.id = u.id
+    `
+  }
+
+  it('preserves existing brand when incoming brand is NULL', async () => {
+    const spId = await createSourceProduct({
+      brand: 'Federal',
+      category: 'Ammunition',
+    })
+
+    await runBatchUpdate([spId], {
+      titles: ['Test Product'],
+      urls: ['https://example.com/product/1'],
+      imageUrls: [null],
+      brands: [null],
+      descriptions: [null],
+      categories: [null],
+      calibers: [null],
+      grainWeights: [null],
+      roundCounts: [null],
+      normalizedUrls: ['https://example.com/product/1'],
+    })
+
+    const result = await prisma.source_products.findUnique({
+      where: { id: spId },
+      select: { brand: true, category: true },
+    })
+
+    expect(result?.brand).toBe('Federal')
+    expect(result?.category).toBe('Ammunition')
+  })
+
+  it('updates brand when incoming brand is non-null', async () => {
+    const spId = await createSourceProduct({ brand: 'Federal' })
+
+    await runBatchUpdate([spId], {
+      titles: ['Test Product'],
+      urls: ['https://example.com/product/2'],
+      imageUrls: [null],
+      brands: ['Winchester'],
+      descriptions: [null],
+      categories: [null],
+      calibers: [null],
+      grainWeights: [null],
+      roundCounts: [null],
+      normalizedUrls: ['https://example.com/product/2'],
+    })
+
+    const result = await prisma.source_products.findUnique({
+      where: { id: spId },
+      select: { brand: true },
+    })
+
+    expect(result?.brand).toBe('Winchester')
+  })
+
+  it('updates mixed: some fields null, some non-null', async () => {
+    const spId = await createSourceProduct({
+      brand: 'Federal',
+      caliber: '9mm',
+      grainWeight: 115,
+    })
+
+    await runBatchUpdate([spId], {
+      titles: ['Test Product Updated'],
+      urls: ['https://example.com/product/3'],
+      imageUrls: [null],
+      brands: [null],          // should preserve 'Federal'
+      descriptions: [null],
+      categories: [null],
+      calibers: ['45 ACP'],    // should update
+      grainWeights: [null],    // should preserve 115
+      roundCounts: [50],       // should set new value
+      normalizedUrls: ['https://example.com/product/3'],
+    })
+
+    const result = await prisma.source_products.findUnique({
+      where: { id: spId },
+      select: {
+        title: true,
+        brand: true,
+        caliber: true,
+        grainWeight: true,
+        roundCount: true,
+      },
+    })
+
+    expect(result?.title).toBe('Test Product Updated')
+    expect(result?.brand).toBe('Federal')       // preserved
+    expect(result?.caliber).toBe('45 ACP')       // updated
+    expect(result?.grainWeight).toBe(115)         // preserved
+    expect(result?.roundCount).toBe(50)           // new value set
+  })
+})
+
+/**
  * Contract Tests - Verify raw SQL matches Prisma schema
  *
  * These tests extract actual SQL from source files and verify

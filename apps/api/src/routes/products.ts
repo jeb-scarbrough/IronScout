@@ -266,43 +266,37 @@ router.get('/search', async (req: Request, res: Response) => {
       }))
     }))
 
-    // Build facets for filtering (show available options with counts)
-    const facets: any = {}
+    // Build facets via DB groupBy — no full-table scan (#204)
+    const facetFields: Array<[string, string]> = [
+      ['caliber', 'calibers'],
+      ['grainWeight', 'grainWeights'],
+      ['caseMaterial', 'caseMaterials'],
+      ['purpose', 'purposes'],
+      ['brand', 'brands'],
+      ['category', 'categories'],
+    ]
 
-    // Get unique values for each filterable field
-    const allProducts = await prisma.products.findMany({
-      where,
-      select: {
-        caliber: true,
-        grainWeight: true,
-        caseMaterial: true,
-        purpose: true,
-        brand: true,
-        category: true
-      }
-    })
-
-    // Count occurrences of each value
-    const countValues = (field: keyof typeof allProducts[0]) => {
-      const counts = new Map<string, number>()
-      allProducts.forEach((p: any) => {
-        const value = p[field]
-        if (value !== null && value !== undefined) {
-          const key = value.toString()
-          counts.set(key, (counts.get(key) || 0) + 1)
-        }
-      })
-      return Object.fromEntries(
-        Array.from(counts.entries()).sort((a: any, b: any) => b[1] - a[1])
+    const facetResults = await Promise.all(
+      facetFields.map(([field]) =>
+        prisma.products.groupBy({
+          by: [field] as any,
+          where,
+          _count: { [field]: true } as any,
+          orderBy: { _count: { [field]: 'desc' } } as any,
+        })
       )
-    }
+    )
 
-    facets.calibers = countValues('caliber')
-    facets.grainWeights = countValues('grainWeight')
-    facets.caseMaterials = countValues('caseMaterial')
-    facets.purposes = countValues('purpose')
-    facets.brands = countValues('brand')
-    facets.categories = countValues('category')
+    const facets: Record<string, Record<string, number>> = {}
+    for (let i = 0; i < facetFields.length; i++) {
+      const [field, outputKey] = facetFields[i]
+      const counts: Record<string, number> = {}
+      for (const row of facetResults[i] as Array<Record<string, any>>) {
+        if (row[field] == null) continue
+        counts[String(row[field])] = row._count[field]
+      }
+      facets[outputKey] = counts
+    }
 
     // V1: No result limits
     res.json({

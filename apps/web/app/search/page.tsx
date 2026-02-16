@@ -7,6 +7,17 @@ import { SearchLoadingOverlay } from '@/components/search/search-loading-overlay
 export const metadata: Metadata = {
   title: 'Search - IronScout',
   description: 'Search and compare ammunition prices across retailers.',
+  alternates: {
+    canonical: '/search',
+  },
+  robots: {
+    index: false,
+    follow: true,
+    googleBot: {
+      index: false,
+      follow: true,
+    },
+  },
 }
 
 interface SearchPageProps {
@@ -30,9 +41,7 @@ interface SearchPageProps {
     pressureRating?: string
     isSubsonic?: string
     shortBarrelOptimized?: string
-    suppressorSafe?: string
     lowFlash?: string
-    lowRecoil?: string
     matchGrade?: string
     minVelocity?: string
     maxVelocity?: string

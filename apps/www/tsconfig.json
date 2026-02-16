@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@ironscout/db/calibers.js": [
+        "../../packages/db/calibers.ts"
       ]
     }
   },

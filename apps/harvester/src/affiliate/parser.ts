@@ -19,6 +19,7 @@ import {
 } from '../config/trace'
 import { parseAttributes, parseUrlSignals } from './signal-extraction'
 import { normalizeCaliberString, extractGrainWeight, extractRoundCount } from '../utils/ammo-utils'
+import { normalizeUpc as sharedNormalizeUpc } from '@ironscout/upc'
 import type { ParsedFeedProduct, ParseResult, ParseError, ErrorCode } from './types'
 import { ERROR_CODES } from './types'
 
@@ -376,18 +377,12 @@ function normalizeSku(value: string | undefined): string | undefined {
 }
 
 /**
- * Normalize UPC/GTIN/EAN: digits only, validate length
- * Valid lengths: 8 (EAN-8), 12 (UPC-A), 13 (EAN-13), 14 (GTIN-14)
+ * Normalize UPC/GTIN/EAN: digits only, validate length.
+ * Delegates to shared @ironscout/upc package.
+ * Invalid-length codes return undefined (dropped from normalizedValue).
  */
 function normalizeUpc(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  const digitsOnly = value.replace(/\D/g, '')
-  // Valid UPC/EAN/GTIN lengths
-  if ([8, 12, 13, 14].includes(digitsOnly.length)) {
-    return digitsOnly
-  }
-  // If invalid length but has digits, still return (may be MPN or partial)
-  return digitsOnly || undefined
+  return sharedNormalizeUpc(value) ?? undefined
 }
 
 /**

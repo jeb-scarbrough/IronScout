@@ -16,22 +16,40 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+function detectIOS(): boolean {
+  const ua = navigator.userAgent || ''
+  const platform = navigator.platform || ''
+  const touchPoints = navigator.maxTouchPoints || 0
+
+  // Covers iPhone/iPad/iPod plus iPadOS desktop-mode user agents.
+  return /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && touchPoints > 1)
+}
+
+function detectMobile(): boolean {
+  const ua = navigator.userAgent || ''
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || navigator.maxTouchPoints > 0
+}
+
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
 
   useEffect(() => {
-    // Check if already installed (standalone mode)
-    const standalone = window.matchMedia('(display-mode: standalone)').matches
+    // Check if already installed (standalone mode). iOS may only expose navigator.standalone.
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
     setIsStandalone(standalone)
     
     if (standalone) return // Don't show prompt if already installed
 
-    // Check if iOS
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const ios = detectIOS()
+    const mobile = detectMobile()
     setIsIOS(ios)
+    setIsMobile(mobile)
 
     // Check if dismissed this session
     if (sessionStorage.getItem(PWA_SESSION_DISMISS_KEY)) return
@@ -49,6 +67,8 @@ export function PWAInstallPrompt() {
       if (daysSinceDismissed < PWA_DISMISS_COOLDOWN_DAYS) return
     }
 
+    const supportsBeforeInstallPrompt = 'onbeforeinstallprompt' in window
+
     // Listen for the beforeinstallprompt event (Chrome, Edge, etc.)
     const handler = (e: Event) => {
       e.preventDefault()
@@ -59,32 +79,45 @@ export function PWAInstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handler)
 
-    // For iOS, show manual instructions after delay
-    if (ios && !standalone) {
-      setTimeout(() => setShowPrompt(true), 5000)
+    // Fallback for mobile browsers that don't support beforeinstallprompt.
+    // This includes iOS Safari and many iOS in-app browsers.
+    let manualFallbackTimer: ReturnType<typeof setTimeout> | null = null
+    if (mobile && !supportsBeforeInstallPrompt) {
+      manualFallbackTimer = setTimeout(() => setShowPrompt(true), 5000)
     }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handler)
+      if (manualFallbackTimer) clearTimeout(manualFallbackTimer)
     }
   }, [])
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return
-
-    // Show the install prompt
-    await deferredPrompt.prompt()
-    
-    // Wait for the user's choice
-    const { outcome } = await deferredPrompt.userChoice
-
-    if (outcome === 'accepted') {
-      safeLogger.components.info('User accepted the install prompt')
+    if (!deferredPrompt) {
+      safeLogger.components.info('Install prompt unavailable; showing manual instructions')
+      setShowPrompt(true)
+      return
     }
-    
-    // Clear the prompt
-    setDeferredPrompt(null)
-    setShowPrompt(false)
+
+    try {
+      // Show the install prompt
+      await deferredPrompt.prompt()
+      
+      // Wait for the user's choice
+      const { outcome } = await deferredPrompt.userChoice
+
+      if (outcome === 'accepted') {
+        safeLogger.components.info('User accepted the install prompt')
+      }
+      
+      // Clear the prompt
+      setDeferredPrompt(null)
+      setShowPrompt(false)
+    } catch (error) {
+      safeLogger.components.error('Install prompt failed; falling back to manual instructions', {}, error)
+      setDeferredPrompt(null)
+      setShowPrompt(true)
+    }
   }
 
   const handleDismiss = (permanent = false) => {
@@ -101,8 +134,8 @@ export function PWAInstallPrompt() {
   // Don't render if already installed or shouldn't show
   if (isStandalone || !showPrompt) return null
 
-  // iOS-specific instructions
-  if (isIOS) {
+  // Manual instructions for mobile browsers without beforeinstallprompt support.
+  if (!deferredPrompt && isMobile) {
     return (
       <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-card border-t border-border shadow-lg safe-area-bottom animate-in slide-in-from-bottom duration-300">
         <div className="flex items-start gap-3 max-w-lg mx-auto">
@@ -112,13 +145,21 @@ export function PWAInstallPrompt() {
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-sm">Install {BRAND_NAME}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Tap the share button <span className="inline-block px-1">
-                <svg className="inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/>
-                  <polyline points="16 6 12 2 8 6"/>
-                  <line x1="12" y1="2" x2="12" y2="15"/>
-                </svg>
-              </span> then &quot;Add to Home Screen&quot;
+              {isIOS ? (
+                <>
+                  Tap the share button <span className="inline-block px-1">
+                    <svg className="inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/>
+                      <polyline points="16 6 12 2 8 6"/>
+                      <line x1="12" y1="2" x2="12" y2="15"/>
+                    </svg>
+                  </span> then &quot;Add to Home Screen&quot;
+                </>
+              ) : (
+                <>
+                  Open your browser menu and choose &quot;Add to Home Screen&quot;.
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-1">

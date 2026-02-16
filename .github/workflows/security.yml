@@ -36,8 +36,8 @@ jobs:
           node-version: '25'
           cache: 'pnpm'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies (no lifecycle scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Audit for high/critical vulnerabilities
         run: pnpm audit --audit-level=high

@@ -17,6 +17,7 @@ import {
   type FieldError,
   type FieldCoercion,
 } from './types'
+import { normalizeUpc } from '@ironscout/upc'
 
 // ============================================================================
 // CONTENT DETECTION
@@ -81,6 +82,8 @@ export function parseXML(content: string): Record<string, unknown>[] {
     ignoreAttributes: false,
     attributeNamePrefix: '',
     textNodeName: '_text',
+    parseTagValue: false,
+    parseAttributeValue: false,
   })
 
   const result = parser.parse(content)
@@ -216,21 +219,15 @@ export function extractBoolean(
 
 /**
  * Validate and normalize UPC
- * Returns null if invalid, normalized UPC string if valid
+ * Returns null if invalid, normalized UPC string if valid.
+ * Strips connector-specific prefixes (UPC:, GTIN:) before shared validation.
+ * Rejects 9/10/11-digit codes (previously accepted in range 8-14).
  */
 export function validateUPC(upc: string | undefined): string | null {
   if (!upc) return null
-
-  // Remove common prefixes and clean
-  let cleaned = upc.replace(/^(UPC:|GTIN:)/i, '').trim()
-  cleaned = cleaned.replace(/[^0-9]/g, '')
-
-  // Valid UPC lengths: 8 (UPC-E), 12 (UPC-A), 13 (EAN-13), 14 (GTIN-14)
-  if (cleaned.length >= 8 && cleaned.length <= 14) {
-    return cleaned
-  }
-
-  return null
+  // Strip common prefixes before shared normalization
+  const cleaned = upc.replace(/^(UPC:|GTIN:)/i, '').trim()
+  return normalizeUpc(cleaned)
 }
 
 // ============================================================================

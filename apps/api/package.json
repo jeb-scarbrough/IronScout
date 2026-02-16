@@ -11,11 +11,14 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:run:pr": "vitest run src/services/ai-search/__tests__/functional/search-functional-matrix.test.ts src/services/ai-search/__tests__/functional/search-relevance-ranking.test.ts src/services/ai-search/__tests__/search-service.test.ts src/services/ai-search/__tests__/queryraw-safety.test.ts src/services/ai-search/__tests__/consumer-output-safety.test.ts",
+    "test:run:nightly": "node ./scripts/run-nightly-tests.mjs",
     "test:integration": "vitest run src/__tests__/integration/**/*.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
     "@ironscout/crypto": "workspace:*",
+    "@ironscout/upc": "workspace:*",
     "@ironscout/db": "workspace:*",
     "@ironscout/logger": "workspace:*",
     "@ironscout/notifications": "workspace:*",

@@ -118,8 +118,16 @@ export function UnifiedSearch({ initialQuery = '' }: UnifiedSearchProps) {
   }).length
 
   // Count performance filters
-  const performanceFilterKeys = ['bulletType', 'pressureRating', 'isSubsonic', 'shortBarrelOptimized',
-                             'suppressorSafe', 'lowFlash', 'lowRecoil', 'matchGrade']
+  const performanceFilterKeys = [
+    'bulletType',
+    'pressureRating',
+    'isSubsonic',
+    'shortBarrelOptimized',
+    'lowFlash',
+    'matchGrade',
+    'minVelocity',
+    'maxVelocity',
+  ]
   const performanceFiltersActive = performanceFilterKeys.filter(k => searchParams.get(k)).length
 
   // Auto-open filters if any are active

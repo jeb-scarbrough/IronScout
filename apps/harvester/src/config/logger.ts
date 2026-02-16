@@ -25,6 +25,7 @@ export const logger = {
   quarantine: rootLogger.child('quarantine'),
   currentprice: rootLogger.child('currentprice'),
   scraper: rootLogger.child('scraper'),
+  calibersnapshot: rootLogger.child('calibersnapshot'),
 }
 
 // Alias for backwards compatibility

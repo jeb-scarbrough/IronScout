@@ -534,7 +534,9 @@ infrastructure/grafana/provisioning/alerting/
 
 | Var | Purpose |
 |-----|---------|
-| `SLACK_DATAFEED_ALERTS_WEBHOOK_URL` | Same Slack webhook used by the app. Set as environment variable on the Grafana server for alert contact point interpolation. |
+| `SLACK_DATAFEED_ALERTS_WEBHOOK_URL` | **Required.** Same Slack webhook used by the app. Set as environment variable on the Grafana server for alert contact point interpolation. |
+| `LOKI_DATASOURCE_UID` | **Required.** Loki datasource UID string used by provisioned alert rules. Must match the UID of the Loki datasource in Grafana. If not set, alert rules will fail to load. |
+| `GRAFANA_URL` | **Required.** Externally reachable Grafana URL (e.g., `http://10.10.9.28:3001`). Used in alert annotation `dashboard_url` links. If not set, Slack links will be broken. |
 
 ---
 

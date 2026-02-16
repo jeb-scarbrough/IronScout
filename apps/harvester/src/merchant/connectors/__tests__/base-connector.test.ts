@@ -207,8 +207,14 @@ describe('parseXML', () => {
     const xml = '<?xml version="1.0"?><products><product><upc>123</upc></product></products>'
     const result = parseXML(xml)
     expect(result).toHaveLength(1)
-    // XML parser returns numeric-looking values as numbers
-    expect(result[0].upc).toBe(123)
+    expect(result[0].upc).toBe('123')
+  })
+
+  it('preserves leading zeros in numeric-looking values', () => {
+    const xml = '<?xml version="1.0"?><products><product><upc>012345678901</upc></product></products>'
+    const result = parseXML(xml)
+    expect(result).toHaveLength(1)
+    expect(result[0].upc).toBe('012345678901')
   })
 
   it('parses catalog/product structure', () => {
@@ -569,6 +575,18 @@ describe('validateUPC', () => {
 
     it('rejects 7-digit UPC', () => {
       expect(validateUPC('1234567')).toBeNull()
+    })
+
+    it('rejects 9-digit code', () => {
+      expect(validateUPC('123456789')).toBeNull()
+    })
+
+    it('rejects 10-digit code', () => {
+      expect(validateUPC('1234567890')).toBeNull()
+    })
+
+    it('rejects 11-digit code', () => {
+      expect(validateUPC('12345678901')).toBeNull()
     })
 
     it('rejects 15-digit UPC', () => {
