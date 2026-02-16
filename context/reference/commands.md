@@ -56,10 +56,10 @@ pnpm dev
 
 ---
 
-### Merchant Portal (legacy path: apps/dealer)
+### Merchant Portal
 
 ```bash
-cd apps/dealer
+cd apps/merchant
 pnpm dev
 ```
 
