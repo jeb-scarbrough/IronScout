@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGroupBy } = vi.hoisted(() => ({ mockGroupBy: vi.fn() }))
+const { mockGroupBy, mockFindMany, mockCount } = vi.hoisted(() => ({
+  mockGroupBy: vi.fn(),
+  mockFindMany: vi.fn().mockResolvedValue([]),
+  mockCount: vi.fn().mockResolvedValue(0),
+}))
 
 vi.mock('@ironscout/db', () => ({
   prisma: {
     products: {
       groupBy: mockGroupBy,
-      findMany: vi.fn().mockResolvedValue([]),
-      count: vi.fn().mockResolvedValue(0),
+      findMany: mockFindMany,
+      count: mockCount,
     },
     prices: { findMany: vi.fn().mockResolvedValue([]) },
   },
@@ -134,5 +138,26 @@ describe('GET /api/products/search facets', () => {
       'brand',
       'category',
     ])
+  })
+
+  it('does not run an extra findMany full-scan for facets', async () => {
+    mockGroupBy.mockResolvedValue([])
+
+    const app = buildApp()
+    await request(app).get('/api/products/search?q=test')
+
+    // One products.findMany call is expected for paginated product fetch.
+    expect(mockFindMany).toHaveBeenCalledTimes(1)
+
+    // Ensure there was no legacy facet full-scan shape with field selects.
+    const hadLegacyFacetScan = mockFindMany.mock.calls.some(([args]: any[]) =>
+      args?.select?.caliber === true &&
+      args?.select?.grainWeight === true &&
+      args?.select?.caseMaterial === true &&
+      args?.select?.purpose === true &&
+      args?.select?.brand === true &&
+      args?.select?.category === true
+    )
+    expect(hadLegacyFacetScan).toBe(false)
   })
 })

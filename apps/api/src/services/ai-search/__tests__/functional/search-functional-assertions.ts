@@ -114,11 +114,10 @@ export function matchesExplicitFilterContract(
   if (filters.isSubsonic !== undefined && product.isSubsonic !== filters.isSubsonic) return false
 
   if (filters.shortBarrelOptimized && !product.shortBarrelOptimized) return false
-  if (filters.suppressorSafe && !product.suppressorSafe) return false
+  // suppressorSafe, lowRecoil, controlledExpansion are soft-removed from
+  // buildWhereClause due to limited data coverage — do not assert them here.
   if (filters.lowFlash && !product.lowFlash) return false
-  if (filters.lowRecoil && !product.lowRecoil) return false
   if (filters.matchGrade && !product.matchGrade) return false
-  if (filters.controlledExpansion && !product.controlledExpansion) return false
 
   if (filters.minVelocity != null && product.muzzleVelocityFps < filters.minVelocity) return false
   if (filters.maxVelocity != null && product.muzzleVelocityFps > filters.maxVelocity) return false
