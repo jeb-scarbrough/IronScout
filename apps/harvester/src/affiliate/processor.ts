@@ -1023,7 +1023,7 @@ function extractAllIdentifiers(product: ParsedFeedProduct): ExtractedIdentifier[
 function computePriceSignature(product: ParsedFeedProduct): string {
   const signatureData = JSON.stringify({
     price: product.price,
-    currency: product.currency || 'USD',
+    currency: product.currency ?? null,
     originalPrice: product.originalPrice,
   })
   return createHash('sha256').update(signatureData).digest('hex')
@@ -1825,9 +1825,22 @@ function decidePriceWrites(
     const priceSignatureHash = computePriceSignature(product)
     const lastPrice = lastPriceCache.get(sourceProductId)
 
-    // Normalize currency for PRICE WRITES (default to USD for data integrity)
-    // Per ADR-009: Alert detection handles missing currency separately (fail-closed)
-    const normalizedCurrency = product.currency || 'USD'
+    // Currency must be explicit by this stage. Do not fail-open to USD.
+    const normalizedCurrency = product.currency?.trim() || null
+    if (!normalizedCurrency) {
+      alertSkips.currencyMismatch++
+      if (decisionLog && (!itemSampler || itemSampler(itemKey))) {
+        decisionLog.debug('WRITE_DECISION', {
+          runId,
+          retailerId,
+          sourceProductId,
+          itemKey,
+          decision: 'SKIP',
+          reasonCode: 'CURRENCY_MISSING',
+        })
+      }
+      continue
+    }
     const normalizedNewInStock = product.inStock === true
 
     // Determine if we should write
@@ -1896,13 +1909,13 @@ function decidePriceWrites(
     // ═══════════════════════════════════════════════════════════════════════════
     // ALERT CHANGE DETECTION
     // Per affiliate-feed-alerts-v1 spec §6 - using exported helper for testability
-    // Per ADR-009: Pass raw currency (possibly null) to fail-closed on unknown
+    // Missing currency rows are already skipped above (fail-closed).
     // ═══════════════════════════════════════════════════════════════════════════
 
     const alertResult = detectAlertChanges(
       product.price,
       product.inStock,
-      product.currency ?? null, // Pass raw value for fail-closed behavior
+      normalizedCurrency,
       productId,
       sourceProductId,
       lastPrice ?? null

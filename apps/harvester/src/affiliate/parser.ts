@@ -31,6 +31,16 @@ const log = createWorkflowLogger(logger.affiliate, {
   sourceId: 'unknown',
 })
 
+class RowParseError extends Error {
+  readonly code: ErrorCode
+
+  constructor(code: ErrorCode, message: string) {
+    super(message)
+    this.name = 'RowParseError'
+    this.code = code
+  }
+}
+
 /**
  * Parse feed content (CSV only for v1)
  */
@@ -62,6 +72,8 @@ export async function parseFeed(
     missingUrl: 0,
     invalidUrl: 0,
     invalidPrice: 0,
+    invalidCurrency: 0,
+    invalidStockStatus: 0,
     parseErrors: 0,
   }
 
@@ -215,9 +227,17 @@ export async function parseFeed(
         products.push(product)
         rowsParsed++
       } catch (err) {
-        validationStats.parseErrors++
+        const errorCode = err instanceof RowParseError ? err.code : ERROR_CODES.PARSE_FAILED
+        if (errorCode === ERROR_CODES.INVALID_CURRENCY) {
+          validationStats.invalidCurrency++
+        } else if (errorCode === ERROR_CODES.INVALID_STOCK_STATUS) {
+          validationStats.invalidStockStatus++
+        } else {
+          validationStats.parseErrors++
+        }
+
         errors.push({
-          code: ERROR_CODES.PARSE_FAILED,
+          code: errorCode,
           message: err instanceof Error ? err.message : 'Parse error',
           rowNumber,
           sample: Object.fromEntries(Object.entries(record).slice(0, 5)),
@@ -239,6 +259,7 @@ export async function parseFeed(
             itemKey,
             decision: 'REJECT',
             reasonCode: TRACE_REASON_CODES.ROW_REJECTED,
+            errorCode,
             errorMessage: err instanceof Error ? err.message : 'Parse error',
             recordKeys: Object.keys(record).slice(0, 10),
             safeExcerpt,
@@ -263,6 +284,8 @@ export async function parseFeed(
         missingUrl: validationStats.missingUrl,
         invalidUrl: validationStats.invalidUrl,
         invalidPrice: validationStats.invalidPrice,
+        invalidCurrency: validationStats.invalidCurrency,
+        invalidStockStatus: validationStats.invalidStockStatus,
         parseErrors: validationStats.parseErrors,
       },
     })
@@ -388,12 +411,15 @@ function normalizeUpc(value: string | undefined): string | undefined {
 /**
  * Normalize currency code: uppercase, validate ISO 4217
  */
-function normalizeCurrency(value: string | undefined): string {
-  if (!value) return 'USD'
+const VALID_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'MXN',
+])
+
+function normalizeCurrency(value: string | undefined): string | null {
+  if (value === undefined) return 'USD'
   const upper = value.trim().toUpperCase()
-  // Common currency codes
-  const validCurrencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'MXN']
-  return validCurrencies.includes(upper) ? upper : 'USD'
+  if (!upper) return 'USD'
+  return VALID_CURRENCIES.has(upper) ? upper : null
 }
 
 /**
@@ -499,6 +525,9 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
   // Parse stock status
   const stockText = getValue('StockAvailability', 'Stock Availability', 'Availability', 'InStock', 'In Stock', 'inStock')
   const inStock = parseStockStatus(stockText)
+  if (inStock === null) {
+    throw new RowParseError(ERROR_CODES.INVALID_STOCK_STATUS, `Unrecognized stock status: ${String(stockText)}`)
+  }
 
   // Extract and normalize identity fields
   const impactItemId = normalizeString(getValue('CatalogItemId', 'ItemId', 'item_id', 'catalogItemId'))
@@ -534,6 +563,12 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
   const originalPriceStr = explicitOriginalPriceStr || (salePriceStr ? listPriceStr : undefined)
   const originalPrice = normalizePrice(originalPriceStr)
 
+  const currencyText = getValue('Currency', 'CurrencyCode', 'currency')
+  const currency = normalizeCurrency(currencyText)
+  if (!currency) {
+    throw new RowParseError(ERROR_CODES.INVALID_CURRENCY, `Unrecognized currency code: ${String(currencyText)}`)
+  }
+
   return {
     name,
     url,
@@ -547,7 +582,7 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
     brand: normalizeBrand(getValue('Manufacturer', 'Brand', 'brand', 'manufacturer')),
     category: normalizeString(getValue('Category', 'ProductCategory', 'category', 'Product Type')),
     originalPrice: originalPrice > 0 ? originalPrice : undefined,
-    currency: normalizeCurrency(getValue('Currency', 'CurrencyCode', 'currency')),
+    currency,
     caliber: caliber ?? undefined,
     grainWeight: grainWeight ?? undefined,
     roundCount: roundCount ?? undefined,
@@ -559,13 +594,14 @@ function mapRecord(record: Record<string, string>, rowNumber: number): ParsedFee
  * Parse stock availability status
  * Handles various formats: Y/N, Yes/No, true/false, In Stock/Out of Stock, 1/0
  */
-function parseStockStatus(value: unknown): boolean {
+function parseStockStatus(value: unknown): boolean | null {
   if (value === undefined || value === null) return true
   if (typeof value === 'boolean') return value
   if (typeof value === 'number') return value > 0
 
   if (typeof value === 'string') {
     const normalized = value.toLowerCase().trim()
+    if (!normalized) return true
 
     // In stock indicators (explicit)
     if (
@@ -606,8 +642,8 @@ function parseStockStatus(value: unknown): boolean {
     }
   }
 
-  // Default to true if unrecognized (assume in stock)
-  return true
+  // Explicit but unrecognized state: fail closed by rejecting the row.
+  return null
 }
 
 /**

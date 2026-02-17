@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { parseFeed, computeUrlHash, normalizeUrl } from '../parser'
+import { ERROR_CODES } from '../types'
 
 describe('parseFeed', () => {
   describe('CSV parsing', () => {
@@ -41,6 +42,7 @@ Basic Product,https://example.com/basic,9.99,Yes`
       expect(result.products[0].sku).toBeUndefined()
       expect(result.products[0].upc).toBeUndefined()
       expect(result.products[0].imageUrl).toBeUndefined()
+      expect(result.products[0].currency).toBe('USD')
     })
 
     it('should reject rows with missing required fields', async () => {
@@ -109,6 +111,39 @@ Out Stock 3,https://example.com/5,10,0`
       expect(result.products[2].inStock).toBe(false)
       expect(result.products[3].inStock).toBe(false)
       expect(result.products[4].inStock).toBe(false)
+    })
+
+    it('should default missing stock status to in stock', async () => {
+      const csv = `Name,URL,Price,Availability
+Missing Stock,https://example.com/1,10,`
+
+      const result = await parseFeed(csv, 'CSV', 1000)
+
+      expect(result.rowsParsed).toBe(1)
+      expect(result.products[0].inStock).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('should reject rows with unrecognized stock status', async () => {
+      const csv = `Name,URL,Price,Availability
+Unknown Stock,https://example.com/1,10,pending`
+
+      const result = await parseFeed(csv, 'CSV', 1000)
+
+      expect(result.rowsParsed).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].code).toBe(ERROR_CODES.INVALID_STOCK_STATUS)
+    })
+
+    it('should reject rows with unrecognized currency code', async () => {
+      const csv = `Name,URL,Price,Currency,Availability
+Bad Currency,https://example.com/1,10,XYZ,Yes`
+
+      const result = await parseFeed(csv, 'CSV', 1000)
+
+      expect(result.rowsParsed).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].code).toBe(ERROR_CODES.INVALID_CURRENCY)
     })
 
     it('should parse Attributes payload for structured fields', async () => {

@@ -1718,7 +1718,7 @@ UPCs are fixed-length codes where leading zeros are significant.
 | `imageUrl` | `ImageUrl`, `ImageURL`, `Image URL`, `Image`, `PrimaryImage` |
 | `description` | `Description`, `ProductDescription`, `Product Description` |
 | `category` | `Category`, `ProductCategory`, `category`, `Product Type` |
-| `currency` | `Currency`, `CurrencyCode`, `currency` (default: USD) |
+| `currency` | `Currency`, `CurrencyCode`, `currency` (missing/blank -> default `USD`; unrecognized explicit code -> reject row) |
 | `inStock` | `StockAvailability`, `Stock Availability`, `Availability`, `InStock` |
 
 #### Stock Status Mapping
@@ -1729,7 +1729,8 @@ UPCs are fixed-length codes where leading zeros are significant.
 | `low stock`, `lowstock`, `low_stock`, `limited` | `true` | In stock (limited quantity) |
 | `n`, `no`, `false`, `0`, `out of stock`, `outofstock`, `unavailable` | `false` | Out of stock |
 | `backordered`, `preorder`, `pre-order`, `sold out`, `discontinued` | `false` | Unavailable variants |
-| (unrecognized) | `true` | Default to in stock if ambiguous |
+| (missing/blank) | `true` | Default to in stock when field is absent |
+| (unrecognized explicit value) | (reject row) | Fail closed on ambiguity (ADR-009) |
 
 ### 7.1.2 Row Validation and Quarantine (Affiliate)
 
