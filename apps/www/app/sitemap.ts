@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { BRAND } from '@/lib/brand'
 import { getContentSlugs, getNestedContentSlugs } from '@/lib/content'
+import { CALIBER_SLUG_MAP } from '@ironscout/db/calibers.js'
 
 export const dynamic = 'force-static'
 
@@ -37,6 +38,7 @@ function withDefaults(
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const caliberSlugs = getContentSlugs('calibers').sort()
+  const snapshotArtifactSlugs = Object.keys(CALIBER_SLUG_MAP).sort()
   const brandSlugs = getContentSlugs('brands').sort()
   const retailerSlugs = getContentSlugs('retailers').sort()
   const ammoSlugs = getContentSlugs('ammo').sort()
@@ -76,7 +78,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     // Public snapshot artifacts (Option A for crawler-visible market snapshot data)
     withDefaults('/market-snapshots/30d/index.json', 'daily', 0.7),
-    ...caliberSlugs.map((slug) =>
+    ...snapshotArtifactSlugs.map((slug) =>
       withDefaults(`/market-snapshots/30d/${slug}.json`, 'daily', 0.6)
     ),
   ]

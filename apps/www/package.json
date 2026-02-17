@@ -8,9 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "verify:snapshot:sitemap": "node ./scripts/verify-market-snapshot-sitemap-alignment.mjs",
     "verify:snapshot:embed": "node ./scripts/verify-market-snapshot-embed-parity.mjs",
     "verify:snapshot:jsonld": "node ./scripts/verify-market-snapshot-jsonld-parity.mjs",
-    "verify:snapshot:parity": "pnpm build && pnpm verify:snapshot:embed && pnpm verify:snapshot:jsonld",
+    "verify:snapshot:parity": "pnpm build && pnpm verify:snapshot:sitemap && pnpm verify:snapshot:embed && pnpm verify:snapshot:jsonld",
     "verify:snapshot:canary": "node ./scripts/verify-market-snapshot-production-canary.mjs"
   },
   "dependencies": {
