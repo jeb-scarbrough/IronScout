@@ -24,8 +24,8 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full bg-iron-950/80 backdrop-blur-md">
       {/* Early Access Banner */}
       <div className="border-b border-primary/30 bg-primary/10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 text-center text-base font-medium text-iron-100">
-          <span className="font-bold text-primary text-lg">Early Access</span>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 text-center text-lg font-medium text-iron-100">
+          <span className="font-bold text-primary text-xl">Early Access</span>
           <span className="mx-2 text-iron-500">&mdash;</span>
           We&apos;re in launch testing. Retailer coverage is expanding&nbsp;&mdash; check back as selection grows.
         </div>
