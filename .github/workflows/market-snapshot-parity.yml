@@ -48,6 +48,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Guard against remote Google Fonts usage
+        run: |
+          if rg "next/font/google" -n; then
+            echo "Remote Google font import detected. Use next/font/local with vendored assets."
+            exit 1
+          fi
+          if rg "fonts\.googleapis\.com|fonts\.gstatic\.com" -n; then
+            echo "Remote Google Fonts URL detected. Use local vendored font assets."
+            exit 1
+          fi
+
       - name: Verify static snapshot parity gates (A/B)
         run: pnpm --filter @ironscout/www verify:snapshot:parity
 
@@ -114,6 +125,17 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Guard against remote Google Fonts usage
+        run: |
+          if rg "next/font/google" -n; then
+            echo "Remote Google font import detected. Use next/font/local with vendored assets."
+            exit 1
+          fi
+          if rg "fonts\.googleapis\.com|fonts\.gstatic\.com" -n; then
+            echo "Remote Google Fonts URL detected. Use local vendored font assets."
+            exit 1
+          fi
 
       - name: Run production canary
         env:

@@ -1,19 +1,52 @@
 import type { Metadata } from 'next';
-import { Outfit, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { OrganizationJsonLd, WebSiteJsonLd } from '@/components/JsonLd';
 import './globals.css';
 
-// Use same fonts as web app for consistency across all IronScout properties
-const outfit = Outfit({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '900'],
+const outfit = localFont({
+  src: [
+    {
+      path: '../public/fonts/Outfit-Latin.woff2',
+      weight: '400 900',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Outfit-LatinExt.woff2',
+      weight: '400 900',
+      style: 'normal',
+    },
+  ],
   variable: '--font-display',
+  display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+const jetbrainsMono = localFont({
+  src: [
+    {
+      path: '../public/fonts/JetBrainsMono-Latin.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/JetBrainsMono-Latin.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/JetBrainsMono-LatinExt.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/JetBrainsMono-LatinExt.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+  ],
   variable: '--font-mono',
+  display: 'swap',
+  fallback: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
 });
 
 export const metadata: Metadata = {
