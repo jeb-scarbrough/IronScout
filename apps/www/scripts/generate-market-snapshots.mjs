@@ -1,5 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import crypto from 'node:crypto'
 import { CALIBER_SLUG_MAP } from '../../../packages/db/calibers.js'
 
@@ -8,6 +8,7 @@ const SNAPSHOT_ENDPOINT = `${API_BASE_URL}/api/market-snapshots/calibers`
 const OUTPUT_DIR = join(process.cwd(), 'public', 'market-snapshots', '30d')
 const GENERATED_AT = new Date().toISOString()
 const WINDOW_DAYS = 30
+const COVERAGE_POLICY = 'site_routed_only'
 const ARTIFACT_SCHEMA_VERSION = 'market-snapshot/v1'
 const INDEX_SCHEMA_VERSION = 'market-snapshot-index/v1'
 const STAT_BASIS = 'dailyBestObserved'
@@ -19,6 +20,21 @@ const METHODOLOGY_NOTES = [
   'Only in-stock observations included.',
   'Coverage varies by retailer and source.',
 ]
+const INDEX_METHODOLOGY_NOTES = [
+  ...METHODOLOGY_NOTES,
+  'Artifacts are published only for calibers with site routes (CALIBER_SLUG_MAP).',
+]
+const SKIP_REASONS = Object.freeze({
+  NOT_IN_CALIBER_SLUG_MAP: 'NOT_IN_CALIBER_SLUG_MAP',
+  DATA_STATUS_NOT_OK: 'DATA_STATUS_NOT_OK',
+  INVALID_SCHEMA: 'INVALID_SCHEMA',
+})
+const DEFAULT_SKIP_DETAIL_CAP = 25
+const VALID_DATA_STATUSES = new Set(['SUFFICIENT', 'INSUFFICIENT_DATA', 'UNAVAILABLE'])
+const FIXTURE_FILE = typeof process.env.MARKET_SNAPSHOT_FIXTURE_FILE === 'string'
+  && process.env.MARKET_SNAPSHOT_FIXTURE_FILE.trim().length > 0
+  ? resolve(process.cwd(), process.env.MARKET_SNAPSHOT_FIXTURE_FILE.trim())
+  : null
 
 const ARTIFACT_SCHEMA = {
   type: 'object',
@@ -87,13 +103,42 @@ const ARTIFACT_SCHEMA = {
 
 const INDEX_SCHEMA = {
   type: 'object',
-  required: ['schemaVersion', 'windowDays', 'generatedAt', 'sourceApiEndpoint', 'artifacts'],
+  required: [
+    'schemaVersion',
+    'windowDays',
+    'generatedAt',
+    'sourceApiEndpoint',
+    'coverage',
+    'methodology',
+    'artifacts',
+  ],
   additionalProperties: false,
   properties: {
     schemaVersion: { type: 'string', enum: [INDEX_SCHEMA_VERSION] },
     windowDays: { type: 'number' },
     generatedAt: { type: 'string' },
     sourceApiEndpoint: { type: 'string' },
+    coverage: {
+      type: 'object',
+      required: ['routedCaliberCount', 'apiCaliberCount', 'policy'],
+      additionalProperties: false,
+      properties: {
+        routedCaliberCount: { type: 'number' },
+        apiCaliberCount: { type: 'number' },
+        policy: { type: 'string', enum: [COVERAGE_POLICY] },
+      },
+    },
+    methodology: {
+      type: 'object',
+      required: ['notes'],
+      additionalProperties: false,
+      properties: {
+        notes: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
     artifacts: {
       type: 'array',
       items: {
@@ -129,6 +174,48 @@ function toIsoString(value) {
   if (typeof value !== 'string' || value.length === 0) return null
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+function parseBooleanEnv(value) {
+  if (typeof value !== 'string') return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
+}
+
+function parseOptionalIntEnv(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) return null
+  const parsed = Number.parseInt(value.trim(), 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function getGitShaFromEnv() {
+  const candidates = [
+    process.env.GIT_SHA,
+    process.env.VERCEL_GIT_COMMIT_SHA,
+    process.env.RENDER_GIT_COMMIT,
+    process.env.GITHUB_SHA,
+    process.env.COMMIT_SHA,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim()
+    }
+  }
+  return null
+}
+
+function collectComputationVersions(rows) {
+  const versions = new Set()
+  for (const row of rows) {
+    if (row === null || typeof row !== 'object') continue
+    if (typeof row.computationVersion === 'string' && row.computationVersion.trim().length > 0) {
+      versions.add(row.computationVersion.trim())
+    }
+  }
+  const list = [...versions].sort((a, b) => a.localeCompare(b))
+  if (list.length === 0) return null
+  if (list.length === 1) return list[0]
+  return list
 }
 
 function subtractDays(isoTimestamp, windowDays) {
@@ -323,7 +410,222 @@ function createArtifact(slug, row) {
   }
 }
 
+function createEmptySkipReasonCounts() {
+  return {
+    [SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]: 0,
+    [SKIP_REASONS.DATA_STATUS_NOT_OK]: 0,
+    [SKIP_REASONS.INVALID_SCHEMA]: 0,
+  }
+}
+
+function createEmptySkipDetails() {
+  return {
+    [SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]: [],
+    [SKIP_REASONS.DATA_STATUS_NOT_OK]: [],
+    [SKIP_REASONS.INVALID_SCHEMA]: [],
+  }
+}
+
+function collectRawSkipDetails(rows, routedCalibers) {
+  const details = createEmptySkipDetails()
+
+  rows.forEach((row, index) => {
+    if (row === null || typeof row !== 'object') {
+      details[SKIP_REASONS.INVALID_SCHEMA].push(`row[${index}]`)
+      return
+    }
+
+    const caliber = typeof row.caliber === 'string' && row.caliber.length > 0 ? row.caliber : null
+    if (caliber === null) {
+      details[SKIP_REASONS.INVALID_SCHEMA].push(`row[${index}]`)
+      return
+    }
+
+    if (!routedCalibers.has(caliber)) {
+      details[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP].push(caliber)
+    }
+
+    if (row.dataStatus !== undefined && !VALID_DATA_STATUSES.has(row.dataStatus)) {
+      details[SKIP_REASONS.DATA_STATUS_NOT_OK].push(`${caliber}: ${String(row.dataStatus)}`)
+    }
+  })
+
+  return details
+}
+
+function sliceDetails(entries, count) {
+  if (!Array.isArray(entries) || count <= 0) return []
+  return entries.slice(0, count)
+}
+
+function buildRunSummary(rows, artifactFilesWritten) {
+  const routedCaliberCount = Object.keys(CALIBER_SLUG_MAP).length
+  const apiSnapshotsFetched = rows.length
+  const routedCalibers = new Set(Object.values(CALIBER_SLUG_MAP))
+  const rawSkipDetails = collectRawSkipDetails(rows, routedCalibers)
+
+  const skippedByReason = createEmptySkipReasonCounts()
+  let remainingSkips = Math.max(0, apiSnapshotsFetched - routedCaliberCount)
+
+  const invalidCount = Math.min(rawSkipDetails[SKIP_REASONS.INVALID_SCHEMA].length, remainingSkips)
+  skippedByReason[SKIP_REASONS.INVALID_SCHEMA] = invalidCount
+  remainingSkips -= invalidCount
+
+  const dataStatusCount = Math.min(rawSkipDetails[SKIP_REASONS.DATA_STATUS_NOT_OK].length, remainingSkips)
+  skippedByReason[SKIP_REASONS.DATA_STATUS_NOT_OK] = dataStatusCount
+  remainingSkips -= dataStatusCount
+
+  const notInCaliberSlugMapCount = remainingSkips
+  skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP] = notInCaliberSlugMapCount
+  remainingSkips = 0
+
+  const skippedTotal =
+    skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]
+    + skippedByReason[SKIP_REASONS.DATA_STATUS_NOT_OK]
+    + skippedByReason[SKIP_REASONS.INVALID_SCHEMA]
+  const artifactsWritten = apiSnapshotsFetched - skippedTotal
+  const gitSha = getGitShaFromEnv()
+  const computationVersion = collectComputationVersions(rows)
+
+  return {
+    coverage: {
+      routedCaliberCount,
+      apiCaliberCount: apiSnapshotsFetched,
+      policy: COVERAGE_POLICY,
+    },
+    apiSnapshotsFetched,
+    artifactsWritten,
+    artifactFilesWritten,
+    skippedTotal,
+    skippedByReason,
+    versions: {
+      artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+      indexSchemaVersion: INDEX_SCHEMA_VERSION,
+      computationVersion,
+      gitSha,
+    },
+    skippedDetails: {
+      [SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]: sliceDetails(
+        rawSkipDetails[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP],
+        skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]
+      ),
+      [SKIP_REASONS.DATA_STATUS_NOT_OK]: sliceDetails(
+        rawSkipDetails[SKIP_REASONS.DATA_STATUS_NOT_OK],
+        skippedByReason[SKIP_REASONS.DATA_STATUS_NOT_OK]
+      ),
+      [SKIP_REASONS.INVALID_SCHEMA]: sliceDetails(
+        rawSkipDetails[SKIP_REASONS.INVALID_SCHEMA],
+        skippedByReason[SKIP_REASONS.INVALID_SCHEMA]
+      ),
+    },
+    reconciliationOk: artifactsWritten + skippedTotal === apiSnapshotsFetched,
+  }
+}
+
+function maybeEmitSkipDetails(summary) {
+  const detailMode = parseBooleanEnv(process.env.MARKET_SNAPSHOT_SKIP_DETAILS)
+  const detailFileRaw = process.env.MARKET_SNAPSHOT_SKIP_DETAILS_FILE
+  const detailFile = typeof detailFileRaw === 'string' && detailFileRaw.trim().length > 0
+    ? resolve(process.cwd(), detailFileRaw.trim())
+    : null
+  if (!detailMode && detailFile === null) return
+
+  const cap = parseOptionalIntEnv(process.env.MARKET_SNAPSHOT_SKIP_DETAIL_CAP) ?? DEFAULT_SKIP_DETAIL_CAP
+  const detailPayload = {}
+
+  for (const reason of Object.values(SKIP_REASONS)) {
+    const entries = summary.skippedDetails[reason] ?? []
+    const total = summary.skippedByReason[reason] ?? 0
+    const values = entries.slice(0, cap)
+    detailPayload[reason] = {
+      total,
+      values,
+      omitted: Math.max(0, total - values.length),
+    }
+  }
+
+  if (detailMode) {
+    console.log(`[market-snapshots] skip-details ${JSON.stringify(detailPayload)}`)
+  }
+
+  if (detailFile !== null) {
+    mkdirSync(dirname(detailFile), { recursive: true })
+    writeFileSync(detailFile, `${JSON.stringify(detailPayload, null, 2)}\n`, 'utf-8')
+  }
+}
+
+function maybeEnforceUnmappedIncreaseGuard(summary) {
+  const guardEnabled = parseBooleanEnv(process.env.MARKET_SNAPSHOT_FAIL_ON_UNMAPPED_INCREASE)
+  if (!guardEnabled) return
+
+  const baselineApiCount = parseOptionalIntEnv(process.env.MARKET_SNAPSHOT_BASELINE_API_CALIBER_COUNT)
+  const baselineNotInMapCount = parseOptionalIntEnv(
+    process.env.MARKET_SNAPSHOT_BASELINE_NOT_IN_CALIBER_SLUG_MAP
+  )
+  const overrideEnabled = parseBooleanEnv(process.env.MARKET_SNAPSHOT_ALLOW_UNMAPPED_INCREASE)
+
+  if (baselineApiCount === null || baselineNotInMapCount === null) {
+    throw new Error(
+      'MARKET_SNAPSHOT_FAIL_ON_UNMAPPED_INCREASE requires MARKET_SNAPSHOT_BASELINE_API_CALIBER_COUNT and MARKET_SNAPSHOT_BASELINE_NOT_IN_CALIBER_SLUG_MAP'
+    )
+  }
+
+  console.log(
+    `[market-snapshots] guardrail ${JSON.stringify({
+      guardEnabled: true,
+      baseline: {
+        apiCaliberCount: baselineApiCount,
+        unmappedCount: baselineNotInMapCount,
+      },
+      current: {
+        apiCaliberCount: summary.apiSnapshotsFetched,
+        unmappedCount: summary.skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP],
+      },
+      overrideEnabled,
+    })}`
+  )
+
+  const unmappedIncreased =
+    summary.apiSnapshotsFetched > baselineApiCount
+    && summary.skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP] > baselineNotInMapCount
+
+  if (unmappedIncreased && !overrideEnabled) {
+    throw new Error(
+      `Unmapped API snapshot count increased: apiSnapshotsFetched=${summary.apiSnapshotsFetched} baseline=${baselineApiCount}, NOT_IN_CALIBER_SLUG_MAP=${summary.skippedByReason[SKIP_REASONS.NOT_IN_CALIBER_SLUG_MAP]} baseline=${baselineNotInMapCount}. Set MARKET_SNAPSHOT_ALLOW_UNMAPPED_INCREASE=true to override intentionally.`
+    )
+  }
+}
+
+function logRunSummary(summary) {
+  const logPayload = {
+    apiSnapshotsFetched: summary.apiSnapshotsFetched,
+    artifactsWritten: summary.artifactsWritten,
+    artifactFilesWritten: summary.artifactFilesWritten,
+    skippedTotal: summary.skippedTotal,
+    reconciliation: `${summary.artifactsWritten}+${summary.skippedTotal}=${summary.apiSnapshotsFetched}`,
+    skippedByReason: summary.skippedByReason,
+    coverage: summary.coverage,
+    versions: summary.versions,
+    reconciliationOk: summary.reconciliationOk,
+  }
+  console.log(`[market-snapshots] run-summary ${JSON.stringify(logPayload)}`)
+}
+
 async function fetchSnapshots() {
+  if (FIXTURE_FILE !== null) {
+    const raw = readFileSync(FIXTURE_FILE, 'utf-8')
+    const payload = JSON.parse(raw)
+    if (Array.isArray(payload)) {
+      return payload
+    }
+    if (payload && Array.isArray(payload.snapshots)) {
+      return payload.snapshots
+    }
+    throw new Error(
+      `Fixture file ${FIXTURE_FILE} must be either snapshots[] array or { snapshots: [] } object`
+    )
+  }
+
   const response = await fetch(SNAPSHOT_ENDPOINT, {
     headers: { accept: 'application/json' },
   })
@@ -341,7 +643,9 @@ async function fetchSnapshots() {
 }
 
 async function main() {
-  console.log(`[market-snapshots] generating static artifacts from ${SNAPSHOT_ENDPOINT}`)
+  const sourceLabel = FIXTURE_FILE !== null ? `fixture ${FIXTURE_FILE}` : SNAPSHOT_ENDPOINT
+  const sourceApiEndpoint = FIXTURE_FILE !== null ? `fixture:${FIXTURE_FILE}` : SNAPSHOT_ENDPOINT
+  console.log(`[market-snapshots] generating static artifacts from ${sourceLabel}`)
 
   rmSync(OUTPUT_DIR, { recursive: true, force: true })
   mkdirSync(OUTPUT_DIR, { recursive: true })
@@ -349,14 +653,17 @@ async function main() {
   let rows = []
   try {
     rows = await fetchSnapshots()
-    console.log(`[market-snapshots] fetched ${rows.length} snapshots`)
   } catch (error) {
     console.warn(
       `[market-snapshots] fetch failed, writing UNAVAILABLE artifacts: ${error instanceof Error ? error.message : String(error)}`
     )
   }
 
-  const byCaliber = new Map(rows.map((row) => [row.caliber, row]))
+  const byCaliber = new Map(
+    rows
+      .filter((row) => row && typeof row.caliber === 'string' && row.caliber.length > 0)
+      .map((row) => [row.caliber, row])
+  )
   const index = []
 
   for (const [slug, caliber] of Object.entries(CALIBER_SLUG_MAP)) {
@@ -375,11 +682,20 @@ async function main() {
     })
   }
 
+  const summary = buildRunSummary(rows, index.length)
+  maybeEnforceUnmappedIncreaseGuard(summary)
+  maybeEmitSkipDetails(summary)
+  logRunSummary(summary)
+
   const indexArtifact = {
     schemaVersion: INDEX_SCHEMA_VERSION,
     windowDays: WINDOW_DAYS,
     generatedAt: GENERATED_AT,
-    sourceApiEndpoint: SNAPSHOT_ENDPOINT,
+    sourceApiEndpoint: sourceApiEndpoint,
+    coverage: summary.coverage,
+    methodology: {
+      notes: INDEX_METHODOLOGY_NOTES,
+    },
     artifacts: index,
   }
   assertSchema(indexArtifact, INDEX_SCHEMA, 'index artifact')
@@ -390,7 +706,7 @@ async function main() {
     'utf-8'
   )
 
-  console.log(`[market-snapshots] wrote ${index.length} artifacts to ${OUTPUT_DIR}`)
+  console.log(`[market-snapshots] wrote ${index.length} artifact files to ${OUTPUT_DIR}`)
 }
 
 main().catch((error) => {
