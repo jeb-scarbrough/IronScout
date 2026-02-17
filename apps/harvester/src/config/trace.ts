@@ -47,6 +47,14 @@ const SENSITIVE_KEY_PATTERNS = [
   /cookie/i,
   /api[-_]?key/i,
   /credential/i,
+  /^source[-_]?id$/i,
+  /^source[-_]?product[-_]?id$/i,
+  /^retailer[-_]?id$/i,
+  /^run[-_]?id$/i,
+  /^job[-_]?id$/i,
+  /^execution[-_]?id$/i,
+  /^feed[-_]?id$/i,
+  /^adapter[-_]?id$/i,
 ]
 
 export const TRACE_REASON_CODES = {

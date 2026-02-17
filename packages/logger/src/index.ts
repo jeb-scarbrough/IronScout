@@ -156,6 +156,14 @@ const SENSITIVE_PATTERNS = [
   /^dob$/i,
   /date[-_]?of[-_]?birth/i,
   /private[-_]?key/i,
+  /^source[-_]?id$/i,
+  /^source[-_]?product[-_]?id$/i,
+  /^retailer[-_]?id$/i,
+  /^run[-_]?id$/i,
+  /^job[-_]?id$/i,
+  /^execution[-_]?id$/i,
+  /^feed[-_]?id$/i,
+  /^adapter[-_]?id$/i,
 ]
 
 /**
