@@ -545,6 +545,7 @@ async function processAffiliateFeedJob(job: Job<AffiliateFeedJobData>): Promise<
                 productsRejected: previousRun.productsRejected ?? 0,
                 duplicateKeyCount: previousRun.duplicateKeyCount ?? 0,
                 urlHashFallbackCount: previousRun.urlHashFallbackCount ?? 0,
+                dedupeFallbackToValid: 0,
                 errorCount: 0,
               },
             }
@@ -768,6 +769,7 @@ interface Phase1Result {
     productsRejected: number
     duplicateKeyCount: number
     urlHashFallbackCount: number
+    dedupeFallbackToValid: number
     errorCount: number
     dataQuality?: import('./types').DataQualityMetrics
   }
@@ -802,7 +804,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
       metrics: {
         downloadBytes: 0, rowsRead: 0, rowsParsed: 0, productsUpserted: 0,
         pricesWritten: 0, productsRejected: 0, duplicateKeyCount: 0,
-        urlHashFallbackCount: 0, errorCount: 0,
+        urlHashFallbackCount: 0, dedupeFallbackToValid: 0, errorCount: 0,
       },
     }
   }
@@ -851,6 +853,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
     pricesWritten: processResult.pricesWritten,
     productsRejected: processResult.productsRejected,
     errorCount: parseResult.errors.length + processResult.errors.length,
+    dedupeFallbackToValid: processResult.dedupeFallbackToValid ?? 0,
   })
 
   if (processResult.errors.length > 0) {
@@ -877,6 +880,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
       productsRejected: processResult.productsRejected,
       duplicateKeyCount: processResult.duplicateKeyCount,
       urlHashFallbackCount: processResult.urlHashFallbackCount,
+      dedupeFallbackToValid: processResult.dedupeFallbackToValid ?? 0,
       errorCount: parseResult.errors.length + processResult.errors.length,
       dataQuality: processResult.qualityMetrics,
     },

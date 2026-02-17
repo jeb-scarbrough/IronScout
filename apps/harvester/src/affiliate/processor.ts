@@ -35,13 +35,16 @@ import { ProductMatcher } from './product-matcher'
 import { normalizeUpc as sharedNormalizeUpc } from '@ironscout/upc'
 import { enqueueProductResolve, alertQueue, type AlertJobData } from '../config/queues'
 import { RESOLVER_VERSION } from '../resolver'
+import {
+  passesNonAmmunitionFilter,
+  wouldSurviveQuarantine,
+} from './quarantine-predicates'
 import type {
   FeedRunContext,
   ParsedFeedProduct,
   ProcessorResult,
   ParseError,
   IdentityType,
-  DataQualityMetrics,
 } from './types'
 import { ERROR_CODES, AffiliateFeedError } from './types'
 import { emitIngestRunSummary } from '../config/ingest-summary'
@@ -235,6 +238,7 @@ export async function processProducts(
   let missingRoundCount = 0
   let missingGrainCount = 0
   let nonAmmunitionFiltered = 0
+  let dedupeFallbackToValid = 0
   const errors: ParseError[] = []
 
   // Run-local price cache - maintained across all chunks
@@ -247,8 +251,9 @@ export async function processProducts(
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PRE-SCAN: Identify "winning" row for each identity
-  // Per spec §4.2.2: "Last row wins" - only process the last occurrence
-  // This avoids processing duplicates across chunks and ensures consistency.
+  // Per spec §4.2.2: quarantine-aware dedupe:
+  // prefer the last row that would survive quarantine; otherwise fall back to
+  // last row overall. This avoids silent loss from degraded trailing duplicates.
   // ═══════════════════════════════════════════════════════════════════════════
   normalizeLog.debug('NORMALIZE_START', {
     totalRows: products.length,
@@ -257,9 +262,15 @@ export async function processProducts(
   const normalizeStart = Date.now()
   procLog.debug('Starting identity pre-scan', { runId: run.id, productCount: products.length })
   const prescanStart = Date.now()
-  const { winningRows, totalDuplicates, totalUrlHashFallbacks } = prescanIdentities(products)
+  const {
+    winningRows,
+    totalDuplicates,
+    totalUrlHashFallbacks,
+    dedupeFallbackToValidCount,
+  } = prescanIdentities(products)
   duplicateKeyCount = totalDuplicates
   urlHashFallbackCount = totalUrlHashFallbacks
+  dedupeFallbackToValid = dedupeFallbackToValidCount
 
   procLog.info('PRESCAN_OK', {
     runId: run.id,
@@ -270,12 +281,14 @@ export async function processProducts(
     duplicatePercentage: products.length > 0 ? ((totalDuplicates / products.length) * 100).toFixed(2) : 0,
     urlHashFallbacks: totalUrlHashFallbacks,
     urlHashPercentage: products.length > 0 ? ((totalUrlHashFallbacks / products.length) * 100).toFixed(2) : 0,
+    dedupeFallbackToValid: dedupeFallbackToValidCount,
   })
   normalizeLog.debug('NORMALIZE_END', {
     durationMs: Date.now() - normalizeStart,
     uniqueIdentities: winningRows.size,
     duplicatesSkipped: totalDuplicates,
     urlHashFallbacks: totalUrlHashFallbacks,
+    dedupeFallbackToValid: dedupeFallbackToValidCount,
   })
 
   // Process in chunks
@@ -834,6 +847,7 @@ export async function processProducts(
     productsMatched,
     duplicateKeyCount,
     urlHashFallbackCount,
+    dedupeFallbackToValid,
     errors: errors.length,
     uniqueProductsSeen: lastPriceCache.size,
     productMatchStats: matcherStats,
@@ -867,6 +881,7 @@ export async function processProducts(
     deduplication: {
       duplicatesSkipped: duplicateKeyCount,
       urlHashFallbacks: urlHashFallbackCount,
+      dedupeFallbackToValid,
     },
     qualityMetrics: {
       missingBrand: missingBrandCount,
@@ -900,6 +915,7 @@ export async function processProducts(
     productsRejected,
     duplicateKeyCount,
     urlHashFallbackCount,
+    dedupeFallbackToValid,
     errors,
     qualityMetrics: {
       version: 1 as const,
@@ -1032,9 +1048,11 @@ function computePriceSignature(product: ParsedFeedProduct): string {
 /**
  * Pre-scan all products to identify the "winning" row for each identity
  *
- * Per spec §4.2.2: "Last row wins" - when duplicate identities appear in a feed,
- * only the last occurrence should be processed. This pre-scan identifies which
- * row index wins for each identity, enabling efficient cross-batch deduplication.
+ * Per spec §4.2.2: quarantine-aware dedupe:
+ * - prefer the last row that would survive quarantine filters
+ * - if all duplicates are invalid, fall back to last row overall
+ *
+ * This pre-scan identifies winner indices for cross-batch deduplication.
  *
  * @returns Map of array index -> ProductWithIdentity for winning rows only
  */
@@ -1042,9 +1060,12 @@ function prescanIdentities(products: ParsedFeedProduct[]): {
   winningRows: Map<number, ProductWithIdentity>
   totalDuplicates: number
   totalUrlHashFallbacks: number
+  dedupeFallbackToValidCount: number
 } {
   // Track last occurrence of each identity (identityKey -> array index)
   const lastOccurrence = new Map<string, number>()
+  // Track last occurrence that would survive quarantine
+  const lastValidOccurrence = new Map<string, number>()
   // Track identity info for each index
   const identityByIndex = new Map<number, {
     product: ParsedFeedProduct
@@ -1067,14 +1088,26 @@ function prescanIdentities(products: ParsedFeedProduct[]): {
 
     // Always update - "last row wins"
     lastOccurrence.set(identityKey, i)
+    if (wouldSurviveQuarantine(product)) {
+      lastValidOccurrence.set(identityKey, i)
+    }
     identityByIndex.set(i, { product, identity, identityKey, allIdentifiers })
   }
 
   // Second pass: build winning rows map (only indices that are the last occurrence)
   const winningRows = new Map<number, ProductWithIdentity>()
   const winningIdentities = new Set<string>()
+  let dedupeFallbackToValidCount = 0
 
-  for (const [identityKey, winningIndex] of lastOccurrence) {
+  for (const [identityKey, lastIndex] of lastOccurrence) {
+    const validIndex = lastValidOccurrence.get(identityKey)
+    const winningIndex =
+      validIndex !== undefined
+        ? validIndex
+        : lastIndex
+    if (validIndex !== undefined && validIndex !== lastIndex) {
+      dedupeFallbackToValidCount++
+    }
     const info = identityByIndex.get(winningIndex)!
     winningRows.set(winningIndex, {
       product: info.product,
@@ -1088,14 +1121,14 @@ function prescanIdentities(products: ParsedFeedProduct[]): {
   // Count duplicates: total rows - unique identities
   const totalDuplicates = products.length - winningIdentities.size
 
-  return { winningRows, totalDuplicates, totalUrlHashFallbacks }
+  return { winningRows, totalDuplicates, totalUrlHashFallbacks, dedupeFallbackToValidCount }
 }
 
 /**
  * Filter a chunk to only include winning rows
  *
- * Per spec §4.2.2: "Last row wins" - only process rows that are the last
- * occurrence of their identity across the entire feed.
+ * Per spec §4.2.2: only process pre-scanned winners for each identity across
+ * the full feed (quarantine-aware global dedupe).
  *
  * @param chunk - Products in this chunk
  * @param chunkStart - Starting index of this chunk in the full products array
@@ -1140,26 +1173,8 @@ export function filterNonAmmunition(
   const valid: ProductWithIdentity[] = []
   const filtered: ProductWithIdentity[] = []
 
-  const AMMO_PACK_RE = /\b(?:rounds?|rds?)\b/i
-  const AMMO_CONTEXT_RE = /\b(?:ammo|ammunition|cartridges?|loads?|shells?)\b/i
-  const HANDLOADING_RE = /\bprojectiles?\b.*\bhandloading\b|\bhandloading\b.*\bprojectiles?\b/i
-
   for (const p of products) {
-    const title = p.product.name
-
-    // Hard-coded exception: handloading projectiles are NOT ammunition
-    if (HANDLOADING_RE.test(title)) {
-      filtered.push(p)
-      continue
-    }
-
-    let signals = 0
-    if (p.product.caliber) signals++
-    if (p.product.grainWeight) signals++
-    if (AMMO_PACK_RE.test(title)) signals++
-    if (AMMO_CONTEXT_RE.test(title)) signals++
-
-    if (signals === 0) {
+    if (!passesNonAmmunitionFilter(p.product)) {
       filtered.push(p)
     } else {
       valid.push(p)

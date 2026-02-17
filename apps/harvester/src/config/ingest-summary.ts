@@ -102,6 +102,9 @@ export interface IngestRunSummary {
 
     /** URL hash fallbacks used */
     urlHashFallbacks: number
+
+    /** Identities where dedupe selected earlier valid row over last invalid duplicate */
+    dedupeFallbackToValid?: number
   }
 
   /** Quality metrics (non-blocking, for observability) */
@@ -195,6 +198,9 @@ export function emitIngestRunSummary(summary: IngestRunSummary): void {
     ...(summary.deduplication && {
       duplicatesSkipped: summary.deduplication.duplicatesSkipped,
       urlHashFallbacks: summary.deduplication.urlHashFallbacks,
+      ...(summary.deduplication.dedupeFallbackToValid !== undefined && {
+        dedupeFallbackToValid: summary.deduplication.dedupeFallbackToValid,
+      }),
     }),
 
     // Quality metrics

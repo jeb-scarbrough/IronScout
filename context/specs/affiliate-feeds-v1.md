@@ -983,16 +983,13 @@ function shouldWritePrice(
 
 **New products:** Products not in the cache after batch-fetch have no prior price. Treat as `reason='new'`.
 
-**Duplicates in file:** "Last row wins" means collapse rows by identity within the chunk before deciding price writes. Otherwise you write two price rows in the same run for the same product.
+**Duplicates in file:** Dedupe is performed with a **global prescan** across the full feed before chunk processing.
 
-```typescript
-// Dedupe within chunk before processing
-const deduped = new Map<string, ParsedRow>();
-for (const row of chunkRows) {
-  deduped.set(row.identityKey, row); // Last row wins
-}
-const rows = Array.from(deduped.values());
-```
+**Quarantine-aware selection rule (v1):**
+- Prefer the **last row that would survive quarantine** for each identity.
+- If all duplicates for an identity would be quarantined, fall back to the **last row overall** (and quarantine it normally).
+
+This prevents silent data loss when the final duplicate is lower quality than an earlier duplicate (for example, missing caliber).
 
 **Cross-chunk duplicates:** If the same product appears in chunk 1 and chunk 2, chunk 2's batch-fetch would be stale. The run-local `lastPriceCache` solves this by updating after each batch insert.
 
@@ -1735,10 +1732,11 @@ UPCs are fixed-length codes where leading zeros are significant.
 ### 7.1.2 Row Validation and Quarantine (Affiliate)
 
 **Validation happens after all extraction attempts** (Attributes JSON, URL signals, title normalization).
+Rows reaching quarantine are the post-dedupe winners from §4.2.2.
 
 **Quarantine trigger (v1):**
 - If `caliber` is still missing after extraction, quarantine the row and skip resolver/upsert.
-- Record `blockingErrors` with `MISSING_CALIBER` and increment `productsRejected`.
+- Record `blockingErrors` with `MISSING_CALIBER` and increment `productsQuarantined`.
 - Quarantine storage uses generic `quarantined_records` with `feedType = AFFILIATE` and `feedId = affiliate_feeds.id`.
 
 **Data quality signals (no quarantine):**
@@ -1827,7 +1825,7 @@ If run fails mid-file:
 
 ### 7.5 Duplicate Rows in File
 
-**Behavior:** Last row wins (upsert semantics)
+**Behavior:** Last valid row wins by identity. If all duplicates are invalid, last row wins and is quarantined.
 
 **Observability:**
 - Track `duplicateKeyCount` per run
@@ -3380,7 +3378,7 @@ This appendix records all architecture decisions made during the specification p
 | Q6.1.5 | URL_HASH Quality Gate | Track `urlHashFallbackCount` per run. Block promotion if >50% or >1000 products use URL_HASH. `expiryBlocked=true`, `reason='DATA_QUALITY_URL_HASH_SPIKE'`. Admin can approve if acceptable for feed. Prevents runaway duplicates from unstable identifiers. |
 | Q6.2.1 | Partial Failure Handling | Keep successful upserts, mark run FAILED, set `isPartial = true`. No expiry on failed runs. |
 | Q6.2.2 | lastSeenAt on Failed Runs | Update `lastSeenAt` as processed. Add `lastSeenSuccessAt` for expiry (updated only after circuit breaker passes). |
-| Q6.3.1 | Duplicate Rows in File | Last row wins (upsert). Track `duplicateKeyCount`. Sample in errors. Don't count toward auto-pause. |
+| Q6.3.1 | Duplicate Rows in File | Global prescan with quarantine-aware dedupe: last valid row wins; if all invalid, last row wins and is quarantined. Track `duplicateKeyCount`. |
 | Q6.4.1 | Price Evaluation Batching | Per-row DB reads are forbidden (self-inflicted outage at 50K rows). Batch-fetch last prices per chunk using `DISTINCT ON`. Maintain run-local `lastPriceCache` updated after each batch insert. Dedupe rows within chunk before processing. |
 | Q6.5.1 | Retry Price Deduplication | Add `affiliateFeedRunId` and `priceSignatureHash` to Price (nullable, affiliate-only). Partial unique index `prices_affiliate_dedupe` ensures inserts are idempotent per `(sourceProductId, runId, signature)`. Use `ON CONFLICT DO NOTHING` (no target). ⚠️ HARD RULE: `prices` table must have no other unique constraints—**enforced via migration test** (Section 18.1.1). Duplicate insert attempts are safely ignored; `pricesWritten` incremented from DB rowCount, not array length. |
 | Q6.6.1 | File Size and Row Limits | Hard limits to prevent OOM: 500 MB file size, 500K rows. Per-feed overrides via `maxFileSizeBytes`/`maxRowCount`. Abort with `FILE_SIZE_LIMIT_EXCEEDED` or `ROW_COUNT_LIMIT_EXCEEDED`. Cache grows with unique products; limits bound memory usage. |
