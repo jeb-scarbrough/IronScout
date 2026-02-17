@@ -4,6 +4,13 @@ import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
 import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 import { getNestedContentSlugs, readNestedMarkdownContent, readMarkdownContent } from '@/lib/content'
+import {
+  computeSnapshotArtifactSha256,
+  createCaliberDatasetJsonLd,
+  createUnavailableSnapshotArtifact,
+  readSnapshotArtifactBySlug,
+  serializeJsonForScript,
+} from '@/lib/market-snapshots'
 
 export const dynamicParams = false
 
@@ -81,22 +88,25 @@ export default async function CaliberTypePage({
   const parentName = parentContent?.frontmatter.heading || slug
   const typeName = content.frontmatter.heading || type
   const caliberLabel = `${parentName} ${typeName}`.trim()
+  const snapshot = readSnapshotArtifactBySlug(slug)
+  const embeddedSnapshot = snapshot ?? createUnavailableSnapshotArtifact(slug)
+  const embeddedSnapshotSha256 = computeSnapshotArtifactSha256(embeddedSnapshot)
+  const datasetJsonLd = createCaliberDatasetJsonLd(caliberLabel, slug, snapshot, BRAND.wwwUrl)
 
   return (
     <>
       <script
+        type="application/json"
+        id={`market-snapshot-${slug}`}
+        data-artifact-sha256={embeddedSnapshotSha256}
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonForScript(embeddedSnapshot),
+        }}
+      />
+      <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'Dataset',
-            name: `${caliberLabel} Ammo Observed Pricing`,
-            description: 'Observed price and availability data with historical context. Summaries appear once sufficient observations are available.',
-            temporalCoverage: 'P30D',
-            variableMeasured: ['price_per_round', 'availability_status'],
-            measurementTechnique: 'Deterministic observation-based aggregation',
-            isAccessibleForFree: true,
-          }),
+          __html: serializeJsonForScript(datasetJsonLd),
         }}
       />
       <BreadcrumbJsonLd
@@ -116,8 +126,7 @@ export default async function CaliberTypePage({
         priceRange={priceRange}
         observedMarketContext={{
           caliberLabel,
-          caliberSlug: slug,
-          apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://api.ironscout.ai',
+          snapshot,
         }}
         breadcrumbs={[
           { label: 'Home', href: '/' },

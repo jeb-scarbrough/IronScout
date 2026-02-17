@@ -118,3 +118,6 @@ export * from './schema-validation.js'
 
 // Re-export shared caliber constants and utilities (ADR-025)
 export * from './calibers.js'
+
+// Re-export shared market observation SQL builders (drift prevention)
+export * from './market-observations.js'

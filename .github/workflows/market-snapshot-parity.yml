@@ -1,0 +1,165 @@
+name: Market Snapshot Parity
+
+on:
+  pull_request:
+    paths:
+      - 'apps/www/**'
+      - 'apps/api/src/services/market-deals.ts'
+      - 'apps/harvester/src/calibersnapshot/**'
+      - 'packages/db/**'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/www/**'
+      - 'apps/api/src/services/market-deals.ts'
+      - 'apps/harvester/src/calibersnapshot/**'
+      - 'packages/db/**'
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: snapshot-parity-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
+
+jobs:
+  www-parity:
+    name: WWW Artifact/Embed/JSON-LD Parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify static snapshot parity gates (A/B)
+        run: pnpm --filter @ironscout/www verify:snapshot:parity
+
+  db-parity:
+    name: DB Snapshot vs Market Deals Parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: ironscout_test
+          POSTGRES_PASSWORD: ironscout_test
+          POSTGRES_DB: ironscout_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run DB parity integration checks
+        env:
+          TEST_DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
+        run: pnpm --filter @ironscout/db test:integration
+
+  canary-www:
+    name: Daily Canary (Production HTML/Artifact/JSON-LD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run production canary
+        env:
+          MARKET_SNAPSHOT_CANARY_BASE_URL: https://www.ironscout.ai
+          MARKET_SNAPSHOT_CANARY_ALLOW_TIMESTAMP_DRIFT: 'true'
+          ALLOW_MISSING_PROD_ARTIFACTS: ${{ vars.ALLOW_MISSING_PROD_ARTIFACTS || '1' }}
+        run: pnpm --filter @ironscout/www verify:snapshot:canary
+
+  canary-db-parity:
+    name: Daily Canary (DB Parity Fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: ironscout_test
+          POSTGRES_PASSWORD: ironscout_test
+          POSTGRES_DB: ironscout_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run DB parity integration checks
+        env:
+          TEST_DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
+        run: pnpm --filter @ironscout/db test:integration

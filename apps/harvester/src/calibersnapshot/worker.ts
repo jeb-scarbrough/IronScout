@@ -6,6 +6,7 @@
  */
 
 import { Worker, Job } from 'bullmq'
+import { CALIBER_SNAPSHOT_COMPUTATION_VERSION } from '@ironscout/db'
 import { getSharedBullMQConnection } from '../config/redis'
 import { QUEUE_NAMES, CaliberSnapshotJobData } from '../config/queues'
 import { logger } from '../config/logger'
@@ -40,7 +41,7 @@ async function processCaliberSnapshotJob(job: Job<CaliberSnapshotJobData>): Prom
   })
 
   try {
-    const result = await computeCaliberSnapshots(windowDays, 'v1')
+    const result = await computeCaliberSnapshots(windowDays, CALIBER_SNAPSHOT_COMPUTATION_VERSION)
 
     log.info('CALIBER_SNAPSHOT_WORKER_JOB_DONE', {
       event_name: 'CALIBER_SNAPSHOT_WORKER_JOB_DONE',

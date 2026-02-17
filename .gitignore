@@ -12,6 +12,8 @@ playwright-report/
 out/
 # But allow the /out route handler (matched by out/ above)
 !apps/web/app/out/
+# Build-time generated static snapshot artifacts (apps/www Option A)
+apps/www/public/market-snapshots/
 
 # Production
 build/

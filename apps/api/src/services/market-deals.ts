@@ -9,7 +9,7 @@
  * - Gun Locker affects ordering/labeling ONLY, not hero selection
  */
 
-import { prisma } from '@ironscout/db'
+import { prisma, buildProductMedianPriceQuery } from '@ironscout/db'
 import { CANONICAL_CALIBERS, normalizeCaliber, type CaliberValue } from './gun-locker'
 import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
@@ -275,94 +275,16 @@ export async function getMarketDeals(): Promise<MarketDealsResponse> {
   const query2Start = performance.now()
 
   // Get 30-day median prices per product
-  // ADR-015: Apply corrections overlay (IGNORE + MULTIPLIER corrections)
+  // Uses shared canonical overlay (ADR-015/005/021) from @ironscout/db.
   const productIds = currentPrices.map((p) => p.productId)
   const medianPrices = await prisma.$queryRaw<
     Array<{ productId: string; medianPrice: any; priceCount: number }>
-  >`
-    WITH daily_best AS (
-      SELECT
-        p.id as "productId",
-        DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC') as day,
-        -- ADR-015: Apply MULTIPLIER corrections to price
-        MIN(
-          pr.price * COALESCE((
-            SELECT CASE WHEN COUNT(*) = 0 THEN 1.0 WHEN COUNT(*) > 2 THEN NULL ELSE EXP(SUM(LN(pc.value))) END
-            FROM price_corrections pc
-            WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
-              AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-              AND (
-                (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
-                (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-                (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-                (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-                (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-              )
-          ), 1.0)
-        ) as daily_best
-      FROM products p
-      JOIN product_links pl ON pl."productId" = p.id
-      JOIN prices pr ON pr."sourceProductId" = pl."sourceProductId"
-      JOIN retailers r ON r.id = pr."retailerId"
-      LEFT JOIN merchant_retailers mr ON mr."retailerId" = r.id AND mr.status = 'ACTIVE'
-      LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
-      WHERE p.id = ANY(${productIds})
-        AND pl.status IN ('MATCHED', 'CREATED')
-        AND pr."observedAt" >= ${thirtyDaysAgo}
-        AND r."visibilityStatus" = 'ELIGIBLE'
-        AND (mr.id IS NULL OR (mr."listingStatus" = 'LISTED' AND mr.status = 'ACTIVE'))
-        AND (pr."affiliateFeedRunId" IS NULL OR afr."ignoredAt" IS NULL) -- ADR-015: Exclude ignored runs
-        -- ADR-015: Exclude prices with active IGNORE corrections
-        AND NOT EXISTS (
-          SELECT 1 FROM price_corrections pc
-          WHERE pc."revokedAt" IS NULL
-            AND pc.action = 'IGNORE'
-            AND pr."observedAt" >= pc."startTs"
-            AND pr."observedAt" < pc."endTs"
-            AND (
-              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
-              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-            )
-        )
-        -- ADR-015: Exclude prices with > 2 MULTIPLIER corrections
-        AND (
-          SELECT COUNT(*)
-          FROM price_corrections pc
-          WHERE pc."revokedAt" IS NULL AND pc.action = 'MULTIPLIER'
-            AND pr."observedAt" >= pc."startTs" AND pr."observedAt" < pc."endTs"
-            AND (
-              (pc."scopeType" = 'PRODUCT' AND pc."scopeId"::text = p.id::text) OR
-              (pc."scopeType" = 'RETAILER' AND pc."scopeId"::text = r.id::text) OR
-              (pc."scopeType" = 'SOURCE' AND pc."scopeId" = pr."sourceId") OR
-              (pc."scopeType" = 'AFFILIATE' AND pc."scopeId" = pr."affiliateId") OR
-              (pc."scopeType" = 'FEED_RUN' AND pr."ingestionRunId" IS NOT NULL AND pc."scopeId" = pr."ingestionRunId")
-            )
-        ) <= 2
-        -- ADR-021: Allow SCRAPE prices only when guardrails pass
-        AND (
-          pr."ingestionRunType" IS NULL
-          OR pr."ingestionRunType" != 'SCRAPE'
-          OR (
-            pr."ingestionRunType" = 'SCRAPE'
-            AND s."adapterId" IS NOT NULL
-            AND s."robotsCompliant" = true
-            AND s."tosReviewedAt" IS NOT NULL
-            AND s."tosApprovedBy" IS NOT NULL
-            AND sas."enabled" = true
-          )
-        )
-      GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
-    )
-    SELECT
-      "productId",
-      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY daily_best) as "medianPrice",
-      COUNT(*)::int as "priceCount"
-    FROM daily_best
-    GROUP BY "productId"
-  `
+  >(buildProductMedianPriceQuery({
+    productIds,
+    windowStart: thirtyDaysAgo,
+    windowEnd: now,
+    inStockOnly: true,
+  }))
 
   const query2DurationMs = Math.round(performance.now() - query2Start)
   log.info('MARKET_DEALS_QUERY_2_MEDIAN_PRICES', {

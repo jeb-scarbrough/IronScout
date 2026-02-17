@@ -110,3 +110,8 @@ It does not decide.
 For structured AI integration standards and signal definitions, see:
 
 https://www.ironscout.ai/iais
+
+Canonical 30-day caliber snapshot artifacts (public JSON):
+
+https://www.ironscout.ai/market-snapshots/30d/index.json
+https://www.ironscout.ai/market-snapshots/30d/<caliber-slug>.json

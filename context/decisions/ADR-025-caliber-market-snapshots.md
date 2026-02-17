@@ -39,6 +39,8 @@ Two thresholds apply:
 
 All public display surfaces that present **caliber-level market statistics** (www caliber pages, LLM market summaries, DaaS) MUST read from the snapshot table (directly or via API). They MUST NOT compute their own caliber medians from raw price data.
 
+**Contract versioning policy**: `schemaVersion` is incremented only for breaking response-shape changes; additive fields are allowed within the same major version. `computationVersion` is independent and MUST be incremented when computation logic or methodology changes without a breaking shape change.
+
 **Exempted service** (computes ad-hoc statistics for **product-level** purposes, not caliber-level summaries):
 - `price-signal-index.ts` — computes per-product `relativePricePct` and `contextBand` for search results. These are product-level comparisons against a caliber baseline, not caliber summaries shown to users as "the 9mm median." Exempt because the median is used as a comparison reference, not presented as the caliber statistic.
 

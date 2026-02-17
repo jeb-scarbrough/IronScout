@@ -26,6 +26,8 @@ export const marketSnapshotsRouter: Router = Router()
 const CACHE_TTL_SECONDS = 300 // 5 minutes
 const CACHE_KEY_ALL = 'market-snapshots:calibers:all'
 const CACHE_KEY_PREFIX = 'market-snapshots:calibers:'
+const SNAPSHOT_METHODOLOGY =
+  'SQL PERCENTILE_CONT over daily-best per-product-per-day observed in-stock prices'
 
 /**
  * Convert Prisma Decimal to number with 6 decimal places, or null.
@@ -42,8 +44,11 @@ function toPublicSnapshot(row: caliber_market_snapshots) {
   return {
     caliber: row.caliber,
     windowDays: row.windowDays,
+    windowStart: row.windowStart.toISOString(),
+    windowEnd: row.windowEnd.toISOString(),
     statBasis: 'dailyBestObserved' as const,
     statLabel: 'Observed daily-best price per round',
+    methodology: SNAPSHOT_METHODOLOGY,
     median: formatDecimal6(row.median),
     p25: formatDecimal6(row.p25),
     p75: formatDecimal6(row.p75),
@@ -54,6 +59,7 @@ function toPublicSnapshot(row: caliber_market_snapshots) {
     productCount: row.productCount,
     retailerCount: row.retailerCount,
     computedAt: row.computedAt.toISOString(),
+    computationVersion: row.computationVersion,
     dataStatus: row.sampleCount >= 5 ? 'SUFFICIENT' : 'INSUFFICIENT_DATA',
   }
 }

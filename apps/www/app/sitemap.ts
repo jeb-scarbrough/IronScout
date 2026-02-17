@@ -13,6 +13,11 @@ function buildUrl(path: string): string {
     return `${baseUrl}/`
   }
 
+  // Do not force trailing slash for file-style resources (e.g. .json artifacts).
+  if (/\.[a-z0-9]+$/i.test(normalizedPath)) {
+    return `${baseUrl}${normalizedPath}`
+  }
+
   const canonicalPath = normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
   return `${baseUrl}${canonicalPath}`
 }
@@ -68,5 +73,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     // Retailer pages
     ...retailerSlugs.map((slug) => withDefaults(`/retailer/${slug}`, 'weekly', 0.5)),
+
+    // Public snapshot artifacts (Option A for crawler-visible market snapshot data)
+    withDefaults('/market-snapshots/30d/index.json', 'daily', 0.7),
+    ...caliberSlugs.map((slug) =>
+      withDefaults(`/market-snapshots/30d/${slug}.json`, 'daily', 0.6)
+    ),
   ]
 }
