@@ -24,6 +24,8 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
   const [isMenuOpen, setIsMenuOpen] = React.useState(false)
   const isSignIn = currentPage === 'signin'
   const isSignUp = currentPage === 'signup'
+  const normalizedWebsiteUrl = websiteUrl.replace(/\/+$/, '')
+  const normalizedAppUrl = appUrl.replace(/\/+$/, '')
 
   // Close menu on resize to desktop
   React.useEffect(() => {
@@ -35,11 +37,11 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
   }, [])
 
   const navLinks = [
-    { href: `${appUrl}/search`, label: 'Search', page: 'search' as const, alwaysVisible: false },
-    { href: `${websiteUrl}/calibers`, label: 'Calibers', page: 'calibers' as const, alwaysVisible: false },
-    { href: `${appUrl}/price-check`, label: 'In-Store Price Check', page: 'price-check' as const, alwaysVisible: false },
-    { href: `${websiteUrl}/about`, label: 'About', page: 'about' as const, alwaysVisible: false },
-    { href: `${websiteUrl}/retailers`, label: 'For Retailers', page: 'retailers' as const, alwaysVisible: false },
+    { href: `${normalizedAppUrl}/search`, label: 'Search', page: 'search' as const, alwaysVisible: false },
+    { href: `${normalizedWebsiteUrl}/calibers`, label: 'Calibers', page: 'calibers' as const, alwaysVisible: false },
+    { href: `${normalizedAppUrl}/price-check`, label: 'In-Store Price Check', page: 'price-check' as const, alwaysVisible: false },
+    { href: `${normalizedWebsiteUrl}/about`, label: 'About', page: 'about' as const, alwaysVisible: false },
+    { href: `${normalizedWebsiteUrl}/retailers`, label: 'For Retailers', page: 'retailers' as const, alwaysVisible: false },
   ]
 
   return (
@@ -56,7 +58,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href={websiteUrl} className="flex items-center gap-2 flex-shrink-0">
+          <a href={normalizedWebsiteUrl} className="flex items-center gap-2 flex-shrink-0">
             <IronScoutLogo className="w-8 h-8" />
             <span className="font-display text-xl font-semibold tracking-tight">
               Iron<span className="text-primary">Scout</span>
@@ -77,7 +79,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
               </a>
             ))}
             <a
-              href={`${appUrl}/auth/signin`}
+              href={`${normalizedAppUrl}/auth/signin`}
               className={`text-sm font-medium transition-colors ${
                 isSignIn
                   ? 'text-iron-600 pointer-events-none'
@@ -87,7 +89,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
               Sign In
             </a>
             <a
-              href={`${appUrl}/auth/signup`}
+              href={`${normalizedAppUrl}/auth/signup`}
               className={`text-sm py-2 ${
                 isSignUp
                   ? 'btn-primary opacity-50 pointer-events-none'
@@ -101,7 +103,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
           {/* Mobile: Search + CTA + Hamburger */}
           <div className="flex md:hidden items-center gap-3">
             <a
-              href={`${appUrl}/search`}
+              href={`${normalizedAppUrl}/search`}
               className={`text-sm font-medium transition-colors ${
                 currentPage === 'search' ? 'text-white' : 'text-iron-400 hover:text-white'
               }`}
@@ -109,7 +111,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
               Search
             </a>
             <a
-              href={`${appUrl}/auth/signup`}
+              href={`${normalizedAppUrl}/auth/signup`}
               className={`text-sm py-1.5 px-4 ${
                 isSignUp
                   ? 'btn-primary opacity-50 pointer-events-none'
@@ -154,7 +156,7 @@ export function MarketingHeader({ currentPage, websiteUrl, appUrl }: MarketingHe
               ))}
               <div className="border-t border-iron-800 my-1" />
               <a
-                href={`${appUrl}/auth/signin`}
+                href={`${normalizedAppUrl}/auth/signin`}
                 className={`text-sm font-medium transition-colors ${
                   isSignIn ? 'text-iron-600 pointer-events-none' : 'text-iron-300 hover:text-white'
                 }`}

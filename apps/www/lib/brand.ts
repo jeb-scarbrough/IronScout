@@ -4,10 +4,18 @@
  */
 
 // URL for the main web application (app.ironscout.ai in production)
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.ironscout.ai'
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
+}
+
+const APP_URL = normalizeBaseUrl(
+  process.env.NEXT_PUBLIC_APP_URL || 'https://app.ironscout.ai'
+)
 
 // URL for the marketing website (www.ironscout.ai in production)
-const WWW_URL = process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
+const WWW_URL = normalizeBaseUrl(
+  process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
+)
 
 export const BRAND = {
   name: 'IronScout',

@@ -6,10 +6,18 @@
  */
 
 /** WWW site URL - uses NEXT_PUBLIC_WWW_URL env var for local dev */
-const WWW_URL = process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
+}
+
+const WWW_URL = normalizeBaseUrl(
+  process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai'
+)
 
 /** APP site URL - uses NEXT_PUBLIC_APP_URL env var for local dev */
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.ironscout.ai'
+const APP_URL = normalizeBaseUrl(
+  process.env.NEXT_PUBLIC_APP_URL || 'https://app.ironscout.ai'
+)
 
 export const BRAND = {
   /** Primary brand name for in-product usage */

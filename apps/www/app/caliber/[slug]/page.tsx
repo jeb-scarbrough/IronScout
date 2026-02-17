@@ -1,14 +1,16 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
-import { BreadcrumbJsonLd } from '@/components/JsonLd'
+import { BreadcrumbJsonLd, CaliberProductJsonLd, RawJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 import { getCaliberAliasEntries, resolveCaliberSlug } from '@/lib/caliber-aliases'
 import { getContentSlugs, readMarkdownContent } from '@/lib/content'
+import { faqSchemas } from '@/lib/faq-schemas'
 import {
   computeSnapshotArtifactSha256,
   createCaliberDatasetJsonLd,
   createUnavailableSnapshotArtifact,
+  isSummaryAvailable,
   readSnapshotArtifactBySlug,
   serializeJsonForScript,
 } from '@/lib/market-snapshots'
@@ -52,11 +54,13 @@ export async function generateMetadata({
       url: `${BRAND.wwwUrl}/caliber/${slug}`,
       siteName: 'IronScout',
       type: 'website',
+      images: [{ url: `${BRAND.wwwUrl}/og/default.png`, width: 1200, height: 630 }],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
+      images: [`${BRAND.wwwUrl}/og/default.png`],
     },
   }
 }
@@ -128,6 +132,17 @@ export default async function CaliberPage({
           { name: displayName, href: `/caliber/${slug}` },
         ]}
       />
+      {faqSchemas[slug] && <RawJsonLd data={faqSchemas[slug]} />}
+      {isSummaryAvailable(snapshot) && (
+        <CaliberProductJsonLd
+          caliberName={displayName}
+          slug={slug}
+          description={content.frontmatter.description || `Compare ${displayName} ammo prices across retailers.`}
+          lowPrice={snapshot.pricePerRound.min}
+          highPrice={snapshot.pricePerRound.max}
+          offerCount={snapshot.counts.productCount}
+        />
+      )}
       <MarketingMarkdownPage
         heading={heading}
         subheading={subheading}

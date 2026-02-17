@@ -8,7 +8,17 @@ interface BreadcrumbItem {
 }
 
 function toCanonicalAbsoluteUrl(href: string): string {
-  const normalizedPath = href.startsWith('/') ? href : `/${href}`
+  const normalizedHref = href.trim()
+
+  if (/^https?:\/\//i.test(normalizedHref)) {
+    const absoluteUrl = new URL(normalizedHref)
+    const normalizedPath = absoluteUrl.pathname === '/'
+      ? ''
+      : absoluteUrl.pathname.replace(/\/+$/, '')
+    return `${absoluteUrl.origin}${normalizedPath}${absoluteUrl.search}${absoluteUrl.hash}`
+  }
+
+  const normalizedPath = normalizedHref.startsWith('/') ? normalizedHref : `/${normalizedHref}`
   if (normalizedPath === '/') {
     return baseUrl
   }
@@ -105,6 +115,64 @@ export function FaqJsonLd({
         text: q.answer,
       },
     })),
+  }
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  )
+}
+
+/**
+ * Renders a raw JSON-LD schema object as a script tag.
+ * Used for pre-built schema objects like caliber FAQ schemas.
+ */
+export function RawJsonLd({ data }: { data: object }) {
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+    />
+  )
+}
+
+/**
+ * Renders a Product + AggregateOffer JSON-LD script tag for caliber pages.
+ * Uses market snapshot data for price range and offer count.
+ */
+export function CaliberProductJsonLd({
+  caliberName,
+  slug,
+  description,
+  lowPrice,
+  highPrice,
+  offerCount,
+}: {
+  caliberName: string
+  slug: string
+  description: string
+  lowPrice: number
+  highPrice: number
+  offerCount: number
+}) {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: `${caliberName} Ammo`,
+    description,
+    category: `Ammunition > ${caliberName}`,
+    url: `${baseUrl}/caliber/${slug}`,
+    offers: {
+      '@type': 'AggregateOffer',
+      lowPrice: lowPrice.toFixed(2),
+      highPrice: highPrice.toFixed(2),
+      priceCurrency: 'USD',
+      offerCount: String(offerCount),
+      availability: 'https://schema.org/InStock',
+      url: `${baseUrl}/caliber/${slug}`,
+    },
   }
 
   return (

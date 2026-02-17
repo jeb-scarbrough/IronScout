@@ -37,11 +37,13 @@ export async function generateMetadata({
       url: `${BRAND.wwwUrl}/ammo/${slug}`,
       siteName: 'IronScout',
       type: 'website',
+      images: [{ url: `${BRAND.wwwUrl}/og/default.png`, width: 1200, height: 630 }],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
+      images: [`${BRAND.wwwUrl}/og/default.png`],
     },
   }
 }

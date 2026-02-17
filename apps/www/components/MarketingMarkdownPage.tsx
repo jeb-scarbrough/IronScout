@@ -28,6 +28,13 @@ interface MarketingMarkdownPageProps {
   observedMarketContext?: ObservedMarketContextBlockProps
 }
 
+function normalizeBreadcrumbHref(href: string): string {
+  if (href === '/') {
+    return href
+  }
+  return href.replace(/\/+$/, '')
+}
+
 export function MarketingMarkdownPage({
   heading,
   subheading,
@@ -53,25 +60,29 @@ export function MarketingMarkdownPage({
             aria-label="Breadcrumb"
             className="mb-6 flex items-center gap-2 text-sm text-iron-500"
           >
-            {breadcrumbs.map((crumb, i) => (
-              <span key={crumb.href} className="flex items-center gap-2">
-                {i > 0 && (
-                  <svg className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                )}
-                {i === breadcrumbs.length - 1 ? (
-                  <span className="text-iron-400 font-medium">{crumb.label}</span>
-                ) : (
-                  <Link
-                    href={crumb.href}
-                    className="hover:text-iron-300 transition-colors"
-                  >
-                    {crumb.label}
-                  </Link>
-                )}
-              </span>
-            ))}
+            {breadcrumbs.map((crumb, i) => {
+              const normalizedHref = normalizeBreadcrumbHref(crumb.href)
+
+              return (
+                <span key={normalizedHref} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <svg className="w-3.5 h-3.5 text-iron-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
+                  {i === breadcrumbs.length - 1 ? (
+                    <span className="text-iron-400 font-medium">{crumb.label}</span>
+                  ) : (
+                    <Link
+                      href={normalizedHref}
+                      className="hover:text-iron-300 transition-colors"
+                    >
+                      {crumb.label}
+                    </Link>
+                  )}
+                </span>
+              )
+            })}
           </nav>
         )}
 
