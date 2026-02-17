@@ -8,6 +8,7 @@ Fonts:
 
 License:
 - SIL Open Font License 1.1 (OFL-1.1)
+- Full text in this directory: `LICENCE.OFL-1.1`
 - https://openfontlicense.org
 
 Upstream projects:
