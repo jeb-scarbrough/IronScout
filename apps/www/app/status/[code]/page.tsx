@@ -111,7 +111,7 @@ export default async function StatusPage({
                 <a href={`${BRAND.appUrl}/search`} className="btn-secondary">
                   Go to search
                 </a>
-                <a href="mailto:hello@ironscout.ai" className="btn-secondary">
+                <a href={`/contact?source=www-status-page&code=${encodeURIComponent(code)}`} className="btn-secondary">
                   Contact us
                 </a>
               </div>

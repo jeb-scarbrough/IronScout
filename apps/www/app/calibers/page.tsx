@@ -10,13 +10,13 @@ export const metadata: Metadata = {
   description:
     'Compare ammunition prices across 14 calibers and 15+ retailers. Handgun, rifle, rimfire, and shotgun ammo deals updated daily.',
   alternates: {
-    canonical: `${BRAND.wwwUrl}/calibers/`,
+    canonical: `${BRAND.wwwUrl}/calibers`,
   },
   openGraph: {
     title: 'Ammo Prices by Caliber — Compare Deals | IronScout',
     description:
       'Compare ammunition prices across 14 calibers and 15+ retailers. Handgun, rifle, rimfire, and shotgun ammo deals updated daily.',
-    url: `${BRAND.wwwUrl}/calibers/`,
+    url: `${BRAND.wwwUrl}/calibers`,
     siteName: 'IronScout',
     type: 'website',
   },

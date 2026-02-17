@@ -11,15 +11,10 @@ function buildUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
 
   if (normalizedPath === '/') {
-    return `${baseUrl}/`
+    return baseUrl
   }
 
-  // Do not force trailing slash for file-style resources (e.g. .json artifacts).
-  if (/\.[a-z0-9]+$/i.test(normalizedPath)) {
-    return `${baseUrl}${normalizedPath}`
-  }
-
-  const canonicalPath = normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
+  const canonicalPath = normalizedPath.replace(/\/+$/, '')
   return `${baseUrl}${canonicalPath}`
 }
 
@@ -48,6 +43,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // Core pages
     withDefaults('/', 'weekly', 1),
     withDefaults('/about', 'monthly', 0.7),
+    withDefaults('/contact', 'monthly', 0.6),
     withDefaults('/retailers', 'monthly', 0.8),
     withDefaults('/privacy', 'monthly', 0.3),
     withDefaults('/terms', 'monthly', 0.3),

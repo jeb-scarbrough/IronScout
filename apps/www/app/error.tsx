@@ -14,6 +14,9 @@ export default function GlobalError({
   useEffect(() => {
     console.error(error);
   }, [error]);
+  const contactHref = error.digest
+    ? `/contact?source=www-global-error&code=500&errorId=${encodeURIComponent(error.digest)}`
+    : '/contact?source=www-global-error&code=500'
 
   return (
     <div className="relative">
@@ -50,7 +53,7 @@ export default function GlobalError({
                 <a href={BRAND.wwwUrl} className="btn-secondary">
                   Go to homepage
                 </a>
-                <a href="mailto:support@ironscout.ai" className="btn-secondary">
+                <a href={contactHref} className="btn-secondary">
                   Contact support
                 </a>
               </div>

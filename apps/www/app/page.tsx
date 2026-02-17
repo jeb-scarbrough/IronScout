@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   description:
     'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and 14 calibers across 15+ online retailers. Track price history, set alerts, and find deals. Free to use.',
   alternates: {
-    canonical: `${BRAND.wwwUrl}/`,
+    canonical: `${BRAND.wwwUrl}`,
   },
   openGraph: {
     title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
     description:
       'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more across 15+ retailers. Track price history, set alerts, and find deals.',
-    url: `${BRAND.wwwUrl}/`,
+    url: `${BRAND.wwwUrl}`,
     siteName: 'IronScout',
     locale: 'en_US',
     type: 'website',

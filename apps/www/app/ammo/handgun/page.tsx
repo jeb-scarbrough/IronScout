@@ -6,11 +6,11 @@ export const metadata: Metadata = {
   title: 'Handgun Ammo Prices — Compare Deals | IronScout',
   description:
     'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across 15+ retailers. Updated daily.',
-  alternates: { canonical: `${BRAND.wwwUrl}/ammo/handgun/` },
+  alternates: { canonical: `${BRAND.wwwUrl}/ammo/handgun` },
   openGraph: {
     title: 'Handgun Ammo Prices — Compare Deals | IronScout',
     description: 'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across 15+ retailers.',
-    url: `${BRAND.wwwUrl}/ammo/handgun/`,
+    url: `${BRAND.wwwUrl}/ammo/handgun`,
     siteName: 'IronScout',
     type: 'website',
   },

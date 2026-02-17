@@ -44,12 +44,12 @@ export async function generateMetadata({
     title,
     description,
     alternates: {
-      canonical: `${BRAND.wwwUrl}/caliber/${slug}/`,
+      canonical: `${BRAND.wwwUrl}/caliber/${slug}`,
     },
     openGraph: {
       title,
       description,
-      url: `${BRAND.wwwUrl}/caliber/${slug}/`,
+      url: `${BRAND.wwwUrl}/caliber/${slug}`,
       siteName: 'IronScout',
       type: 'website',
     },

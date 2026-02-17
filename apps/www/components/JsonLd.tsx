@@ -7,6 +7,14 @@ interface BreadcrumbItem {
   href: string
 }
 
+function toCanonicalAbsoluteUrl(href: string): string {
+  const normalizedPath = href.startsWith('/') ? href : `/${href}`
+  if (normalizedPath === '/') {
+    return baseUrl
+  }
+  return `${baseUrl}${normalizedPath.replace(/\/+$/, '')}`
+}
+
 /**
  * Renders a BreadcrumbList JSON-LD script tag for SEO.
  */
@@ -18,7 +26,7 @@ export function BreadcrumbJsonLd({ items }: { items: BreadcrumbItem[] }) {
       '@type': 'ListItem',
       position: i + 1,
       name: item.name,
-      item: `${baseUrl}${item.href}`,
+      item: toCanonicalAbsoluteUrl(item.href),
     })),
   }
 

@@ -6,11 +6,11 @@ export const metadata: Metadata = {
   title: 'Rifle Ammo Prices — Compare Deals | IronScout',
   description:
     'Compare rifle ammo prices for 5.56 NATO, .223, .308 Win, 6.5 Creedmoor, 7.62x39, .300 BLK, and .30-06 across retailers.',
-  alternates: { canonical: `${BRAND.wwwUrl}/ammo/rifle/` },
+  alternates: { canonical: `${BRAND.wwwUrl}/ammo/rifle` },
   openGraph: {
     title: 'Rifle Ammo Prices — Compare Deals | IronScout',
     description: 'Compare rifle ammo prices for 5.56, .308, 6.5CM, 7.62x39, .300 BLK, and .30-06 across retailers.',
-    url: `${BRAND.wwwUrl}/ammo/rifle/`,
+    url: `${BRAND.wwwUrl}/ammo/rifle`,
     siteName: 'IronScout',
     type: 'website',
   },

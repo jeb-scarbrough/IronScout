@@ -44,6 +44,7 @@ import { adminRouter } from './routes/admin'
 import { reviewQueueRouter } from './routes/review-queue'
 import { usersRouter } from './routes/users'
 import { marketSnapshotsRouter } from './routes/market-snapshots'
+import { contactRouter } from './routes/contact'
 import { classifyError, getSafeMessage } from './lib/errors'
 import { getRequestContext } from '@ironscout/logger'
 
@@ -199,6 +200,7 @@ app.use('/api/admin', adminRouter)
 app.use('/api/review-queue', reviewQueueRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/market-snapshots', marketSnapshotsRouter)
+app.use('/api/contact', contactRouter)
 
 // Error logger middleware - logs errors with classification
 app.use(errorLoggerMiddleware)
