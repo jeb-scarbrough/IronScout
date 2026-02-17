@@ -151,7 +151,7 @@ export interface ProcessorResult {
   duplicateKeyCount: number
   urlHashFallbackCount: number
   /** Identities where dedupe selected an earlier valid row over the last invalid duplicate */
-  dedupeFallbackToValid?: number
+  dedupeFallbackToValid: number
   errors: ParseError[]
   /** Data quality metrics; undefined on early error exits */
   qualityMetrics?: DataQualityMetrics

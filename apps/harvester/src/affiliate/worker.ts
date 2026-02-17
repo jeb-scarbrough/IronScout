@@ -853,7 +853,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
     pricesWritten: processResult.pricesWritten,
     productsRejected: processResult.productsRejected,
     errorCount: parseResult.errors.length + processResult.errors.length,
-    dedupeFallbackToValid: processResult.dedupeFallbackToValid ?? 0,
+    dedupeFallbackToValid: processResult.dedupeFallbackToValid,
   })
 
   if (processResult.errors.length > 0) {
@@ -880,7 +880,7 @@ async function executePhase1(context: FeedRunContext, log: typeof moduleLog): Pr
       productsRejected: processResult.productsRejected,
       duplicateKeyCount: processResult.duplicateKeyCount,
       urlHashFallbackCount: processResult.urlHashFallbackCount,
-      dedupeFallbackToValid: processResult.dedupeFallbackToValid ?? 0,
+      dedupeFallbackToValid: processResult.dedupeFallbackToValid,
       errorCount: parseResult.errors.length + processResult.errors.length,
       dataQuality: processResult.qualityMetrics,
     },
