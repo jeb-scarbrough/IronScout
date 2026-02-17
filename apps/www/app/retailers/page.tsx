@@ -231,9 +231,9 @@ export default function Retailers() {
           <div className="space-y-6 text-iron-300">
             <p className="leading-relaxed">
               If you have questions about how your products appear, data accuracy, or
-              available data interfaces, you can reach us at{' '}
-              <a href="mailto:retailers@ironscout.ai" className="text-primary hover:text-primary/80">
-                retailers@ironscout.ai
+              available data interfaces, you can{' '}
+              <a href="/contact?source=www-retailers" className="text-primary hover:text-primary/80">
+                contact support
               </a>
             </p>
             <p className="text-iron-400">

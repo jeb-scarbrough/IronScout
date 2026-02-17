@@ -366,7 +366,7 @@ export default function Home() {
               <a href="/retailers" className="hover:text-white transition-colors">For Retailers</a>
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
               <a href="/terms" className="hover:text-white transition-colors">Terms</a>
-              <a href="mailto:hello@ironscout.ai" className="hover:text-white transition-colors">Contact</a>
+              <a href="/contact?source=www-home-footer" className="hover:text-white transition-colors">Contact</a>
             </div>
 
             <div className="text-sm text-iron-500">

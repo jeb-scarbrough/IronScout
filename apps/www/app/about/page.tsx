@@ -262,8 +262,8 @@ export default function About() {
           </div>
           <p className="text-iron-500 text-sm mt-8">
             Questions or feedback?{' '}
-            <a href="mailto:hello@ironscout.ai" className="text-primary hover:text-primary/80">
-              hello@ironscout.ai
+            <a href="/contact?source=www-about" className="text-primary hover:text-primary/80">
+              Contact support
             </a>
           </p>
         </div>
