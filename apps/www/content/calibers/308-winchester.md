@@ -4,7 +4,7 @@ description: Compare .308 Winchester ammo prices across 15+ retailers. FMJ from 
 heading: .308 Winchester ammo prices
 subheading: The full-power rifle standard. Compare FMJ, hunting, match-grade, and bulk deals for the most versatile .30-caliber cartridge.
 category: rifle
-priceRange: $0.55–$2.50
+priceRange: $0.55—$2.50
 ctaPrimaryLabel: Search .308 Win
 ctaPrimaryPath: /search?q=308+winchester
 ctaSecondaryLabel: Get Price Alerts — Free
@@ -15,30 +15,30 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Type | Grain | Use Case | Typical CPR |
 |---|---|---|---|---|
-| [Federal American Eagle](/ammo/federal-american-eagle-308) | FMJ | 150gr | Range / Training | $0.55–0.75 |
-| [PMC X-TAC .308](/ammo/pmc-xtac-308) | FMJ | 147gr | Range / Training | $0.55–0.70 |
-| [Winchester Super-X](/ammo/winchester-super-x-308) | PP | 150gr | Hunting | $0.90–1.30 |
-| [Federal Power-Shok](/ammo/federal-power-shok-308) | SP | 150gr | Hunting | $0.85–1.20 |
-| [Hornady American Whitetail](/ammo/hornady-american-whitetail-308) | InterLock | 150gr | Hunting | $0.90–1.30 |
-| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | Sierra MK | 168gr | Match / Precision | $1.20–1.80 |
-| [Hornady ELD Match](/ammo/hornady-eld-match-308) | ELD-M | 168gr | Match / Precision | $1.20–1.70 |
-| [Hornady Precision Hunter](/ammo/hornady-precision-hunter-308) | ELD-X | 178gr | Long-Range Hunting | $1.40–2.00 |
-| [Barnes VOR-TX](/ammo/barnes-vor-tx-308) | TTSX | 150gr | Lead-Free Hunting | $1.60–2.50 |
+| Federal American Eagle | FMJ | 150gr | Range / Training | $0.55—0.75 |
+| PMC X-TAC .308 | FMJ | 147gr | Range / Training | $0.55—0.70 |
+| Winchester Super-X | PP | 150gr | Hunting | $0.90—1.30 |
+| [Federal Power-Shok](/ammo/federal-power-shok-308) | SP | 150gr | Hunting | $0.85—1.20 |
+| Hornady American Whitetail | InterLock | 150gr | Hunting | $0.90—1.30 |
+| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | Sierra MK | 168gr | Match / Precision | $1.20—1.80 |
+| Hornady ELD Match | ELD-M | 168gr | Match / Precision | $1.20—1.70 |
+| Hornady Precision Hunter | ELD-X | 178gr | Long-Range Hunting | $1.40—2.00 |
+| Barnes VOR-TX | TTSX | 150gr | Lead-Free Hunting | $1.60—2.50 |
 
 ## .308 Winchester by load type
 
 - [.308 FMJ / Range ammo](/caliber/308-winchester/fmj) — Brass-cased training and plinking loads
 - [Bulk .308 (200+ rounds)](/caliber/308-winchester/bulk) — Case quantity deals for volume shooters
 - [.308 Hunting loads](/caliber/308-winchester/hunting) — Soft point, bonded, and expanding bullets for game
-- [.308 Match Grade](/caliber/308-winchester/match-grade) — 168gr–175gr OTM for precision and competition
+- [.308 Match Grade](/caliber/308-winchester/match-grade) — 168gr—175gr OTM for precision and competition
 
 ## How .308 Winchester prices compare
 
 The .308 Winchester occupies a unique position in the rifle market: it's the most popular full-power .30-caliber cartridge, serving equally well for hunting, precision shooting, and general-purpose rifle work. That versatility is reflected in one of the broadest price ranges of any caliber.
 
-**FMJ range and training ammo** runs **$0.55–0.75 per round** for brass-cased loads from Federal American Eagle, PMC, and S&B. This is roughly 2x the cost of 5.56 NATO FMJ, which is the main reason many AR-platform shooters train with 5.56 and save the .308 for specific applications. Surplus and imported 7.62 NATO ball can occasionally dip below $0.50/rd, but availability is inconsistent.
+**FMJ range and training ammo** runs **$0.55—0.75 per round** for brass-cased loads from Federal American Eagle, PMC, and S&B. This is roughly 2x the cost of 5.56 NATO FMJ, which is the main reason many AR-platform shooters train with 5.56 and save the .308 for specific applications. Surplus and imported 7.62 NATO ball can occasionally dip below $0.50/rd, but availability is inconsistent.
 
-**Hunting ammunition** represents the broadest segment, ranging from **$0.85 to $2.50+ per round** depending on bullet technology. Budget hunting loads — Federal Power-Shok, Remington Core-Lokt, Winchester Super-X — use traditional cup-and-core bullets and run $0.85–1.30/rd. Premium bonded and controlled-expansion bullets (Hornady ELD-X, Nosler AccuBond, Barnes TTSX) command $1.40–2.50/rd, with lead-free options like Barnes at the top of the range.
+**Hunting ammunition** represents the broadest segment, ranging from **$0.85 to $2.50+ per round** depending on bullet technology. Budget hunting loads — Federal Power-Shok, Remington Core-Lokt, Winchester Super-X — use traditional cup-and-core bullets and run $0.85—1.30/rd. Premium bonded and controlled-expansion bullets (Hornady ELD-X, Nosler AccuBond, Barnes TTSX) command $1.40—2.50/rd, with lead-free options like Barnes at the top of the range.
 
 > **The 168gr vs 175gr question:** For match shooters, the traditional choice was 168gr Sierra MatchKing. At distances beyond 800 yards, the 175gr SMK and Hornady 178gr ELD-M maintain supersonic flight longer, giving them an edge at extended range. For most hunters and precision shooters inside 600 yards, either works well.
 

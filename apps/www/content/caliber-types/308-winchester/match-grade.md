@@ -13,9 +13,9 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | 168gr | Sierra MK | 20 | $0.85–1.20 |
-| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | 175gr | Sierra MK | 20 | $0.90–1.25 |
-| [Hornady ELD Match](/ammo/hornady-eld-match-308) | 168gr | ELD-M | 20 | $0.90–1.30 |
+| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | 168gr | Sierra MK | 20 | $0.85—1.20 |
+| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-308) | 175gr | Sierra MK | 20 | $0.90—1.25 |
+| Hornady ELD Match | 168gr | ELD-M | 20 | $0.90—1.30 |
 
 ## What to know
 

@@ -13,8 +13,8 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Count | Typical CPR |
 |---|---|---|---|
-| Federal Lake City XM80 | 149gr FMJ | 500 | $0.55–0.65 |
-| [Federal American Eagle](/ammo/federal-american-eagle-308) | 150gr FMJ | 100 | $0.55–0.72 |
+| Federal Lake City XM80 | 149gr FMJ | 500 | $0.55—0.65 |
+| Federal American Eagle | 150gr FMJ | 100 | $0.55—0.72 |
 
 ## Buying .308 in bulk
 

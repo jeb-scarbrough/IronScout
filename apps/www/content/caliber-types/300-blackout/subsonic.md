@@ -3,7 +3,7 @@ title: .300 Blackout Subsonic Ammo Prices — Compare Deals | IronScout
 description: Compare .300 Blackout subsonic ammo prices across retailers. 190-220gr suppressor loads from $0.55/rd. Updated daily.
 heading: .300 Blackout subsonic ammo prices
 subheading: Suppressor-optimized loads under 1,050 fps. The reason most people buy a .300 Blackout.
-priceRange: $0.55–$1.00
+priceRange: $0.55—$1.00
 ctaPrimaryLabel: Search .300 BLK Subsonic
 ctaPrimaryPath: /search?q=300+blackout+subsonic
 ctaSecondaryLabel: Get Price Alerts — Free
@@ -14,11 +14,11 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Sellier & Bellot 300 BLK Sub](/ammo/sellier-bellot-300-blackout-sub) | 200gr | FMJ | 20 | $0.55–0.75 |
-| [Magtech 300 BLK Sub](/ammo/magtech-300-blackout-sub) | 200gr | FMJ | 50 | $0.55–0.75 |
-| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | 190gr | Sub-X | 20–200 | $0.60–0.90 |
-| [Sig Sauer 300 BLK](/ammo/sig-sauer-300-blackout-sub) | 220gr | OTM | 20 | $0.70–1.00 |
-| [Federal American Eagle Sub](/ammo/federal-american-eagle-300-blackout-sub) | 220gr | OTM | 20 | $0.65–0.85 |
+| Sellier & Bellot 300 BLK Sub | 200gr | FMJ | 20 | $0.55—0.75 |
+| Magtech 300 BLK Sub | 200gr | FMJ | 50 | $0.55—0.75 |
+| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | 190gr | Sub-X | 20—200 | $0.60—0.90 |
+| Sig Sauer 300 BLK | 220gr | OTM | 20 | $0.70—1.00 |
+| Federal American Eagle Sub | 220gr | OTM | 20 | $0.65—0.85 |
 
 ## What to know about subsonic .300 BLK
 
@@ -30,7 +30,7 @@ The critical distinction in subsonic .300 BLK is between **FMJ plinking loads** 
 
 **Hornady Sub-X** is the standout expanding subsonic load. Its patented flex-tip design initiates expansion at subsonic velocity, something conventional JHP cannot reliably do. Lehigh Defense Controlled Chaos and Maximum Expansion bullets also offer subsonic expansion through non-traditional engineering (fragmenting or hydraulic designs).
 
-For **range and suppressor fun**, FMJ subsonic loads from S&B and Magtech at $0.55–0.75/rd are the most economical option. Save the more expensive expanding loads for your defense magazine.
+For **range and suppressor fun**, FMJ subsonic loads from S&B and Magtech at $0.55—0.75/rd are the most economical option. Save the more expensive expanding loads for your defense magazine.
 
 > **Cycling reliability:** Subsonic .300 BLK generates less gas than supersonic loads, which can cause cycling issues in some gas-operated semi-autos, particularly those with adjustable gas blocks set for supersonic ammo. If running a suppressed AR-15, ensure your gas system is tuned for subsonic or use a suppressor with back-pressure characteristics that aid cycling.
 

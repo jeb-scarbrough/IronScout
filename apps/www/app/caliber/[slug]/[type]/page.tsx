@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
 import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
+import { getCaliberAliasEntries, resolveCaliberSlug } from '@/lib/caliber-aliases'
 import { getNestedContentSlugs, readNestedMarkdownContent, readMarkdownContent } from '@/lib/content'
 import {
   computeSnapshotArtifactSha256,
@@ -15,10 +16,24 @@ import {
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  return getNestedContentSlugs('caliber-types').map(({ parent, child }) => ({
+  const canonicalParams = getNestedContentSlugs('caliber-types').map(({ parent, child }) => ({
     slug: parent,
     type: child,
   }))
+
+  const typesByCanonicalSlug = new Map<string, string[]>()
+  for (const param of canonicalParams) {
+    const existing = typesByCanonicalSlug.get(param.slug) ?? []
+    existing.push(param.type)
+    typesByCanonicalSlug.set(param.slug, existing)
+  }
+
+  const aliasParams = getCaliberAliasEntries().flatMap(([aliasSlug, canonicalSlug]) => {
+    const typeSlugs = typesByCanonicalSlug.get(canonicalSlug) ?? []
+    return typeSlugs.map((type) => ({ slug: aliasSlug, type }))
+  })
+
+  return [...canonicalParams, ...aliasParams]
 }
 
 export async function generateMetadata({
@@ -26,7 +41,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ slug: string; type: string }>
 }): Promise<Metadata> {
-  const { slug, type } = await params
+  const { slug: rawSlug, type } = await params
+  const slug = resolveCaliberSlug(rawSlug)
   const content = readNestedMarkdownContent('caliber-types', slug, type)
   if (!content) {
     return { title: 'Not Found | IronScout' }
@@ -61,7 +77,8 @@ export default async function CaliberTypePage({
 }: {
   params: Promise<{ slug: string; type: string }>
 }) {
-  const { slug, type } = await params
+  const { slug: rawSlug, type } = await params
+  const slug = resolveCaliberSlug(rawSlug)
   const content = readNestedMarkdownContent('caliber-types', slug, type)
   if (!content) {
     notFound()

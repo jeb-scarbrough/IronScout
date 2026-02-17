@@ -13,10 +13,10 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Velocity | Count | Typical CPR |
 |---|---|---|---|---|
-| [CCI Standard Velocity](/ammo/cci-standard-velocity-22lr) | 40gr | 1070 fps | 50–500 | $0.07–0.09 |
-| CCI Quiet-22 | 40gr | 710 fps | 50 | $0.08–0.12 |
-| CCI Suppressor | 45gr | 970 fps | 50 | $0.08–0.12 |
-| Aguila Colibri | 20gr | 420 fps | 50 | $0.08–0.12 |
+| CCI Standard Velocity | 40gr | 1070 fps | 50—500 | $0.07—0.09 |
+| CCI Quiet-22 | 40gr | 710 fps | 50 | $0.08—0.12 |
+| CCI Suppressor | 45gr | 970 fps | 50 | $0.08—0.12 |
+| Aguila Colibri | 20gr | 420 fps | 50 | $0.08—0.12 |
 
 ## What to know
 

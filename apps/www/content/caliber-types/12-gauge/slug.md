@@ -13,14 +13,14 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Type | Oz | Count | Typical CPR |
 |---|---|---|---|---|
-| [Federal Power-Shok Slug](/ammo/federal-power-shok-12-gauge-slug) | Rifled | 1oz | 5 | $0.70–1.00 |
-| Remington Slugger | Rifled | 1oz | 5 | $0.70–1.00 |
-| Federal Truball | Rifled | 1oz | 5 | $0.80–1.10 |
-| Hornady SST Sabot | Sabot | 300gr | 5 | $1.50–2.50 |
+| Federal Power-Shok Slug | Rifled | 1oz | 5 | $0.70—1.00 |
+| Remington Slugger | Rifled | 1oz | 5 | $0.70—1.00 |
+| Federal Truball | Rifled | 1oz | 5 | $0.80—1.10 |
+| Hornady SST Sabot | Sabot | 300gr | 5 | $1.50—2.50 |
 
 ## What to know
 
-Rifled slugs (Foster-type) are for smooth-bore barrels and are the most affordable option. Sabot slugs are for rifled barrels and offer much better accuracy past 75 yards, but cost 2–3x as much. For deer hunting with a smooth bore, the Federal Truball is the accuracy king. For rifled barrels, Hornady SST provides rifle-like performance to 150+ yards.
+Rifled slugs (Foster-type) are for smooth-bore barrels and are the most affordable option. Sabot slugs are for rifled barrels and offer much better accuracy past 75 yards, but cost 2—3x as much. For deer hunting with a smooth bore, the Federal Truball is the accuracy king. For rifled barrels, Hornady SST provides rifle-like performance to 150+ yards.
 
 ## Related
 

@@ -13,14 +13,14 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Shot | Oz | Velocity | Count | Typical CPR |
 |---|---|---|---|---|---|
-| [Federal Top Gun Light](/ammo/federal-top-gun-12-gauge) | #8 | 1oz | 1180 fps | 25 | $0.25–0.35 |
-| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #7.5 | 1-1/8oz | 1145 fps | 25 | $0.28–0.38 |
-| [Winchester AA](/ammo/winchester-aa-12-gauge) | #8 | 1-1/8oz | 1145 fps | 25 | $0.30–0.40 |
-| [Remington Gun Club](/ammo/remington-gun-club-12-gauge) | #8 | 1-1/8oz | 1200 fps | 25 | $0.25–0.35 |
+| [Federal Top Gun Light](/ammo/federal-top-gun-12-gauge) | #8 | 1oz | 1180 fps | 25 | $0.25—0.35 |
+| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #7.5 | 1-1/8oz | 1145 fps | 25 | $0.28—0.38 |
+| Winchester AA | #8 | 1-1/8oz | 1145 fps | 25 | $0.30—0.40 |
+| Remington Gun Club | #8 | 1-1/8oz | 1200 fps | 25 | $0.25—0.35 |
 
 ## What to know
 
-Target loads are the highest-volume shotshell category. Winchester AA is the premium competition standard; Federal Top Gun and Remington Gun Club are the value options. Light loads (1oz) are preferred for high-volume days — less recoil means less fatigue. Case pricing (250 shells) drops cost 10–15%. Many ranges and clubs offer bulk case discounts.
+Target loads are the highest-volume shotshell category. Winchester AA is the premium competition standard; Federal Top Gun and Remington Gun Club are the value options. Light loads (1oz) are preferred for high-volume days — less recoil means less fatigue. Case pricing (250 shells) drops cost 10—15%. Many ranges and clubs offer bulk case discounts.
 
 ## Related
 

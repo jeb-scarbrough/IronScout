@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3004",
-    "build": "node ./scripts/generate-market-snapshots.mjs && next build",
+    "build": "node ./scripts/verify-internal-links.mjs && node ./scripts/generate-market-snapshots.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "verify:links": "node ./scripts/verify-internal-links.mjs",
     "verify:snapshot:sitemap": "node ./scripts/verify-market-snapshot-sitemap-alignment.mjs",
     "verify:snapshot:embed": "node ./scripts/verify-market-snapshot-embed-parity.mjs",
     "verify:snapshot:jsonld": "node ./scripts/verify-market-snapshot-jsonld-parity.mjs",

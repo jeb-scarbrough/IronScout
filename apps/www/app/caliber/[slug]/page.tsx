@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { MarketingMarkdownPage } from '@/components/MarketingMarkdownPage'
 import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
+import { getCaliberAliasEntries, resolveCaliberSlug } from '@/lib/caliber-aliases'
 import { getContentSlugs, readMarkdownContent } from '@/lib/content'
 import {
   computeSnapshotArtifactSha256,
@@ -15,7 +16,13 @@ import {
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  return getContentSlugs('calibers').map((slug) => ({ slug }))
+  const canonicalSlugs = getContentSlugs('calibers')
+  const canonicalSet = new Set(canonicalSlugs)
+  const aliasSlugs = getCaliberAliasEntries()
+    .filter(([, canonicalSlug]) => canonicalSet.has(canonicalSlug))
+    .map(([aliasSlug]) => aliasSlug)
+
+  return [...canonicalSlugs, ...aliasSlugs].map((slug) => ({ slug }))
 }
 
 export async function generateMetadata({
@@ -23,7 +30,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ slug: string }>
 }): Promise<Metadata> {
-  const { slug } = await params
+  const { slug: rawSlug } = await params
+  const slug = resolveCaliberSlug(rawSlug)
   const content = readMarkdownContent('calibers', slug)
   if (!content) {
     return { title: 'Caliber Not Found | IronScout' }
@@ -65,7 +73,8 @@ export default async function CaliberPage({
 }: {
   params: Promise<{ slug: string }>
 }) {
-  const { slug } = await params
+  const { slug: rawSlug } = await params
+  const slug = resolveCaliberSlug(rawSlug)
   const content = readMarkdownContent('calibers', slug)
   if (!content) {
     notFound()

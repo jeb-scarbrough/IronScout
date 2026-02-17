@@ -13,12 +13,12 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Hornady Black](/ammo/hornady-black-223) | 75gr | BTHP | 20 | $0.55–0.75 |
-| [Federal Gold Medal](/ammo/federal-gold-medal-223) | 69gr | Sierra MK | 20 | $0.70–1.00 |
+| Hornady Black | 75gr | BTHP | 20 | $0.55—0.75 |
+| Federal Gold Medal | 69gr | Sierra MK | 20 | $0.70—1.00 |
 
 ## What to know
 
-Heavy-bullet .223 (69–77gr) requires 1:7 or 1:8 twist barrels. The .223 Remington headstamp is more common on match ammo than 5.56 NATO since precision loads are manufactured to SAAMI spec. See also [5.56 match grade](/caliber/556-nato/match-grade) for 77gr options.
+Heavy-bullet .223 (69—77gr) requires 1:7 or 1:8 twist barrels. The .223 Remington headstamp is more common on match ammo than 5.56 NATO since precision loads are manufactured to SAAMI spec. See also [5.56 match grade](/caliber/556-nato/match-grade) for 77gr options.
 
 ## Related
 

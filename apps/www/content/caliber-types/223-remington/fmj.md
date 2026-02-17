@@ -13,8 +13,8 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Count | Typical CPR |
 |---|---|---|---|
-| [Wolf Gold](/ammo/wolf-gold-223) | 55gr | 20–1000 | $0.28–0.36 |
-| [Federal American Eagle](/ammo/federal-american-eagle-223) | 55gr | 20 | $0.30–0.40 |
+| [Wolf Gold](/ammo/wolf-gold-223) | 55gr | 20—1000 | $0.28—0.36 |
+| Federal American Eagle | 55gr | 20 | $0.30—0.40 |
 
 ## What to know
 

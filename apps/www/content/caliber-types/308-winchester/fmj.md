@@ -13,13 +13,13 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Count | Typical CPR |
 |---|---|---|---|
-| [Federal American Eagle](/ammo/federal-american-eagle-308) | 150gr | 20 | $0.55–0.75 |
-| [Winchester White Box](/ammo/winchester-white-box-308) | 147gr | 20 | $0.55–0.70 |
-| Federal Lake City XM80 | 149gr | 20–500 | $0.55–0.70 |
+| Federal American Eagle | 150gr | 20 | $0.55—0.75 |
+| Winchester White Box | 147gr | 20 | $0.55—0.70 |
+| Federal Lake City XM80 | 149gr | 20—500 | $0.55—0.70 |
 
 ## What to know
 
-The 147–150gr FMJ is the standard .308 range load. Lake City XM80 (7.62 NATO mil-spec) is often the cheapest option in bulk. Brass-cased and reloadable. Buying in 200+ round quantities saves noticeably.
+The 147—150gr FMJ is the standard .308 range load. Lake City XM80 (7.62 NATO mil-spec) is often the cheapest option in bulk. Brass-cased and reloadable. Buying in 200+ round quantities saves noticeably.
 
 ## Related
 

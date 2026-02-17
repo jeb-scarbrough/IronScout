@@ -13,9 +13,9 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Hornady V-Max](/ammo/hornady-vmax-223) | 55gr | V-Max | 20 | $0.45–0.65 |
-| Hornady Superformance Varmint | 53gr | V-Max | 20 | $0.50–0.70 |
-| Federal V-Shok | 55gr | Nosler BT | 20 | $0.50–0.70 |
+| Hornady V-Max | 55gr | V-Max | 20 | $0.45—0.65 |
+| Hornady Superformance Varmint | 53gr | V-Max | 20 | $0.50—0.70 |
+| Federal V-Shok | 55gr | Nosler BT | 20 | $0.50—0.70 |
 
 ## What to know
 

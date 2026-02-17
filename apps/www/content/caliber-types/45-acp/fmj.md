@@ -13,9 +13,9 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Count | Typical CPR |
 |---|---|---|---|
-| [Blazer Brass 45](/ammo/blazer-brass-45-acp) | 230gr | 50 | $0.28–0.36 |
-| [Federal American Eagle](/ammo/federal-american-eagle-45-acp) | 230gr | 50–100 | $0.28–0.40 |
-| [Winchester White Box](/ammo/winchester-white-box-45-acp) | 230gr | 50–100 | $0.28–0.38 |
+| Blazer Brass 45 | 230gr | 50 | $0.28—0.36 |
+| [Federal American Eagle](/ammo/federal-american-eagle-45-acp) | 230gr | 50—100 | $0.28—0.40 |
+| [Winchester White Box](/ammo/winchester-white-box-45-acp) | 230gr | 50—100 | $0.28—0.38 |
 
 ## What to know about .45 ACP FMJ
 

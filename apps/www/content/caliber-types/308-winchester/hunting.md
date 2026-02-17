@@ -13,11 +13,11 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Federal Power-Shok](/ammo/federal-power-shok-308) | 150gr | Soft Point | 20 | $0.75–1.00 |
-| [Hornady American Whitetail](/ammo/hornady-american-whitetail-308) | 150gr | InterLock | 20 | $0.80–1.10 |
-| Remington Core-Lokt | 150gr | PSP | 20 | $0.80–1.10 |
-| Hornady Precision Hunter | 178gr | ELD-X | 20 | $1.10–1.50 |
-| Federal Terminal Ascent | 175gr | Bonded | 20 | $1.30–1.70 |
+| [Federal Power-Shok](/ammo/federal-power-shok-308) | 150gr | Soft Point | 20 | $0.75—1.00 |
+| Hornady American Whitetail | 150gr | InterLock | 20 | $0.80—1.10 |
+| Remington Core-Lokt | 150gr | PSP | 20 | $0.80—1.10 |
+| Hornady Precision Hunter | 178gr | ELD-X | 20 | $1.10—1.50 |
+| Federal Terminal Ascent | 175gr | Bonded | 20 | $1.30—1.70 |
 
 ## What to know
 

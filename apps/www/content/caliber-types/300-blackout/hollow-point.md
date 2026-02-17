@@ -13,13 +13,13 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [Barnes VOR-TX](/ammo/barnes-vortx-300blk) | 110gr | TAC-TX | 20 | $1.00–1.40 |
-| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | 190gr | Sub-X (subsonic) | 20 | $0.65–0.90 |
-| Lehigh Defense 300 BLK | 115gr | Controlled Chaos | 20 | $1.20–1.60 |
+| Barnes VOR-TX | 110gr | TAC-TX | 20 | $1.00—1.40 |
+| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | 190gr | Sub-X (subsonic) | 20 | $0.65—0.90 |
+| Lehigh Defense 300 BLK | 115gr | Controlled Chaos | 20 | $1.20—1.60 |
 
 ## What to know
 
-Expanding .300 BLK comes in two flavors: supersonic (110–125gr) for maximum terminal effect, and subsonic (190gr+ Sub-X) for suppressed use. Barnes TAC-TX is the most popular supersonic expanding load. Hornady Sub-X is the only widely available subsonic that reliably expands. Premium pricing reflects the specialty nature of these loads.
+Expanding .300 BLK comes in two flavors: supersonic (110—125gr) for maximum terminal effect, and subsonic (190gr+ Sub-X) for suppressed use. Barnes TAC-TX is the most popular supersonic expanding load. Hornady Sub-X is the only widely available subsonic that reliably expands. Premium pricing reflects the specialty nature of these loads.
 
 ## Related
 

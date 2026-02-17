@@ -21,9 +21,9 @@ If you are standing in a store, use the In-Store Price Check and enter the box d
 
 ## Popular Prvi Partizan calibers
 - [9mm ammo listings](/caliber/9mm)
-- [5.56 / .223 ammo listings](/caliber/556)
+- [5.56 / .223 ammo listings](/caliber/556-nato)
 - [45 ACP ammo listings](/caliber/45-acp)
-- [308 / 7.62 ammo listings](/caliber/308)
+- [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
 ## Related brands

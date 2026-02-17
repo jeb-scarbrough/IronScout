@@ -13,13 +13,13 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Count | Typical CPR |
 |---|---|---|---|
-| [Blazer Brass 45](/ammo/blazer-brass-45-acp) | 230gr FMJ | 250 | $0.28–0.34 |
-| [Federal American Eagle](/ammo/federal-american-eagle-45-acp) | 230gr FMJ | 100 | $0.28–0.38 |
-| [Winchester White Box](/ammo/winchester-white-box-45-acp) | 230gr FMJ | 100 | $0.28–0.38 |
+| Blazer Brass 45 | 230gr FMJ | 250 | $0.28—0.34 |
+| [Federal American Eagle](/ammo/federal-american-eagle-45-acp) | 230gr FMJ | 100 | $0.28—0.38 |
+| [Winchester White Box](/ammo/winchester-white-box-45-acp) | 230gr FMJ | 100 | $0.28—0.38 |
 
 ## Buying .45 ACP in bulk
 
-Bulk .45 ACP saves roughly 10–15% over 50-round boxes. The larger case and heavier bullet make .45 ACP more expensive to ship per round than 9mm, so free shipping thresholds matter even more. Case quantities (500–1000 rounds) are the best value.
+Bulk .45 ACP saves roughly 10—15% over 50-round boxes. The larger case and heavier bullet make .45 ACP more expensive to ship per round than 9mm, so free shipping thresholds matter even more. Case quantities (500—1000 rounds) are the best value.
 
 ## Related
 

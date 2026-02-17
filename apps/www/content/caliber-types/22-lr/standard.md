@@ -13,14 +13,14 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Grain | Bullet | Count | Typical CPR |
 |---|---|---|---|---|
-| [CCI Blazer](/ammo/cci-blazer-22lr) | 40gr | LRN | 50–5250 | $0.04–0.07 |
-| [Federal AutoMatch](/ammo/federal-automatch-22lr) | 40gr | LRN | 325 | $0.05–0.07 |
-| [Federal Champion](/ammo/federal-champion-22lr) | 40gr | LRN | 325–525 | $0.05–0.07 |
-| [Aguila Super Extra](/ammo/aguila-super-extra-22lr) | 40gr | CPRN | 50–500 | $0.05–0.07 |
+| [CCI Blazer](/ammo/cci-blazer-22lr) | 40gr | LRN | 50—5250 | $0.04—0.07 |
+| [Federal AutoMatch](/ammo/federal-automatch-22lr) | 40gr | LRN | 325 | $0.05—0.07 |
+| Federal Champion | 40gr | LRN | 325—525 | $0.05—0.07 |
+| Aguila Super Extra | 40gr | CPRN | 50—500 | $0.05—0.07 |
 
 ## What to know
 
-Standard velocity .22 LR (1,050–1,080 fps) is the quietest and cheapest option. Buy in 500-round bricks or 5,000-round cases for best pricing. AutoMatch is specifically optimized for semi-auto cycling. CCI Blazer is the cheapest but may not cycle all semi-autos reliably.
+Standard velocity .22 LR (1,050—1,080 fps) is the quietest and cheapest option. Buy in 500-round bricks or 5,000-round cases for best pricing. AutoMatch is specifically optimized for semi-auto cycling. CCI Blazer is the cheapest but may not cycle all semi-autos reliably.
 
 ## Related
 

@@ -4,7 +4,7 @@ description: Compare .300 AAC Blackout ammo prices across 15+ retailers. Superso
 heading: .300 Blackout ammo prices
 subheading: Built for suppressed AR-15s and short-barreled rifles. Compare supersonic, subsonic, and defense loads across every major retailer.
 category: rifle
-priceRange: $0.50–$1.50
+priceRange: $0.50—$1.50
 ctaPrimaryLabel: Search .300 BLK
 ctaPrimaryPath: /search?q=300+blackout
 ctaSecondaryLabel: Get Price Alerts — Free
@@ -15,33 +15,33 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Type | Grain | Use Case | Typical CPR |
 |---|---|---|---|---|
-| [S&B .300 BLK](/ammo/sellier-bellot-300-blackout) | FMJ | 147gr | Range / Training | $0.50–0.65 |
-| [Magtech .300 BLK](/ammo/magtech-300-blackout) | FMJ | 115gr | Range / Training | $0.50–0.65 |
-| [Hornady Black 110gr](/ammo/hornady-black-300blk-110) | V-MAX | 110gr | Supersonic / Varmint | $0.65–0.90 |
-| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | Sub-X | 190gr | Suppressed | $0.60–0.90 |
-| [Sig Sauer 300 BLK](/ammo/sig-sauer-300-blackout) | OTM | 220gr | Suppressed | $0.70–1.00 |
-| [Sellier & Bellot 200gr Sub](/ammo/sellier-bellot-300-blackout-sub) | FMJ | 200gr | Subsonic Range | $0.55–0.75 |
-| [Barnes VOR-TX 300 BLK](/ammo/barnes-vor-tx-300-blackout) | TAC-TX | 120gr | HD / Hunting | $1.10–1.50 |
+| S&B .300 BLK | FMJ | 147gr | Range / Training | $0.50—0.65 |
+| Magtech .300 BLK | FMJ | 115gr | Range / Training | $0.50—0.65 |
+| Hornady Black 110gr | V-MAX | 110gr | Supersonic / Varmint | $0.65—0.90 |
+| [Hornady Black Sub-X](/ammo/hornady-black-300blk-subsonic) | Sub-X | 190gr | Suppressed | $0.60—0.90 |
+| Sig Sauer 300 BLK | OTM | 220gr | Suppressed | $0.70—1.00 |
+| Sellier & Bellot 200gr Sub | FMJ | 200gr | Subsonic Range | $0.55—0.75 |
+| Barnes VOR-TX 300 BLK | TAC-TX | 120gr | HD / Hunting | $1.10—1.50 |
 
 ## .300 Blackout by load type
 
-- [.300 Blackout supersonic](/caliber/300-blackout/supersonic) — 110–125gr loads for full-velocity applications
-- [.300 Blackout subsonic](/caliber/300-blackout/subsonic) — 190–220gr loads optimized for suppressors
+- [.300 Blackout supersonic](/caliber/300-blackout/supersonic) — 110—125gr loads for full-velocity applications
+- [.300 Blackout subsonic](/caliber/300-blackout/subsonic) — 190—220gr loads optimized for suppressors
 - [.300 Blackout hollow point](/caliber/300-blackout/hollow-point) — Expanding defense and hunting loads
 
 ## How .300 Blackout prices compare
 
 The .300 AAC Blackout was designed with one specific mission: give the AR-15 platform a .30-caliber option that works in short barrels and suppresses exceptionally well. That design intent shapes the entire market — this is a caliber where subsonic loads outsell supersonic in many product lines.
 
-**Supersonic loads** (110–125gr) run **$0.50–0.90 per round** and deliver ballistics similar to 7.62x39 from an AR-15 platform. These are the range/training loads for .300 BLK owners who want to practice without the cost of subsonic ammo. S&B and Magtech offer the lowest-cost supersonic options.
+**Supersonic loads** (110—125gr) run **$0.50—0.90 per round** and deliver ballistics similar to 7.62x39 from an AR-15 platform. These are the range/training loads for .300 BLK owners who want to practice without the cost of subsonic ammo. S&B and Magtech offer the lowest-cost supersonic options.
 
-**Subsonic loads** (190–220gr) run **$0.55–1.00 per round** and are the reason most people buy a .300 BLK in the first place. At velocities below 1,050 fps, these loads eliminate the supersonic crack when paired with a suppressor, producing a hearing-safe shooting experience. Hornady Sub-X is the standout in this segment because its bullet is specifically designed to expand at subsonic velocity — most traditional JHP designs won't expand below 1,000 fps.
+**Subsonic loads** (190—220gr) run **$0.55—1.00 per round** and are the reason most people buy a .300 BLK in the first place. At velocities below 1,050 fps, these loads eliminate the supersonic crack when paired with a suppressor, producing a hearing-safe shooting experience. Hornady Sub-X is the standout in this segment because its bullet is specifically designed to expand at subsonic velocity — most traditional JHP designs won't expand below 1,000 fps.
 
-> **The expansion problem:** Standard hollow point bullets require minimum velocities of 1,200–1,800 fps to reliably expand. At .300 BLK subsonic velocities (~1,000 fps), they act like FMJ. Hornady Sub-X and Lehigh Defense Controlled Chaos are specifically engineered for subsonic expansion. If terminal performance matters for your use case, these are the loads to research.
+> **The expansion problem:** Standard hollow point bullets require minimum velocities of 1,200—1,800 fps to reliably expand. At .300 BLK subsonic velocities (~1,000 fps), they act like FMJ. Hornady Sub-X and Lehigh Defense Controlled Chaos are specifically engineered for subsonic expansion. If terminal performance matters for your use case, these are the loads to research.
 
 ### .300 BLK vs 5.56 NATO
 
-The .300 BLK's main advantage is suppressor performance and short-barrel efficiency. It reaches full ballistic potential in a 9" barrel, versus 14.5–16" for 5.56 NATO. The tradeoff is cost: .300 BLK range ammo costs roughly 2x what 5.56 NATO costs per round. Most .300 BLK owners also own 5.56 uppers and train primarily with the cheaper caliber, reserving .300 BLK for specific applications.
+The .300 BLK's main advantage is suppressor performance and short-barrel efficiency. It reaches full ballistic potential in a 9" barrel, versus 14.5—16" for 5.56 NATO. The tradeoff is cost: .300 BLK range ammo costs roughly 2x what 5.56 NATO costs per round. Most .300 BLK owners also own 5.56 uppers and train primarily with the cheaper caliber, reserving .300 BLK for specific applications.
 
 > **Safety warning:** .300 Blackout rounds will chamber in a 5.56 NATO rifle but cannot safely fire. This is the most dangerous cross-caliber compatibility issue in the AR platform. Always clearly mark your .300 BLK magazines and never mix ammunition on the same bench.
 

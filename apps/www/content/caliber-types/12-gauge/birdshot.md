@@ -1,6 +1,6 @@
 ---
 title: "12 Gauge Birdshot Prices — Compare Deals | IronScout"
-description: "Compare 12 gauge birdshot and small game load prices across retailers. #6–#8 shot from $0.25/rd. Updated daily."
+description: "Compare 12 gauge birdshot and small game load prices across retailers. #6—#8 shot from $0.25/rd. Updated daily."
 heading: "12 gauge birdshot ammo prices"
 subheading: "Compare birdshot for clay shooting and small game across retailers."
 ctaPrimaryLabel: "Search 12ga Birdshot"
@@ -13,10 +13,10 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Shot | Oz | Use | Count | Typical CPR |
 |---|---|---|---|---|---|
-| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #7.5 | 1-1/8 | Trap/Skeet | 25 | $0.28–0.38 |
-| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #8 | 1-1/8 | Trap/Skeet | 25 | $0.28–0.38 |
-| [Remington Gun Club](/ammo/remington-gun-club-12-gauge) | #8 | 1-1/8 | Trap/Skeet | 25 | $0.25–0.35 |
-| [Winchester AA](/ammo/winchester-aa-12-gauge) | #8 | 1-1/8 | Competition | 25 | $0.30–0.40 |
+| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #7.5 | 1-1/8 | Trap/Skeet | 25 | $0.28—0.38 |
+| [Federal Top Gun](/ammo/federal-top-gun-12-gauge) | #8 | 1-1/8 | Trap/Skeet | 25 | $0.28—0.38 |
+| Remington Gun Club | #8 | 1-1/8 | Trap/Skeet | 25 | $0.25—0.35 |
+| Winchester AA | #8 | 1-1/8 | Competition | 25 | $0.30—0.40 |
 
 ## What to know
 

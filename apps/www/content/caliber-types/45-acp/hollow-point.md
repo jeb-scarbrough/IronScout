@@ -13,9 +13,9 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Bullet | Grain | Count | Typical CPR |
 |---|---|---|---|---|
-| [Federal HST](/ammo/federal-hst-45-acp) | JHP | 230gr | 50 | $0.60–0.85 |
-| [Speer Gold Dot 45](/ammo/speer-gold-dot-45-acp) | JHP | 230gr | 50 | $0.65–1.00 |
-| [Hornady Critical Defense 45](/ammo/hornady-critical-defense-45-acp) | FTX | 185gr | 20 | $0.70–1.10 |
+| [Federal HST](/ammo/federal-hst-45-acp) | JHP | 230gr | 50 | $0.60—0.85 |
+| Speer Gold Dot 45 | JHP | 230gr | 50 | $0.65—1.00 |
+| Hornady Critical Defense 45 | FTX | 185gr | 20 | $0.70—1.10 |
 
 ## What to know about .45 ACP hollow points
 

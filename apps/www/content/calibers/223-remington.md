@@ -4,7 +4,7 @@ description: Compare .223 Remington ammo prices across 15+ retailers. FMJ from $
 heading: .223 Remington ammo prices
 subheading: The civilian sibling of 5.56 NATO. Compare FMJ, varmint, and match-grade loads across every major retailer.
 category: rifle
-priceRange: $0.25–$1.20
+priceRange: $0.25—$1.20
 ctaPrimaryLabel: Search .223 Rem
 ctaPrimaryPath: /search?q=223+remington
 ctaSecondaryLabel: Get Price Alerts — Free
@@ -15,29 +15,29 @@ ctaSecondaryPath: /auth/signup?intent=alerts
 
 | Product Line | Type | Grain | Use Case | Typical CPR |
 |---|---|---|---|---|
-| [Wolf Gold .223](/ammo/wolf-gold-223) | FMJ | 55gr | Range / Training | $0.25–0.36 |
-| [Federal American Eagle .223](/ammo/federal-american-eagle-223) | FMJ | 55gr | Range / Training | $0.28–0.40 |
-| [Hornady Frontier .223](/ammo/hornady-frontier-223) | FMJ | 55gr | Range / Training | $0.28–0.38 |
-| [Hornady V-MAX .223](/ammo/hornady-vmax-223) | V-MAX | 55gr | Varmint | $0.40–0.60 |
-| [Federal Gold Medal Match](/ammo/federal-gold-medal-match-223) | BTHP | 69gr | Precision | $0.70–1.00 |
-| [Hornady Black 75gr](/ammo/hornady-black-223) | BTHP | 75gr | HD / Precision | $0.70–1.00 |
-| [Federal Premium 77gr](/ammo/federal-premium-223-77) | SMK | 77gr | Precision / MK262 clone | $0.80–1.20 |
+| [Wolf Gold .223](/ammo/wolf-gold-223) | FMJ | 55gr | Range / Training | $0.25—0.36 |
+| Federal American Eagle .223 | FMJ | 55gr | Range / Training | $0.28—0.40 |
+| Hornady Frontier .223 | FMJ | 55gr | Range / Training | $0.28—0.38 |
+| Hornady V-MAX .223 | V-MAX | 55gr | Varmint | $0.40—0.60 |
+| Federal Gold Medal Match | BTHP | 69gr | Precision | $0.70—1.00 |
+| Hornady Black 75gr | BTHP | 75gr | HD / Precision | $0.70—1.00 |
+| Federal Premium 77gr | SMK | 77gr | Precision / MK262 clone | $0.80—1.20 |
 
 ## .223 Remington by bullet type
 
 - [.223 FMJ / Range ammo](/caliber/223-remington/fmj) — Budget training and plinking loads
 - [.223 Varmint loads](/caliber/223-remington/varmint) — Thin-jacketed expanding bullets for pest control
-- [.223 Match Grade](/caliber/223-remington/match-grade) — 69–77gr OTM for precision shooting
+- [.223 Match Grade](/caliber/223-remington/match-grade) — 69—77gr OTM for precision shooting
 
 ## How .223 Remington prices compare
 
 The .223 Remington and 5.56 NATO share identical external case dimensions but differ in chamber pressure specifications. In the commercial ammo market, ammunition labeled ".223 Remington" is loaded to SAAMI specifications (55,000 psi), while "5.56 NATO" is loaded to NATO specifications (roughly 62,000 psi). In practice, the performance difference is minimal for most applications, and both are safe in rifles chambered for 5.56 NATO or .223 Wylde.
 
-**FMJ range ammo** labeled .223 Remington often represents the absolute lowest cost per round for the AR-15 platform. Wolf Gold — brass-cased, boxer-primed .223 loaded in Taiwan — is consistently one of the cheapest quality options at **$0.25–0.36/rd**. Federal American Eagle and Hornady Frontier round out the budget tier at $0.28–0.40/rd.
+**FMJ range ammo** labeled .223 Remington often represents the absolute lowest cost per round for the AR-15 platform. Wolf Gold — brass-cased, boxer-primed .223 loaded in Taiwan — is consistently one of the cheapest quality options at **$0.25—0.36/rd**. Federal American Eagle and Hornady Frontier round out the budget tier at $0.28—0.40/rd.
 
-**Varmint ammunition** is a segment where .223 Remington has always excelled. The combination of high velocity, flat trajectory, and lightweight bullets makes it ideal for prairie dog and coyote shooting. Hornady V-MAX and Nosler Varmageddon in 40–55gr provide explosive expansion at **$0.40–0.60/rd**.
+**Varmint ammunition** is a segment where .223 Remington has always excelled. The combination of high velocity, flat trajectory, and lightweight bullets makes it ideal for prairie dog and coyote shooting. Hornady V-MAX and Nosler Varmageddon in 40—55gr provide explosive expansion at **$0.40—0.60/rd**.
 
-**Match-grade loads** are identical in performance to their 5.56 NATO equivalents. Federal Gold Medal 69gr, Hornady Black 75gr, and Federal 77gr SMK (the commercial MK262 equivalent) run **$0.70–1.20/rd** and deliver sub-MOA accuracy in quality rifles.
+**Match-grade loads** are identical in performance to their 5.56 NATO equivalents. Federal Gold Medal 69gr, Hornady Black 75gr, and Federal 77gr SMK (the commercial MK262 equivalent) run **$0.70—1.20/rd** and deliver sub-MOA accuracy in quality rifles.
 
 > **Chamber compatibility:** .223 Remington ammunition is safe in all .223 Remington, .223 Wylde, and 5.56 NATO chambers. The concern runs the other direction — 5.56 NATO ammo in a tight .223 Remington-only chamber can produce elevated pressures. Most modern AR-15s are chambered in 5.56 or .223 Wylde, making this a non-issue in practice.
 
