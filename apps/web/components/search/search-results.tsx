@@ -38,7 +38,7 @@ interface SearchResultsProps {
 
 export async function SearchResults({ searchParams }: SearchResultsProps) {
   const query = searchParams.q || ''
-  const page = parseInt(searchParams.page || '1')
+  const page = Math.max(1, parseInt(searchParams.page || '1') || 1)
   const sortBy = searchParams.sortBy || 'relevance'
   
   // Get session for user tier and token (server-side auth handles refresh)
