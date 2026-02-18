@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Header } from './components/Header';
 import { HeroSearch } from './components/HeroSearch';
 import { FaqAccordion } from './components/FaqAccordion';
@@ -69,6 +70,10 @@ const whyIronScoutItems = [
 export default function Home() {
   return (
     <div className="relative">
+      <Script
+        src="http://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=5423c26e1614d014410b8b21eb80807de155a8dd"
+        strategy="afterInteractive"
+      />
       <Header currentPage="home" />
 
       {/* Hero Section */}
