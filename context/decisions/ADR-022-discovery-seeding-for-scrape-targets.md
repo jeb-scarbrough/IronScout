@@ -1,26 +1,30 @@
-# ADR-022: Limited Discovery Seeding for Scrape Targets
+# ADR-022: Limited Discovery for Scrape Targets (CLI/Text-Only)
 
 ## Status
-Accepted
+Accepted (Amended 2026-02-18)
 
 ## Context
-Manual entry of `scrape_targets` does not scale to thousands of product URLs.
+Manual entry of product target URLs does not scale to thousands of URLs.
 At the same time, v1 explicitly rejects site-wide crawling and adapter-driven
-pagination. We need a controlled, low-risk way to seed `scrape_targets` without
-turning the scraper framework into a crawler or weakening trust guardrails.
+pagination. We need a controlled, low-risk way to discover candidate URLs
+without turning the scraper framework into a crawler or weakening trust
+guardrails.
 
-This ADR introduces an optional, ops-run discovery step that only **seeds URLs**
-and does **not** extract prices or product data. It keeps adapters focused on
-single-page product extraction and preserves the surgical scraping model.
+This ADR introduces an optional, ops-run discovery step that only discovers
+URLs and does **not** extract prices or product data. It keeps adapters focused
+on single-page product extraction and preserves the surgical scraping model.
+
+This ADR is amended to remove DB access from discovery. Discovery is now
+strictly CLI/text-file output.
 
 ## Decision
-Allow a **limited discovery seeding** workflow to populate `scrape_targets`
-for approved sources. Discovery is **external to the scraper framework** and
-only produces URLs.
+Allow a **limited discovery** workflow for approved sources. Discovery is
+**external to the scraper framework** and only produces URLs as local files.
 
 Implementation location:
 - Manual CLI only: `scripts/seeding/discover-scrape-targets.mjs`
 - No BullMQ jobs, no cron, no autonomous scheduling
+- No DB access (no reads, no writes)
 
 Discovery may use:
 - `sitemap.xml` (preferred)
@@ -32,16 +36,14 @@ Discovery may use:
   `/sitemap.xml` or `/sitemap_index.xml` when no sitemap is declared
 
 Discovery must:
-- Run only for sources with `scrapeEnabled = true`, `robotsCompliant = true`,
-  `tosReviewedAt` set, `tosApprovedBy` set, and `adapterId` set
 - Obey robots.txt (same policy as scraper); fail closed on ambiguity
 - Use SSRF protections identical to the scraper fetcher
 - Use conservative rate limits (default 0.5 req/sec) and explicit caps
-- Output a summary before any DB writes and require explicit operator acceptance
+- Output a summary and write discovered URLs to local text files only
 - Avoid JS rendering, proxy rotation, or anti-bot evasion
-- Only write canonicalized URLs into `scrape_targets`
-- Dedupe by `(sourceId, canonicalUrl)` and never delete existing targets
-- Record discovery provenance in `scrape_targets.notes` using a structured
+- Only emit canonicalized URLs
+- Dedupe discovered URLs within the run
+- Record discovery provenance in output metadata using a structured
   tag: `discovery:<runId> method:<SITEMAP|LISTING|MIXED>`
 - Validate candidate URLs against adapter-compatible patterns
 - If pagination is used:
@@ -53,30 +55,30 @@ Discovery must **not**:
 - Scrape prices or product data
 - Paginate beyond explicit allowlists, page caps, or URL caps
 - Run continuously or autonomously without ops control
+- Read from or write to the database
 
 ## Alternatives Considered
 - **Manual URL entry only**: Lowest risk, but not scalable.
 - **Full crawler with pagination and auto-discovery**: High ToS/ops risk and
   conflicts with v1 surgical scraping constraints.
+- **DB-seeded discovery**: Rejected to keep discovery deterministic, local, and
+  operationally simple.
 
 ## Consequences
-- **Technical**: Adds a discovery script and a small amount of ops tooling.
+- **Technical**: Discovery remains a standalone CLI that emits files only.
   Scraper framework remains unchanged (single-page extraction only).
-- **Operational**: Requires allowlist governance, rate limits, and audit notes.
-  Misuse increases ToS risk, so fail-closed controls are mandatory.
+- **Operational**: Requires explicit operator review of output files before any
+  downstream ingestion. Misuse increases ToS risk, so fail-closed controls are
+  mandatory.
 - **Product/Trust**: Improves coverage without changing consumer promises or
   visibility guardrails.
 
 ## Notes
-- Allowlist storage + caps live in `sources.scrapeConfig.discovery`:
-  - `allowlist`: array of sitemap/listing seed URLs
-  - `maxUrls`: integer cap (default 500 if unset)
-  - `targetUrlTemplate`: optional template to convert discovered product URLs into
-    scrape target URLs (e.g., JSON endpoints). Use `{slug}` for the product
-    path without a leading slash (canonical URL remains the HTML product URL).
-  - CLI seeds must be a subset of allowlist when present
+- Discovery input is CLI-driven (explicit seed URLs and filters).
+- Output is text-first and file-based (for example newline-delimited URL files
+  plus run summary artifacts).
 - Cap enforcement is fail-closed: if discovery exceeds `maxUrls`, abort.
 - Pagination cap is enforced per listing run (CLI `--max-pages`, default 10 when `--paginate` is used).
 
-Discovery seeding is an ops-only input path into `scrape_targets`. It does not
-change scraper adapter responsibilities or consumer visibility rules.
+Discovery is an ops-only URL discovery utility. It does not change scraper
+adapter responsibilities or consumer visibility rules.

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Discovery seeding for scrape_targets (ADR-022).
+ * Discovery URL finder (CLI/text output only).
  *
  * Usage:
  *   node scripts/seeding/discover-scrape-targets.mjs \
- *     --source-id <id> \
+ *     --source-url <url> | --domain <domain> \
  *     --sitemap <url> [--sitemap <url> ...] \
  *     --listing <url> [--listing <url> ...] \
  *     --product-path-prefix /product/ \
@@ -15,22 +15,21 @@
  *     [--dry-run] \
  *     [--count-only] \
  *     [--notes "optional note"] \
- *     [--output <path>] \
- *     [--no-sql]
+ *     [--output <path>]
  */
 
 import { promises as dns } from 'dns'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { createInterface } from 'node:readline/promises'
-import { stdin as input, stdout as output } from 'node:process'
 import { loadEnv } from '../lib/load-env.mjs'
 
 const DEFAULT_USER_AGENT = 'IronScout/1.0 (+https://ironscout.ai/bot; bot@ironscout.ai)'
 const DEFAULT_DELAY_MS = 1000
 const MIN_DELAY_MS = 1000
 const MAX_DELAY_MS = 60000
-const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+// Allow larger sitemap files (e.g., Brownells static SKU sitemap ~5.9 MB)
+// while still protecting discovery from unbounded response sizes.
+const MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 const DEFAULT_MAX_PAGES = 10
 
 async function main() {
@@ -44,8 +43,8 @@ async function main() {
     return
   }
 
-  if (!opts.sourceId && !opts.domain && !opts.sourceUrl) {
-    fail('Provide --source-id or --domain/--source-url')
+  if (!opts.domain && !opts.sourceUrl) {
+    fail('Provide --domain or --source-url')
   }
 
   if (opts.sitemaps.length === 0 && opts.listings.length === 0 && !opts.autoSitemap) {
@@ -55,109 +54,7 @@ async function main() {
   const startedAt = Date.now()
   const runId = new Date().toISOString()
   const projectRoot = process.cwd()
-
-  let prisma = null
-  let source = null
-
-  try {
-
-  if (opts.dryRun && opts.accept) {
-    fail('--accept cannot be used with --dry-run')
-  }
-  if (opts.countOnly && opts.accept) {
-    fail('--accept cannot be used with --count-only')
-  }
-
-  if (opts.sourceId) {
-    const db = await import('../../packages/db/index.js')
-    prisma = db.prisma
-
-    const sourceSelect = {
-      id: true,
-      url: true,
-      adapterId: true,
-      scrapeEnabled: true,
-      robotsCompliant: true,
-      tosReviewedAt: true,
-      tosApprovedBy: true,
-      scrapeConfig: true,
-    }
-
-    try {
-      source = await prisma.sources.findUnique({
-        where: { id: opts.sourceId },
-        select: sourceSelect,
-      })
-    } catch (error) {
-      const message = error?.message || String(error)
-      if (message.includes('does not exist') || message.includes('column')) {
-        console.error('Error: Database schema appears out of date for sources.')
-        console.error('Expected columns: adapterId, scrapeConfig, scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy.')
-        console.error('Fix: run `pnpm db:migrate:dev` (or point DATABASE_URL to a migrated database).')
-        process.exit(1)
-      }
-      throw error
-    }
-
-    if (!source) {
-      const adapterMatches = await prisma.sources.findMany({
-        where: { adapterId: opts.sourceId },
-        select: sourceSelect,
-        take: 5,
-      })
-
-      if (adapterMatches.length === 1) {
-        source = adapterMatches[0]
-        console.log(`Auto-resolved source-id "${opts.sourceId}" to source ${source.id} via adapterId.`)
-      } else if (adapterMatches.length > 1) {
-        console.error(`Error: Multiple sources found with adapterId="${opts.sourceId}".`)
-        for (const match of adapterMatches) {
-          console.error(`  - ${match.id} ${match.url}`)
-        }
-        process.exit(1)
-      } else {
-        const looksLikeDomain = opts.sourceId.includes('.') || opts.sourceId.includes('/')
-        if (looksLikeDomain) {
-          const domain = opts.sourceId.replace(/^https?:\/\//, '').split('/')[0]
-          const urlMatches = await prisma.sources.findMany({
-            where: { url: { contains: domain, mode: 'insensitive' } },
-            select: sourceSelect,
-            take: 5,
-          })
-          if (urlMatches.length === 1) {
-            source = urlMatches[0]
-            console.log(`Auto-resolved source-id "${opts.sourceId}" to source ${source.id} via url match.`)
-          } else if (urlMatches.length > 1) {
-            console.error(`Error: Multiple sources found matching url "${domain}".`)
-            for (const match of urlMatches) {
-              console.error(`  - ${match.id} ${match.url}`)
-            }
-            process.exit(1)
-          }
-        }
-      }
-    }
-
-    if (!source) {
-      fail(`Source not found: ${opts.sourceId}. Use a Source ID (CUID) or a unique adapterId.`)
-    }
-
-    if (!source.adapterId) {
-      fail(`Source missing adapterId: ${opts.sourceId}`)
-    }
-
-    if (opts.adapterId && opts.adapterId !== source.adapterId) {
-      fail(`adapterId mismatch: source=${source.adapterId} input=${opts.adapterId}`)
-    }
-
-    if (opts.accept) {
-      source = await ensureSourceGates(source, prisma)
-    }
-  } else if (opts.accept) {
-    fail('Cannot write without --source-id')
-  }
-
-  const baseUrl = source?.url ?? opts.sourceUrl ?? (opts.domain ? `https://${opts.domain}` : null)
+  const baseUrl = opts.sourceUrl ?? (opts.domain ? `https://${opts.domain}` : null)
   const sourceDomain = baseUrl ? getRegistrableDomain(baseUrl) : null
   if (!sourceDomain) {
     fail('Unable to determine source domain')
@@ -175,26 +72,9 @@ async function main() {
     }
   }
 
-  const discoveryConfig =
-    source?.scrapeConfig && typeof source.scrapeConfig === 'object'
-      ? source.scrapeConfig.discovery
-      : null
-
-  const allowlist = Array.isArray(discoveryConfig?.allowlist)
-    ? discoveryConfig.allowlist.map(entry => canonicalizeUrl(String(entry)))
-    : null
-
-  const configMaxUrls = Number.isFinite(discoveryConfig?.maxUrls)
-    ? Number.parseInt(discoveryConfig.maxUrls, 10)
-    : null
-
   const requestedMaxUrls = opts.maxUrlsProvided ? opts.maxUrls : null
-  const effectiveMaxUrls =
-    configMaxUrls && requestedMaxUrls
-      ? Math.min(configMaxUrls, requestedMaxUrls)
-      : configMaxUrls ?? requestedMaxUrls ?? 500
+  const effectiveMaxUrls = requestedMaxUrls ?? 500
   const capInfo = {
-    configMaxUrls,
     requestedMaxUrls,
     effectiveMaxUrls,
   }
@@ -203,20 +83,9 @@ async function main() {
     fail('Invalid maxUrls cap')
   }
 
-  const configProductUrlRegex =
-    typeof discoveryConfig?.productUrlRegex === 'string' ? discoveryConfig.productUrlRegex : null
-  const configProductPathPrefix =
-    typeof discoveryConfig?.productPathPrefix === 'string' ? discoveryConfig.productPathPrefix : null
-  const configTargetUrlTemplate =
-    typeof discoveryConfig?.targetUrlTemplate === 'string' ? discoveryConfig.targetUrlTemplate : null
-  const configPaginate = discoveryConfig?.paginate === true
-  const configMaxPages = Number.isFinite(discoveryConfig?.maxPages)
-    ? Number.parseInt(discoveryConfig.maxPages, 10)
-    : null
-
-  const effectiveProductUrlRegex = opts.productUrlRegex ?? configProductUrlRegex
-  const effectiveProductPathPrefix = opts.productPathPrefix ?? configProductPathPrefix
-  const effectiveTargetUrlTemplate = opts.targetUrlTemplate ?? configTargetUrlTemplate
+  const effectiveProductUrlRegex = opts.productUrlRegex
+  const effectiveProductPathPrefix = opts.productPathPrefix
+  const effectiveTargetUrlTemplate = opts.targetUrlTemplate
 
   if (!effectiveProductPathPrefix && !effectiveProductUrlRegex) {
     fail('Provide --product-path-prefix or --product-url-regex to filter product URLs')
@@ -251,12 +120,6 @@ async function main() {
   for (const seedUrl of seedUrls) {
     await ensurePublicUrl(seedUrl)
     await ensureSameDomain(seedUrl, sourceDomain)
-    if (allowlist && allowlist.length > 0) {
-      const canonicalSeed = canonicalizeUrl(seedUrl)
-      if (!allowlist.includes(canonicalSeed)) {
-        fail(`Seed URL not in allowlist: ${seedUrl}`)
-      }
-    }
     const robotsCheck = await robots.check(seedUrl)
     if (!robotsCheck.fetchSucceeded) {
       fail(`robots.txt fetch failed for ${getRegistrableDomain(seedUrl)}`)
@@ -277,15 +140,11 @@ async function main() {
   const records = []
   const method = resolveMethod(opts)
   const notes = buildNotes(runId, method, opts.notes)
-  const createdBy = process.env.USER || process.env.USERNAME || 'discovery-script'
 
   for (const [canonicalUrl, record] of canonicalToRecord.entries()) {
     records.push({
       url: record.targetUrl,
       canonicalUrl,
-      sourceId: source?.id ?? 'no-db',
-      adapterId: source?.adapterId ?? opts.adapterId ?? 'unknown',
-      createdBy,
       notes,
     })
   }
@@ -322,11 +181,7 @@ async function main() {
       console.log(line)
     }
   }
-  if (source) {
-    console.log(`sourceId=${source.id} adapterId=${source.adapterId}`)
-  } else {
-    console.log(`sourceDomain=${sourceDomain}`)
-  }
+  console.log(`sourceDomain=${sourceDomain}`)
   console.log(`notes="${notes}"`)
   if (records.length > 0) {
     console.log('sample:')
@@ -340,44 +195,24 @@ async function main() {
     return
   }
 
-  const shouldWriteSql = !opts.noSql && !opts.countOnly
-  let sqlFilePath = null
-  if (shouldWriteSql) {
-    if (!source) {
-      fail('SQL output requires --source-id')
-    }
-    sqlFilePath = writeSqlFile({
-      projectRoot,
-      source,
-      method,
-      runId,
-      records,
-      createdBy,
-      notes,
-      outputPath: opts.output,
-    })
-    console.log(`sqlFile=${sqlFilePath}`)
-  }
-
-  if (opts.dryRun || opts.countOnly) {
+  if (opts.countOnly) {
     return
   }
 
-  if (!opts.accept) {
-    console.log('DB write skipped. Re-run with --accept to write to database.')
-    return
-  }
-
-  if (!prisma) {
-    fail('Internal error: prisma missing for write')
-  }
-
-  const result = await prisma.scrape_targets.createMany({
-    data: records,
-    skipDuplicates: true,
+  const outputPath = writeDiscoveryFile({
+    projectRoot,
+    runId,
+    sourceDomain,
+    method,
+    records,
+    notes,
+    outputPath: opts.output,
   })
+  console.log(`outputFile=${outputPath}`)
 
-  console.log(`inserted=${result.count} discovered=${records.length} skippedRobots=${skippedRobots}`)
+  if (opts.dryRun) {
+    console.log('Dry-run mode: discovery output was written to file only.')
+  }
 
   async function handleCandidate(candidateUrl) {
     totalScanned += 1
@@ -466,14 +301,8 @@ async function main() {
     const visited = new Set()
     let currentUrl = listingUrl
     let pagesProcessed = 0
-    const paginateEnabled = opts.paginate || configPaginate
-    const maxPages = paginateEnabled
-      ? opts.maxPagesProvided
-        ? opts.maxPages
-        : Number.isFinite(configMaxPages)
-          ? Math.max(1, configMaxPages)
-          : DEFAULT_MAX_PAGES
-      : 1
+    const paginateEnabled = opts.paginate
+    const maxPages = paginateEnabled ? opts.maxPages : 1
 
     while (currentUrl && pagesProcessed < maxPages) {
       const canonicalListingUrl = canonicalizeUrl(currentUrl)
@@ -521,18 +350,11 @@ async function main() {
       currentUrl = nextUrl
     }
   }
-  } finally {
-    if (prisma) {
-      await prisma.$disconnect()
-    }
-  }
 }
 
 function parseArgs(argv) {
   const out = {
     help: false,
-    sourceId: null,
-    adapterId: null,
     domain: null,
     sourceUrl: null,
     sitemaps: [],
@@ -547,22 +369,16 @@ function parseArgs(argv) {
     targetUrlTemplate: null,
     dryRun: false,
     countOnly: false,
-    accept: false,
     autoSitemap: false,
     notes: null,
     logUrls: false,
     output: null,
-    noSql: false,
   }
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') {
       out.help = true
-    } else if (arg === '--source-id') {
-      out.sourceId = argv[++i]
-    } else if (arg === '--adapter-id') {
-      out.adapterId = argv[++i]
     } else if (arg === '--domain') {
       out.domain = argv[++i]
     } else if (arg === '--source-url') {
@@ -592,8 +408,6 @@ function parseArgs(argv) {
       out.dryRun = true
     } else if (arg === '--count-only') {
       out.countOnly = true
-    } else if (arg === '--accept') {
-      out.accept = true
     } else if (arg === '--auto-sitemap') {
       out.autoSitemap = true
     } else if (arg === '--notes') {
@@ -602,8 +416,6 @@ function parseArgs(argv) {
       out.logUrls = true
     } else if (arg === '--output') {
       out.output = argv[++i]
-    } else if (arg === '--no-sql') {
-      out.noSql = true
     } else {
       fail(`Unknown arg: ${arg}`)
     }
@@ -614,24 +426,20 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log('discover-scrape-targets.mjs')
-  console.log('  --source-id <id> (required)')
-  console.log('  --domain <domain> (dry-run without DB)')
-  console.log('  --source-url <url> (dry-run without DB)')
+  console.log('  --domain <domain> OR --source-url <url> (required)')
   console.log('  --sitemap <url> (repeatable)')
   console.log('  --listing <url> (repeatable)')
   console.log('  --product-path-prefix /product/ OR --product-url-regex "<regex>"')
   console.log('  --target-url-template "<url with {slug} placeholder>"')
   console.log('  --paginate (follow rel=next or page= links on listing pages)')
   console.log('  --max-pages 10 (cap listing pagination; only when --paginate)')
-  console.log('  --max-urls 500 (default; capped by scrapeConfig.discovery.maxUrls)')
+  console.log('  --max-urls 500 (default)')
   console.log('  --dry-run')
-  console.log('  --count-only (scan and report totals; no writes)')
-  console.log('  --accept (required to write directly to scrape_targets)')
+  console.log('  --count-only (scan and report totals; no output file)')
   console.log('  --auto-sitemap (discover sitemap via robots.txt or /sitemap.xml)')
   console.log('  --notes "optional note"')
   console.log('  --log-urls (print per-URL status as discovery runs)')
-  console.log('  --output <path> (write SQL file to this path)')
-  console.log('  --no-sql (skip SQL output file)')
+  console.log('  --output <path> (write discovery output text file to this path)')
 }
 
 function fail(message) {
@@ -639,17 +447,13 @@ function fail(message) {
   process.exit(1)
 }
 
-function formatCapDetails({ configMaxUrls, requestedMaxUrls, effectiveMaxUrls }, attemptedCount) {
-  const configPart = Number.isFinite(configMaxUrls) ? String(configMaxUrls) : 'none'
+function formatCapDetails({ requestedMaxUrls, effectiveMaxUrls }, attemptedCount) {
   const requestedPart = Number.isFinite(requestedMaxUrls) ? String(requestedMaxUrls) : 'none'
   const attemptedPart = Number.isFinite(attemptedCount) ? ` attempted=${attemptedCount}` : ''
-  return `cap=${effectiveMaxUrls} configMaxUrls=${configPart} requestedMaxUrls=${requestedPart}.${attemptedPart}`
+  return `cap=${effectiveMaxUrls} requestedMaxUrls=${requestedPart}.${attemptedPart}`
 }
 
-function capOverrideHint({ configMaxUrls }) {
-  if (Number.isFinite(configMaxUrls)) {
-    return ' Cap is enforced by source.scrapeConfig.discovery.maxUrls.'
-  }
+function capOverrideHint() {
   return ' Use --max-urls to override the default cap for this run.'
 }
 
@@ -659,52 +463,35 @@ function buildNotes(runId, method, note) {
   return `${base} ${note}`
 }
 
-function sqlEscape(value) {
-  return String(value).replace(/'/g, "''")
-}
-
 function sanitizeFilename(value) {
   return String(value).replace(/[^0-9A-Za-z._-]/g, '-')
 }
 
-function writeSqlFile({ projectRoot, source, method, runId, records, createdBy, notes, outputPath }) {
+function writeDiscoveryFile({ projectRoot, sourceDomain, method, runId, records, notes, outputPath }) {
   const safeRunId = sanitizeFilename(runId)
-  const safeSource = sanitizeFilename(source.id)
+  const safeSource = sanitizeFilename(sourceDomain)
   const defaultDir = resolve(projectRoot, 'tmp', 'scrape-discovery')
-  const dir = outputPath ? resolve(projectRoot, outputPath) : defaultDir
-  const filePath = outputPath ? dir : resolve(dir, `discovery-${safeSource}-${safeRunId}.sql`)
+  const filePath = outputPath
+    ? resolve(projectRoot, outputPath)
+    : resolve(defaultDir, `discovery-${safeSource}-${safeRunId}.txt`)
 
-  if (!outputPath) {
-    mkdirSync(dir, { recursive: true })
-  } else {
-    const parentDir = resolve(filePath, '..')
-    mkdirSync(parentDir, { recursive: true })
+  const parentDir = resolve(filePath, '..')
+  mkdirSync(parentDir, { recursive: true })
+
+  const lines = [
+    '# IronScout discovery output',
+    `# sourceDomain=${sourceDomain}`,
+    `# method=${method}`,
+    `# runId=${runId}`,
+    `# discovered=${records.length}`,
+    `# notes=${notes}`,
+    '',
+  ]
+  for (const record of records) {
+    lines.push(record.url)
   }
-
-  const header = [
-    '-- IronScout scrape discovery SQL',
-    `-- sourceId=${source.id}`,
-    `-- adapterId=${source.adapterId}`,
-    `-- method=${method}`,
-    `-- runId=${runId}`,
-    `-- discovered=${records.length}`,
-    '',
-    'BEGIN;',
-    'INSERT INTO scrape_targets ("url", "canonicalUrl", "sourceId", "adapterId", "createdBy", "notes") VALUES',
-  ]
-
-  const values = records.map(record => {
-    return `  ('${sqlEscape(record.url)}', '${sqlEscape(record.canonicalUrl)}', '${sqlEscape(record.sourceId)}', '${sqlEscape(record.adapterId)}', '${sqlEscape(record.createdBy)}', '${sqlEscape(record.notes)}')`
-  })
-
-  const footer = [
-    'ON CONFLICT ("sourceId", "canonicalUrl") DO NOTHING;',
-    'COMMIT;',
-    '',
-  ]
-
-  const sql = [...header, values.join(',\n'), ...footer].join('\n')
-  writeFileSync(filePath, sql, 'utf8')
+  lines.push('')
+  writeFileSync(filePath, lines.join('\n'), 'utf8')
   return filePath
 }
 
@@ -1462,87 +1249,6 @@ function buildRobotsUrls(domain) {
   }
   const urls = candidates.map(host => `https://${host}/robots.txt`)
   return Array.from(new Set(urls))
-}
-
-async function promptYesNo(question, defaultNo = false) {
-  if (!process.stdin.isTTY) return false
-  const rl = createInterface({ input, output })
-  try {
-    const raw = (await rl.question(question)).trim().toLowerCase()
-    if (!raw) return !defaultNo
-    return raw === 'y' || raw === 'yes'
-  } finally {
-    rl.close()
-  }
-}
-
-async function promptText(question, defaultValue = '') {
-  if (!process.stdin.isTTY) return defaultValue
-  const rl = createInterface({ input, output })
-  try {
-    const raw = (await rl.question(question)).trim()
-    return raw || defaultValue
-  } finally {
-    rl.close()
-  }
-}
-
-async function ensureSourceGates(source, prisma) {
-  const missing = []
-  if (!source.scrapeEnabled) missing.push('scrapeEnabled')
-  if (!source.robotsCompliant) missing.push('robotsCompliant')
-  if (!source.tosReviewedAt) missing.push('tosReviewedAt')
-  if (!source.tosApprovedBy) missing.push('tosApprovedBy')
-
-  if (missing.length === 0) {
-    return source
-  }
-
-  console.error(`Source gates not satisfied (${missing.join(', ')})`)
-  if (!process.stdin.isTTY) {
-    fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
-  }
-
-  const shouldUpdate = await promptYesNo(
-    'Update gates now? This will enable scraping for this source. (Y/n) '
-  )
-  if (!shouldUpdate) {
-    fail('Source gates not satisfied (scrapeEnabled, robotsCompliant, tosReviewedAt, tosApprovedBy)')
-  }
-
-  const defaultApprover =
-    source.tosApprovedBy ||
-    process.env.USER ||
-    process.env.USERNAME ||
-    'ops@ironscout.ai'
-  const tosApprovedBy = await promptText('ToS approved by (required): ', defaultApprover)
-  if (!tosApprovedBy) {
-    fail('tosApprovedBy is required to update gates.')
-  }
-
-  const data = {}
-  if (!source.scrapeEnabled) data.scrapeEnabled = true
-  if (!source.robotsCompliant) data.robotsCompliant = true
-  if (!source.tosReviewedAt) data.tosReviewedAt = new Date()
-  if (!source.tosApprovedBy) data.tosApprovedBy = tosApprovedBy
-
-  const updated = await prisma.sources.update({
-    where: { id: source.id },
-    data,
-    select: {
-      id: true,
-      url: true,
-      adapterId: true,
-      scrapeEnabled: true,
-      robotsCompliant: true,
-      tosReviewedAt: true,
-      tosApprovedBy: true,
-      scrapeConfig: true,
-    },
-  })
-
-  console.log('Updated source gates to satisfy discovery write requirements.')
-  return updated
 }
 
 main()

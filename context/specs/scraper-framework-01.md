@@ -13,7 +13,7 @@
 
 Build a surgical, URL-driven price monitoring framework that:
 - Scrapes specific product URLs (not site-wide crawling)
-- Allows optional discovery seeding **outside the framework** per ADR-022
+- Allows optional discovery URL collection **outside the framework** per ADR-022
 - Enables rapid onboarding of new retailer targets via thin adapters
 - Follows the unified ingestion pattern (source_products → resolver → products)
 - Preserves all trust invariants (append-only, fail-closed, server-side enforcement)
@@ -23,7 +23,7 @@ Build a surgical, URL-driven price monitoring framework that:
 
 ## 2. Non-Goals (v1)
 
-- No autonomous site-wide crawling; discovery seeding limited to allowlisted sitemaps/listing pages (ADR-022)
+- No autonomous site-wide crawling; discovery URL collection limited to allowlisted sitemaps/listing pages (ADR-022)
 - No consumer visibility for scraped prices without ADR-021 guardrails
 - No real-time guarantees or SLAs
 - No proxy rotation or anti-bot evasion (defer to later phases)
@@ -41,7 +41,7 @@ Unlike traditional crawlers that discover URLs via pagination, this framework sc
 - Admin portal input
 - CSV/bulk import
 - Affiliate feed URLs (refresh prices for known products)
-- Discovery seeding (sitemap/listing pages, ADR-022)
+- Discovery URL collection (sitemap/listing pages, ADR-022)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -98,7 +98,7 @@ Unlike traditional crawlers that discover URLs via pagination, this framework sc
 |--------|---------------|-------------------------------|
 | URL source | Adapter discovers via pagination | Database (`scrape_targets`) |
 | Volume | Thousands of pages | Tens to hundreds of URLs |
-| Discovery | Finds new products | Optional seeding via allowlisted sources (ADR-022) |
+| Discovery | Finds new products | Optional URL collection via allowlisted sources (ADR-022) |
 | Adapter complexity | High (pagination, dedup) | Low (single page extraction) |
 | Risk profile | Higher ToS exposure | Lower, more controlled |
 

@@ -1,7 +1,7 @@
 # Scraper Feed Playbook
 
 This playbook turns a new scraper feed into a repeatable workflow.
-It follows ADR-021 (SCRAPE guardrails) and ADR-022 (discovery seeding).
+It follows ADR-021 (SCRAPE guardrails) and ADR-022 (CLI/text-only discovery).
 
 Guiding principles:
 - Fail closed on ambiguity (ADR-009)
@@ -42,7 +42,8 @@ Approval gates (must be recorded before consumer visibility):
 If any gate is missing, do not scrape (fail closed).
 
 Environment:
-- `DATABASE_URL` must be set (or present in repo `.env`) before running discovery or dry-run scripts.
+- `DATABASE_URL` must be set (or present in repo `.env`) before running `scraper:dry-run`.
+- `scraper:discover` is CLI/text-file only and does not require DB access.
 
 ---
 
@@ -55,8 +56,7 @@ pnpm scraper:bootstrap --id <adapterId> --domain <domain>
 ```
 
 This runs `scraper:new` (scaffold + auto-register + guided setup) and then offers discovery prompts.
-Discovery defaults to a dry-run before any DB writes.
-Dry-run discovery can run without the DB by providing a domain or source URL.
+Discovery runs in CLI/text-file mode only (no DB writes).
 Bootstrap saves your last answers to `.ironscout/scraper/<adapterId>.json` so you can reuse or edit them on the next run.
 
 Use the template directly (this auto-registers the adapter in the registry and can run a guided setup prompt):
@@ -125,17 +125,16 @@ If you need a scripted setup, add `packages/db/register-<retailer>.ts`.
 
 Scrape config tips:
 - Use `scrapeConfig.customHeaders` when JSON endpoints require Accept headers
-- Use `scrapeConfig.discovery` for allowlisted listing URLs and pagination caps
 
 ---
 
 ## 6) Discovery Seed (Optional, ADR-022)
 
-Discovery only seeds URLs. It does not scrape prices.
+Discovery only discovers candidate URLs and writes a local text file. It does not scrape prices and does not write to DB.
 
 ```bash
-pnpm scraper:discover --source-id <sourceId> --listing <url> --product-path-prefix /ammo/ --dry-run
-pnpm scraper:discover --source-id <sourceId> --listing <url> --product-path-prefix /ammo/ --accept
+pnpm scraper:discover --source-url <url> --listing <url> --product-path-prefix /ammo/ --dry-run
+pnpm scraper:discover --domain <domain> --sitemap <url> --product-url-regex "<regex>"
 ```
 
 If the site is a JS shell, use a JSON listing endpoint and `targetUrlTemplate`.

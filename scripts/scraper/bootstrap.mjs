@@ -121,7 +121,7 @@ function printHelp() {
   console.log('  --id <adapterId> (required)')
   console.log('  --domain <domain> (required)')
   console.log('  --version <semver> (default: 0.1.0)')
-  console.log('  --source-id <sourceId> (for discovery)')
+  console.log('  --source-url <url> (for discovery, optional)')
   console.log('  --listing <url> (repeatable, for discovery)')
   console.log('  --sitemap <url> (repeatable, for discovery)')
   console.log('  --product-path-prefix /product/ (for discovery)')
@@ -130,7 +130,7 @@ function printHelp() {
   console.log('  --paginate (discovery)')
   console.log('  --max-pages 10 (discovery)')
   console.log('  --max-urls 500 (discovery)')
-  console.log('  --skip-dry-run (skip discovery dry-run)')
+  console.log('  --skip-dry-run (run discovery without --dry-run)')
 }
 
 async function main() {
@@ -185,29 +185,19 @@ async function main() {
     return
   }
 
-  const sourceId =
-    flags['source-id'] ||
-    storedDiscovery.sourceId ||
-    (await promptText(
-      buildPrompt(
-        'Source ID for discovery (required to write). Adapter id also accepted:',
-        storedDiscovery.sourceId || ''
-      ),
-      storedDiscovery.sourceId || ''
-    ))
   let discoveryDomain = flags.domain || adapterDomain
-  let sourceUrl = ''
-  if (!sourceId) {
-    sourceUrl = await promptText(
-      buildPrompt('Source URL for discovery (optional, dry-run only):', storedDiscovery.sourceUrl || ''),
+  const sourceUrl =
+    flags['source-url'] ||
+    storedDiscovery.sourceUrl ||
+    (await promptText(
+      buildPrompt('Source URL for discovery (optional):', storedDiscovery.sourceUrl || ''),
       storedDiscovery.sourceUrl || ''
+    ))
+  if (!sourceUrl && !discoveryDomain) {
+    discoveryDomain = await promptText(
+      buildPrompt('Source domain for discovery (optional):', storedDiscovery.domain || ''),
+      storedDiscovery.domain || ''
     )
-    if (!sourceUrl && !discoveryDomain) {
-      discoveryDomain = await promptText(
-        buildPrompt('Source domain for discovery (optional, dry-run only):', storedDiscovery.domain || ''),
-        storedDiscovery.domain || ''
-      )
-    }
   }
 
   const listingInput = flags.listing
@@ -287,7 +277,6 @@ async function main() {
     discovery: {
       ...storedDiscovery,
       runDiscovery,
-      sourceId: sourceId || storedDiscovery.sourceId || '',
       sourceUrl,
       domain: discoveryDomain,
       listings,
@@ -303,14 +292,12 @@ async function main() {
   })
 
   const baseArgs = []
-  if (sourceId) {
-    baseArgs.push('--source-id', sourceId)
-  } else if (sourceUrl) {
+  if (sourceUrl) {
     baseArgs.push('--source-url', sourceUrl)
   } else if (discoveryDomain) {
     baseArgs.push('--domain', discoveryDomain)
   } else {
-    console.warn('Skipping discovery: source-id or domain/source-url required for dry-run.')
+    console.warn('Skipping discovery: source-url or domain required.')
     return
   }
   for (const url of listings) baseArgs.push('--listing', url)
@@ -327,27 +314,21 @@ async function main() {
   if (maxUrls) baseArgs.push('--max-urls', String(maxUrls))
   if (logUrls) baseArgs.push('--log-urls')
 
-  if (flags['skip-dry-run'] !== true) {
-    const dryRunExit = await runNodeScript('scripts/seeding/discover-scrape-targets.mjs', [...baseArgs, '--dry-run'])
-    if (dryRunExit !== 0) {
-      console.error('Discovery dry-run failed. Fix the error above before attempting DB writes.')
-      process.exit(dryRunExit)
-    }
+  const discoveryArgs = [...baseArgs]
+  const runAsDryRun = flags['skip-dry-run'] !== true
+  if (runAsDryRun) {
+    discoveryArgs.push('--dry-run')
   }
-
-  if (sourceId) {
-    const acceptWrite = await promptYesNo(buildYesNoQuestion('Write discovery results to DB now?', false))
-    if (acceptWrite) {
-      const writeExit = await runNodeScript('scripts/seeding/discover-scrape-targets.mjs', [...baseArgs, '--accept'])
-      if (writeExit !== 0) {
-        process.exit(writeExit)
-      }
-    } else {
-      console.log('Discovery skipped or left in dry-run mode.')
-    }
-  } else {
-    console.log('Discovery completed in dry-run mode (no DB writes without source-id).')
+  const discoveryExit = await runNodeScript('scripts/seeding/discover-scrape-targets.mjs', discoveryArgs)
+  if (discoveryExit !== 0) {
+    console.error('Discovery run failed. Fix the error above and retry.')
+    process.exit(discoveryExit)
   }
+  console.log(
+    runAsDryRun
+      ? 'Discovery completed in dry-run mode (CLI/text-file output only; no DB writes).'
+      : 'Discovery completed (CLI/text-file output only; no DB writes).'
+  )
 }
 
 main().catch(error => {
