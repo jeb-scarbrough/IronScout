@@ -84,6 +84,13 @@ envVarGroups:
       - key: GOOGLE_CLIENT_SECRET
         sync: false  # Set manually in dashboard
 
+  - name: ironscout-turnstile
+    envVars:
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false  # Set manually in dashboard - Cloudflare Turnstile widget site key
+      - key: TURNSTILE_SECRET_KEY
+        sync: false  # Set manually in dashboard - Cloudflare Turnstile server-side secret
+
   - name: ironscout-slack
     envVars:
       - key: SLACK_DATAFEED_ALERTS_WEBHOOK_URL
@@ -123,6 +130,7 @@ services:
       - fromGroup: ironscout-openai
       - fromGroup: ironscout-email
       - fromGroup: ironscout-google
+      - fromGroup: ironscout-turnstile
       - key: PORT
         value: 8000
 
@@ -212,6 +220,8 @@ services:
     healthCheckPath: /
     envVars:
       - fromGroup: ironscout-common
+      - fromGroup: ironscout-urls
+      - fromGroup: ironscout-turnstile
       - key: PORT
         value: 3000
 

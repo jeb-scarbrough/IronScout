@@ -117,7 +117,7 @@ Conditionally enabled: if both `*_CLIENT_ID` and `*_CLIENT_SECRET` are set, the 
 | `STRIPE_PRICE_ID_MERCHANT_STANDARD_MONTHLY` | `'price_merchant_standard'` | Stripe price ID for merchant standard plan. |
 | `STRIPE_PRICE_ID_MERCHANT_PRO_MONTHLY` | `'price_merchant_pro'` | Stripe price ID for merchant pro plan. |
 | `DEBUG_API_KEY` | none (optional) | API key for debug endpoints (e.g. `/debug/webhook-stats`). Only works in development or when header matches. |
-| `TURNSTILE_SECRET_KEY` | none (required for contact form) | Cloudflare Turnstile secret key used to verify `www` contact form submissions server-side. If missing, contact form submissions fail closed. |
+| `TURNSTILE_SECRET_KEY` | none (required for contact form) | Cloudflare Turnstile secret key used to verify `www` contact form submissions server-side. If missing, contact form submissions fail closed. Render group: `ironscout-turnstile`. |
 
 ### apps/web
 
@@ -172,7 +172,7 @@ Conditionally enabled: if both `*_CLIENT_ID` and `*_CLIENT_SECRET` are set, the 
 | `MARKET_SNAPSHOT_CANARY_BASE_URL` | `'https://www.ironscout.ai'` | Base URL for production canary verification of market snapshots. |
 | `MARKET_SNAPSHOT_CANARY_ALLOW_TIMESTAMP_DRIFT` | `'true'` | Allow timestamp-only mismatches in canary verification. Set `'false'` for strict parity checks. |
 | `ALLOW_MISSING_PROD_ARTIFACTS` | `''` (false) | Allow missing production market snapshot artifacts in canary. Set `'true'` or `'1'` to treat 404s as blocked rather than errors. |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | none (required for contact form) | Public Cloudflare Turnstile site key for the `www` contact form widget. If missing, the form is disabled in the UI. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | none (required for contact form) | Public Cloudflare Turnstile site key for the `www` contact form widget. If missing, the form is disabled in the UI. Render group: `ironscout-turnstile`. |
 
 ### Logging (Cross-App via `@ironscout/logger`)
 
@@ -273,6 +273,10 @@ COOKIE_DOMAIN=.local.ironscout.ai
 OPENAI_API_KEY=sk-...
 RESEND_API_KEY=re_...
 CREDENTIAL_ENCRYPTION_KEY_B64=...
+
+# Contact form (www + api)
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA  # Cloudflare test key (always passes)
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA  # Cloudflare test secret (always passes)
 ```
 
 ---
