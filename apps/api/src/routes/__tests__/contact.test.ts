@@ -3,7 +3,7 @@ import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { sendMock, loggerMock } = vi.hoisted(() => ({
-  sendMock: vi.fn(),
+  sendMock: vi.fn().mockResolvedValue({ data: { id: 'email_test_123' }, error: null }),
   loggerMock: {
     error: vi.fn(),
     info: vi.fn(),

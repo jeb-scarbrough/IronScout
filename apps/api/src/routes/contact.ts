@@ -42,7 +42,11 @@ function getResendClient(): Resend {
 }
 
 function getSenderAddress(): string {
-  return process.env.NOREPLY_EMAIL_FROM || process.env.ALERTS_EMAIL_FROM || 'noreply@ironscout.ai'
+  const raw = process.env.NOREPLY_EMAIL_FROM || process.env.ALERTS_EMAIL_FROM || ''
+  // Env var may already contain a display name, e.g. "IronScout Alerts <alerts@ironscout.ai>".
+  // Extract the bare address so the caller can wrap it with its own display name.
+  const match = raw.match(/<([^>]+)>/)
+  return match ? match[1] : (raw || 'noreply@ironscout.ai')
 }
 
 function escapeHtml(value: string): string {
@@ -152,7 +156,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const resend = getResendClient()
     const fromAddress = getSenderAddress()
-    await resend.emails.send({
+    const { data, error: sendError } = await resend.emails.send({
       from: `IronScout Support <${fromAddress}>`,
       to: [SUPPORT_EMAIL_TO],
       replyTo: payload.email,
@@ -161,6 +165,12 @@ router.post('/', async (req: Request, res: Response) => {
       html: buildMessageHtml(payload),
     })
 
+    if (sendError || !data?.id) {
+      log.error('Contact form Resend rejected email', { sendError, from: fromAddress })
+      return res.status(503).json({ error: 'Contact form is temporarily unavailable' })
+    }
+
+    log.info('Contact form email sent', { emailId: data.id, from: fromAddress })
     return res.status(202).json({ ok: true })
   } catch (error) {
     log.error('Contact form email delivery failed', {}, error as Error)
