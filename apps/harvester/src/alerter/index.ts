@@ -48,10 +48,13 @@ try {
 } catch (error) {
   log.warn('Resend API key not configured - email notifications will be disabled')
 }
-const ALERTS_EMAIL_FROM = process.env.ALERTS_EMAIL_FROM
-if (!ALERTS_EMAIL_FROM) {
+const ALERTS_EMAIL_FROM_RAW = process.env.ALERTS_EMAIL_FROM
+if (!ALERTS_EMAIL_FROM_RAW) {
   throw new Error('ALERTS_EMAIL_FROM not configured')
 }
+// Env var may include display name (e.g. "IronScout Alerts <alerts@ironscout.ai>").
+// Extract bare address so callers can wrap with their own display name.
+const ALERTS_EMAIL_FROM = ALERTS_EMAIL_FROM_RAW.match(/<([^>]+)>/)?.[1] ?? ALERTS_EMAIL_FROM_RAW
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 // Queue for delayed notifications
@@ -1211,6 +1214,10 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
       subject: `🎉 Price Drop Alert: ${alert.products.name}`,
       html
     })
+    if (emailResult?.error) {
+      log.error('Resend rejected price drop email', { sendError: emailResult.error, userId: alert.userId })
+      return { success: false, providerMessageId: undefined }
+    }
     log.info('Price drop email sent', { userId: alert.userId, providerMessageId: emailResult?.data?.id })
   } else if (alert.ruleType === 'BACK_IN_STOCK') {
     const html = generateBackInStockEmailHTML({
@@ -1230,6 +1237,10 @@ async function sendNotification(alert: any, reason: string, notifyLog: typeof lo
       subject: `✨ Back in Stock: ${alert.products.name}`,
       html
     })
+    if (emailResult?.error) {
+      log.error('Resend rejected back-in-stock email', { sendError: emailResult.error, userId: alert.userId })
+      return { success: false, providerMessageId: undefined }
+    }
     log.info('Back in stock email sent', { userId: alert.userId, providerMessageId: emailResult?.data?.id })
   }
 

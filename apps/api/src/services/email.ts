@@ -12,8 +12,14 @@ function requireEnv(name: string): string {
   return value
 }
 
-const ALERTS_EMAIL_FROM = () => requireEnv('ALERTS_EMAIL_FROM')
-const NOREPLY_EMAIL_FROM = () => requireEnv('NOREPLY_EMAIL_FROM')
+/** Extract bare email address from env vars that may include a display name. */
+function bareAddress(raw: string): string {
+  const match = raw.match(/<([^>]+)>/)
+  return match ? match[1] : raw
+}
+
+const ALERTS_EMAIL_FROM = () => bareAddress(requireEnv('ALERTS_EMAIL_FROM'))
+const NOREPLY_EMAIL_FROM = () => bareAddress(requireEnv('NOREPLY_EMAIL_FROM'))
 
 interface PriceDropEmailData {
   userName: string
@@ -50,13 +56,17 @@ export async function sendPriceDropEmail(
   const html = generatePriceDropEmailHTML(data)
 
   try {
-    await resend.emails.send({
+    const { data: result, error: sendError } = await resend.emails.send({
       from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM()}>`,
       to: [to],
       subject: `🎉 Price Drop Alert: ${data.productName}`,
       html
     })
-    log.info('Price drop email sent', { productName: data.productName })
+    if (sendError || !result?.id) {
+      log.error('Resend rejected price drop email', { sendError, productName: data.productName })
+      throw new Error(sendError?.message || 'Resend rejected email')
+    }
+    log.info('Price drop email sent', { emailId: result.id, productName: data.productName })
   } catch (error) {
     log.error('Failed to send price drop email', { error: (error as Error)?.message })
     throw error
@@ -70,13 +80,17 @@ export async function sendBackInStockEmail(
   const html = generateBackInStockEmailHTML(data)
 
   try {
-    await resend.emails.send({
+    const { data: result, error: sendError } = await resend.emails.send({
       from: `IronScout.ai Alerts <${ALERTS_EMAIL_FROM()}>`,
       to: [to],
       subject: `✨ Back in Stock: ${data.productName}`,
       html
     })
-    log.info('Back in stock email sent', { productName: data.productName })
+    if (sendError || !result?.id) {
+      log.error('Resend rejected back-in-stock email', { sendError, productName: data.productName })
+      throw new Error(sendError?.message || 'Resend rejected email')
+    }
+    log.info('Back in stock email sent', { emailId: result.id, productName: data.productName })
   } catch (error) {
     log.error('Failed to send back in stock email', { error: (error as Error)?.message })
     throw error
@@ -321,13 +335,17 @@ export async function sendAccountDeletionEmail(
   const html = generateAccountDeletionEmailHTML(data)
 
   try {
-    await resend.emails.send({
+    const { data: result, error: sendError } = await resend.emails.send({
       from: `IronScout.ai <${NOREPLY_EMAIL_FROM()}>`,
       to: [to],
       subject: 'Account Deletion Request Received',
       html
     })
-    log.info('Account deletion email sent')
+    if (sendError || !result?.id) {
+      log.error('Resend rejected account deletion email', { sendError })
+      throw new Error(sendError?.message || 'Resend rejected email')
+    }
+    log.info('Account deletion email sent', { emailId: result.id })
   } catch (error) {
     log.error('Failed to send account deletion email', { error: (error as Error)?.message })
     throw error
