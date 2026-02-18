@@ -47,6 +47,8 @@ envVarGroups:
         value: IronScout <noreply@ironscout.ai>
       - key: ALERTS_EMAIL_FROM
         value: IronScout Alerts <alerts@ironscout.ai>
+      - key: NOREPLY_EMAIL_FROM
+        value: IronScout <noreply@ironscout.ai>
 
   - name: ironscout-secrets
     envVars:

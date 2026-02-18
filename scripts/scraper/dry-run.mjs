@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict"
 
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { parseArgs } from '../lib/utils.mjs'
@@ -9,7 +9,10 @@ import { loadEnv } from '../lib/load-env.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(__dirname, '../..')
-const scraperIndexPath = resolve(projectRoot, 'apps/harvester/dist/scraper/index.js')
+const scraperRegistryPath = resolve(projectRoot, 'apps/harvester/dist/scraper/registry.js')
+const scraperHttpFetcherPath = resolve(projectRoot, 'apps/harvester/dist/scraper/fetch/http-fetcher.js')
+const scraperRobotsPath = resolve(projectRoot, 'apps/harvester/dist/scraper/fetch/robots.js')
+const scraperUrlUtilsPath = resolve(projectRoot, 'apps/harvester/dist/scraper/utils/url.js')
 const adaptersIndexPath = resolve(projectRoot, 'apps/harvester/dist/scraper/adapters/index.js')
 
 function fail(message) {
@@ -18,39 +21,20 @@ function fail(message) {
 }
 
 function printHelp() {
-  console.log('dry-run.mjs')
-  console.log('  --source-id <id> (required)')
-  console.log('  --limit <n> (default: 10)')
-  console.log('  --latest (disable random sampling)')
-  console.log('  --allow-unapproved (bypass ToS/robots/scrapeEnabled gates)')
+  console.log('dry-run.mjs (DB-free)')
+  console.log('  --adapter-id <id> (required)')
+  console.log('  --source-id <id> (optional, default: dry_run_source)')
+  console.log('  --retailer-id <id> (optional, default: dry_run_retailer)')
+  console.log('  --url <url> (optional, repeat via positional args)')
+  console.log('  --url-file <path> (optional, newline-delimited URLs or logs containing url=...)')
+  console.log('  --limit <n> (default: all)')
+  console.log('  --delay-ms <n> (default: 500)')
   console.log('  --json (print JSON output)')
+  console.log('  --verbose')
   console.log('')
-  console.log('Example:')
-  console.log('  node scripts/scraper/dry-run.mjs --source-id <sourceId> --limit 10')
-}
-
-function sampleIndices(max, count) {
-  const picks = new Set()
-  if (count >= max) {
-    return Array.from({ length: max }, (_, i) => i)
-  }
-  while (picks.size < count) {
-    picks.add(Math.floor(Math.random() * max))
-  }
-  return Array.from(picks).sort((a, b) => a - b)
-}
-
-function shouldPreferJson(url) {
-  try {
-    const parsed = new URL(url)
-    if (parsed.pathname.includes('/api/')) return true
-    if (parsed.pathname.endsWith('.json')) return true
-    if (parsed.searchParams.has('fieldset')) return true
-    if (parsed.searchParams.has('include')) return true
-    return false
-  } catch {
-    return false
-  }
+  console.log('Examples:')
+  console.log('  node scripts/scraper/dry-run.mjs --adapter-id brownells --url https://www.brownells.com/ammunition/...')
+  console.log('  node scripts/scraper/dry-run.mjs --adapter-id brownells --url-file brownells-discovery.log --limit 20')
 }
 
 function createLogger(verbose) {
@@ -73,357 +57,333 @@ function formatCurrency(cents) {
   return `$${(cents / 100).toFixed(2)}`
 }
 
+function normalizeUrlToken(token) {
+  if (!token) return null
+  const cleaned = token.trim().replace(/^["']|["']$/g, '').replace(/[),.;]+$/g, '')
+  if (!/^https?:\/\//i.test(cleaned)) return null
+  return cleaned
+}
+
+function extractUrlsFromText(text) {
+  const urls = []
+  const lines = text.split(/\r?\n/)
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      const firstToken = trimmed.split(/\s+/)[0]
+      const parsed = normalizeUrlToken(firstToken)
+      if (parsed) urls.push(parsed)
+      continue
+    }
+
+    const keyMatch = trimmed.match(/url=(https?:\/\/[^\s"'<>]+)/i)
+    if (keyMatch?.[1]) {
+      const parsed = normalizeUrlToken(keyMatch[1])
+      if (parsed) urls.push(parsed)
+      continue
+    }
+
+    const generalMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i)
+    if (generalMatch?.[0]) {
+      const parsed = normalizeUrlToken(generalMatch[0])
+      if (parsed) urls.push(parsed)
+    }
+  }
+  return urls
+}
+
+function collectInputUrls(args, flags) {
+  const collected = []
+
+  if (typeof flags.url === 'string') {
+    const split = flags.url
+      .split(',')
+      .map(part => normalizeUrlToken(part))
+      .filter(Boolean)
+    collected.push(...split)
+  }
+
+  if (typeof flags['url-file'] === 'string') {
+    const urlFile = resolve(process.cwd(), flags['url-file'])
+    if (!existsSync(urlFile)) {
+      fail(`--url-file not found: ${urlFile}`)
+    }
+    const fileText = readFileSync(urlFile, 'utf8')
+    collected.push(...extractUrlsFromText(fileText))
+  }
+
+  if (args.length > 0) {
+    for (const token of args) {
+      const parsed = normalizeUrlToken(token)
+      if (parsed) {
+        collected.push(parsed)
+      }
+    }
+  }
+
+  return Array.from(new Set(collected))
+}
+
+function shouldPreferJson(url) {
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname.includes('/api/')) return true
+    if (parsed.pathname.endsWith('.json')) return true
+    if (parsed.searchParams.has('fieldset')) return true
+    if (parsed.searchParams.has('include')) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 async function main() {
   loadEnv()
-
-  const args = parseArgs()
-  const flags = args.flags
+  const parsedArgs = parseArgs()
+  const flags = parsedArgs.flags
 
   if (flags.help || flags.h) {
     printHelp()
     return
   }
 
-  const sourceId = flags['source-id'] || flags.sourceId || args._[0]
-  if (!sourceId) {
-    fail('Missing --source-id <id>')
+  const adapterId = flags['adapter-id'] || flags.adapterId
+  if (!adapterId || typeof adapterId !== 'string') {
+    fail('Missing --adapter-id <id>')
   }
 
-  const limitRaw = flags.limit || '10'
-  const limit = Math.max(1, Number.parseInt(limitRaw, 10) || 10)
-  const useRandom = !(flags.latest === true)
-  const allowUnapproved = flags['allow-unapproved'] === true
+  const sourceId = typeof flags['source-id'] === 'string' ? flags['source-id'] : 'dry_run_source'
+  const retailerId = typeof flags['retailer-id'] === 'string' ? flags['retailer-id'] : 'dry_run_retailer'
   const outputJson = flags.json === true
   const verbose = flags.verbose === true || flags.v === true
 
-  if (!existsSync(scraperIndexPath) || !existsSync(adaptersIndexPath)) {
+  const limitRaw = flags.limit
+  const limit = typeof limitRaw === 'string' ? Math.max(1, Number.parseInt(limitRaw, 10) || 1) : Number.POSITIVE_INFINITY
+
+  const delayRaw = flags['delay-ms']
+  const minDelayMs = typeof delayRaw === 'string' ? Math.max(0, Number.parseInt(delayRaw, 10) || 500) : 500
+
+  const inputUrls = collectInputUrls(parsedArgs._, flags)
+  if (inputUrls.length === 0) {
+    fail('No input URLs provided. Use --url, --url-file, or positional URLs.')
+  }
+
+  if (
+    !existsSync(scraperRegistryPath) ||
+    !existsSync(scraperHttpFetcherPath) ||
+    !existsSync(scraperRobotsPath) ||
+    !existsSync(scraperUrlUtilsPath) ||
+    !existsSync(adaptersIndexPath)
+  ) {
     fail('Harvester dist not found. Run: pnpm --filter @ironscout/harvester build')
   }
 
-  const scraper = await import(pathToFileURL(scraperIndexPath).href)
+  const registryModule = await import(pathToFileURL(scraperRegistryPath).href)
+  const httpFetcherModule = await import(pathToFileURL(scraperHttpFetcherPath).href)
+  const robotsModule = await import(pathToFileURL(scraperRobotsPath).href)
+  const urlUtilsModule = await import(pathToFileURL(scraperUrlUtilsPath).href)
   const adapters = await import(pathToFileURL(adaptersIndexPath).href)
-  const { prisma } = await import('../../packages/db/index.js')
+  adapters.registerAllAdapters()
 
-  try {
-    adapters.registerAllAdapters()
+  const adapter = registryModule.getAdapterRegistry().get(adapterId)
+  if (!adapter) {
+    fail(`Adapter not registered: ${adapterId}`)
+  }
 
-    const source = await prisma.sources.findUnique({
-      where: { id: sourceId },
-      select: {
-        id: true,
-        name: true,
-        url: true,
-        adapterId: true,
-        retailerId: true,
-        enabled: true,
-        scrapeEnabled: true,
-        robotsCompliant: true,
-        tosReviewedAt: true,
-        tosApprovedBy: true,
-        scrapeConfig: true,
-        scrape_adapter_status: {
-          select: {
-            enabled: true,
-            ingestionPaused: true,
-          },
-        },
-      },
-    })
+  const selectedUrls = inputUrls.slice(0, limit)
+  const logger = createLogger(verbose)
+  const runId = `dry-run-${Date.now()}`
 
-    if (!source) {
-      fail(`Source not found: ${sourceId}`)
+  const robotsPolicy = new robotsModule.RobotsPolicyImpl()
+  const fetcher = new httpFetcherModule.HttpFetcher({ robotsPolicy })
+
+  const counters = {
+    attempted: selectedUrls.length,
+    fetchedOk: 0,
+    fetchFailed: 0,
+    extractOk: 0,
+    extractFailed: 0,
+    normalizedOk: 0,
+    dropped: 0,
+    quarantined: 0,
+    fetchReasons: {},
+    extractReasons: {},
+    normalizeReasons: {},
+  }
+
+  const results = []
+  const lastFetchAtByDomain = new Map()
+
+  for (const url of selectedUrls) {
+    const domain = urlUtilsModule.getRegistrableDomain(url)
+    const crawlDelay = await robotsPolicy.getCrawlDelay(domain)
+    const effectiveDelayMs = Math.max(minDelayMs, crawlDelay ? crawlDelay * 1000 : 0)
+    const lastAt = lastFetchAtByDomain.get(domain) || 0
+    const elapsed = Date.now() - lastAt
+    if (elapsed < effectiveDelayMs) {
+      await new Promise(resolve => setTimeout(resolve, effectiveDelayMs - elapsed))
+    }
+    lastFetchAtByDomain.set(domain, Date.now())
+
+    const headers = {}
+    if (shouldPreferJson(url)) {
+      headers.Accept = 'application/json,text/plain,*/*'
     }
 
-    if (!source.adapterId) {
-      fail(`Source missing adapterId: ${sourceId}`)
+    const fetchResult = await fetcher.fetch(url, { headers })
+    if (fetchResult.status !== 'ok') {
+      counters.fetchFailed += 1
+      counters.fetchReasons[fetchResult.status] = (counters.fetchReasons[fetchResult.status] || 0) + 1
+      results.push({
+        url,
+        status: 'fetch_failed',
+        fetchStatus: fetchResult.status,
+        error: fetchResult.error,
+      })
+      continue
     }
 
-    const adapter = scraper.getAdapterRegistry().get(source.adapterId)
-    if (!adapter) {
-      fail(`Adapter not registered: ${source.adapterId}`)
+    counters.fetchedOk += 1
+
+    let extractResult
+    try {
+      extractResult = adapter.extract(fetchResult.html ?? '', url, {
+        sourceId,
+        retailerId,
+        runId,
+        targetId: `dry-target-${domain}`,
+        now: new Date(),
+        logger,
+      })
+    } catch (error) {
+      counters.extractFailed += 1
+      counters.extractReasons.EXCEPTION = (counters.extractReasons.EXCEPTION || 0) + 1
+      results.push({
+        url,
+        status: 'extract_failed',
+        reason: 'EXCEPTION',
+        error: error?.message || String(error),
+      })
+      continue
     }
 
-    if (adapter.requiresJsRendering) {
-      fail(`Adapter ${adapter.id} requires JS rendering; dry-run uses HTTP fetcher only`)
+    if (!extractResult.ok) {
+      counters.extractFailed += 1
+      counters.extractReasons[extractResult.reason] =
+        (counters.extractReasons[extractResult.reason] || 0) + 1
+      results.push({
+        url,
+        status: 'extract_failed',
+        reason: extractResult.reason,
+        details: extractResult.details,
+      })
+      continue
     }
 
-    if (!allowUnapproved) {
-      if (!source.enabled) {
-        fail('Source is disabled (sources.enabled=false)')
-      }
-      if (!source.scrapeEnabled) {
-        fail('Source scrapeEnabled=false (scraping not approved)')
-      }
-      if (!source.robotsCompliant) {
-        fail('Source robotsCompliant=false (robots blocked)')
-      }
-      if (!source.tosReviewedAt || !source.tosApprovedBy) {
-        fail('Source ToS gates not satisfied (tosReviewedAt/tosApprovedBy)')
-      }
-      if (!source.scrape_adapter_status?.enabled) {
-        fail('Adapter disabled (scrape_adapter_status.enabled=false)')
-      }
-      if (source.scrape_adapter_status?.ingestionPaused) {
-        fail('Adapter ingestion paused (scrape_adapter_status.ingestionPaused=true)')
-      }
+    counters.extractOk += 1
+
+    let normalizeResult
+    try {
+      normalizeResult = adapter.normalize(extractResult.offer, {
+        sourceId,
+        retailerId,
+        runId,
+        targetId: `dry-target-${domain}`,
+        now: new Date(),
+        logger,
+      })
+    } catch (error) {
+      counters.quarantined += 1
+      counters.normalizeReasons.EXCEPTION = (counters.normalizeReasons.EXCEPTION || 0) + 1
+      results.push({
+        url,
+        status: 'quarantined',
+        reason: 'EXCEPTION',
+        error: error?.message || String(error),
+      })
+      continue
     }
 
-    const scrapeConfig = scraper.parseScrapeConfig(source.scrapeConfig)
-    const rateLimit = {
-      requestsPerSecond:
-        scrapeConfig?.rateLimit?.requestsPerSecond ?? scraper.DEFAULT_RATE_LIMIT.requestsPerSecond,
-      minDelayMs: scrapeConfig?.rateLimit?.minDelayMs ?? scraper.DEFAULT_RATE_LIMIT.minDelayMs,
-    }
-    const derivedDelayMs = Math.max(rateLimit.minDelayMs, Math.ceil(1000 / rateLimit.requestsPerSecond))
-
-    const robotsPolicy = new scraper.RobotsPolicyImpl()
-    const fetcher = new scraper.HttpFetcher({ robotsPolicy })
-
-    const where = {
-      sourceId: source.id,
-      adapterId: source.adapterId,
-      enabled: true,
-      status: 'ACTIVE',
-      robotsPathBlocked: false,
-    }
-
-    const totalTargets = await prisma.scrape_targets.count({ where })
-    if (totalTargets === 0) {
-      fail('No active scrape targets found for this source')
-    }
-
-    const takeCount = Math.min(limit, totalTargets)
-    let targets = []
-
-    if (useRandom) {
-      const indices = sampleIndices(totalTargets, takeCount)
-      for (const index of indices) {
-        const rows = await prisma.scrape_targets.findMany({
-          where,
-          select: { id: true, url: true, canonicalUrl: true },
-          orderBy: { id: 'asc' },
-          skip: index,
-          take: 1,
-        })
-        if (rows.length > 0) {
-          targets.push(rows[0])
-        }
-      }
+    if (normalizeResult.status === 'ok') {
+      counters.normalizedOk += 1
+      results.push({
+        url,
+        status: 'ok',
+        title: normalizeResult.offer.title,
+        priceCents: normalizeResult.offer.priceCents,
+        availability: normalizeResult.offer.availability,
+      })
+    } else if (normalizeResult.status === 'drop') {
+      counters.dropped += 1
+      counters.normalizeReasons[normalizeResult.reason] =
+        (counters.normalizeReasons[normalizeResult.reason] || 0) + 1
+      results.push({
+        url,
+        status: 'dropped',
+        reason: normalizeResult.reason,
+      })
     } else {
-      targets = await prisma.scrape_targets.findMany({
-        where,
-        select: { id: true, url: true, canonicalUrl: true },
-        orderBy: { updatedAt: 'desc' },
-        take: takeCount,
+      counters.quarantined += 1
+      counters.normalizeReasons[normalizeResult.reason] =
+        (counters.normalizeReasons[normalizeResult.reason] || 0) + 1
+      results.push({
+        url,
+        status: 'quarantined',
+        reason: normalizeResult.reason,
       })
     }
+  }
 
-    if (targets.length === 0) {
-      fail('No targets selected for dry run')
-    }
-
-    const logger = createLogger(verbose)
-    const runId = `dry-run-${Date.now()}`
-    const results = []
-    const counters = {
-      attempted: targets.length,
-      fetchedOk: 0,
-      fetchFailed: 0,
-      extractOk: 0,
-      extractFailed: 0,
-      normalizedOk: 0,
-      dropped: 0,
-      quarantined: 0,
-      fetchReasons: {},
-      extractReasons: {},
-      normalizeReasons: {},
-    }
-
-    const lastFetchAt = new Map()
-
-    for (const target of targets) {
-      const domain = scraper.getRegistrableDomain(target.url)
-      const crawlDelay = await robotsPolicy.getCrawlDelay(domain)
-      const delayMs = Math.max(derivedDelayMs, crawlDelay ? crawlDelay * 1000 : 0)
-
-      const last = lastFetchAt.get(domain) || 0
-      const elapsed = Date.now() - last
-      if (elapsed < delayMs) {
-        await new Promise(resolve => setTimeout(resolve, delayMs - elapsed))
-      }
-
-      lastFetchAt.set(domain, Date.now())
-
-      const headers = { ...(scrapeConfig?.customHeaders ?? {}) }
-      if (!headers.Accept && shouldPreferJson(target.url)) {
-        headers.Accept = 'application/json,text/plain,*/*'
-      }
-
-      const fetchResult = await fetcher.fetch(target.url, { headers })
-      if (fetchResult.status !== 'ok') {
-        counters.fetchFailed += 1
-        counters.fetchReasons[fetchResult.status] = (counters.fetchReasons[fetchResult.status] || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'fetch_failed',
-          fetchStatus: fetchResult.status,
-          error: fetchResult.error,
-        })
-        continue
-      }
-
-      counters.fetchedOk += 1
-
-      let extractResult = null
-      try {
-        extractResult = adapter.extract(fetchResult.html ?? '', target.url, {
-          sourceId: source.id,
-          retailerId: source.retailerId,
-          runId,
-          targetId: target.id,
-          now: new Date(),
-          logger,
-        })
-      } catch (error) {
-        counters.extractFailed += 1
-        counters.extractReasons.EXCEPTION = (counters.extractReasons.EXCEPTION || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'extract_failed',
-          reason: 'EXCEPTION',
-          error: error?.message || String(error),
-        })
-        continue
-      }
-
-      if (!extractResult.ok) {
-        counters.extractFailed += 1
-        counters.extractReasons[extractResult.reason] =
-          (counters.extractReasons[extractResult.reason] || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'extract_failed',
-          reason: extractResult.reason,
-          details: extractResult.details,
-        })
-        continue
-      }
-
-      counters.extractOk += 1
-
-      let normalizeResult = null
-      try {
-        normalizeResult = adapter.normalize(extractResult.offer, {
-          sourceId: source.id,
-          retailerId: source.retailerId,
-          runId,
-          targetId: target.id,
-          now: new Date(),
-          logger,
-        })
-      } catch (error) {
-        counters.quarantined += 1
-        counters.normalizeReasons.EXCEPTION = (counters.normalizeReasons.EXCEPTION || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'quarantined',
-          reason: 'EXCEPTION',
-          error: error?.message || String(error),
-        })
-        continue
-      }
-
-      if (normalizeResult.status === 'ok') {
-        counters.normalizedOk += 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'ok',
-          priceCents: normalizeResult.offer.priceCents,
-          availability: normalizeResult.offer.availability,
-          title: normalizeResult.offer.title,
-        })
-      } else if (normalizeResult.status === 'drop') {
-        counters.dropped += 1
-        counters.normalizeReasons[normalizeResult.reason] =
-          (counters.normalizeReasons[normalizeResult.reason] || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'dropped',
-          reason: normalizeResult.reason,
-        })
-      } else {
-        counters.quarantined += 1
-        counters.normalizeReasons[normalizeResult.reason] =
-          (counters.normalizeReasons[normalizeResult.reason] || 0) + 1
-        results.push({
-          id: target.id,
-          url: target.url,
-          status: 'quarantined',
-          reason: normalizeResult.reason,
-        })
-      }
-    }
-
-    if (outputJson) {
-      console.log(
-        JSON.stringify(
-          {
-            source: {
-              id: source.id,
-              name: source.name,
-              adapterId: source.adapterId,
-            },
-            counts: counters,
-            results,
-          },
-          null,
-          2
-        )
+  if (outputJson) {
+    console.log(
+      JSON.stringify(
+        {
+          adapterId,
+          sourceId,
+          retailerId,
+          counts: counters,
+          results,
+        },
+        null,
+        2
       )
-      return
-    }
+    )
+    return
+  }
 
-    console.log(`Dry run complete for source ${source.name} (${source.id})`) 
-    console.log(`Adapter: ${source.adapterId} | Targets: ${targets.length}/${totalTargets}`)
-    console.log('')
+  console.log(`Dry run complete for adapter ${adapterId}`)
+  console.log(`URLs tested: ${selectedUrls.length}`)
+  console.log('')
+  for (const result of results) {
+    if (result.status === 'ok') {
+      console.log(`OK      ${formatCurrency(result.priceCents)} ${result.availability} ${result.url}`)
+    } else if (result.status === 'fetch_failed') {
+      console.log(`FETCH   ${result.fetchStatus} ${result.url}`)
+    } else if (result.status === 'extract_failed') {
+      console.log(`EXTRACT ${result.reason} ${result.url}`)
+    } else if (result.status === 'dropped') {
+      console.log(`DROP    ${result.reason} ${result.url}`)
+    } else {
+      console.log(`QUAR    ${result.reason} ${result.url}`)
+    }
+  }
 
-    for (const result of results) {
-      if (result.status === 'ok') {
-        console.log(`OK     ${formatCurrency(result.priceCents)} ${result.availability} ${result.url}`)
-      } else if (result.status === 'fetch_failed') {
-        console.log(`FETCH  ${result.fetchStatus} ${result.url}`)
-      } else if (result.status === 'extract_failed') {
-        console.log(`EXTRACT ${result.reason} ${result.url}`)
-      } else if (result.status === 'dropped') {
-        console.log(`DROP   ${result.reason} ${result.url}`)
-      } else if (result.status === 'quarantined') {
-        console.log(`QUAR   ${result.reason} ${result.url}`)
-      }
-    }
+  console.log('')
+  console.log('Summary:')
+  console.log(`  fetchedOk=${counters.fetchedOk} fetchFailed=${counters.fetchFailed}`)
+  console.log(`  extractOk=${counters.extractOk} extractFailed=${counters.extractFailed}`)
+  console.log(`  normalizedOk=${counters.normalizedOk} dropped=${counters.dropped} quarantined=${counters.quarantined}`)
 
-    console.log('')
-    console.log('Summary:')
-    console.log(`  fetchedOk=${counters.fetchedOk} fetchFailed=${counters.fetchFailed}`)
-    console.log(`  extractOk=${counters.extractOk} extractFailed=${counters.extractFailed}`)
-    console.log(`  normalizedOk=${counters.normalizedOk} dropped=${counters.dropped} quarantined=${counters.quarantined}`)
-
-    if (Object.keys(counters.fetchReasons).length > 0) {
-      console.log(`  fetchReasons=${JSON.stringify(counters.fetchReasons)}`)
-    }
-    if (Object.keys(counters.extractReasons).length > 0) {
-      console.log(`  extractReasons=${JSON.stringify(counters.extractReasons)}`)
-    }
-    if (Object.keys(counters.normalizeReasons).length > 0) {
-      console.log(`  normalizeReasons=${JSON.stringify(counters.normalizeReasons)}`)
-    }
-  } finally {
-    await prisma.$disconnect()
+  if (Object.keys(counters.fetchReasons).length > 0) {
+    console.log(`  fetchReasons=${JSON.stringify(counters.fetchReasons)}`)
+  }
+  if (Object.keys(counters.extractReasons).length > 0) {
+    console.log(`  extractReasons=${JSON.stringify(counters.extractReasons)}`)
+  }
+  if (Object.keys(counters.normalizeReasons).length > 0) {
+    console.log(`  normalizeReasons=${JSON.stringify(counters.normalizeReasons)}`)
   }
 }
 

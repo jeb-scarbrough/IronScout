@@ -113,7 +113,7 @@ Access at: `http://localhost:3939/admin/queues`
 pnpm scraper:bootstrap --id <adapterId> --domain <domain>
 pnpm scraper:new --id <adapterId> --domain <domain> --version 0.1.0
 pnpm scraper:discover --source-url <url> --listing <url> --product-path-prefix /ammo/ --dry-run
-pnpm scraper:dry-run --source-id <sourceId> --limit 10
+pnpm scraper:dry-run --adapter-id <adapterId> --url-file <urls.txt> --limit 10
 ```
 
 Note: `scraper:dry-run` uses the harvester dist build. If it is missing, run:
