@@ -146,14 +146,15 @@ router.post('/semantic', redisRateLimit({
       return res.status(400).json(error.toApiError())
     }
 
-    log.error('Semantic search error', {}, error)
-
     if (error instanceof z.ZodError) {
+      log.warn('Semantic search validation error', { issues: error.issues })
       return res.status(400).json({
         error: 'Invalid request parameters',
         details: error.issues
       })
     }
+
+    log.error('Semantic search error', {}, error)
 
     res.status(500).json({ error: 'Search failed' })
   }

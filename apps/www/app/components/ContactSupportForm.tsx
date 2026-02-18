@@ -32,6 +32,18 @@ type SubmitState = {
   message?: string
 }
 
+type FieldErrors = Partial<Record<keyof FormState, string>>
+
+/** Client-side constraints matching the API Zod schema (contact.ts). */
+function validateForm(form: FormState): FieldErrors {
+  const errors: FieldErrors = {}
+  if (form.name.trim().length < 2) errors.name = 'Name must be at least 2 characters.'
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = 'Enter a valid email address.'
+  if (form.subject.trim().length < 3) errors.subject = 'Subject must be at least 3 characters.'
+  if (form.message.trim().length < 20) errors.message = 'Message must be at least 20 characters.'
+  return errors
+}
+
 export function ContactSupportForm() {
   const searchParams = useSearchParams()
   const source = searchParams.get('source') || ''
@@ -52,6 +64,7 @@ export function ContactSupportForm() {
     website: '',
   })
   const [submitState, setSubmitState] = useState<SubmitState>({ type: 'idle' })
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [turnstileReady, setTurnstileReady] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState('')
   const [widgetId, setWidgetId] = useState<string | null>(null)
@@ -80,8 +93,23 @@ export function ContactSupportForm() {
     setWidgetId(id)
   }, [turnstileReady, widgetId])
 
+  const updateField = (field: keyof FormState, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    const errors = validateForm(form)
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     if (!turnstileToken) {
       setSubmitState({
         type: 'error',
@@ -127,6 +155,7 @@ export function ContactSupportForm() {
         message: '',
         website: '',
       })
+      setFieldErrors({})
       setTurnstileToken('')
       if (window.turnstile && widgetId) {
         window.turnstile.reset(widgetId)
@@ -158,10 +187,13 @@ export function ContactSupportForm() {
               name="name"
               autoComplete="name"
               required
+              minLength={2}
+              maxLength={120}
               className="rounded-lg border border-iron-800 bg-iron-900/60 px-3 py-2 text-iron-100 focus:border-primary focus:outline-none"
               value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              onChange={(event) => updateField('name', event.target.value)}
             />
+            {fieldErrors.name && <span className="text-xs text-red-400">{fieldErrors.name}</span>}
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-iron-300">Email</span>
@@ -170,10 +202,12 @@ export function ContactSupportForm() {
               name="email"
               autoComplete="email"
               required
+              maxLength={320}
               className="rounded-lg border border-iron-800 bg-iron-900/60 px-3 py-2 text-iron-100 focus:border-primary focus:outline-none"
               value={form.email}
-              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+              onChange={(event) => updateField('email', event.target.value)}
             />
+            {fieldErrors.email && <span className="text-xs text-red-400">{fieldErrors.email}</span>}
           </label>
         </div>
 
@@ -183,9 +217,10 @@ export function ContactSupportForm() {
             type="text"
             name="company"
             autoComplete="organization"
+            maxLength={120}
             className="rounded-lg border border-iron-800 bg-iron-900/60 px-3 py-2 text-iron-100 focus:border-primary focus:outline-none"
             value={form.company}
-            onChange={(event) => setForm((prev) => ({ ...prev, company: event.target.value }))}
+            onChange={(event) => updateField('company', event.target.value)}
           />
         </label>
 
@@ -195,10 +230,13 @@ export function ContactSupportForm() {
             type="text"
             name="subject"
             required
+            minLength={3}
+            maxLength={160}
             className="rounded-lg border border-iron-800 bg-iron-900/60 px-3 py-2 text-iron-100 focus:border-primary focus:outline-none"
             value={form.subject}
-            onChange={(event) => setForm((prev) => ({ ...prev, subject: event.target.value }))}
+            onChange={(event) => updateField('subject', event.target.value)}
           />
+          {fieldErrors.subject && <span className="text-xs text-red-400">{fieldErrors.subject}</span>}
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
@@ -207,10 +245,13 @@ export function ContactSupportForm() {
             name="message"
             required
             rows={8}
+            minLength={20}
+            maxLength={5000}
             className="rounded-lg border border-iron-800 bg-iron-900/60 px-3 py-2 text-iron-100 focus:border-primary focus:outline-none"
             value={form.message}
-            onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
+            onChange={(event) => updateField('message', event.target.value)}
           />
+          {fieldErrors.message && <span className="text-xs text-red-400">{fieldErrors.message}</span>}
         </label>
 
         <input
