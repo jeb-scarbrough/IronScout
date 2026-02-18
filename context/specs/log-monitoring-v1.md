@@ -156,7 +156,7 @@ All queries use `{source="render"}` as the stream selector, with one or more `|~
 | B2 | Harvester boots | `Scheduler settings loaded` | Regex on message (`worker.ts:262`). Exactly 1 per harvester boot. Do NOT match `WORKER_START` — a single healthy harvester boot emits 5+ WORKER_START events (embedding, resolver, currentprice, quarantine, scrape). |
 | B3 | Prisma errors | `PrismaClient.*Error\|P2002\|P2025` | Regex on error strings |
 | B4 | Connection errors | `ECONNREFUSED\|ECONNRESET\|ETIMEDOUT` | Regex on error strings |
-| B5 | Redis errors | `MaxRetriesPerRequestError\|redis.*NOAUTH\|READONLY.*redis\|MaxRetriesPerRequest\|Redis connection\|Connection is closed` | Regex on error strings. Covers: max retries exhausted, auth failures, read-only replica errors, generic connection failures, and closed connection errors. |
+| B5 | Redis errors | `MaxRetriesPerRequestError\|ECONNREFUSED.*6379\|redis.*NOAUTH\|READONLY.*redis\|Connection is closed` | Regex on error strings. Covers: max retries exhausted, connection refused on Redis port, auth failures, read-only replica errors, and closed connection errors. Excludes `Redis connection` (false-positives on healthy startup log) and redundant `MaxRetriesPerRequest`. Aligned with alert rule `ironscout-redis-connectivity`. |
 
 #### C: Harvester Pipeline (5 queries)
 
@@ -193,8 +193,9 @@ D2 filter chain (append after `{source="render"}`):
 
 E2 filter chain (append after `{source="render"}`):
 ```
-|~ "http.request.end" |~ "status_code.*5[0-9]"
+|~ "http.request.end" |~ "\"status_code\":5[0-9][0-9]"
 ```
+Note: Anchored to JSON value position (`"status_code":5XX`) to prevent greedy `.*` from matching latency or other numeric fields across the log line.
 
 ### curl Templates
 

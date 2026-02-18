@@ -120,7 +120,7 @@ count_over_time({source="render"} |~ "\"error_category\":\"internal\""[<WINDOW>]
 | B2 | Harvester boots | `Scheduler settings loaded` | Regex on message. Exactly 1 per harvester boot. Do NOT match WORKER_START. |
 | B3 | Prisma errors | `PrismaClient.*Error\|P2002\|P2025` | Regex on error strings |
 | B4 | Connection errors | `ECONNREFUSED\|ECONNRESET\|ETIMEDOUT` | Regex on error strings |
-| B5 | Redis errors | `MaxRetriesPerRequestError\|redis.*NOAUTH\|READONLY.*redis\|MaxRetriesPerRequest\|Redis connection\|Connection is closed` | Regex on error strings |
+| B5 | Redis errors | `MaxRetriesPerRequestError\|ECONNREFUSED.*6379\|redis.*NOAUTH\|READONLY.*redis\|Connection is closed` | Regex on error strings |
 
 ### B1: API Starts
 ```
@@ -145,8 +145,9 @@ count_over_time({source="render"} |~ "ECONNREFUSED|ECONNRESET|ETIMEDOUT"[<WINDOW
 
 ### B5: Redis Errors
 ```
-count_over_time({source="render"} |~ "MaxRetriesPerRequestError|redis.*NOAUTH|READONLY.*redis|MaxRetriesPerRequest|Redis connection|Connection is closed"[<WINDOW>])
+count_over_time({source="render"} |~ "MaxRetriesPerRequestError|ECONNREFUSED.*6379|redis.*NOAUTH|READONLY.*redis|Connection is closed"[<WINDOW>])
 ```
+Note: Excludes `Redis connection` (matches healthy startup log `Configured Redis connection`) and redundant `MaxRetriesPerRequest` (subset of `MaxRetriesPerRequestError`). Aligned with alert rule `ironscout-redis-connectivity`.
 
 ---
 
@@ -214,7 +215,7 @@ count_over_time({source="render"} |~ "http.request.end" |~ "/api/auth" |~ "statu
 | ID | Name | LogQL Filter | Reliability |
 |----|------|-------------|-------------|
 | E1 | All warnings | `"level":"warn"` | Reliable |
-| E2 | HTTP 5xx | (chained filter — see below) | Reliable (request-logger) |
+| E2 | HTTP 5xx | (chained filter — see below) | Reliable (request-logger). Anchored to JSON value position to prevent greedy cross-field matching. |
 
 ### E1: All Warnings
 ```
@@ -222,9 +223,9 @@ count_over_time({source="render"} |~ "\"level\":\"warn\""[<WINDOW>])
 ```
 
 ### E2: HTTP 5xx
-Uses chained `|~` filters for field-order safety:
+Uses chained `|~` filters for field-order safety. The status_code pattern is anchored to the JSON value position to prevent greedy `.*` from matching latency or other numeric fields (e.g. `"status_code":200,"latency_ms":52` would false-match `status_code.*5[0-9]`).
 ```
-count_over_time({source="render"} |~ "http.request.end" |~ "status_code.*5[0-9]"[<WINDOW>])
+count_over_time({source="render"} |~ "http.request.end" |~ "\"status_code\":5[0-9][0-9]"[<WINDOW>])
 ```
 
 ---
