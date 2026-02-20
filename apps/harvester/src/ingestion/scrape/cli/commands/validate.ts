@@ -86,5 +86,9 @@ export async function runValidateCommand(args: ValidateCommandArgs): Promise<num
     )
   }
 
+  console.warn(
+    'Validation currently covers scaffold shape and registry parity only; typecheck, lint, fixture execution, and freshness checks are pending Phase B completion.'
+  )
+
   return 0
 }

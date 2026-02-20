@@ -17,16 +17,20 @@ function fail(message: string, code = 2): never {
   throw error
 }
 
+function asTsString(value: string): string {
+  return JSON.stringify(value)
+}
+
 function templateManifest(args: AddCommandArgs, baseUrl: string): string {
   return `import type { ScrapePluginManifest } from '../../types.js'
 
 export const manifest: ScrapePluginManifest = {
-  id: '${args.siteId}',
-  name: '${args.name}',
-  owner: '${args.owner}',
+  id: ${asTsString(args.siteId)},
+  name: ${asTsString(args.name)},
+  owner: ${asTsString(args.owner)},
   version: '0.1.0',
-  mode: '${args.mode}',
-  baseUrls: ['${baseUrl}'],
+  mode: ${asTsString(args.mode)},
+  baseUrls: [${asTsString(baseUrl)}],
   rateLimit: {
     requestsPerSecond: 0.5,
     minDelayMs: 500,
@@ -130,6 +134,22 @@ describe('${args.siteId} contract', () => {
 `
 }
 
+function templateFixturesReadme(): string {
+  return `# Fixtures
+
+Required:
+- in-stock fixture
+- out-of-stock fixture
+- one malformed/edge fixture
+- meta.json with capturedAt/capturedFrom/capturedBy/notes
+
+Rules:
+- no live network in contract tests
+- fixture outputs must be deterministic
+- update expected hash only when normalization behavior intentionally changes
+`
+}
+
 function upsertKnownAdaptersEntry(
   registryPath: string,
   args: AddCommandArgs,
@@ -147,14 +167,14 @@ function upsertKnownAdaptersEntry(
   }
 
   const entry = `  {
-    id: '${args.siteId}',
-    name: '${args.name}',
-    domain: '${domain}',
+    id: ${asTsString(args.siteId)},
+    name: ${asTsString(args.name)},
+    domain: ${asTsString(domain)},
     productPathPattern: '/product/',
-    owner: '${args.owner}',
-    mode: '${args.mode}',
+    owner: ${asTsString(args.owner)},
+    mode: ${asTsString(args.mode)},
     version: '0.1.0',
-    baseUrls: ['${baseUrl}'],
+    baseUrls: [${asTsString(baseUrl)}],
   },
   ${marker}`
 
@@ -224,6 +244,7 @@ export async function runAddCommand(args: AddCommandArgs): Promise<number> {
   const fixtureExt = args.mode === 'json' ? 'json' : 'html'
   writeFile(join(fixturesRoot, `in-stock.${fixtureExt}`), '', args.force)
   writeFile(join(fixturesRoot, `out-of-stock.${fixtureExt}`), '', args.force)
+  writeFile(join(fixturesRoot, 'README.md'), templateFixturesReadme(), args.force)
   writeFile(
     join(fixturesRoot, 'meta.json'),
     JSON.stringify(

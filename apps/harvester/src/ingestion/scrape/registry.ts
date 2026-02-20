@@ -1,7 +1,21 @@
 import type { ScrapePluginManifest, SitePluginRegistration, ScrapeSitePlugin } from './types.js'
 import { SITE_PLUGIN_REGISTRATIONS } from './sites/index.js'
+import psl from 'psl'
 
 const registrations = new Map<string, SitePluginRegistration>()
+const domainOwners = new Map<string, string>()
+
+function registrableDomainForBaseUrl(baseUrl: string): string {
+  let host: string
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase()
+  } catch {
+    return baseUrl.toLowerCase()
+  }
+
+  const registrable = psl.get(host)
+  return (registrable ?? host).toLowerCase()
+}
 
 function validateManifest(manifest: ScrapePluginManifest): void {
   if (!manifest.id.trim()) {
@@ -17,6 +31,21 @@ export function registerSitePlugin(registration: SitePluginRegistration): void {
 
   if (registrations.has(registration.manifest.id)) {
     throw new Error(`Plugin '${registration.manifest.id}' is already registered`)
+  }
+
+  for (const baseUrl of registration.manifest.baseUrls) {
+    const registrableDomain = registrableDomainForBaseUrl(baseUrl)
+    const existingOwner = domainOwners.get(registrableDomain)
+    if (existingOwner && existingOwner !== registration.manifest.id) {
+      throw new Error(
+        `Plugin '${registration.manifest.id}' collides with '${existingOwner}' on registrable domain '${registrableDomain}'`
+      )
+    }
+  }
+
+  for (const baseUrl of registration.manifest.baseUrls) {
+    const registrableDomain = registrableDomainForBaseUrl(baseUrl)
+    domainOwners.set(registrableDomain, registration.manifest.id)
   }
 
   registrations.set(registration.manifest.id, registration)

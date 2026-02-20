@@ -91,7 +91,7 @@ export interface ScrapePluginFetchResult {
 
 export interface ScrapeSitePlugin {
   manifest: ScrapePluginManifest
-  fetchRaw?: (input: ScrapePluginFetchInput) => Promise<ScrapePluginFetchResult>
+  fetchRaw: (input: ScrapePluginFetchInput) => Promise<ScrapePluginFetchResult>
   extractRaw: (payload: string, url: string) => ScrapePluginExtractResult
   normalizeRaw: (input: NormalizeInput) => NormalizeResult
 }

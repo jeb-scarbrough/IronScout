@@ -5,6 +5,7 @@ import type {
   ScrapePluginManifest,
   RawScrapeOffer,
 } from '../types.js'
+import { isPrivateOrReservedHost } from './network.js'
 
 export function computeIdentityKey(input: {
   retailerProductId?: string
@@ -124,14 +125,7 @@ export function validateBaseUrls(manifest: ScrapePluginManifest): {
         return { ok: false, error: `base URL must be https: ${entry}` }
       }
       const host = parsed.hostname.toLowerCase()
-      if (
-        host === 'localhost' ||
-        host === '127.0.0.1' ||
-        host === '0.0.0.0' ||
-        host.startsWith('10.') ||
-        host.startsWith('192.168.') ||
-        host.startsWith('169.254.')
-      ) {
+      if (isPrivateOrReservedHost(host)) {
         return { ok: false, error: `base URL host is blocked: ${entry}` }
       }
     } catch {

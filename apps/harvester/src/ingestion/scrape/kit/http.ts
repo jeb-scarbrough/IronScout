@@ -3,6 +3,7 @@ import { RobotsPolicyImpl } from '../../../scraper/fetch/robots.js'
 import { RedisRateLimiter } from '../../../scraper/fetch/rate-limiter.js'
 import type { FetchResult } from '../../../scraper/types.js'
 import type { ScrapePluginMode, ScrapePluginRateLimit } from '../types.js'
+import { isPrivateOrReservedHost } from './network.js'
 
 const MAX_REQUESTS_PER_SECOND = 2
 const MIN_DELAY_MS = 500
@@ -50,14 +51,7 @@ function isHostAllowed(url: string, baseUrls: string[]): boolean {
   }
 
   const host = target.hostname.toLowerCase()
-  if (
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '0.0.0.0' ||
-    host.startsWith('10.') ||
-    host.startsWith('192.168.') ||
-    host.startsWith('169.254.')
-  ) {
+  if (isPrivateOrReservedHost(host)) {
     return false
   }
 
