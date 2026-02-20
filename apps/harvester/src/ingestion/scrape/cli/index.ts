@@ -43,7 +43,7 @@ function printHelp(): void {
   console.log('  validate --site-id <id>')
   console.log('  test --site-id <id>')
   console.log('  smoke --site-id <id> --url-file <path> [--limit 10]')
-  console.log('  db:add-retailer-source --site-id <id> --retailer-name "<name>" --website <url> --source-name "<name>" --source-url <url>')
+  console.log('  db:add-retailer-source --site-id <id> --retailer-name "<name>" --website <url> --source-name "<name>" --source-url <url> [--scrape-config-file <path>|--scrape-config-json <json>] [--scrape-config-merge deep|replace] [--dry-run]')
 }
 
 async function main(): Promise<void> {
@@ -96,6 +96,10 @@ async function main(): Promise<void> {
         website: asString(flags.website),
         sourceName: asString(flags['source-name']),
         sourceUrl: asString(flags['source-url']),
+        scrapeConfigFile: asString(flags['scrape-config-file']) || undefined,
+        scrapeConfigJson: asString(flags['scrape-config-json']) || undefined,
+        scrapeConfigMerge: asString(flags['scrape-config-merge']) as 'deep' | 'replace',
+        dryRun: flags['dry-run'] === true,
       })
       break
     default:
