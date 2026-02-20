@@ -1,6 +1,6 @@
 ---
-title: 9mm Ammo Prices — Compare Deals Across 15+ Retailers | IronScout
-description: Compare 9mm Luger ammo prices across 15+ online retailers. FMJ range ammo from $0.17/rd, JHP defense loads from $0.50/rd. Updated daily with price history.
+title: 9mm Ammo Prices — Compare Deals Across Retailers | IronScout
+description: Compare 9mm Luger ammo prices across multiple online retailers. FMJ range ammo from $0.17/rd, JHP defense loads from $0.50/rd. Updated daily with price history.
 heading: 9mm ammo prices
 subheading: The most popular handgun caliber in America. Compare FMJ range ammo, JHP defense loads, +P, subsonic, and bulk deals across every major retailer.
 category: handgun

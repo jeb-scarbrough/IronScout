@@ -1,6 +1,6 @@
 ---
 title: .30-06 Springfield Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare .30-06 Springfield ammo prices across 15+ retailers. FMJ from $0.65/rd, hunting from $0.80/rd, match-grade from $1.00/rd. Updated daily.
+description: Compare .30-06 Springfield ammo prices across multiple retailers. FMJ from $0.65/rd, hunting from $0.80/rd, match-grade from $1.00/rd. Updated daily.
 heading: .30-06 Springfield ammo prices
 subheading: America's classic hunting cartridge. Compare FMJ, hunting, and match-grade loads across every major retailer.
 category: rifle

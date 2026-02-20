@@ -9,26 +9,28 @@ import { BRAND } from '@/lib/brand';
 const APP_URL = BRAND.appUrl;
 
 export const metadata: Metadata = {
-  title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+  title: 'Compare Ammo Prices Across Multiple Retailers | IronScout',
   description:
-    'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and 14 calibers across 15+ online retailers. Track price history, set alerts, and find deals. Free to use.',
+    'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and 14 calibers across multiple online retailers. Track price history, set alerts, and find deals. Free to use.',
   alternates: {
     canonical: `${BRAND.wwwUrl}`,
   },
   openGraph: {
-    title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+    title: 'Compare Ammo Prices Across Multiple Retailers | IronScout',
     description:
-      'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more across 15+ retailers. Track price history, set alerts, and find deals.',
+      'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more across multiple retailers. Track price history, set alerts, and find deals.',
     url: `${BRAND.wwwUrl}`,
     siteName: 'IronScout',
     locale: 'en_US',
     type: 'website',
+    images: [{ url: `${BRAND.wwwUrl}/og/default.png`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Compare Ammo Prices Across 15+ Retailers | IronScout',
+    title: 'Compare Ammo Prices Across Multiple Retailers | IronScout',
     description:
       'Compare ammunition prices for 9mm, 5.56, .308, .22 LR and more. Free ammo price tracker with alerts.',
+    images: [`${BRAND.wwwUrl}/og/default.png`],
   },
 };
 
@@ -67,11 +69,46 @@ const whyIronScoutItems = [
   },
 ];
 
+const faqItems = [
+  {
+    question: 'What is IronScout?',
+    answer: 'IronScout is a free ammunition search engine that compares prices across multiple online retailers. It tracks real-time availability, price history, and price-per-round for 14 calibers — from 9mm and 5.56 NATO to .308 Winchester and 12 gauge. Think of it as a flight search engine, but for ammo.',
+  },
+  {
+    question: 'How does IronScout find ammo prices?',
+    answer: 'IronScout indexes product listings from major online ammunition retailers daily. Prices, availability, and product details are updated automatically so you see current information without visiting each store individually.',
+  },
+  {
+    question: 'Is IronScout free to use?',
+    answer: 'Yes. Searching and comparing ammo prices is completely free with no account required. Free accounts unlock saved calibers and basic price alerts. Premium tiers add features like AI-powered search, deeper price history, and advanced alert controls.',
+  },
+  {
+    question: 'Does IronScout sell ammunition?',
+    answer: "No. IronScout is a search and comparison tool, not a retailer. When you find what you're looking for, you click through to the retailer's site to purchase directly. We never handle payment, shipping, or inventory.",
+  },
+  {
+    question: 'How is IronScout different from other ammo search sites?',
+    answer: 'Most ammo search engines sort by price alone. IronScout uses AI-powered intent matching — it understands whether you need range ammo, defense loads, or match-grade precision and ranks results accordingly. It also tracks price history so you can see whether a deal is actually good, not just the cheapest listing today.',
+  },
+  {
+    question: 'What calibers does IronScout track?',
+    answer: 'IronScout currently tracks 14 calibers: 9mm, 5.56 NATO, .223 Remington, .308 Winchester, .22 LR, .45 ACP, .380 ACP, .40 S&W, 10mm Auto, .300 Blackout, 6.5 Creedmoor, 7.62x39, .30-06 Springfield, and 12 gauge. More calibers are added based on demand.',
+  },
+  {
+    question: 'How do ammo price alerts work?',
+    answer: 'Set a target price or choose to be notified on any price drop for products you care about. IronScout monitors prices daily and sends you a notification when conditions are met. You can also set back-in-stock alerts for items that are currently unavailable.',
+  },
+  {
+    question: 'How often are ammo prices updated?',
+    answer: 'Prices and availability are updated daily across all tracked retailers. High-demand calibers like 9mm and 5.56 NATO may be checked more frequently during periods of high market activity.',
+  },
+];
+
 export default function Home() {
   return (
     <div className="relative">
       <Script
-        src="http://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=5423c26e1614d014410b8b21eb80807de155a8dd"
+        src="https://classic.avantlink.com/affiliate_app_confirm.php?mode=js&authResponse=5423c26e1614d014410b8b21eb80807de155a8dd"
         strategy="afterInteractive"
       />
       <Header currentPage="home" />
@@ -304,6 +341,22 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Frequently Asked Questions — real FAQs with schema */}
+      <section className="pt-16 pb-24 border-t border-iron-800/50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="section-heading mb-4">
+              Frequently Asked <span className="text-gradient">Questions</span>
+            </h2>
+            <p className="text-iron-400 text-lg max-w-2xl mx-auto">
+              Everything you need to know about searching and comparing ammo prices.
+            </p>
+          </div>
+
+          <FaqAccordion items={faqItems} />
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-24 border-t border-iron-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -330,14 +383,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ JSON-LD */}
+      {/* FAQPage JSON-LD — genuine user questions only */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             '@context': 'https://schema.org',
             '@type': 'FAQPage',
-            mainEntity: whyIronScoutItems.map((item) => ({
+            mainEntity: faqItems.map((item) => ({
               '@type': 'Question',
               name: item.question,
               acceptedAnswer: {

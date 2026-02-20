@@ -42,6 +42,11 @@ export async function generateMetadata({
   const title = content.frontmatter.title || 'Ammo Prices by Caliber | IronScout'
   const description = content.frontmatter.description
 
+  // Use caliber-specific OG image if available, otherwise fall back to default
+  const ogImageSlug = content.frontmatter.ogImage || slug
+  const ogImage = `${BRAND.wwwUrl}/og/${ogImageSlug}.png`
+  const ogFallback = `${BRAND.wwwUrl}/og/default.png`
+
   return {
     title,
     description,
@@ -54,13 +59,16 @@ export async function generateMetadata({
       url: `${BRAND.wwwUrl}/caliber/${slug}`,
       siteName: 'IronScout',
       type: 'website',
-      images: [{ url: `${BRAND.wwwUrl}/og/default.png`, width: 1200, height: 630 }],
+      images: [
+        { url: ogImage, width: 1200, height: 630 },
+        { url: ogFallback, width: 1200, height: 630 },
+      ],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`${BRAND.wwwUrl}/og/default.png`],
+      images: [ogImage],
     },
   }
 }

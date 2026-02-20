@@ -1,6 +1,6 @@
 ---
 title: 6.5 Creedmoor Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare 6.5 Creedmoor ammo prices across 15+ retailers. Hunting from $1.00/rd, match-grade from $1.10/rd. Updated daily.
+description: Compare 6.5 Creedmoor ammo prices across multiple retailers. Hunting from $1.00/rd, match-grade from $1.10/rd. Updated daily.
 heading: 6.5 Creedmoor ammo prices
 subheading: The modern precision cartridge. Compare hunting and match-grade loads for the caliber that redefined long-range shooting.
 category: rifle

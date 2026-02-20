@@ -1,6 +1,6 @@
 ---
 title: .300 Blackout Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare .300 AAC Blackout ammo prices across 15+ retailers. Supersonic from $0.50/rd, subsonic suppressor loads from $0.55/rd. Updated daily.
+description: Compare .300 AAC Blackout ammo prices across multiple retailers. Supersonic from $0.50/rd, subsonic suppressor loads from $0.55/rd. Updated daily.
 heading: .300 Blackout ammo prices
 subheading: Built for suppressed AR-15s and short-barreled rifles. Compare supersonic, subsonic, and defense loads across every major retailer.
 category: rifle

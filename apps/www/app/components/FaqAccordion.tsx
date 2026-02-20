@@ -33,9 +33,15 @@ export function FaqAccordion({ items }: { items: AccordionItem[] }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          {/* Always in DOM for SEO, hidden visually via CSS */}
-          <div className={`px-6 pb-4 ${openIndex === i ? '' : 'hidden'}`}>
-            <p className="text-iron-400 leading-relaxed">{item.answer}</p>
+          {/* Always in DOM for SEO — collapsed via height/overflow, not display:none */}
+          <div
+            className={`overflow-hidden transition-all duration-200 ${
+              openIndex === i ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+            }`}
+          >
+            <div className="px-6 pb-4">
+              <p className="text-iron-400 leading-relaxed">{item.answer}</p>
+            </div>
           </div>
         </div>
       ))}

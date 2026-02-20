@@ -12,7 +12,7 @@ This document has higher authority than roadmaps, ideas, or partially implemente
 Terminology note:
 - Merchant = portal account, billing, auth boundary.
 - Retailer = consumer storefront, price visibility boundary.
-- v1 uses affiliate feeds and/or approved scraped sources for consumer pricing. Merchant onboarding, retailer feed ingestion, and subscription billing are deferred to v1.1.
+- v1 launch uses approved scraped sources for consumer pricing. Affiliate feed onboarding is deferred post-launch. Merchant onboarding, retailer feed ingestion, and subscription billing are deferred to v1.1.
 Where Merchant/Retailer terms appear, they describe the future model.
 
 ---
@@ -23,7 +23,7 @@ v1 is considered successful if IronScout:
 
 - Delivers clear, trustworthy price context to consumers
 - Makes AI-powered search meaningfully better than keyword-only alternatives
-- Proves affiliate-feed and/or approved scrape ingestion as a reliable source for consumer search and alerts
+- Proves approved scrape ingestion as a reliable source for consumer search and alerts
 - Is operable by a small team without constant manual intervention
 
 v1 is **not** required to be feature-complete or optimized for scale.
@@ -40,7 +40,7 @@ v1 is **not** required to be feature-complete or optimized for scale.
 - Historical price context (uniform for all users)
 - Basic price and availability alerts
 - Watchlists
-- Affiliate feeds and approved scraped sources are the only consumer ingestion sources in v1
+- Approved scraped sources are the only consumer-visible ingestion source at v1 launch
 - No consumer Premium in v1; all consumer capabilities are available to every user
 
 ---
@@ -57,7 +57,7 @@ v1 is **not** required to be feature-complete or optimized for scale.
 
 ### Platform & Infrastructure
 
-- Harvester-based affiliate and SCRAPE ingestion pipeline (approved targets only)
+- Harvester-based SCRAPE ingestion pipeline (approved targets only)
 - Idempotent scheduling and job execution
 - Batched database writes
 - Retailer visibility enforcement at query time (predicate: eligibility + listing; no subscription gating)
@@ -119,6 +119,7 @@ These items must not be shipped, marketed, or implied in v1.
 These may exist in docs, code, or experiments but must remain disabled or internal.
 
 - Merchant portal (all features)
+- Affiliate feed onboarding for consumer-visible pricing
 - Retailer/merchant feed ingestion (CSV/XML/JSON)
 - Merchant subscription and billing workflows
 - Stripe integration and productized billing flows (v1.1+)

@@ -1,6 +1,6 @@
 ---
 title: .223 Remington Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare .223 Remington ammo prices across 15+ retailers. FMJ from $0.25/rd, varmint from $0.40/rd, match-grade from $0.70/rd. Updated daily.
+description: Compare .223 Remington ammo prices across multiple retailers. FMJ from $0.25/rd, varmint from $0.40/rd, match-grade from $0.70/rd. Updated daily.
 heading: .223 Remington ammo prices
 subheading: The civilian sibling of 5.56 NATO. Compare FMJ, varmint, and match-grade loads across every major retailer.
 category: rifle

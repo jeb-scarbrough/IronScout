@@ -53,7 +53,7 @@ export const faqSchemas: Record<string, object> = {
         name: 'Where can I find 9mm ammo in stock right now?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: '9mm is the highest-volume handgun caliber in America and is widely available from online retailers. IronScout tracks in-stock 9mm ammo across 15+ retailers with daily price updates and availability monitoring. Set up a free price alert to get notified when prices drop or specific products come back in stock.',
+          text: '9mm is the highest-volume handgun caliber in America and is widely available from online retailers. IronScout tracks in-stock 9mm ammo across multiple retailers with daily price updates and availability monitoring. Set up a free price alert to get notified when prices drop or specific products come back in stock.',
         },
       },
     ],
@@ -108,7 +108,7 @@ export const faqSchemas: Record<string, object> = {
         name: 'Where can I find 5.56 NATO ammo in stock?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: '5.56 NATO is widely produced by domestic and international manufacturers and is generally in stock at most online retailers. IronScout tracks availability across 15+ retailers with daily updates. Set up a free price alert to get notified of price drops and restocks on specific loads.',
+          text: '5.56 NATO is widely produced by domestic and international manufacturers and is generally in stock at most online retailers. IronScout tracks availability across multiple retailers with daily updates. Set up a free price alert to get notified of price drops and restocks on specific loads.',
         },
       },
     ],
@@ -273,7 +273,7 @@ export const faqSchemas: Record<string, object> = {
         name: 'Where can I find .45 ACP ammo in stock?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: '.45 ACP is a mature caliber with stable production from every major domestic manufacturer. Availability is generally good, though specific defense loads can go in and out of stock. IronScout tracks .45 ACP across 15+ online retailers with daily price updates. Set up a free alert for your preferred load to get notified of restocks and price drops.',
+          text: '.45 ACP is a mature caliber with stable production from every major domestic manufacturer. Availability is generally good, though specific defense loads can go in and out of stock. IronScout tracks .45 ACP across multiple online retailers with daily price updates. Set up a free alert for your preferred load to get notified of restocks and price drops.',
         },
       },
     ],
@@ -328,7 +328,7 @@ export const faqSchemas: Record<string, object> = {
         name: 'Where can I find 12 gauge ammo in stock?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: '12 gauge is the most popular shotgun caliber in America with broad availability. Target loads are almost always in stock; specialty defense loads like Federal FliteControl can be harder to find. IronScout tracks 12 gauge availability across 15+ retailers with daily updates. Set up a free price alert to catch restocks and deal pricing on specific loads.',
+          text: '12 gauge is the most popular shotgun caliber in America with broad availability. Target loads are almost always in stock; specialty defense loads like Federal FliteControl can be harder to find. IronScout tracks 12 gauge availability across multiple retailers with daily updates. Set up a free price alert to catch restocks and deal pricing on specific loads.',
         },
       },
     ],

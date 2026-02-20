@@ -1,6 +1,6 @@
 ---
 title: 12 Gauge Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare 12 gauge shotgun ammo prices across 15+ retailers. Target loads from $0.25/shell, buckshot from $0.60/shell, slugs from $0.80/shell. Updated daily.
+description: Compare 12 gauge shotgun ammo prices across multiple retailers. Target loads from $0.25/shell, buckshot from $0.60/shell, slugs from $0.80/shell. Updated daily.
 heading: 12 gauge ammo prices
 subheading: The most versatile shotgun gauge. Compare target, buckshot, slug, and birdshot loads across every major retailer.
 category: shotgun

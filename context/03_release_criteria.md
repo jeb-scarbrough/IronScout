@@ -38,7 +38,7 @@ All criteria below exist to enforce this rule.
 - Canonical product grouping is stable and deterministic
 - Prices shown to users are tied to a specific source and timestamp
 - Historical price context is derived from stored data, not inference
-- Consumer prices are keyed by `retailerId` and sourced from affiliate feeds and/or approved scraped sources in v1.
+- Consumer prices are keyed by `retailerId` and sourced from approved scraped sources at v1 launch.
 - Blocked, ineligible, or unlisted Retailers never appear in:
   - search results
   - alerts
@@ -56,26 +56,24 @@ All criteria below exist to enforce this rule.
 
 ---
 
-## Ingestion & Harvester Behavior (Affiliate + Scrape)
+## Ingestion & Harvester Behavior (Scrape)
 
 ### Required
 
-- Affiliate feed ingestion is idempotent
+- Scrape ingestion is idempotent
 - Duplicate scheduling cannot produce duplicate writes
-- Broken feeds can be quarantined without system-wide impact
+- Failing scrape adapters can be quarantined or disabled without system-wide impact
 - Alerts only fire on price drop or back-in-stock events for canonical products
 - Scheduler runs as a singleton or lock-protected worker
-- If SCRAPE data is consumer-visible:
-  - Scrape targets are allowlisted and ToS/robots compliant
-  - Drift detection auto-disables failing adapters
-  - Operational kill switch exists for immediate removal
+- Scrape targets are allowlisted and ToS/robots compliant
+- Drift detection auto-disables failing adapters
+- Operational kill switch exists for immediate removal
 
 ### Must Not Ship If
 
-- Multiple harvester instances can double-ingest affiliate feeds
-- Duplicate affiliate runs produce duplicate price rows beyond dedupe safeguards
-- Manual intervention is required to stop bad affiliate data propagation
-- SCRAPE data can appear without approval, monitoring, or a kill switch
+- Multiple harvester instances can duplicate scrape runs or writes
+- Manual intervention is required to stop bad scrape data propagation
+- Scrape data can appear without approval, monitoring, or a kill switch
 
 ---
 
@@ -155,7 +153,7 @@ Before shipping v1, confirm:
 - [ ] All public copy reviewed against `00_public_promises.md`
 - [ ] All v1 features verified against `02_v1_scope_and_cut_list.md`
 - [ ] Retailer visibility eligibility + listing predicate tested end-to-end
-- [ ] Affiliate feed and/or scrape ingestion verified end-to-end
+- [ ] Scrape ingestion verified end-to-end
 - [ ] Harvester duplication tested under concurrency
 - [ ] At least one full rollback completed successfully
 

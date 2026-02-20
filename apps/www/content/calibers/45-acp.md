@@ -1,6 +1,6 @@
 ---
 title: .45 ACP Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare .45 ACP ammo prices across 15+ retailers. FMJ range ammo from $0.28/rd, JHP defense loads from $0.60/rd. Updated daily with price history.
+description: Compare .45 ACP ammo prices across multiple retailers. FMJ range ammo from $0.28/rd, JHP defense loads from $0.60/rd. Updated daily with price history.
 heading: .45 ACP ammo prices
 subheading: The classic big-bore handgun cartridge. Compare FMJ range ammo, JHP defense loads, and bulk deals across every major retailer.
 category: handgun

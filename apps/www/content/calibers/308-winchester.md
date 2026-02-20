@@ -1,6 +1,6 @@
 ---
 title: .308 Winchester Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare .308 Winchester ammo prices across 15+ retailers. FMJ from $0.55/rd, hunting from $0.90/rd, match-grade from $1.00/rd. Updated daily.
+description: Compare .308 Winchester ammo prices across multiple retailers. FMJ from $0.55/rd, hunting from $0.90/rd, match-grade from $1.00/rd. Updated daily.
 heading: .308 Winchester ammo prices
 subheading: The full-power rifle standard. Compare FMJ, hunting, match-grade, and bulk deals for the most versatile .30-caliber cartridge.
 category: rifle

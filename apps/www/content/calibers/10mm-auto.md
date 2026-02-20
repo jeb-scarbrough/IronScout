@@ -1,6 +1,6 @@
 ---
 title: 10mm Auto Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare 10mm Auto ammo prices across 15+ retailers. FMJ from $0.30/rd, hunting/defense loads from $0.70/rd. Updated daily.
+description: Compare 10mm Auto ammo prices across multiple retailers. FMJ from $0.30/rd, hunting/defense loads from $0.70/rd. Updated daily.
 heading: 10mm Auto ammo prices
 subheading: Maximum handgun energy for woods carry and hunting. Compare FMJ, JHP, and hard-cast loads across every major retailer.
 category: handgun

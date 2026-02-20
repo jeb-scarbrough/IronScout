@@ -1,6 +1,6 @@
 ---
 title: 5.56 NATO Ammo Prices — Compare Deals Across Retailers | IronScout
-description: Compare 5.56x45mm NATO ammo prices across 15+ retailers. M193 FMJ from $0.28/rd, M855 green tip from $0.30/rd, match-grade from $0.80/rd. Updated daily.
+description: Compare 5.56x45mm NATO ammo prices across multiple retailers. M193 FMJ from $0.28/rd, M855 green tip from $0.30/rd, match-grade from $0.80/rd. Updated daily.
 heading: 5.56 NATO ammo prices
 subheading: The most popular rifle caliber in America. Compare M193, M855 green tip, match-grade, and bulk deals across every major retailer.
 category: rifle
