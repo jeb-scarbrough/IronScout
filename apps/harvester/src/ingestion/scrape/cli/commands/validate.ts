@@ -5,6 +5,7 @@ import { assertRegistryParity } from '../../registry.js'
 import { safeJsonParse } from '../../kit/json.js'
 import { evaluateFixtureFreshness, validateFixtureMeta } from '../../kit/fixtures.js'
 import { runTestCommand } from './test.js'
+import { resolveRepoRoot } from '../paths.js'
 
 interface ValidateCommandArgs {
   siteId: string
@@ -21,7 +22,8 @@ const REQUIRED_SITE_FILES = [
   'tests/contract.test.ts',
 ]
 
-const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const PNPM_CMD = 'pnpm'
+const PNPM_SHELL = process.platform === 'win32'
 
 function runHarvesterTypecheck(repoRoot: string): boolean {
   const result = spawnSync(
@@ -30,6 +32,7 @@ function runHarvesterTypecheck(repoRoot: string): boolean {
     {
       cwd: repoRoot,
       stdio: 'inherit',
+      shell: PNPM_SHELL,
     }
   )
   return result.status === 0
@@ -42,6 +45,7 @@ function runHarvesterLint(repoRoot: string): { ok: boolean; skipped: boolean } {
     {
       cwd: repoRoot,
       encoding: 'utf8',
+      shell: PNPM_SHELL,
     }
   )
 
@@ -91,7 +95,7 @@ export async function runValidateCommand(args: ValidateCommandArgs): Promise<num
     return 2
   }
 
-  const repoRoot = process.cwd()
+  const repoRoot = resolveRepoRoot()
   const siteRoot = resolve(repoRoot, 'apps/harvester/src/ingestion/scrape/sites', args.siteId)
   if (!existsSync(siteRoot)) {
     console.error(`Site does not exist: ${siteRoot}`)

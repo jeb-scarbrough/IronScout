@@ -109,6 +109,20 @@ Access at: `http://localhost:3939/admin/queues`
 
 ## Scraper Workflow
 
+### Plugin Onboarding (ingestion/scrape)
+
+```bash
+pnpm scraper:add --site-id <siteId> --name "<display name>" --mode html|json [--owner "<owner>"]
+pnpm scraper:validate --site-id <siteId> [--strict]
+pnpm scraper:test --site-id <siteId>
+pnpm scraper:smoke --site-id <siteId> --url-file <urls.txt> [--limit 10]
+pnpm scraper:db:add-retailer-source --site-id <siteId> --retailer-name "<name>" --website "https://..." --source-name "<name>" --source-url "https://..."
+```
+
+See `context/reference/scraper-onboarding.md` for full onboarding checklist and Admin bulk import requirements.
+
+### Legacy Adapter Workflow (scraper/adapters)
+
 ```bash
 pnpm scraper:bootstrap --id <adapterId> --domain <domain>
 pnpm scraper:new --id <adapterId> --domain <domain> --version 0.1.0

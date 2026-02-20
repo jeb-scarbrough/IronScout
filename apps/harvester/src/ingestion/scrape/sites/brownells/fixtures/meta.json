@@ -1,0 +1,6 @@
+{
+  "capturedAt": "2026-02-18T00:00:00.000Z",
+  "capturedFrom": "https://www.brownells.com/ammunition/",
+  "capturedBy": "legacy-brownells-fixture-migration",
+  "notes": "Migrated fixture set from legacy scraper adapter tests for Phase C bridge parity."
+}

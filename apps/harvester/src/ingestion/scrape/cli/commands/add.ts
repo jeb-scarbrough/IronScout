@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { resolveRepoRoot } from '../paths.js'
 
 interface AddCommandArgs {
   siteId: string
@@ -221,7 +222,7 @@ export async function runAddCommand(args: AddCommandArgs): Promise<number> {
     fail('mode must be html or json', 2)
   }
 
-  const repoRoot = process.cwd()
+  const repoRoot = resolveRepoRoot()
   const domain = `${args.siteId.replace(/_/g, '-')}.com`
   const baseUrl = `https://www.${domain}`
   const siteRoot = resolve(repoRoot, 'apps/harvester/src/ingestion/scrape/sites', args.siteId)

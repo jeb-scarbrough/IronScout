@@ -4,6 +4,7 @@ import type { Prisma } from '@ironscout/db'
 import { getRegisteredSitePluginManifest } from '../../registry.js'
 import { safeJsonParse } from '../../kit/json.js'
 import { validateScrapeConfig } from '../../kit/validate.js'
+import { resolveRepoRoot } from '../paths.js'
 
 type ScrapeConfigMergeMode = 'deep' | 'replace'
 
@@ -57,7 +58,10 @@ function deepMergeObjects(
   return merged
 }
 
-function readScrapeConfigFromInput(args: DbAddRetailerSourceArgs): {
+function readScrapeConfigFromInput(
+  args: DbAddRetailerSourceArgs,
+  repoRoot: string
+): {
   config?: Record<string, unknown>
   unknownTopLevelKeys: string[]
 } {
@@ -70,7 +74,7 @@ function readScrapeConfigFromInput(args: DbAddRetailerSourceArgs): {
   }
 
   const payload = args.scrapeConfigFile
-    ? readFileSync(resolve(process.cwd(), args.scrapeConfigFile), 'utf8')
+    ? readFileSync(resolve(repoRoot, args.scrapeConfigFile), 'utf8')
     : args.scrapeConfigJson!
   const parsed = safeJsonParse(payload)
   if (!parsed.ok) {
@@ -95,6 +99,7 @@ function toAuditJson(value: unknown): Prisma.InputJsonValue {
 export async function runDbAddRetailerSourceCommand(
   args: DbAddRetailerSourceArgs
 ): Promise<number> {
+  const repoRoot = resolveRepoRoot()
   const missing = []
   if (!args.siteId) missing.push('--site-id')
   if (!args.retailerName) missing.push('--retailer-name')
@@ -128,7 +133,10 @@ export async function runDbAddRetailerSourceCommand(
     const { prisma } = await import('@ironscout/db')
     const website = normalizeAbsoluteHttpUrl(args.website, '--website')
     const sourceUrl = normalizeAbsoluteHttpUrl(args.sourceUrl, '--source-url')
-    const { config: providedScrapeConfig, unknownTopLevelKeys } = readScrapeConfigFromInput(args)
+    const { config: providedScrapeConfig, unknownTopLevelKeys } = readScrapeConfigFromInput(
+      args,
+      repoRoot
+    )
     const actor =
       process.env.SCRAPER_CLI_ACTOR?.trim() ||
       process.env.USER?.trim() ||

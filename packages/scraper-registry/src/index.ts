@@ -25,6 +25,16 @@ export interface ScraperRegistryEntry {
 export const KNOWN_ADAPTERS = [
   // __KNOWN_ADAPTERS_INSERT__
   {
+    id: 'brownells',
+    name: 'Brownells',
+    domain: 'brownells.com',
+    productPathPattern: '/ammunition/',
+    owner: 'harvester',
+    mode: 'html',
+    version: '1.0.0',
+    baseUrls: ['https://www.brownells.com'],
+  },
+  {
     id: 'midwayusa',
     name: 'MidwayUSA',
     domain: 'midwayusa.com',

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { resolveRepoRoot } from '../paths.js'
 
 interface SmokeCommandArgs {
   siteId: string
@@ -24,7 +25,7 @@ export async function runSmokeCommand(args: SmokeCommandArgs): Promise<number> {
     return 2
   }
 
-  const repoRoot = process.cwd()
+  const repoRoot = resolveRepoRoot()
   const urlFilePath = resolve(repoRoot, args.urlFile)
   if (!existsSync(urlFilePath)) {
     console.error(`URL file not found: ${urlFilePath}`)

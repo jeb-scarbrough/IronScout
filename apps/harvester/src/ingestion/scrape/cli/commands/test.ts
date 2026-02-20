@@ -1,13 +1,15 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { resolveRepoRoot } from '../paths.js'
 
 interface TestCommandArgs {
   siteId: string
 }
 
 const SITE_ID_PATTERN = /^[a-z0-9_]+$/
-const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const PNPM_CMD = 'pnpm'
+const PNPM_SHELL = process.platform === 'win32'
 
 export async function runTestCommand(args: TestCommandArgs): Promise<number> {
   if (!args.siteId) {
@@ -19,7 +21,7 @@ export async function runTestCommand(args: TestCommandArgs): Promise<number> {
     return 2
   }
 
-  const repoRoot = process.cwd()
+  const repoRoot = resolveRepoRoot()
   const contractVitestConfig = resolve(
     repoRoot,
     'apps/harvester/src/ingestion/scrape/cli/vitest.contract.config.ts'
@@ -52,6 +54,7 @@ export async function runTestCommand(args: TestCommandArgs): Promise<number> {
       {
         cwd: repoRoot,
         stdio: 'inherit',
+        shell: PNPM_SHELL,
       }
     )
     return result.status === 0 ? 0 : 6
