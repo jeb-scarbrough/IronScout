@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3004",
-    "build": "node ./scripts/verify-internal-links.mjs && node ./scripts/generate-market-snapshots.mjs && next build",
+    "build": "node ./scripts/verify-internal-links.mjs && node ./scripts/generate-market-snapshots.mjs && next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
