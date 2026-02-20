@@ -158,7 +158,10 @@ function upsertKnownAdaptersEntry(
   baseUrl: string
 ): void {
   const existing = readFileSync(registryPath, 'utf8')
-  if (existing.includes(`id: '${args.siteId}'`)) {
+  if (
+    existing.includes(`id: '${args.siteId}'`) ||
+    existing.includes(`id: "${args.siteId}"`)
+  ) {
     return
   }
 

@@ -168,4 +168,26 @@ describe('db:add-retailer-source command', () => {
       })
     )
   })
+
+  it('scopes source-name matching to the same adapter or unassigned sources', async () => {
+    const result = await runDbAddRetailerSourceCommand({
+      siteId: 'testsite',
+      retailerName: 'Retailer',
+      website: 'https://retailer.test',
+      sourceName: 'Source',
+      sourceUrl: 'https://retailer.test/products',
+    })
+
+    expect(result).toBe(0)
+    expect(mocks.sourcesFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            { retailerId: 'retailer-1', name: 'Source', adapterId: 'testsite' },
+            { retailerId: 'retailer-1', name: 'Source', adapterId: null },
+          ]),
+        }),
+      })
+    )
+  })
 })

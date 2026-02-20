@@ -231,7 +231,8 @@ export async function runDbAddRetailerSourceCommand(
           OR: [
             { adapterId: args.siteId },
             { retailerId: retailer.id, url: sourceUrl },
-            { retailerId: retailer.id, name: args.sourceName },
+            { retailerId: retailer.id, name: args.sourceName, adapterId: args.siteId },
+            { retailerId: retailer.id, name: args.sourceName, adapterId: null },
           ],
         },
         select: {

@@ -68,13 +68,16 @@ function runHarvesterLint(repoRoot: string): { ok: boolean; skipped: boolean } {
   return { ok: false, skipped: false }
 }
 
-function hasKnownAdapterEntry(registryFileContent: string, siteId: string): boolean {
-  return registryFileContent.includes(`id: '${siteId}'`)
+export function hasKnownAdapterEntry(registryFileContent: string, siteId: string): boolean {
+  return (
+    registryFileContent.includes(`id: '${siteId}'`) ||
+    registryFileContent.includes(`id: "${siteId}"`)
+  )
 }
 
-function extractKnownAdapterIds(registryFileContent: string): string[] {
+export function extractKnownAdapterIds(registryFileContent: string): string[] {
   const ids: string[] = []
-  const regex = /id:\s*'([a-z0-9_]+)'/g
+  const regex = /id:\s*['"]([a-z0-9_]+)['"]/g
   let match: RegExpExecArray | null
   while ((match = regex.exec(registryFileContent)) !== null) {
     const id = match[1]
