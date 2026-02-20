@@ -535,7 +535,10 @@ export async function aiSearch(
   // Per search-lens-v1.md: "Ordering derives from declared ordering rules only"
   const rankingStart = Date.now()
   let rankedProducts: any[]
-  const lensOrderingActive = lensMetadata !== undefined
+  // Lens ordering is active only when the lens ran AND the user hasn't
+  // explicitly requested a different sort.  Explicit sortBy always wins.
+  const userRequestedExplicitSort = sortBy !== 'relevance'
+  const lensOrderingActive = lensMetadata !== undefined && !userRequestedExplicitSort
 
   if (lensOrderingActive) {
     // Lens pipeline already applied deterministic ordering - preserve it
