@@ -40,7 +40,7 @@ function printHelp(): void {
   console.log('')
   console.log('Commands:')
   console.log('  add --site-id <id> --name "<name>" --mode html|json [--owner "<owner>"] [--force]')
-  console.log('  validate --site-id <id>')
+  console.log('  validate --site-id <id> [--strict]')
   console.log('  test --site-id <id>')
   console.log('  smoke --site-id <id> --url-file <path> [--limit 10]')
   console.log('  db:add-retailer-source --site-id <id> --retailer-name "<name>" --website <url> --source-name "<name>" --source-url <url> [--scrape-config-file <path>|--scrape-config-json <json>] [--scrape-config-merge deep|replace] [--dry-run]')
@@ -74,6 +74,7 @@ async function main(): Promise<void> {
     case 'validate':
       exitCode = await runValidateCommand({
         siteId: asString(flags['site-id']),
+        strict: flags.strict === true,
       })
       break
     case 'test':

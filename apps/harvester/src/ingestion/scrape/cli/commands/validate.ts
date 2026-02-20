@@ -1,9 +1,14 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { assertRegistryParity } from '../../registry.js'
+import { safeJsonParse } from '../../kit/json.js'
+import { evaluateFixtureFreshness, validateFixtureMeta } from '../../kit/fixtures.js'
+import { runTestCommand } from './test.js'
 
 interface ValidateCommandArgs {
   siteId: string
+  strict?: boolean
 }
 
 const REQUIRED_SITE_FILES = [
@@ -15,6 +20,49 @@ const REQUIRED_SITE_FILES = [
   'fixtures/meta.json',
   'tests/contract.test.ts',
 ]
+
+const PNPM_CMD = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+
+function runHarvesterTypecheck(repoRoot: string): boolean {
+  const result = spawnSync(
+    PNPM_CMD,
+    ['--filter', '@ironscout/harvester', 'exec', 'tsc', '--noEmit'],
+    {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    }
+  )
+  return result.status === 0
+}
+
+function runHarvesterLint(repoRoot: string): { ok: boolean; skipped: boolean } {
+  const result = spawnSync(
+    PNPM_CMD,
+    ['--filter', '@ironscout/harvester', 'run', 'lint'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }
+  )
+
+  if (result.status === 0) {
+    return { ok: true, skipped: false }
+  }
+
+  const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  if (output.includes('ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT')) {
+    console.warn('Lint step skipped: @ironscout/harvester has no lint script configured')
+    return { ok: true, skipped: true }
+  }
+
+  if (result.stdout) {
+    process.stdout.write(result.stdout)
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr)
+  }
+  return { ok: false, skipped: false }
+}
 
 function hasKnownAdapterEntry(registryFileContent: string, siteId: string): boolean {
   return registryFileContent.includes(`id: '${siteId}'`)
@@ -58,6 +106,33 @@ export async function runValidateCommand(args: ValidateCommandArgs): Promise<num
     }
   }
 
+  const fixtureMetaPath = resolve(siteRoot, 'fixtures/meta.json')
+  const fixtureMetaRaw = readFileSync(fixtureMetaPath, 'utf8')
+  const parsedMeta = safeJsonParse(fixtureMetaRaw)
+  if (!parsedMeta.ok) {
+    console.error(`Invalid fixture metadata JSON: ${parsedMeta.error}`)
+    return 4
+  }
+
+  const metaValidation = validateFixtureMeta(parsedMeta.value)
+  if (!metaValidation.ok) {
+    console.error(metaValidation.error)
+    return 4
+  }
+
+  const freshness = evaluateFixtureFreshness(metaValidation.value, {
+    strict: args.strict === true,
+  })
+  if (!freshness.ok) {
+    console.error(freshness.error)
+    return 4
+  }
+  if (freshness.status === 'warn' && freshness.warning) {
+    console.warn(freshness.warning)
+  } else {
+    console.log(`Fixture metadata freshness: ok (${freshness.ageDays} days old)`)
+  }
+
   const registryPath = resolve(repoRoot, 'packages/scraper-registry/src/index.ts')
   const registryContent = readFileSync(registryPath, 'utf8')
   if (!hasKnownAdapterEntry(registryContent, args.siteId)) {
@@ -85,10 +160,22 @@ export async function runValidateCommand(args: ValidateCommandArgs): Promise<num
       `Registry parity warning (not yet migrated): ${parity.missingInPluginRegistry.join(', ')}`
     )
   }
+  if (!runHarvesterTypecheck(repoRoot)) {
+    console.error('Typecheck failed during scraper validate')
+    return 5
+  }
 
-  console.warn(
-    'Validation currently covers scaffold shape and registry parity only; typecheck, lint, fixture execution, and freshness checks are pending Phase B completion.'
-  )
+  const lint = runHarvesterLint(repoRoot)
+  if (!lint.ok) {
+    console.error('Lint failed during scraper validate')
+    return 5
+  }
+
+  const testExit = await runTestCommand({ siteId: args.siteId })
+  if (testExit !== 0) {
+    console.error('Fixture contract tests failed during scraper validate')
+    return 5
+  }
 
   return 0
 }

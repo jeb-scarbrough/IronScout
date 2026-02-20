@@ -20,6 +20,10 @@ export async function runTestCommand(args: TestCommandArgs): Promise<number> {
   }
 
   const repoRoot = process.cwd()
+  const contractVitestConfig = resolve(
+    repoRoot,
+    'apps/harvester/src/ingestion/scrape/cli/vitest.contract.config.ts'
+  )
   const testFile = resolve(
     repoRoot,
     'apps/harvester/src/ingestion/scrape/sites',
@@ -35,7 +39,16 @@ export async function runTestCommand(args: TestCommandArgs): Promise<number> {
   try {
     const result = spawnSync(
       PNPM_CMD,
-      ['--filter', '@ironscout/harvester', 'exec', 'vitest', 'run', testFile],
+      [
+        '--filter',
+        '@ironscout/harvester',
+        'exec',
+        'vitest',
+        'run',
+        '--config',
+        contractVitestConfig,
+        testFile,
+      ],
       {
         cwd: repoRoot,
         stdio: 'inherit',
