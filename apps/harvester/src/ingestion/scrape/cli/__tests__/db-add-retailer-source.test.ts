@@ -2,52 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getManifest: vi.fn(),
-  retailersFindUnique: vi.fn(),
-  retailersUpsert: vi.fn(),
-  adapterFindUnique: vi.fn(),
-  adapterUpsert: vi.fn(),
-  sourcesFindMany: vi.fn(),
-  sourcesUpdate: vi.fn(),
-  sourcesCreate: vi.fn(),
-  trustFindUnique: vi.fn(),
-  trustUpsert: vi.fn(),
-  auditCreate: vi.fn(),
-  transaction: vi.fn(),
+  log: vi.fn(),
+  error: vi.fn(),
 }))
 
 vi.mock('../../registry.js', () => ({
   getRegisteredSitePluginManifest: mocks.getManifest,
 }))
 
-vi.mock('@ironscout/db', () => ({
-  prisma: {
-    retailers: {
-      findUnique: mocks.retailersFindUnique,
-      upsert: mocks.retailersUpsert,
-    },
-    scrape_adapter_status: {
-      findUnique: mocks.adapterFindUnique,
-      upsert: mocks.adapterUpsert,
-    },
-    sources: {
-      findMany: mocks.sourcesFindMany,
-      update: mocks.sourcesUpdate,
-      create: mocks.sourcesCreate,
-    },
-    source_trust_config: {
-      findUnique: mocks.trustFindUnique,
-      upsert: mocks.trustUpsert,
-    },
-    admin_audit_logs: {
-      create: mocks.auditCreate,
-    },
-    $transaction: mocks.transaction,
-  },
-}))
-
 import { runDbAddRetailerSourceCommand } from '../commands/db-add-retailer-source.js'
 
-describe('db:add-retailer-source command', () => {
+describe('db:add-retailer-source command (sql output mode)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
@@ -60,67 +25,8 @@ describe('db:add-retailer-source command', () => {
       baseUrls: ['https://www.testsite.com'],
     })
 
-    mocks.retailersFindUnique.mockResolvedValue(null)
-    mocks.retailersUpsert.mockResolvedValue({
-      id: 'retailer-1',
-      name: 'Retailer',
-      website: 'https://retailer.test/',
-      visibilityStatus: 'INELIGIBLE',
-    })
-
-    mocks.adapterFindUnique.mockResolvedValue(null)
-    mocks.adapterUpsert.mockResolvedValue({
-      adapterId: 'testsite',
-      enabled: true,
-      ingestionPaused: false,
-    })
-
-    mocks.sourcesFindMany.mockResolvedValue([])
-    mocks.sourcesCreate.mockResolvedValue({
-      id: 'source-1',
-      name: 'Source',
-      url: 'https://retailer.test/products',
-      type: 'HTML',
-      retailerId: 'retailer-1',
-      adapterId: 'testsite',
-      scrapeEnabled: false,
-      robotsCompliant: true,
-      scrapeConfig: { customHeaders: { Accept: 'application/json' } },
-    })
-
-    mocks.trustFindUnique.mockResolvedValue(null)
-    mocks.trustUpsert.mockResolvedValue({
-      id: 'trust-1',
-      sourceId: 'source-1',
-      upcTrusted: false,
-      version: 1,
-    })
-    mocks.auditCreate.mockResolvedValue({ id: 'audit-1' })
-
-    mocks.transaction.mockImplementation(async (callback: any) =>
-      callback({
-        retailers: {
-          findUnique: mocks.retailersFindUnique,
-          upsert: mocks.retailersUpsert,
-        },
-        scrape_adapter_status: {
-          findUnique: mocks.adapterFindUnique,
-          upsert: mocks.adapterUpsert,
-        },
-        sources: {
-          findMany: mocks.sourcesFindMany,
-          update: mocks.sourcesUpdate,
-          create: mocks.sourcesCreate,
-        },
-        source_trust_config: {
-          findUnique: mocks.trustFindUnique,
-          upsert: mocks.trustUpsert,
-        },
-        admin_audit_logs: {
-          create: mocks.auditCreate,
-        },
-      })
-    )
+    vi.spyOn(console, 'log').mockImplementation(mocks.log)
+    vi.spyOn(console, 'error').mockImplementation(mocks.error)
   })
 
   it('fails closed when both scrape-config-file and scrape-config-json are passed', async () => {
@@ -135,9 +41,10 @@ describe('db:add-retailer-source command', () => {
     })
 
     expect(result).toBe(2)
+    expect(mocks.error).toHaveBeenCalled()
   })
 
-  it('creates expected source defaults and writes audit log in one transaction', async () => {
+  it('returns SQL onboarding script without DB access (non-dry-run)', async () => {
     const result = await runDbAddRetailerSourceCommand({
       siteId: 'testsite',
       retailerName: 'Retailer',
@@ -149,45 +56,29 @@ describe('db:add-retailer-source command', () => {
     })
 
     expect(result).toBe(0)
-    expect(mocks.transaction).toHaveBeenCalledTimes(1)
-    expect(mocks.sourcesCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          scrapeEnabled: false,
-          robotsCompliant: true,
-          adapterId: 'testsite',
-        }),
-      })
-    )
-    expect(mocks.auditCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          action: 'SCRAPER_DB_ADD_RETAILER_SOURCE',
-          resource: 'scraper_source_onboarding',
-        }),
-      })
-    )
+    const sql = mocks.log.mock.calls[mocks.log.mock.calls.length - 1]?.[0]
+    expect(typeof sql).toBe('string')
+    expect(sql).toContain('BEGIN;')
+    expect(sql).toContain('INSERT INTO retailers')
+    expect(sql).toContain("v_site_id text := 'testsite';")
+    expect(sql).toContain("'unknownScrapeConfigTopLevelKeys', v_unknown_top_level_keys")
+    expect(sql).toContain('COMMIT;')
   })
 
-  it('scopes source-name matching to the same adapter or unassigned sources', async () => {
+  it('returns SQL onboarding script in dry-run mode', async () => {
     const result = await runDbAddRetailerSourceCommand({
       siteId: 'testsite',
       retailerName: 'Retailer',
       website: 'https://retailer.test',
       sourceName: 'Source',
       sourceUrl: 'https://retailer.test/products',
+      dryRun: true,
     })
 
     expect(result).toBe(0)
-    expect(mocks.sourcesFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            { retailerId: 'retailer-1', name: 'Source', adapterId: 'testsite' },
-            { retailerId: 'retailer-1', name: 'Source', adapterId: null },
-          ]),
-        }),
-      })
-    )
+    const sql = mocks.log.mock.calls[mocks.log.mock.calls.length - 1]?.[0]
+    expect(typeof sql).toBe('string')
+    expect(sql).toContain('BEGIN;')
+    expect(sql).toContain('ROLLBACK;')
   })
 })

@@ -5,7 +5,7 @@ This runbook covers onboarding a new site plugin under `apps/harvester/src/inges
 Scope:
 - Plugin contract implementation (manifest/fetch/extract/normalize)
 - Contract test + fixture setup
-- Audited retailer/source setup
+- Audited retailer/source setup SQL generation (text-only)
 - Scrape target population through Admin bulk import
 
 Guardrails:
@@ -29,9 +29,10 @@ Guardrails:
 5. Validate and test:
 `pnpm scraper:validate --site-id <siteId>`
 `pnpm scraper:test --site-id <siteId>`
-6. Create retailer/source safely with audit trail:
+6. Generate retailer/source setup SQL (text-only):
 `pnpm scraper:db:add-retailer-source --site-id <siteId> --retailer-name "<name>" --website "https://..." --source-name "<name>" --source-url "https://..."`
-7. Populate scrape targets via Admin UI bulk import (`/scrapers`).
+7. Run the emitted SQL through the approved SQL execution workflow for the intended environment.
+8. Populate scrape targets via Admin UI bulk import (`/scrapers`).
 
 ## Admin Bulk Import (Required Path)
 
@@ -58,7 +59,7 @@ https://www.brownells.com/ammunition/shotgun-ammunition/top-gun-light-ammo-12-ga
 4. Deterministic hash assertions pass.
 5. `pnpm scraper:validate --site-id <siteId>` passes.
 6. `pnpm scraper:test --site-id <siteId>` passes.
-7. Retailer/source setup was done via audited CLI command.
+7. Retailer/source setup SQL was generated via CLI and run via approved workflow in the intended environment.
 8. Source remains disabled until explicit approval.
 9. Targets were populated through Admin bulk import from discovery output.
 

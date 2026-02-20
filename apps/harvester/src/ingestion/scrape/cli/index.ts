@@ -99,7 +99,8 @@ async function main(): Promise<void> {
         sourceUrl: asString(flags['source-url']),
         scrapeConfigFile: asString(flags['scrape-config-file']) || undefined,
         scrapeConfigJson: asString(flags['scrape-config-json']) || undefined,
-        scrapeConfigMerge: asString(flags['scrape-config-merge']) as 'deep' | 'replace',
+        scrapeConfigMerge:
+          (asString(flags['scrape-config-merge']) as 'deep' | 'replace') || undefined,
         dryRun: flags['dry-run'] === true,
       })
       break

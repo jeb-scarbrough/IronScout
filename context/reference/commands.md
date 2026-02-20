@@ -119,6 +119,8 @@ pnpm scraper:smoke --site-id <siteId> --url-file <urls.txt> [--limit 10]
 pnpm scraper:db:add-retailer-source --site-id <siteId> --retailer-name "<name>" --website "https://..." --source-name "<name>" --source-url "https://..."
 ```
 
+`scraper:db:add-retailer-source` is text-only: it validates inputs and prints a SQL upsert script. It does not read or write the database.
+
 See `context/reference/scraper-onboarding.md` for full onboarding checklist and Admin bulk import requirements.
 
 ### Legacy Adapter Workflow (scraper/adapters)
