@@ -116,6 +116,19 @@ describe('brownells contract', () => {
     expect(extracted.reason).toBe('PAGE_STRUCTURE_CHANGED')
   })
 
+  it('listing page fixture fails with explicit listing-page details', () => {
+    const payload = readFixture('listing-page.html')
+    const extracted = plugin.extractRaw(
+      payload,
+      'https://www.brownells.com/ammunition/rifle-ammunition/gold-medal-sierra-matchking-ammo-224-valkyrie-90gr-hpbt/?sku=100029351'
+    )
+
+    expect(extracted.ok).toBe(false)
+    if (extracted.ok) return
+    expect(extracted.reason).toBe('PAGE_STRUCTURE_CHANGED')
+    expect(extracted.details).toContain('resolved to listing page canonical=')
+  })
+
   it('multi-offer fixture returns deterministic raw offers', () => {
     const payload = readFixture('out-of-stock.html')
     const extracted = plugin.extractRaw(

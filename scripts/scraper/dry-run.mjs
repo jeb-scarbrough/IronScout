@@ -362,7 +362,8 @@ async function main() {
     } else if (result.status === 'fetch_failed') {
       console.log(`FETCH   ${result.fetchStatus} ${result.url}`)
     } else if (result.status === 'extract_failed') {
-      console.log(`EXTRACT ${result.reason} ${result.url}`)
+      const detailsSuffix = result.details ? ` (${result.details})` : ''
+      console.log(`EXTRACT ${result.reason}${detailsSuffix} ${result.url}`)
     } else if (result.status === 'dropped') {
       console.log(`DROP    ${result.reason} ${result.url}`)
     } else {

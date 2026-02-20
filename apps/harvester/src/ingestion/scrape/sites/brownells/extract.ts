@@ -92,9 +92,10 @@ function flattenJsonLdNodes(value: unknown): unknown[] {
   return nodes
 }
 
-function extractJsonLdProduct(payload: string): JsonLdProduct | null {
+function extractJsonLdNodes(payload: string): unknown[] {
   const $ = loadHtml(payload)
   const scripts = $(SELECTORS.jsonLd)
+  const nodes: unknown[] = []
 
   for (let i = 0; i < scripts.length; i++) {
     const raw = scripts.eq(i).text().trim()
@@ -103,16 +104,33 @@ function extractJsonLdProduct(payload: string): JsonLdProduct | null {
     const parsed = safeJsonParse(raw)
     if (!parsed.ok) continue
 
-    for (const node of flattenJsonLdNodes(parsed.value)) {
-      if (!node || typeof node !== 'object') continue
-      const product = node as JsonLdProduct
-      if (isTypeMatch(product['@type'], 'Product')) {
-        return product
-      }
+    nodes.push(...flattenJsonLdNodes(parsed.value))
+  }
+
+  return nodes
+}
+
+function extractJsonLdProduct(nodes: unknown[]): JsonLdProduct | null {
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue
+    const product = node as JsonLdProduct
+    if (isTypeMatch(product['@type'], 'Product')) {
+      return product
     }
   }
 
   return null
+}
+
+function hasJsonLdType(nodes: unknown[], expectedType: string): boolean {
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue
+    const typed = node as { '@type'?: string | string[] }
+    if (isTypeMatch(typed['@type'], expectedType)) {
+      return true
+    }
+  }
+  return false
 }
 
 function mapSchemaAvailability(value: string | undefined): RawScrapeOffer['availability'] {
@@ -177,17 +195,71 @@ function extractOfferPrice(offer: JsonLdOffer): number | null {
   return null
 }
 
+function pathSegments(pathname: string): string[] {
+  return pathname.split('/').filter(Boolean)
+}
+
+function isAmmunitionCategoryPath(pathname: string): boolean {
+  const segments = pathSegments(pathname)
+  return segments.length === 2 && segments[0] === 'ammunition'
+}
+
+function resolveCanonicalUrl(payload: string, pageUrl: string): string | null {
+  const $ = loadHtml(payload)
+  const canonicalRaw = $('link[rel="canonical"]').attr('href')?.trim()
+  if (!canonicalRaw) return null
+  try {
+    return new URL(canonicalRaw, pageUrl).toString()
+  } catch {
+    return null
+  }
+}
+
+function describeNonProductPage(payload: string, pageUrl: string, jsonLdNodes: unknown[]): string | null {
+  const canonicalUrl = resolveCanonicalUrl(payload, pageUrl)
+  if (!canonicalUrl) return null
+
+  let parsedCanonical: URL | null = null
+  let parsedRequested: URL | null = null
+  try {
+    parsedCanonical = new URL(canonicalUrl)
+  } catch {
+    parsedCanonical = null
+  }
+  try {
+    parsedRequested = new URL(pageUrl)
+  } catch {
+    parsedRequested = null
+  }
+
+  if (!parsedCanonical || !parsedRequested) {
+    return null
+  }
+
+  const looksLikeCategory = isAmmunitionCategoryPath(parsedCanonical.pathname)
+  const hasThingSchema = hasJsonLdType(jsonLdNodes, 'Thing')
+  const pathChanged = parsedCanonical.pathname !== parsedRequested.pathname
+
+  if (looksLikeCategory && (pathChanged || hasThingSchema)) {
+    return `Requested URL resolved to listing page canonical=${canonicalUrl}`
+  }
+
+  return null
+}
+
 export function extractRaw(payload: string, url: string): ScrapePluginExtractResult {
   if (!payload || payload.trim().length === 0) {
     return { ok: false, reason: 'EMPTY_PAGE' }
   }
 
-  const product = extractJsonLdProduct(payload)
+  const jsonLdNodes = extractJsonLdNodes(payload)
+  const product = extractJsonLdProduct(jsonLdNodes)
   if (!product) {
+    const nonProductDetails = describeNonProductPage(payload, url, jsonLdNodes)
     return {
       ok: false,
       reason: 'PAGE_STRUCTURE_CHANGED',
-      details: 'No JSON-LD Product object found',
+      details: nonProductDetails ?? 'No JSON-LD Product object found',
     }
   }
 
