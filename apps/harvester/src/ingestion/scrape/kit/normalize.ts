@@ -68,7 +68,8 @@ function normalizeUrlOrFallback(rawUrl: string, fallbackUrl: string): string {
 export function normalizeOffer(input: NormalizeInput): NormalizedScrapeOffer {
   const raw: RawScrapeOffer = input.rawOffer
   const canonicalUrl = normalizeUrlOrFallback(raw.url, raw.url)
-  const priceCents = parsePriceCents(raw.price) ?? 0
+  // Preserve parse failures as NaN so validation can emit a specific reason.
+  const priceCents = parsePriceCents(raw.price) ?? Number.NaN
   const roundCount = parsePositiveInt(raw.roundCount)
   const grainWeight = parsePositiveInt(raw.grainWeight)
 

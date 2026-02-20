@@ -9,6 +9,10 @@ export function validateNormalizedOffer(offer: NormalizedScrapeOffer): ValidateN
     return { ok: false, status: 'drop', reason: 'MISSING_REQUIRED_FIELD' }
   }
 
+  if (!Number.isFinite(offer.priceCents)) {
+    return { ok: false, status: 'drop', reason: 'PRICE_PARSE_FAILED' }
+  }
+
   if (!Number.isInteger(offer.priceCents) || offer.priceCents <= 0) {
     return { ok: false, status: 'drop', reason: 'INVALID_PRICE' }
   }

@@ -9,9 +9,9 @@ const MAX_REQUESTS_PER_SECOND = 2
 const MIN_DELAY_MS = 500
 const MAX_CONCURRENT = 1
 
-const robots = new RobotsPolicyImpl()
-const rateLimiter = new RedisRateLimiter({ robotsPolicy: robots })
-const fetcher = new HttpFetcher({ robotsPolicy: robots })
+let robots: RobotsPolicyImpl | null = null
+let rateLimiter: RedisRateLimiter | null = null
+let fetcher: HttpFetcher | null = null
 
 export interface FetchWithPolicyInput {
   url: string
@@ -30,7 +30,24 @@ export interface FetchWithPolicyResult {
   durationMs: number
 }
 
-function clampRateLimit(rateLimit?: ScrapePluginRateLimit): {
+function getPolicyDependencies(): {
+  robots: RobotsPolicyImpl
+  rateLimiter: RedisRateLimiter
+  fetcher: HttpFetcher
+} {
+  if (!robots) {
+    robots = new RobotsPolicyImpl()
+  }
+  if (!rateLimiter) {
+    rateLimiter = new RedisRateLimiter({ robotsPolicy: robots })
+  }
+  if (!fetcher) {
+    fetcher = new HttpFetcher({ robotsPolicy: robots })
+  }
+  return { robots, rateLimiter, fetcher }
+}
+
+export function clampRateLimit(rateLimit?: ScrapePluginRateLimit): {
   requestsPerSecond: number
   minDelayMs: number
   maxConcurrent: number
@@ -42,7 +59,7 @@ function clampRateLimit(rateLimit?: ScrapePluginRateLimit): {
   }
 }
 
-function isHostAllowed(url: string, baseUrls: string[]): boolean {
+export function isHostAllowed(url: string, baseUrls: string[]): boolean {
   let target: URL
   try {
     target = new URL(url)
@@ -65,7 +82,7 @@ function isHostAllowed(url: string, baseUrls: string[]): boolean {
   })
 }
 
-function mapFetchResult(result: FetchResult): FetchWithPolicyResult {
+export function mapFetchResult(result: FetchResult): FetchWithPolicyResult {
   if (result.status === 'ok') {
     return {
       ok: true,
@@ -94,10 +111,11 @@ export async function fetchWithPolicy(input: FetchWithPolicyInput): Promise<Fetc
 
   const target = new URL(input.url)
   const limits = clampRateLimit(input.rateLimit)
-  rateLimiter.setConfig(target.hostname.toLowerCase(), limits)
-  await rateLimiter.acquire(target.hostname.toLowerCase())
+  const policy = getPolicyDependencies()
+  policy.rateLimiter.setConfig(target.hostname.toLowerCase(), limits)
+  await policy.rateLimiter.acquire(target.hostname.toLowerCase())
 
-  const result = await fetcher.fetch(input.url, {
+  const result = await policy.fetcher.fetch(input.url, {
     headers: input.headers,
     timeoutMs: input.timeoutMs,
   })
