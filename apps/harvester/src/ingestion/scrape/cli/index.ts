@@ -3,25 +3,7 @@ import { runValidateCommand } from './commands/validate.js'
 import { runTestCommand } from './commands/test.js'
 import { runSmokeCommand } from './commands/smoke.js'
 import { runDbAddRetailerSourceCommand } from './commands/db-add-retailer-source.js'
-
-function parseFlags(argv: string[]): Record<string, string | boolean> {
-  const flags: Record<string, string | boolean> = {}
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]
-    if (!token.startsWith('--')) {
-      continue
-    }
-    const key = token.slice(2)
-    const next = argv[i + 1]
-    if (next && !next.startsWith('--')) {
-      flags[key] = next
-      i++
-    } else {
-      flags[key] = true
-    }
-  }
-  return flags
-}
+import { parseFlags } from './parse-flags.js'
 
 function asString(value: string | boolean | undefined): string {
   return typeof value === 'string' ? value : ''
