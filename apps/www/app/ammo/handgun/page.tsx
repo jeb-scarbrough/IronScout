@@ -96,6 +96,36 @@ export default function HandgunCategoryPage() {
     <CategoryPageLayout
       title="Handgun ammo prices"
       description="Compare prices across retailers for every major handgun caliber — from budget 9mm range ammo to premium 10mm woods carry loads."
+      categoryIntro={
+        <>
+          <p>
+            The handgun ammunition market splits into two distinct buying patterns:
+            high-volume range ammo purchased by the case, and premium defensive ammo
+            purchased by the box. Understanding which category you&apos;re shopping in
+            determines where the real value is.
+          </p>
+          <p>
+            For range and training use, 9mm dominates on price and availability. Full
+            metal jacket loads from Blazer Brass, Magtech, and Federal American Eagle are
+            the workhorses of the handgun range — and buying in bulk case quantities
+            consistently beats box pricing by 10–15%. The .45 ACP and .40 S&amp;W cost
+            meaningfully more per round for equivalent FMJ, which is why most high-volume
+            handgun shooters gravitate toward 9mm for practice regardless of what they carry.
+          </p>
+          <p>
+            For self-defense and concealed carry, bullet design matters more than price.
+            Federal HST, Speer Gold Dot, and Hornady Critical Defense are the three most
+            widely recommended hollow point lines across all handgun calibers, with extensive
+            law enforcement track records. At the margins, the 10mm Auto stands apart — it&apos;s
+            the only mainstream semi-auto handgun caliber with enough energy for serious woods
+            carry and handgun hunting, with hard-cast loads from Buffalo Bore and Underwood
+            designed specifically for large-animal defense.
+          </p>
+          <p>
+            Price ranges in the table below are updated daily and reflect current retail availability.
+          </p>
+        </>
+      }
       calibers={calibers}
       breadcrumbName="Handgun"
       breadcrumbHref="/ammo/handgun"

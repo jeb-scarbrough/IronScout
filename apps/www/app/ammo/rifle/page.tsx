@@ -127,6 +127,36 @@ export default function RifleCategoryPage() {
     <CategoryPageLayout
       title="Rifle ammo prices"
       description="Compare prices across retailers for every major rifle caliber — from budget 5.56 range ammo to precision 6.5 Creedmoor match loads."
+      categoryIntro={
+        <>
+          <p>
+            Rifle ammunition spans a wider price range than any other category — from
+            budget steel-case .223 for high-volume AR shooting to premium
+            controlled-expansion hunting loads built for elk at extended range. The caliber
+            you shoot and what you&apos;re doing with it determines where you should focus.
+          </p>
+          <p>
+            For AR-15 platform shooters, 5.56 NATO and .223 Remington are functionally
+            interchangeable in most modern rifles and offer the lowest cost per round in
+            the rifle category. M193-spec FMJ from PMC and Wolf Gold anchors the budget
+            tier, making high-volume training affordable. The 7.62x39 is even cheaper for
+            AK and SKS owners with steel-case options, though brass-case alternatives cost
+            significantly more.
+          </p>
+          <p>
+            For precision and hunting, the market splits along use case. The .308 Winchester
+            remains the most versatile full-power rifle cartridge with the deepest product
+            line — budget hunting loads, match-grade options, and everything in between. The
+            6.5 Creedmoor has overtaken .308 for dedicated precision work, with factory match
+            ammo that consistently shoots sub-MOA. For hunting, .30-06 Springfield and .308
+            Winchester still dominate deer rifle sales, while .300 Blackout owns the suppressed
+            short-barrel niche.
+          </p>
+          <p>
+            Price ranges in the table below are updated daily across multiple online retailers.
+          </p>
+        </>
+      }
       calibers={calibers}
       breadcrumbName="Rifle"
       breadcrumbHref="/ammo/rifle"

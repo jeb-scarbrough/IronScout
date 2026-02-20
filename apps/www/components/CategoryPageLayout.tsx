@@ -15,6 +15,7 @@ export interface CategoryCaliber {
 interface CategoryPageLayoutProps {
   title: string
   description: string
+  categoryIntro?: React.ReactNode
   calibers: CategoryCaliber[]
   breadcrumbName: string
   breadcrumbHref: string
@@ -23,6 +24,7 @@ interface CategoryPageLayoutProps {
 export function CategoryPageLayout({
   title,
   description,
+  categoryIntro,
   calibers,
   breadcrumbName,
   breadcrumbHref,
@@ -55,6 +57,13 @@ export function CategoryPageLayout({
             </Link>
           </div>
         </header>
+
+        {/* Category intro prose — SEO content depth */}
+        {categoryIntro && (
+          <div className="prose prose-invert prose-iron max-w-3xl mb-12 text-iron-400 leading-relaxed space-y-4">
+            {categoryIntro}
+          </div>
+        )}
 
         {/* Caliber comparison table */}
         <div className="overflow-x-auto mb-10 -mx-2">
