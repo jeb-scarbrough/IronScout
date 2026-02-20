@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { Header } from '../components/Header'
 import { ContactSupportForm } from '../components/ContactSupportForm'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 import { BRAND } from '@/lib/brand'
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <div className="relative">
+      <BreadcrumbJsonLd items={[{ name: 'Home', href: '/' }, { name: 'Contact', href: '/contact' }]} />
       <Header currentPage="home" />
       <section className="pt-12 pb-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">

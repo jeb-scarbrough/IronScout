@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { LegalPage } from '@/components/LegalPage'
+import { BreadcrumbJsonLd } from '@/components/JsonLd'
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | IronScout',
@@ -16,5 +17,10 @@ function getPrivacyContent(): string {
 export default function PrivacyPage() {
   const content = getPrivacyContent()
 
-  return <LegalPage content={content} />
+  return (
+    <>
+      <BreadcrumbJsonLd items={[{ name: 'Home', href: '/' }, { name: 'Privacy Policy', href: '/privacy' }]} />
+      <LegalPage content={content} />
+    </>
+  )
 }

@@ -5,11 +5,11 @@ import { CategoryPageLayout, type CategoryCaliber } from '@/components/CategoryP
 export const metadata: Metadata = {
   title: 'Handgun Ammo Prices — Compare Deals | IronScout',
   description:
-    'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across 15+ retailers. Updated daily.',
+    'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across multiple retailers. Updated daily.',
   alternates: { canonical: `${BRAND.wwwUrl}/ammo/handgun` },
   openGraph: {
     title: 'Handgun Ammo Prices — Compare Deals | IronScout',
-    description: 'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across 15+ retailers.',
+    description: 'Compare handgun ammo prices for 9mm, .45 ACP, .380 ACP, .40 S&W, and 10mm Auto across multiple retailers.',
     url: `${BRAND.wwwUrl}/ammo/handgun`,
     siteName: 'IronScout',
     type: 'website',

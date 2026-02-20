@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { Header } from '../components/Header';
+import { BreadcrumbJsonLd } from '@/components/JsonLd';
 import { BRAND } from '../../lib/brand';
 
 export const metadata: Metadata = {
@@ -12,6 +13,7 @@ const APP_URL = BRAND.appUrl;
 export default function About() {
   return (
     <div className="relative">
+      <BreadcrumbJsonLd items={[{ name: 'Home', href: '/' }, { name: 'About', href: '/about' }]} />
       <Header currentPage="about" />
 
       {/* Hero Section */}

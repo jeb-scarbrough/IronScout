@@ -127,8 +127,14 @@ export default function Home() {
               Search ammo prices<br />
               <span className="text-gradient">like a shooter</span>
             </h1>
-            <p className="text-xl md:text-2xl text-iron-400 font-display mb-10">
+            <p className="text-xl md:text-2xl text-iron-400 font-display mb-6">
               AI-powered search. Results that make sense.
+            </p>
+            <p className="text-iron-400 text-base max-w-2xl mx-auto mb-10">
+              Compare ammunition prices across major online retailers for 14 calibers — from
+              9mm and 5.56 NATO to .308 Winchester and 12 gauge. IronScout understands whether
+              you need range ammo, defense loads, or match-grade precision and shows you
+              results that match how you actually buy.
             </p>
 
             {/* Interactive search — client component */}
@@ -162,8 +168,12 @@ export default function Home() {
               <span className="text-gradient">Ammo Search</span>
             </h2>
             <p className="text-iron-400 text-lg max-w-2xl mx-auto">
-              Most ammo search stops at price lists. We built something that actually understands
-              how shooters buy.
+              Most ammo search engines stop at price lists — sorted by cost per round and
+              nothing else. That works when you already know exactly what you want. But
+              choosing between range ammo for a weekend class, hollow points for carry, and
+              match-grade loads for competition are fundamentally different decisions with
+              different priorities. IronScout is an ammunition search engine built around
+              that reality.
             </p>
           </div>
 
@@ -172,21 +182,21 @@ export default function Home() {
               {
                 title: 'Intent-Aware Search',
                 description:
-                  'Range ammo and carry ammo are different decisions. IronScout understands your use case and orders results accordingly.',
+                  'Range ammo and carry ammo are different decisions. Search for \u201c9mm for home defense\u201d and IronScout prioritizes proven hollow point loads from Federal HST and Speer Gold Dot. Search for \u201ccheap 9mm for the range\u201d and it surfaces bulk FMJ deals instead. Results are ordered by what you\u2019re trying to do, not just the lowest sticker price.',
                 iconPath:
                   'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z',
               },
               {
                 title: 'Personal Caliber Context',
                 description:
-                  'Save what you shoot and stop filtering through irrelevant results. Your calibers shape your experience automatically.',
+                  'Save the calibers you shoot \u2014 9mm, 5.56, .308, whatever you own \u2014 and IronScout focuses on what\u2019s relevant to you automatically. No more scrolling past calibers you don\u2019t shoot. Your saved calibers also power personalized price alerts, so you hear about the deals that actually matter.',
                 iconPath:
                   'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
               },
               {
                 title: 'Market Awareness',
                 description:
-                  "See price history and get alerts for changes that matter. Understand whether today's price is actually good.",
+                  "Ammo prices shift constantly. IronScout tracks price history for every product so you can see whether today's price is a genuine deal or just normal. Set price drop alerts and back-in-stock notifications to stay informed without manually checking retailer sites every day.",
                 iconPath:
                   'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
               },
@@ -216,10 +226,16 @@ export default function Home() {
               Compare prices across retailers by caliber and category.
             </p>
             <p className="text-iron-500 text-base max-w-3xl mx-auto">
-              IronScout tracks ammunition prices daily across major online retailers.
-              Browse by category — handgun, rifle, rimfire, or shotgun — or jump to a
-              specific caliber to see current price ranges, popular product lines, and
-              bulk deals.
+              IronScout tracks ammunition prices daily across major online retailers. Every
+              caliber page shows current price ranges, popular product lines, bulk deals, and
+              price history context — so you know what a fair price looks like before you buy.
+              Browse by category or jump straight to a specific caliber.
+            </p>
+            <p className="text-iron-500 text-base max-w-3xl mx-auto mt-3">
+              Whether you&apos;re looking for the cheapest brass-cased 9mm FMJ for a range
+              session, comparing .308 Winchester hunting loads for deer season, or tracking
+              5.56 NATO bulk deals, each caliber page gives you the market context to make
+              an informed decision.
             </p>
           </div>
 
@@ -312,19 +328,19 @@ export default function Home() {
                 step: '01',
                 title: 'Search',
                 description:
-                  'Describe what you need in natural language. IronScout understands calibers, use cases, and intent.',
+                  'Describe what you need in plain language. Try \u201cbulk 9mm for the range,\u201d \u201csubsonic 300 blackout,\u201d or \u201cbest price 5.56 green tip.\u201d IronScout interprets caliber, use case, and quantity intent to rank results that match what you\u2019re actually looking for.',
               },
               {
                 step: '02',
                 title: 'Save',
                 description:
-                  "Add items to your watchlist. We monitor prices and availability in the background so you don't have to.",
+                  'Found something worth watching? Save it to your watchlist. IronScout monitors prices and availability across retailers in the background and notifies you when something changes \u2014 a price drop, a restock, or a new deal on a product you care about.',
               },
               {
                 step: '03',
                 title: 'Buy',
                 description:
-                  'When conditions are right, click through to the retailer. No middleman, no markup.',
+                  'When conditions are right, click through directly to the retailer\u2019s product page. IronScout never handles checkout, payment, or shipping. You buy direct, and you keep whatever loyalty points or promotions the retailer offers.',
               },
             ].map((item, i) => (
               <div key={i} className="relative">

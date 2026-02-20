@@ -5,11 +5,11 @@ import { CategoryPageLayout, type CategoryCaliber } from '@/components/CategoryP
 export const metadata: Metadata = {
   title: 'Rimfire Ammo Prices — Compare Deals | IronScout',
   description:
-    'Compare .22 LR rimfire ammo prices across 15+ retailers. Bulk plinking from $0.04/rd, match-grade from $0.10/rd. Updated daily.',
+    'Compare .22 LR rimfire ammo prices across multiple retailers. Bulk plinking from $0.04/rd, match-grade from $0.10/rd. Updated daily.',
   alternates: { canonical: `${BRAND.wwwUrl}/ammo/rimfire` },
   openGraph: {
     title: 'Rimfire Ammo Prices — Compare Deals | IronScout',
-    description: 'Compare .22 LR rimfire ammo prices across 15+ retailers. Bulk plinking from $0.04/rd.',
+    description: 'Compare .22 LR rimfire ammo prices across multiple retailers. Bulk plinking from $0.04/rd.',
     url: `${BRAND.wwwUrl}/ammo/rimfire`,
     siteName: 'IronScout',
     type: 'website',

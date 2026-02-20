@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { Header } from '../components/Header';
+import { BreadcrumbJsonLd } from '@/components/JsonLd';
 
 export const metadata: Metadata = {
   title: 'For Retailers - IronScout',
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 export default function Retailers() {
   return (
     <div className="relative">
+      <BreadcrumbJsonLd items={[{ name: 'Home', href: '/' }, { name: 'For Retailers', href: '/retailers' }]} />
       <Header currentPage="retailers" />
 
       {/* Hero Section */}

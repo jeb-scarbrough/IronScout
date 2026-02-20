@@ -5,11 +5,11 @@ import { CategoryPageLayout, type CategoryCaliber } from '@/components/CategoryP
 export const metadata: Metadata = {
   title: 'Shotgun Ammo Prices — Compare Deals | IronScout',
   description:
-    'Compare 12 gauge shotshell prices across 15+ retailers. Target loads from $0.25/rd, buckshot from $0.60/rd. Updated daily.',
+    'Compare 12 gauge shotshell prices across multiple retailers. Target loads from $0.25/rd, buckshot from $0.60/rd. Updated daily.',
   alternates: { canonical: `${BRAND.wwwUrl}/ammo/shotgun` },
   openGraph: {
     title: 'Shotgun Ammo Prices — Compare Deals | IronScout',
-    description: 'Compare 12 gauge shotshell prices across 15+ retailers. Target loads from $0.25/rd.',
+    description: 'Compare 12 gauge shotshell prices across multiple retailers. Target loads from $0.25/rd.',
     url: `${BRAND.wwwUrl}/ammo/shotgun`,
     siteName: 'IronScout',
     type: 'website',
