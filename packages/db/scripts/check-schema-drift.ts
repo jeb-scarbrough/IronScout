@@ -203,6 +203,8 @@ async function main() {
       /Altered column `search_vector` \(default changed/,
       // FK index on prices.affiliateFeedRunId added via raw SQL (migration 20260212000000)
       /Removed index on columns \(affiliateFeedRunId\)/,
+      // Indexes dropped in search perf migration (20260220000000) that Prisma still reports as drift
+      /Removed index on columns \(resolvedAt\)/,
     ]
 
     // Strip known drift lines and check if any unknown drift remains
