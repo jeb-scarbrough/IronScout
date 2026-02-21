@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RetailerPrice, ShippingInfo } from '@/components/results/types'
 import { refreshSessionToken } from '@/hooks/use-session-refresh'
+import { getUserAlerts } from '@/lib/api'
 import { env } from '@/lib/env'
 import { safeLogger } from '@/lib/safe-logger'
 
@@ -30,10 +31,11 @@ const API_BASE_URL = env.NEXT_PUBLIC_API_URL
  * - "Find similar" navigates to search with caliber filter
  */
 export default function DashboardPage() {
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
   const { data, isLoading, error, mutate } = useLoadout()
   const router = useRouter()
   const token = session?.accessToken
+  const [hasAlerts, setHasAlerts] = useState(false)
 
   // Panel state
   const [panelOpen, setPanelOpen] = useState(false)
@@ -138,6 +140,43 @@ export default function DashboardPage() {
     setRetailers([])
   }, [])
 
+  // Issue #243: Drive checklist alert step from real alert state
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchAlertState = async () => {
+      if (sessionStatus === 'loading') return
+
+      // Default to restricted/false when unauthenticated or ambiguous
+      let authToken: string | undefined = token
+      if (!authToken) {
+        const refreshed = await refreshSessionToken()
+        if (refreshed) authToken = refreshed
+      }
+
+      if (!authToken) {
+        if (!cancelled) setHasAlerts(false)
+        return
+      }
+
+      try {
+        const alerts = await getUserAlerts(authToken, false)
+        if (!cancelled) {
+          setHasAlerts(alerts.some((alert) => alert.isActive))
+        }
+      } catch (err) {
+        safeLogger.dashboard.error('Failed to fetch alert state for checklist', {}, err)
+        if (!cancelled) setHasAlerts(false)
+      }
+    }
+
+    fetchAlertState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, sessionStatus])
+
   // Loading state
   if (isLoading) {
     return <DashboardSkeleton />
@@ -161,7 +200,6 @@ export default function DashboardPage() {
   const hasFirearms = data.gunLocker.firearms.length > 0
   const hasWatchedItems = data.watching.items.length > 0
   const bothEmpty = !hasFirearms && !hasWatchedItems
-  const hasAlerts = false // See #243
 
   return (
     <DashboardContent>
