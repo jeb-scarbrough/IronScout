@@ -642,10 +642,81 @@ async function fetchSnapshots() {
   return payload.snapshots
 }
 
+const INDEXNOW_KEY = process.env.INDEXNOW_KEY || '0bc93fb8d0fdb68be43464ab170a68a9'
+const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow'
+const WWW_BASE_URL = (process.env.NEXT_PUBLIC_WWW_URL || 'https://www.ironscout.ai').replace(/\/$/, '')
+
+/**
+ * Submit changed caliber URLs to IndexNow for faster search engine indexing.
+ * Only pings when running against the production API (not fixtures).
+ */
+async function submitIndexNow(changedSlugs) {
+  if (FIXTURE_FILE !== null) {
+    console.log('[market-snapshots] skipping IndexNow submission (fixture mode)')
+    return
+  }
+
+  if (parseBooleanEnv(process.env.MARKET_SNAPSHOT_SKIP_INDEXNOW)) {
+    console.log('[market-snapshots] skipping IndexNow submission (MARKET_SNAPSHOT_SKIP_INDEXNOW=true)')
+    return
+  }
+
+  if (changedSlugs.length === 0) {
+    console.log('[market-snapshots] no changed slugs, skipping IndexNow')
+    return
+  }
+
+  const host = new URL(WWW_BASE_URL).host
+  const urls = [
+    // Hub pages that aggregate snapshot data
+    WWW_BASE_URL,
+    `${WWW_BASE_URL}/calibers`,
+    // Individual caliber pages that changed
+    ...changedSlugs.map((slug) => `${WWW_BASE_URL}/caliber/${slug}`),
+  ]
+
+  const payload = {
+    host,
+    key: INDEXNOW_KEY,
+    keyLocation: `${WWW_BASE_URL}/${INDEXNOW_KEY}.txt`,
+    urlList: urls,
+  }
+
+  try {
+    const response = await fetch(INDEXNOW_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(payload),
+    })
+
+    if (response.ok || response.status === 202) {
+      console.log(`[market-snapshots] IndexNow: submitted ${urls.length} URLs (status: ${response.status})`)
+    } else {
+      const body = await response.text().catch(() => '')
+      console.warn(`[market-snapshots] IndexNow: submission failed (status: ${response.status}): ${body}`)
+    }
+  } catch (error) {
+    console.warn(`[market-snapshots] IndexNow: network error: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 async function main() {
   const sourceLabel = FIXTURE_FILE !== null ? `fixture ${FIXTURE_FILE}` : SNAPSHOT_ENDPOINT
   const sourceApiEndpoint = FIXTURE_FILE !== null ? `fixture:${FIXTURE_FILE}` : SNAPSHOT_ENDPOINT
   console.log(`[market-snapshots] generating static artifacts from ${sourceLabel}`)
+
+  // Read existing artifact hashes before overwriting, for IndexNow change detection
+  const previousHashes = new Map()
+  try {
+    for (const file of readdirSync(OUTPUT_DIR)) {
+      if (!file.endsWith('.json') || file === 'index.json') continue
+      const slug = file.replace(/\.json$/, '')
+      const raw = readFileSync(join(OUTPUT_DIR, file), 'utf-8')
+      previousHashes.set(slug, sha256(stableStringify(JSON.parse(raw))))
+    }
+  } catch {
+    // OUTPUT_DIR may not exist yet
+  }
 
   rmSync(OUTPUT_DIR, { recursive: true, force: true })
   mkdirSync(OUTPUT_DIR, { recursive: true })
@@ -707,6 +778,19 @@ async function main() {
   )
 
   console.log(`[market-snapshots] wrote ${index.length} artifact files to ${OUTPUT_DIR}`)
+
+  // Detect which caliber slugs actually changed and ping IndexNow
+  const changedSlugs = index
+    .filter((entry) => entry.artifactSha256 !== previousHashes.get(entry.caliberSlug))
+    .map((entry) => entry.caliberSlug)
+
+  if (changedSlugs.length > 0) {
+    console.log(`[market-snapshots] ${changedSlugs.length} artifact(s) changed: ${changedSlugs.join(', ')}`)
+  } else {
+    console.log('[market-snapshots] no artifact changes detected')
+  }
+
+  await submitIndexNow(changedSlugs)
 }
 
 main().catch((error) => {
