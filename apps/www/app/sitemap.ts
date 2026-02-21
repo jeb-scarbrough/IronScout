@@ -2,7 +2,6 @@ import type { MetadataRoute } from 'next'
 import { BRAND } from '@/lib/brand'
 import { getContentSlugs, getNestedContentSlugs } from '@/lib/content'
 import { readSnapshotArtifactBySlug } from '@/lib/market-snapshots'
-import { CALIBER_SLUG_MAP } from '@ironscout/db/calibers.js'
 
 export const dynamic = 'force-static'
 
