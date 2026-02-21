@@ -26,6 +26,13 @@ If you are standing in a store, use the In-Store Price Check and enter the box d
 - [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
+## Where to buy Hornady ammo
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, strong Hornady selection
+- [MidwayUSA](/retailer/midwayusa) — Full Hornady lineup from Frontier to ELD Match
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Competitive pricing on popular loads
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store
+
 ## Related brands
 - [Winchester](/brand/winchester)
 - [Federal](/brand/federal)

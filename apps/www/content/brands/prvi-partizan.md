@@ -26,6 +26,13 @@ If you are standing in a store, use the In-Store Price Check and enter the box d
 - [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
+## Where to buy Prvi Partizan ammo
+- [MidwayUSA](/retailer/midwayusa) — Widest PPU selection including match loads
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, competitive PPU pricing
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Occasional PPU deals
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store
+
 ## Related brands
 - [Winchester](/brand/winchester)
 - [Federal](/brand/federal)

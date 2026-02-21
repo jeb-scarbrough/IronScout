@@ -26,6 +26,13 @@ If you are standing in a store, use the In-Store Price Check and enter the box d
 - [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
+## Where to buy Federal ammo
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, deep Federal inventory
+- [MidwayUSA](/retailer/midwayusa) — Full Federal lineup across all calibers
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Frequent deals on American Eagle
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store
+
 ## Related brands
 - [Winchester](/brand/winchester)
 - [Remington](/brand/remington)

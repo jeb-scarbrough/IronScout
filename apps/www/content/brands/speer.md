@@ -26,6 +26,13 @@ If you are standing in a store, use the In-Store Price Check and enter the box d
 - [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
+## Where to buy Speer ammo
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, strong Gold Dot selection
+- [MidwayUSA](/retailer/midwayusa) — Full Speer lineup
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Competitive pricing
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store
+
 ## Related brands
 - [Winchester](/brand/winchester)
 - [Federal](/brand/federal)

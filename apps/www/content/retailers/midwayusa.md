@@ -28,7 +28,17 @@ This compares to recent online listings for context only.
 - [308 / 7.62 ammo listings](/caliber/308-winchester)
 - [12 gauge shotshell listings](/caliber/12-gauge)
 
+## Popular brands
+- [Federal](/brand/federal) — HST, American Eagle, Gold Medal Match
+- [Hornady](/brand/hornady) — Critical Defense, ELD Match, Frontier
+- [Winchester](/brand/winchester) — White Box, PDX1, Super-X
+- [CCI / Blazer](/brand/cci) — Blazer Brass, Mini-Mag, Stinger
+- [Speer](/brand/speer) — Gold Dot law enforcement duty loads
+- [Remington](/brand/remington) — UMC, Core-Lokt, Golden Saber
+- [Magtech](/brand/magtech) — Budget brass-cased FMJ
+
 ## Related retailers
 - [Lucky Gunner](/retailer/lucky-gunner)
 - [Target Sports USA](/retailer/target-sports-usa)
 - [Sportsman's Warehouse](/retailer/sportsmans-warehouse)
+- [Palmetto State Armory](/retailer/palmetto-state-armory)
