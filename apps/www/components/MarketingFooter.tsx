@@ -13,6 +13,9 @@ export function MarketingFooter() {
             <Link href="/calibers" className="hover:text-iron-300 transition-colors">
               All Calibers
             </Link>
+            <Link href="/brands" className="hover:text-iron-300 transition-colors">
+              Brands
+            </Link>
             <Link href="/ammo/handgun" className="hover:text-iron-300 transition-colors">
               Handgun
             </Link>

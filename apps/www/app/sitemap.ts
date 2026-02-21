@@ -78,6 +78,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
     // Hub & category pages — use latest snapshot date since they show aggregated data
     entry('/calibers', 'weekly', 0.9, latestSnapshot),
+    entry('/brands', 'monthly', 0.8),
     entry('/ammo/handgun', 'weekly', 0.8, latestSnapshot),
     entry('/ammo/rifle', 'weekly', 0.8, latestSnapshot),
     entry('/ammo/rimfire', 'weekly', 0.8, latestSnapshot),

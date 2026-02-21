@@ -431,6 +431,7 @@ export default function Home() {
 
             <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-iron-400">
               <a href="/calibers" className="hover:text-white transition-colors">All Calibers</a>
+              <a href="/brands" className="hover:text-white transition-colors">Brands</a>
               <a href="/ammo/handgun" className="hover:text-white transition-colors">Handgun</a>
               <a href="/ammo/rifle" className="hover:text-white transition-colors">Rifle</a>
               <a href="/ammo/rimfire" className="hover:text-white transition-colors">Rimfire</a>
