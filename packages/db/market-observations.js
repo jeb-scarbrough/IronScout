@@ -362,7 +362,7 @@ export function buildCaliberPriceCheckStatsQuery({
         AND (${grainValue}::int IS NULL OR p."grainWeight" = ${grainValue}::int)
         AND (${roundCountValue}::int IS NULL OR p."roundCount" = ${roundCountValue}::int)
         AND (${caseMaterialPattern}::text IS NULL OR LOWER(p."caseMaterial") LIKE ${caseMaterialPattern}::text)
-        AND (${bulletTypeValue}::text IS NULL OR p."bulletType" = ${bulletTypeValue}::text)
+        AND (${bulletTypeValue}::text IS NULL OR p."bulletType"::text = ${bulletTypeValue}::text)
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT

@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   ],
   // Static export for maximum performance
   output: 'export',
+  // Generate nested index.html (e.g. caliber/9mm/index.html) for clean URLs
+  trailingSlash: true,
 
   // Image optimization disabled for static export
   images: {
