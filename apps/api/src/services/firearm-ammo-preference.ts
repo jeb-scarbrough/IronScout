@@ -505,6 +505,86 @@ export async function getPreferencesForFirearm(
 }
 
 /**
+ * Batch-fetch ammo preferences for multiple firearms belonging to the same user.
+ * Eliminates N+1 queries when loading preferences for all firearms in the Gun Locker.
+ *
+ * IMPORTANT: Caller must have already validated ownership of all firearmIds
+ * (e.g. via getGuns(userId)). This function skips the per-firearm user_guns.findUnique
+ * ownership check to avoid redundant queries.
+ *
+ * Supersession chain resolution and soft-delete side effects are fully preserved —
+ * batchPreloadSupersessionChains and dedupeAndSoftDeleteSuperseded run per-firearm
+ * to maintain identical behavior to getPreferencesForFirearm.
+ *
+ * @param userId - User ID (for query filter)
+ * @param firearmIds - Firearm IDs (ownership pre-validated by caller)
+ * @returns Map of firearmId → AmmoPreferenceGroup[]
+ */
+export async function getPreferencesForFirearms(
+  userId: string,
+  firearmIds: string[]
+): Promise<Map<string, AmmoPreferenceGroup[]>> {
+  if (firearmIds.length === 0) {
+    return new Map()
+  }
+
+  // Single query for all preferences across all firearms
+  const allPreferences = await prisma.firearm_ammo_preferences.findMany({
+    where: {
+      userId,
+      firearmId: { in: firearmIds },
+      deletedAt: null,
+    },
+    include: {
+      products: {
+        select: PRODUCT_SELECT,
+      },
+    },
+    orderBy: [
+      { updatedAt: 'desc' },
+      { ammoSkuId: 'asc' }, // Tie-breaker for deterministic ordering per spec
+    ],
+  })
+
+  // Group raw preferences by firearmId
+  const byFirearm = new Map<string, typeof allPreferences>()
+  for (const id of firearmIds) {
+    byFirearm.set(id, [])
+  }
+  for (const pref of allPreferences) {
+    byFirearm.get(pref.firearmId)?.push(pref)
+  }
+
+  // Process each firearm's preferences: supersession chains + dedupe
+  // These contain critical business logic (soft-delete side effects) that MUST be preserved
+  const result = new Map<string, AmmoPreferenceGroup[]>()
+
+  for (const [firearmId, preferences] of byFirearm) {
+    if (preferences.length === 0) {
+      result.set(firearmId, [])
+      continue
+    }
+
+    const productMap = await batchPreloadSupersessionChains(preferences)
+    const mapped = mapToAmmoPreferences(preferences, productMap)
+    const deduped = await dedupeAndSoftDeleteSuperseded(mapped)
+
+    // Group by use case in fixed order
+    const groups: AmmoPreferenceGroup[] = []
+    for (const useCase of USE_CASE_ORDER) {
+      const prefs = deduped.filter((p) => p.useCase === useCase)
+      if (prefs.length > 0) {
+        groups.push({ useCase, preferences: prefs })
+      }
+    }
+
+    result.set(firearmId, groups)
+  }
+
+  return result
+}
+
+/**
  * Get all ammo preferences for a user (for My Loadout)
  * Per spec: "Most recently updated mapping first"
  */

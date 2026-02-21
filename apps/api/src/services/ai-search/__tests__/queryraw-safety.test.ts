@@ -35,6 +35,8 @@ const ALLOWED_INTERPOLATIONS = [
   'embeddingParamIdx',
   'limitParamIdx',
   'offsetParamIdx',
+  // search-service.ts: static column list fragment (pre-built outside SQL template)
+  'selectColumns',
   // recompute.ts: scope filter fragment (static SQL with $N params)
   'scopeFilter',
 ]

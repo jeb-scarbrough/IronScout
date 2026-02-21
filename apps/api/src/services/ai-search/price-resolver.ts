@@ -12,7 +12,73 @@
  */
 
 import { prisma, Prisma } from '@ironscout/db'
-import { currentVisiblePriceWhere } from '../../config/tiers'
+import { getPriceLookbackDays } from '../../config/tiers'
+
+/** Row shape returned by the consolidated JOIN query */
+interface PriceJoinRow {
+  productId: string
+  confidence: string | number // Decimal comes back as string from raw SQL
+  id: string
+  sourceProductId: string
+  retailerId: string
+  merchantId: string | null
+  sourceId: string | null
+  price: string | number // Decimal
+  visiblePrice: string | number // Decimal
+  currency: string
+  url: string
+  inStock: boolean
+  observedAt: Date
+  shippingCost: string | number | null // Decimal
+  retailerName: string
+  retailerTier: string
+  ingestionRunType: string | null
+  ingestionRunId: string | null
+  recomputedAt: Date
+  recomputeJobId: string | null
+}
+
+/**
+ * Compute the lookback cutoff date for current visible prices.
+ * Mirrors currentVisiblePriceWhere() but returns a Date for raw SQL.
+ */
+function getLookbackCutoff(): Date {
+  const lookbackDays = getPriceLookbackDays()
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)
+  return cutoffDate
+}
+
+/**
+ * Transform a raw JOIN row into the API-compatible price shape.
+ */
+function transformPriceRow(row: PriceJoinRow) {
+  return {
+    id: row.id,
+    sourceProductId: row.sourceProductId,
+    retailerId: row.retailerId,
+    merchantId: row.merchantId,
+    sourceId: row.sourceId,
+    price: row.visiblePrice, // Use corrected price as the visible price
+    visiblePrice: row.visiblePrice,
+    currency: row.currency,
+    url: row.url,
+    inStock: row.inStock,
+    observedAt: row.observedAt,
+    shippingCost: row.shippingCost,
+    retailerName: row.retailerName,
+    retailerTier: row.retailerTier,
+    ingestionRunType: row.ingestionRunType,
+    ingestionRunId: row.ingestionRunId,
+    recomputedAt: row.recomputedAt,
+    recomputeJobId: row.recomputeJobId,
+    retailers: {
+      id: row.retailerId,
+      name: row.retailerName,
+      tier: row.retailerTier,
+    },
+  }
+}
 
 /**
  * Get prices for a canonical product through product_links
@@ -20,55 +86,38 @@ import { currentVisiblePriceWhere } from '../../config/tiers'
  * Per ADR-015: Now reads from current_visible_prices derived table
  * instead of evaluating corrections at query time.
  *
- * Query path: product_links → source_products → current_visible_prices
+ * Query path: product_links JOIN current_visible_prices (single query)
  *
  * @param productId - Canonical product ID
  * @returns Prices with retailer info (denormalized in derived table)
  */
 export async function getPricesViaProductLinks(productId: string) {
-  // Find all source_products linked to this canonical product
-  // Per Spec v1.2 §0.0: Query path must include both MATCHED and CREATED links
-  const links = await prisma.product_links.findMany({
-    where: {
-      productId,
-      status: { in: ['MATCHED', 'CREATED'] },
-    },
-    select: {
-      sourceProductId: true,
-      confidence: true,
-      matchType: true,
-    },
-  })
+  const cutoffDate = getLookbackCutoff()
 
-  if (links.length === 0) {
-    return []
-  }
+  // Single JOIN query replaces the two-query pattern.
+  // product_links.sourceProductId has a UNIQUE constraint, so the JOIN
+  // cannot produce duplicated price rows — each CVP row maps to exactly
+  // one product_link.
+  const rows = await prisma.$queryRaw<PriceJoinRow[]>`
+    SELECT
+      pl."productId",
+      pl.confidence,
+      cvp.id, cvp."sourceProductId", cvp."retailerId", cvp."merchantId",
+      cvp."sourceId", cvp.price, cvp."visiblePrice", cvp.currency, cvp.url,
+      cvp."inStock", cvp."observedAt", cvp."shippingCost",
+      cvp."retailerName", cvp."retailerTier",
+      cvp."ingestionRunType", cvp."ingestionRunId",
+      cvp."recomputedAt", cvp."recomputeJobId"
+    FROM product_links pl
+    JOIN current_visible_prices cvp
+      ON cvp."sourceProductId" = pl."sourceProductId"
+    WHERE pl."productId" = ${productId}
+      AND pl.status IN ('MATCHED', 'CREATED')
+      AND cvp."observedAt" >= ${cutoffDate}
+    ORDER BY cvp."retailerTier" DESC, cvp."visiblePrice" ASC
+  `
 
-  const sourceProductIds = links.map(l => l.sourceProductId)
-
-  // ADR-015: Query derived table instead of prices with corrections overlay
-  // The derived table already has retailer info denormalized
-  const prices = await prisma.current_visible_prices.findMany({
-    where: {
-      sourceProductId: { in: sourceProductIds },
-      ...currentVisiblePriceWhere(),
-    },
-    orderBy: [
-      { retailerTier: 'desc' },
-      { visiblePrice: 'asc' },
-    ],
-  })
-
-  // Transform to match the previous return shape for API compatibility
-  return prices.map(p => ({
-    ...p,
-    price: p.visiblePrice, // Use corrected price as the visible price
-    retailers: {
-      id: p.retailerId,
-      name: p.retailerName,
-      tier: p.retailerTier,
-    },
-  }))
+  return rows.map(transformPriceRow)
 }
 
 /**
@@ -102,83 +151,62 @@ export async function batchGetPricesViaProductLinks(
  * Per ADR-015: Now reads from current_visible_prices derived table
  * instead of evaluating corrections at query time.
  *
+ * Consolidated into a single JOIN query (P0 optimization). One DB round-trip
+ * instead of two. product_links.sourceProductId has a UNIQUE constraint, so the
+ * JOIN cannot produce duplicated price rows — each CVP row maps to exactly one
+ * product_link. Confidence is tracked as MAX(pl.confidence) per productId during
+ * the single result iteration.
+ *
  * @param productIds - Array of canonical product IDs
  * @returns Prices and max confidence per product
  */
 export async function batchGetPricesWithConfidence(
   productIds: string[]
 ): Promise<BatchPriceResult> {
-  // Find all source_products linked to these canonical products
-  // Per Spec v1.2 §0.0: Query path must include both MATCHED and CREATED links
-  const links = await prisma.product_links.findMany({
-    where: {
-      productId: { in: productIds },
-      status: { in: ['MATCHED', 'CREATED'] },
-    },
-    select: {
-      sourceProductId: true,
-      productId: true,
-      confidence: true,
-    },
-  })
-
-  if (links.length === 0) {
-    return {
-      pricesMap: new Map(productIds.map(id => [id, []])),
-      confidenceMap: new Map(productIds.map(id => [id, 0])),
-    }
+  if (productIds.length === 0) {
+    return { pricesMap: new Map(), confidenceMap: new Map() }
   }
 
-  // Build sourceProductId → productId mapping
-  const sourceToProduct = new Map<string, string>()
-  // Track max confidence per productId for canonicalConfidence
+  const cutoffDate = getLookbackCutoff()
+
+  // Single JOIN query replaces the two-query pattern (product_links + current_visible_prices).
+  // Uses safe tagged template (parameterized), not the unsafe raw string variant.
+  const rows = await prisma.$queryRaw<PriceJoinRow[]>`
+    SELECT
+      pl."productId",
+      pl.confidence,
+      cvp.id, cvp."sourceProductId", cvp."retailerId", cvp."merchantId",
+      cvp."sourceId", cvp.price, cvp."visiblePrice", cvp.currency, cvp.url,
+      cvp."inStock", cvp."observedAt", cvp."shippingCost",
+      cvp."retailerName", cvp."retailerTier",
+      cvp."ingestionRunType", cvp."ingestionRunId",
+      cvp."recomputedAt", cvp."recomputeJobId"
+    FROM product_links pl
+    JOIN current_visible_prices cvp
+      ON cvp."sourceProductId" = pl."sourceProductId"
+    WHERE pl."productId" = ANY(${productIds}::text[])
+      AND pl.status IN ('MATCHED', 'CREATED')
+      AND cvp."observedAt" >= ${cutoffDate}
+    ORDER BY pl."productId", cvp."retailerTier" DESC, cvp."visiblePrice" ASC
+  `
+
+  // Single iteration builds both pricesMap and confidenceMap
+  const pricesMap = new Map<string, any[]>(productIds.map(id => [id, []]))
   const confidenceMap = new Map<string, number>(productIds.map(id => [id, 0]))
 
-  for (const link of links) {
-    if (link.productId) {
-      sourceToProduct.set(link.sourceProductId, link.productId)
-      // Track max confidence per product (ProductResolver.matchScore)
-      const currentMax = confidenceMap.get(link.productId) ?? 0
-      const linkConfidence = Number(link.confidence)
-      if (linkConfidence > currentMax) {
-        confidenceMap.set(link.productId, linkConfidence)
-      }
+  for (const row of rows) {
+    const productId = row.productId
+    if (!productId) continue
+
+    // Track max confidence per product (ProductResolver.matchScore)
+    const linkConfidence = Number(row.confidence)
+    const currentMax = confidenceMap.get(productId) ?? 0
+    if (linkConfidence > currentMax) {
+      confidenceMap.set(productId, linkConfidence)
     }
-  }
 
-  const sourceProductIds = Array.from(sourceToProduct.keys())
-
-  // ADR-015: Query derived table instead of prices with corrections overlay
-  const prices = await prisma.current_visible_prices.findMany({
-    where: {
-      sourceProductId: { in: sourceProductIds },
-      ...currentVisiblePriceWhere(),
-    },
-    orderBy: [
-      { retailerTier: 'desc' },
-      { visiblePrice: 'asc' },
-    ],
-  })
-
-  // Group prices by canonical product
-  const pricesMap = new Map<string, any[]>(productIds.map(id => [id, []]))
-
-  for (const price of prices) {
-    if (price.sourceProductId) {
-      const productId = sourceToProduct.get(price.sourceProductId)
-      if (productId) {
-        // Transform to match expected shape for API compatibility
-        pricesMap.get(productId)?.push({
-          ...price,
-          price: price.visiblePrice, // Use corrected price
-          retailers: {
-            id: price.retailerId,
-            name: price.retailerName,
-            tier: price.retailerTier,
-          },
-        })
-      }
-    }
+    // Transform and group by productId
+    pricesMap.get(productId)?.push(transformPriceRow(row))
   }
 
   return { pricesMap, confidenceMap }

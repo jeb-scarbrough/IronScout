@@ -835,12 +835,14 @@ model current_visible_prices {
   recomputeJobId String?
 
   // Indexes for hot-path queries
-  @@index([productId])
+  // REMOVED: @@index([productId]) — 0 scans, dead index
   @@index([retailerId])
   @@index([sourceProductId])
   @@index([observedAt])
-  @@index([inStock])
+  // REMOVED: @@index([inStock]) — 0 scans, dead index
   @@index([recomputedAt])
+  // Composite: covers JOIN on sourceProductId + observedAt lookback filter (P0 price resolution)
+  @@index([sourceProductId, observedAt(sort: Desc)])
   @@map("current_visible_prices")
 }
 
@@ -953,7 +955,7 @@ model products {
   // REMOVED: @@index([name]) — replaced by GIN trigram index (migration 20260208220000)
   @@index([pressureRating])
   // REMOVED: @@index([purpose]) — replaced by GIN trigram index (migration 20260208220000)
-  @@index([updatedAt])
+  // REMOVED: @@index([updatedAt]) — 0 scans, dead index
   @@index([brandNorm, caliberNorm])
 }
 
@@ -1172,10 +1174,12 @@ model product_links {
 
   @@index([productId])
   // REMOVED: @@index([status]) - redundant, covered by @@index([status, matchType])
-  @@index([matchType])
+  // REMOVED: @@index([matchType]) — 0 scans, dead index
   @@index([status, matchType]) // For filtered queries by resolution state
-  @@index([resolverVersion])
-  @@index([resolvedAt])
+  // REMOVED: @@index([resolverVersion]) — 0 scans, dead index
+  // REMOVED: @@index([resolvedAt]) — covered by @@index([productId, status, sourceProductId])
+  // Composite: covers WHERE (productId, status) + provides sourceProductId for JOIN without heap fetch (P0 price resolution)
+  @@index([productId, status, sourceProductId])
 }
 
 /// Brand alias mapping for resolver normalization.
