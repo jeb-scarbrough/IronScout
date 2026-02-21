@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
-import { GunLockerCard, WatchingCard, MarketActivityCard, GetStartedChecklist } from '@/components/dashboard/loadout'
+import { GunLockerCard, WatchingCard, MarketActivityCard, GetStartedChecklist, ReconBriefing, ReconGreeting } from '@/components/dashboard/loadout'
+import { useAlertHistory } from '@/hooks/use-alert-history'
 import { DashboardContent } from '@/components/dashboard/dashboard-content'
 import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,6 +34,7 @@ const API_BASE_URL = env.NEXT_PUBLIC_API_URL
 export default function DashboardPage() {
   const { data: session, status: sessionStatus } = useSession()
   const { data, isLoading, error, mutate } = useLoadout()
+  const { entries: alertHistory } = useAlertHistory(10)
   const router = useRouter()
   const token = session?.accessToken
   const [hasAlerts, setHasAlerts] = useState(false)
@@ -203,11 +205,25 @@ export default function DashboardPage() {
 
   return (
     <DashboardContent>
+      {/* Contextual greeting */}
+      <ReconGreeting
+        userName={session?.user?.name ?? undefined}
+        watchingItems={data.watching.items}
+        retailersTracked={data.marketActivity.retailersTracked}
+      />
+
       {/* Getting Started checklist — auto-hides when 2/3 done */}
       <GetStartedChecklist
         hasFirearm={hasFirearms}
         hasWatchedItem={hasWatchedItems}
         hasAlerts={hasAlerts}
+      />
+
+      {/* Recon Briefing — surfaces recent changes at the top */}
+      <ReconBriefing
+        watchingItems={data.watching.items}
+        recentAlerts={alertHistory}
+        onCompareClick={handleCompareClick}
       />
 
       {bothEmpty ? (
