@@ -12,6 +12,7 @@
  *     [--paginate] \
  *     [--max-pages 10] \
  *     [--max-urls 1000] \
+ *     [--dont-verify-pdp] \
  *     [--dry-run] \
  *     [--count-only] \
  *     [--notes "optional note"] \
@@ -260,6 +261,30 @@ async function main() {
       return
     }
 
+    if (opts.verifyPdp) {
+      const delayMs = clampDelayMs(robotsCheck.crawlDelayMs ?? DEFAULT_DELAY_MS)
+      await rateLimiter.wait(cleaned, delayMs)
+
+      let pageHtml = null
+      try {
+        pageHtml = await fetchText(cleaned, false)
+      } catch {
+        skippedPattern += 1
+        if (opts.logUrls) {
+          console.log(`url: skip reason=pdp-unreachable url=${cleaned}`)
+        }
+        return
+      }
+
+      if (!looksLikeVerifiedPdp(pageHtml, cleaned)) {
+        skippedPattern += 1
+        if (opts.logUrls) {
+          console.log(`url: skip reason=pdp-verify url=${cleaned}`)
+        }
+        return
+      }
+    }
+
     eligibleCount += 1
 
     const canonicalUrl = canonicalizeUrl(cleaned)
@@ -367,6 +392,7 @@ function parseArgs(argv) {
     maxPages: DEFAULT_MAX_PAGES,
     maxPagesProvided: false,
     targetUrlTemplate: null,
+    verifyPdp: true,
     dryRun: false,
     countOnly: false,
     autoSitemap: false,
@@ -404,6 +430,8 @@ function parseArgs(argv) {
       if (!Number.isFinite(out.maxPages) || out.maxPages < 1) {
         fail('Invalid --max-pages value')
       }
+    } else if (arg === '--dont-verify-pdp') {
+      out.verifyPdp = false
     } else if (arg === '--dry-run') {
       out.dryRun = true
     } else if (arg === '--count-only') {
@@ -434,6 +462,7 @@ function printHelp() {
   console.log('  --paginate (follow rel=next or page= links on listing pages)')
   console.log('  --max-pages 10 (cap listing pagination; only when --paginate)')
   console.log('  --max-urls 500 (default)')
+  console.log('  --dont-verify-pdp (disable PDP verification; default is verify)')
   console.log('  --dry-run')
   console.log('  --count-only (scan and report totals; no output file)')
   console.log('  --auto-sitemap (discover sitemap via robots.txt or /sitemap.xml)')
@@ -509,6 +538,50 @@ function matchesProductPattern(url, prefix, regex) {
   } catch {
     return false
   }
+}
+
+function htmlHasJsonLdProduct(html) {
+  return /"@type"\s*:\s*("Product"|\[\s*"Product")/i.test(html)
+}
+
+function canonicalHrefFromHtml(html, baseUrl) {
+  const relFirst = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i)
+  const hrefFirst = html.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["'][^>]*>/i)
+  const href = relFirst?.[1]?.trim() ?? hrefFirst?.[1]?.trim()
+  if (!href) return null
+
+  try {
+    return new URL(href, baseUrl).toString()
+  } catch {
+    return null
+  }
+}
+
+function isCategoryLikeAmmunitionPath(pathname) {
+  const parts = pathname.split('/').filter(Boolean)
+  return parts.length === 2 && parts[0] === 'ammunition'
+}
+
+function looksLikeVerifiedPdp(html, requestUrl) {
+  if (!htmlHasJsonLdProduct(html)) {
+    return false
+  }
+
+  const canonical = canonicalHrefFromHtml(html, requestUrl)
+  if (!canonical) {
+    return true
+  }
+
+  try {
+    const parsedCanonical = new URL(canonical)
+    if (isCategoryLikeAmmunitionPath(parsedCanonical.pathname)) {
+      return false
+    }
+  } catch {
+    return false
+  }
+
+  return true
 }
 
 function cleanCandidateUrl(url) {
