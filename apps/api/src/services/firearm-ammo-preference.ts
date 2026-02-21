@@ -559,13 +559,16 @@ export async function getPreferencesForFirearms(
   // These contain critical business logic (soft-delete side effects) that MUST be preserved
   const result = new Map<string, AmmoPreferenceGroup[]>()
 
+  // Preload all supersession chains in one batch across all firearms,
+  // avoiding per-firearm DB round-trips for chain resolution.
+  const productMap = await batchPreloadSupersessionChains(allPreferences)
+
   for (const [firearmId, preferences] of byFirearm) {
     if (preferences.length === 0) {
       result.set(firearmId, [])
       continue
     }
 
-    const productMap = await batchPreloadSupersessionChains(preferences)
     const mapped = mapToAmmoPreferences(preferences, productMap)
     const deduped = await dedupeAndSoftDeleteSuperseded(mapped)
 
