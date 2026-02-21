@@ -736,7 +736,7 @@ model prices {
   @@index([productId, retailerId, createdAt])
   @@index([price, inStock])
   @@index([retailerId])
-  @@index([sourceProductId])
+  @@index([sourceProductId, createdAt(sort: Desc)])
   // Issue #218: Partial unique index prices_source_observed_dedupe
   // ON (sourceProductId, observedAt) WHERE sourceProductId IS NOT NULL
   // Managed via raw SQL migration (Prisma doesn't support partial unique indexes)
