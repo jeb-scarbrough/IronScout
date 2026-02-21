@@ -248,6 +248,48 @@ export default function About() {
         </div>
       </section>
 
+      {/* Browse Section */}
+      <section className="py-16 border-t border-iron-800/50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="font-display text-2xl sm:text-3xl font-semibold text-iron-100 mb-6">
+            Start Browsing
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            <a href="/calibers" className="card text-center group hover:border-iron-600 transition-colors py-4">
+              <span className="text-iron-200 font-medium group-hover:text-primary transition-colors">All Calibers</span>
+            </a>
+            <a href="/brands" className="card text-center group hover:border-iron-600 transition-colors py-4">
+              <span className="text-iron-200 font-medium group-hover:text-primary transition-colors">Brands</span>
+            </a>
+            <a href="/ammo/handgun" className="card text-center group hover:border-iron-600 transition-colors py-4">
+              <span className="text-iron-200 font-medium group-hover:text-primary transition-colors">Handgun Ammo</span>
+            </a>
+            <a href="/ammo/rifle" className="card text-center group hover:border-iron-600 transition-colors py-4">
+              <span className="text-iron-200 font-medium group-hover:text-primary transition-colors">Rifle Ammo</span>
+            </a>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-8">
+            {[
+              { label: '9mm', href: '/caliber/9mm' },
+              { label: '5.56 NATO', href: '/caliber/556-nato' },
+              { label: '.308 Win', href: '/caliber/308-winchester' },
+              { label: '.22 LR', href: '/caliber/22-lr' },
+              { label: '.45 ACP', href: '/caliber/45-acp' },
+              { label: '12 Gauge', href: '/caliber/12-gauge' },
+              { label: '.300 BLK', href: '/caliber/300-blackout' },
+            ].map((cal) => (
+              <a
+                key={cal.href}
+                href={cal.href}
+                className="rounded-lg border border-iron-800 px-3 py-1.5 text-sm text-iron-400 hover:text-iron-200 hover:border-iron-600 transition-all"
+              >
+                {cal.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-16 border-t border-iron-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
