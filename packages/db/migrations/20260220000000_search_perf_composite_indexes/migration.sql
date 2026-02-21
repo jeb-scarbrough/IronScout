@@ -11,11 +11,13 @@
 -- ============================================================================
 
 -- Covers WHERE (productId, status) + provides sourceProductId for JOIN without heap fetch
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "product_links_productId_status_sourceProductId_idx"
+-- NOTE: Not using CONCURRENTLY — Prisma wraps migrations in a transaction.
+-- For production, consider applying via psql with CONCURRENTLY to avoid table locks.
+CREATE INDEX IF NOT EXISTS "product_links_productId_status_sourceProductId_idx"
   ON "product_links" ("productId", "status", "sourceProductId");
 
 -- Covers JOIN on sourceProductId + observedAt lookback filter
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "current_visible_prices_sourceProductId_observedAt_idx"
+CREATE INDEX IF NOT EXISTS "current_visible_prices_sourceProductId_observedAt_idx"
   ON "current_visible_prices" ("sourceProductId", "observedAt" DESC);
 
 -- ============================================================================
