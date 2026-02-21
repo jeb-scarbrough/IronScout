@@ -138,6 +138,8 @@ Note: `scraper:dry-run` uses the harvester dist build. If it is missing, run:
 pnpm --filter @ironscout/harvester build
 ```
 
+See `context/reference/scraper-bootstrap-runbook.md` for the full bootstrap workflow, failure handling, and Admin UI handoff steps.
+
 ---
 
 ## Database
