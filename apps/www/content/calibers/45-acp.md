@@ -43,6 +43,23 @@ Premium JHP defense loads run **$0.60—1.10 per round**, comparable to 9mm JHP 
 
 The .45 ACP market is stable but slowly declining in volume as 9mm continues to dominate new handgun sales. Pricing has been steady since 2024, with no significant supply disruptions. The caliber remains well-supported by all major manufacturers.
 
+## Popular .45 ACP brands
+
+- [Federal](/brand/federal) — American Eagle range ammo and HST defense loads. The standard in .45 ACP.
+- [Winchester](/brand/winchester) — White Box budget FMJ and PDX1 defense loads.
+- [CCI](/brand/cci) — Blazer Brass .45. Affordable brass-cased range ammo.
+- [Hornady](/brand/hornady) — Critical Defense FTX in 185gr. Reliable expansion from shorter barrels.
+- [Speer](/brand/speer) — Gold Dot .45. Extensive law enforcement duty track record.
+- [Remington](/brand/remington) — UMC .45 ACP range loads. Reliable mid-price option.
+
+## Where to buy .45 ACP ammo
+
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, real-time inventory
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Frequent sales and bundle deals
+- [MidwayUSA](/retailer/midwayusa) — Wide selection across all brands and bullet types
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store pickup options
+
 ## Related calibers
 
 - [9mm](/caliber/9mm) — Lower cost per round, higher magazine capacity, dominant market position

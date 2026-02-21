@@ -52,3 +52,19 @@ The .30-06 market is stable but gradually declining in volume as new bolt-action
 - [6.5 Creedmoor](/caliber/65-creedmoor) — Lower recoil, better long-range ballistics, the modern precision choice
 - [12 Gauge](/caliber/12-gauge) — Shotgun alternative for close-range hunting
 - [.300 Blackout](/caliber/300-blackout) — AR platform, optimized for short range and suppressors
+
+## Popular .30-06 Springfield brands
+
+- [Federal](/brand/federal) — Power-Shok, Fusion, and Premium hunting loads. Widest .30-06 lineup.
+- [Hornady](/brand/hornady) — American Whitetail and Superformance. Modern hunting performance.
+- [Winchester](/brand/winchester) — Super-X and Deer Season XP. Classic American hunting brand.
+- [Remington](/brand/remington) — Core-Lokt. The iconic .30-06 hunting load for generations.
+- [Sellier & Bellot](/brand/sellier-bellot) — Budget brass-cased FMJ for range use.
+
+## Where to buy .30-06 Springfield ammo
+
+- [MidwayUSA](/retailer/midwayusa) — Widest selection for hunting and target loads
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Strong hunting ammo selection, online and in-store
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, competitive pricing
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Occasional deals on hunting calibers

@@ -52,3 +52,19 @@ The 12 gauge market is mature and well-supplied. Target load pricing has been st
 - [.308 Winchester](/caliber/308-winchester) — Rifle alternative for deer hunting with longer range
 - [.30-06 Springfield](/caliber/30-06-springfield) — Classic rifle hunting cartridge
 - [5.56 NATO](/caliber/556-nato) — AR-platform alternative for home defense and target shooting
+
+## Popular 12 gauge brands
+
+- [Federal](/brand/federal) — Top Gun target loads, FliteControl buckshot, Power-Shok slugs. Full 12ga lineup.
+- [Winchester](/brand/winchester) — Super-X buckshot and slugs, AA target loads. The classic shotshell brand.
+- [Hornady](/brand/hornady) — Critical Defense buckshot and SST slugs. Premium defensive shotshells.
+- [Remington](/brand/remington) — Express buckshot, Slugger, and Gun Club target loads.
+- [Fiocchi](/brand/fiocchi) — Italian-made target loads. Competitive pricing for clay shooters.
+
+## Where to buy 12 gauge ammo
+
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Strong shotshell selection, online and in-store
+- [MidwayUSA](/retailer/midwayusa) — Wide selection across target, hunting, and defense
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, good buckshot and slug inventory
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Deals on defensive and target loads
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members

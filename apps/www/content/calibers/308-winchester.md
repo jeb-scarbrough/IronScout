@@ -56,3 +56,20 @@ The .308 Winchester market is mature and well-supplied. Domestic production from
 - [6.5 Creedmoor](/caliber/65-creedmoor) — Better ballistic coefficient, less recoil, purpose-built for precision
 - [.30-06 Springfield](/caliber/30-06-springfield) — Higher velocity potential with the same bullet weights
 - [7.62x39](/caliber/762x39) — Budget intermediate cartridge for AK/SKS platforms
+
+## Popular .308 Winchester brands
+
+- [Federal](/brand/federal) — Gold Medal Match, American Eagle, Power-Shok hunting. Dominant across all segments.
+- [Hornady](/brand/hornady) — ELD Match, American Whitetail, Superformance. Premium precision and hunting.
+- [Winchester](/brand/winchester) — Super-X hunting and USA target loads. Classic hunting brand.
+- [Sellier & Bellot](/brand/sellier-bellot) — Budget brass-cased FMJ. Best value for volume shooting.
+- [Remington](/brand/remington) — Core-Lokt hunting and UMC range loads.
+- [Prvi Partizan](/brand/prvi-partizan) — Budget match and FMJ from Serbia.
+
+## Where to buy .308 Winchester ammo
+
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, strong .308 selection
+- [MidwayUSA](/retailer/midwayusa) — Widest selection from budget to premium match
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Competitive pricing on bulk FMJ
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store pickup options

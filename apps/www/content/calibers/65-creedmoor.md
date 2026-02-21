@@ -49,3 +49,19 @@ The 6.5 Creedmoor market continues to grow, with every major manufacturer now of
 - [.308 Winchester](/caliber/308-winchester) — More energy, more hunting ammo options, lower range ammo cost
 - [.30-06 Springfield](/caliber/30-06-springfield) — Higher velocity with heavy bullets, the classic American hunting round
 - [5.56 NATO](/caliber/556-nato) — Much cheaper to shoot for volume training on AR-platform rifles
+
+## Popular 6.5 Creedmoor brands
+
+- [Hornady](/brand/hornady) — ELD Match and Precision Hunter. The company that created the cartridge.
+- [Federal](/brand/federal) — Gold Medal Match and Fusion hunting. Premium precision loads.
+- [Winchester](/brand/winchester) — Match and Deer Season XP. Competitive match-grade pricing.
+- [Sellier & Bellot](/brand/sellier-bellot) — Budget 6.5 CM FMJ and match options.
+- [Prvi Partizan](/brand/prvi-partizan) — Budget brass-cased match loads from Serbia.
+
+## Where to buy 6.5 Creedmoor ammo
+
+- [MidwayUSA](/retailer/midwayusa) — Widest selection for precision and hunting loads
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, good match-grade inventory
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Competitive pricing
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store pickup options

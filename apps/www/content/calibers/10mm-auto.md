@@ -52,3 +52,19 @@ The 10mm market continues to grow, with new product launches from Federal (HST 1
 - [.45 ACP](/caliber/45-acp) — Same parent case, lower pressure, more gun options, subsonic by default
 - [.40 S&W](/caliber/40-sw) — Shortened 10mm case, less recoil, cheaper ammo, more gun options
 - [9mm](/caliber/9mm) — Much cheaper to shoot, higher capacity, dominant self-defense caliber
+
+## Popular 10mm Auto brands
+
+- [Federal](/brand/federal) — HST 10mm, American Eagle, and Fusion hunting loads.
+- [Hornady](/brand/hornady) — XTP and Custom loads. Versatile across defense and hunting.
+- [CCI](/brand/cci) — Blazer Brass 10mm. Affordable range ammo.
+- [Sellier & Bellot](/brand/sellier-bellot) — Budget 10mm FMJ, often the cheapest brass-cased option.
+- [Speer](/brand/speer) — Gold Dot 10mm. Proven duty-grade expansion.
+
+## Where to buy 10mm Auto ammo
+
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, strong 10mm selection
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [MidwayUSA](/retailer/midwayusa) — Widest selection including boutique manufacturers
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Competitive pricing on common loads
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Online and in-store pickup options

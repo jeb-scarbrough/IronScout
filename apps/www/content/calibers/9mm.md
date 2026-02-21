@@ -51,6 +51,24 @@ For **range and training**, 115gr FMJ is the universal standard. Virtually every
 
 For **concealed carry and home defense**, 124gr and 147gr JHP loads are the standard. The 124gr +P segment (Federal HST 124gr +P, Speer Gold Dot 124gr +P) represents the most common law enforcement duty load configuration, which means it has the deepest real-world performance data. However, standard-pressure 124gr and 147gr loads from these same manufacturers perform well in modern designs and generate less felt recoil — a meaningful consideration for compact and subcompact pistols.
 
+## Popular 9mm brands
+
+- [Federal](/brand/federal) — HST, American Eagle, Punch. Dominant across both range and defense.
+- [CCI](/brand/cci) — Blazer Brass budget FMJ. Consistently among the cheapest brass-cased 9mm.
+- [Winchester](/brand/winchester) — White Box range ammo and PDX1 defense loads.
+- [Hornady](/brand/hornady) — Critical Defense and Critical Duty. Premium self-defense focus.
+- [Speer](/brand/speer) — Gold Dot. The most widely issued law enforcement duty round.
+- [Remington](/brand/remington) — UMC range ammo. Reliable mid-price option.
+- [Magtech](/brand/magtech) — Brazilian-made budget FMJ, popular for high-volume range use.
+
+## Where to buy 9mm ammo
+
+- [Lucky Gunner](/retailer/lucky-gunner) — Fast shipping, real-time inventory, strong bulk selection
+- [Target Sports USA](/retailer/target-sports-usa) — Free shipping on case quantities for members
+- [Palmetto State Armory](/retailer/palmetto-state-armory) — Frequent sales and bundle deals
+- [MidwayUSA](/retailer/midwayusa) — Wide selection across all brands and bullet types
+- [Sportsman's Warehouse](/retailer/sportsmans-warehouse) — Both online and in-store pickup options
+
 ## Related calibers
 
 - [.380 ACP](/caliber/380-acp) — Lighter recoil for micro-compact carry guns. Cheaper guns, more expensive ammo.
