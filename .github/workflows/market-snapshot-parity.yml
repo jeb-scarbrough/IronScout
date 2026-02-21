@@ -102,7 +102,7 @@ jobs:
       - name: Initialize test database schema
         env:
           DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
-        run: pnpm --filter @ironscout/db prisma migrate deploy
+        run: pnpm --filter @ironscout/db db:migrate:deploy
 
       - name: Run DB parity integration checks
         env:
@@ -189,7 +189,7 @@ jobs:
       - name: Initialize test database schema
         env:
           DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
-        run: pnpm --filter @ironscout/db prisma migrate deploy
+        run: pnpm --filter @ironscout/db db:migrate:deploy
 
       - name: Run DB parity integration checks
         env:
