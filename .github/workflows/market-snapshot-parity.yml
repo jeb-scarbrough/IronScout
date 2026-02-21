@@ -99,6 +99,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Initialize test database schema
+        env:
+          DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
+        run: pnpm --filter @ironscout/db prisma migrate deploy
+
       - name: Run DB parity integration checks
         env:
           TEST_DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
@@ -180,6 +185,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Initialize test database schema
+        env:
+          DATABASE_URL: postgresql://ironscout_test:ironscout_test@localhost:5433/ironscout_test
+        run: pnpm --filter @ironscout/db prisma migrate deploy
 
       - name: Run DB parity integration checks
         env:
