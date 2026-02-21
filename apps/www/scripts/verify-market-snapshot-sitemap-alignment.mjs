@@ -16,10 +16,6 @@ function extractLocUrls(xml) {
   return urls
 }
 
-function toSnapshotUrl(baseUrl, slug) {
-  return `${baseUrl}/market-snapshots/30d/${slug}.json`
-}
-
 async function main() {
   const rootDir = process.cwd()
   const sitemapPath = path.join(rootDir, 'out', 'sitemap.xml')
@@ -42,48 +38,51 @@ async function main() {
   }
 
   const allUrls = extractLocUrls(rawSitemap)
-  const indexPath = '/market-snapshots/30d/index.json'
-  const snapshotIndexUrl = allUrls.find((url) => url.endsWith(indexPath)) ?? null
-  if (snapshotIndexUrl === null) {
+  const allUrlSet = new Set(allUrls)
+
+  // Detect base URL from the homepage entry
+  const homepageUrl = allUrls.find((url) => {
+    try {
+      const parsed = new URL(url)
+      return parsed.pathname === '' || parsed.pathname === '/'
+    } catch {
+      return false
+    }
+  })
+
+  if (!homepageUrl) {
     errors.push({
       gate: GATE,
-      reason: 'Snapshot index URL missing from sitemap',
-      expectedPath: indexPath,
+      reason: 'Could not detect base URL from sitemap (no homepage entry found)',
     })
     printGateResult(GATE, checked, errors, warnings)
     return
   }
 
-  const baseUrl = snapshotIndexUrl.slice(0, -indexPath.length)
+  const baseUrl = homepageUrl.replace(/\/$/, '')
+
+  // Verify every known caliber slug has a /caliber/{slug} entry in sitemap
   const expectedSlugs = Object.keys(CALIBER_SLUG_MAP).sort()
-  const expectedUrls = new Set([
-    `${baseUrl}${indexPath}`,
-    ...expectedSlugs.map((slug) => toSnapshotUrl(baseUrl, slug)),
-  ])
-
-  const actualSnapshotUrls = allUrls.filter((url) => url.includes('/market-snapshots/30d/'))
-  const actualUrlSet = new Set(actualSnapshotUrls)
-
-  for (const expectedUrl of expectedUrls) {
+  for (const slug of expectedSlugs) {
     checked += 1
-    if (!actualUrlSet.has(expectedUrl)) {
+    const expectedUrl = `${baseUrl}/caliber/${slug}`
+    if (!allUrlSet.has(expectedUrl)) {
       errors.push({
         gate: GATE,
-        reason: 'Expected snapshot URL missing from sitemap',
+        reason: 'Expected caliber page URL missing from sitemap',
         url: expectedUrl,
       })
     }
   }
 
-  const expectedUrlSet = new Set(expectedUrls)
-  for (const actualUrl of actualUrlSet) {
-    if (!expectedUrlSet.has(actualUrl)) {
-      errors.push({
-        gate: GATE,
-        reason: 'Unexpected snapshot URL present in sitemap',
-        url: actualUrl,
-      })
-    }
+  // Warn if raw JSON snapshot URLs are still in the sitemap (they shouldn't be)
+  const snapshotUrls = allUrls.filter((url) => url.includes('/market-snapshots/'))
+  for (const url of snapshotUrls) {
+    warnings.push({
+      gate: GATE,
+      reason: 'Raw JSON snapshot URL found in sitemap (should be removed to conserve crawl budget)',
+      url,
+    })
   }
 
   printGateResult(GATE, checked, errors, warnings)

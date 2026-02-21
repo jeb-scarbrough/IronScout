@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { BRAND } from '@/lib/brand'
 import { getContentSlugs, getNestedContentSlugs } from '@/lib/content'
+import { readSnapshotArtifactBySlug } from '@/lib/market-snapshots'
 import { CALIBER_SLUG_MAP } from '@ironscout/db/calibers.js'
 
 export const dynamic = 'force-static'
@@ -18,64 +19,88 @@ function buildUrl(path: string): string {
   return `${baseUrl}${canonicalPath}`
 }
 
-function withDefaults(
+function entry(
   path: string,
   changeFrequency: MetadataRoute.Sitemap[0]['changeFrequency'],
-  priority: number
+  priority: number,
+  lastModified?: Date
 ): MetadataRoute.Sitemap[0] {
   return {
     url: buildUrl(path),
-    lastModified: new Date(),
+    lastModified: lastModified ?? new Date(),
     changeFrequency,
     priority,
   }
 }
 
+/**
+ * Returns the most recent snapshot computedAt date across all calibers,
+ * useful as a lastModified proxy for hub/category pages that aggregate
+ * snapshot data.
+ */
+function getLatestSnapshotDate(caliberSlugs: string[]): Date {
+  let latest: Date | null = null
+  for (const slug of caliberSlugs) {
+    const snapshot = readSnapshotArtifactBySlug(slug)
+    if (snapshot?.computedAt) {
+      const d = new Date(snapshot.computedAt)
+      if (!latest || d > latest) latest = d
+    }
+  }
+  return latest ?? new Date()
+}
+
+/**
+ * Returns the snapshot computedAt date for a single caliber slug,
+ * falling back to build time if no snapshot exists.
+ */
+function getSnapshotDate(slug: string): Date {
+  const snapshot = readSnapshotArtifactBySlug(slug)
+  return snapshot?.computedAt ? new Date(snapshot.computedAt) : new Date()
+}
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const caliberSlugs = getContentSlugs('calibers').sort()
-  const snapshotArtifactSlugs = Object.keys(CALIBER_SLUG_MAP).sort()
   const brandSlugs = getContentSlugs('brands').sort()
   const retailerSlugs = getContentSlugs('retailers').sort()
   const ammoSlugs = getContentSlugs('ammo').sort()
   const caliberTypes = getNestedContentSlugs('caliber-types')
 
+  const latestSnapshot = getLatestSnapshotDate(caliberSlugs)
+
   return [
     // Core pages
-    withDefaults('/', 'weekly', 1),
-    withDefaults('/about', 'monthly', 0.7),
-    withDefaults('/contact', 'monthly', 0.6),
-    withDefaults('/retailers', 'monthly', 0.8),
-    withDefaults('/privacy', 'monthly', 0.3),
-    withDefaults('/terms', 'monthly', 0.3),
+    entry('/', 'weekly', 1, latestSnapshot),
+    entry('/about', 'monthly', 0.7),
+    entry('/contact', 'monthly', 0.6),
+    entry('/retailers', 'monthly', 0.8),
+    entry('/privacy', 'monthly', 0.3),
+    entry('/terms', 'monthly', 0.3),
 
-    // Hub & category pages
-    withDefaults('/calibers', 'weekly', 0.9),
-    withDefaults('/ammo/handgun', 'weekly', 0.8),
-    withDefaults('/ammo/rifle', 'weekly', 0.8),
-    withDefaults('/ammo/rimfire', 'weekly', 0.8),
-    withDefaults('/ammo/shotgun', 'weekly', 0.8),
+    // Hub & category pages — use latest snapshot date since they show aggregated data
+    entry('/calibers', 'weekly', 0.9, latestSnapshot),
+    entry('/ammo/handgun', 'weekly', 0.8, latestSnapshot),
+    entry('/ammo/rifle', 'weekly', 0.8, latestSnapshot),
+    entry('/ammo/rimfire', 'weekly', 0.8, latestSnapshot),
+    entry('/ammo/shotgun', 'weekly', 0.8, latestSnapshot),
 
-    // Caliber pages
-    ...caliberSlugs.map((slug) => withDefaults(`/caliber/${slug}`, 'weekly', 0.8)),
+    // Caliber pages — use per-caliber snapshot date
+    ...caliberSlugs.map((slug) =>
+      entry(`/caliber/${slug}`, 'weekly', 0.8, getSnapshotDate(slug))
+    ),
 
-    // Caliber × type intersection pages
+    // Caliber × type intersection pages — use parent caliber snapshot date
     ...caliberTypes.map(({ parent, child }) =>
-      withDefaults(`/caliber/${parent}/${child}`, 'weekly', 0.7)
+      entry(`/caliber/${parent}/${child}`, 'weekly', 0.7, getSnapshotDate(parent))
     ),
 
     // Product-line pages
-    ...ammoSlugs.map((slug) => withDefaults(`/ammo/${slug}`, 'weekly', 0.7)),
+    ...ammoSlugs.map((slug) => entry(`/ammo/${slug}`, 'weekly', 0.7)),
 
     // Brand pages
-    ...brandSlugs.map((slug) => withDefaults(`/brand/${slug}`, 'weekly', 0.5)),
+    ...brandSlugs.map((slug) => entry(`/brand/${slug}`, 'weekly', 0.5)),
 
     // Retailer pages
-    ...retailerSlugs.map((slug) => withDefaults(`/retailer/${slug}`, 'weekly', 0.5)),
-
-    // Public snapshot artifacts (Option A for crawler-visible market snapshot data)
-    withDefaults('/market-snapshots/30d/index.json', 'daily', 0.7),
-    ...snapshotArtifactSlugs.map((slug) =>
-      withDefaults(`/market-snapshots/30d/${slug}.json`, 'daily', 0.6)
-    ),
+    ...retailerSlugs.map((slug) => entry(`/retailer/${slug}`, 'weekly', 0.5)),
   ]
 }
