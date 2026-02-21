@@ -191,7 +191,7 @@ export function buildProductMedianPriceQuery({
       LEFT JOIN affiliate_feed_runs afr ON afr.id = pr."affiliateFeedRunId"
       LEFT JOIN sources s ON s.id = pr."sourceId"
       LEFT JOIN scrape_adapter_status sas ON sas."adapterId" = s."adapterId"
-      WHERE p.id = ANY(${productIds})
+      WHERE p.id = ANY(${productIds}::text[])
         AND pl.status IN ('MATCHED', 'CREATED')
         AND pr."observedAt" >= ${windowStart}
         AND pr."observedAt" < ${windowEnd}
@@ -357,12 +357,12 @@ export function buildCaliberPriceCheckStatsQuery({
             AND sas."enabled" = true
           )
         )
-        AND LOWER(p.caliber) = ANY(${caliberAliases})
-        AND (${brandPattern} IS NULL OR LOWER(p.brand) LIKE ${brandPattern})
-        AND (${grainValue} IS NULL OR p."grainWeight" = ${grainValue})
-        AND (${roundCountValue} IS NULL OR p."roundCount" = ${roundCountValue})
-        AND (${caseMaterialPattern} IS NULL OR LOWER(p."caseMaterial") LIKE ${caseMaterialPattern})
-        AND (${bulletTypeValue} IS NULL OR p."bulletType" = ${bulletTypeValue})
+        AND LOWER(p.caliber) = ANY(${caliberAliases}::text[])
+        AND (${brandPattern}::text IS NULL OR LOWER(p.brand) LIKE ${brandPattern}::text)
+        AND (${grainValue}::int IS NULL OR p."grainWeight" = ${grainValue}::int)
+        AND (${roundCountValue}::int IS NULL OR p."roundCount" = ${roundCountValue}::int)
+        AND (${caseMaterialPattern}::text IS NULL OR LOWER(p."caseMaterial") LIKE ${caseMaterialPattern}::text)
+        AND (${bulletTypeValue}::text IS NULL OR p."bulletType"::text = ${bulletTypeValue}::text)
       GROUP BY p.id, DATE_TRUNC('day', pr."observedAt" AT TIME ZONE 'UTC')
     )
     SELECT

@@ -14,7 +14,7 @@ import { getRedisClient } from '../config/redis'
 import { loggers } from '../config/logger'
 import { batchGetPricesViaProductLinks } from './ai-search/price-resolver'
 import { getGuns, type Gun, type CaliberValue } from './gun-locker'
-import { getPreferencesForFirearm, type AmmoPreference } from './firearm-ammo-preference'
+import { getPreferencesForFirearms, type AmmoPreference } from './firearm-ammo-preference'
 
 const log = loggers.dashboard
 
@@ -185,9 +185,14 @@ async function getGunLockerWithPrices(userId: string): Promise<LoadoutData['gunL
     return { firearms: [], totalAmmoItems: 0 }
   }
 
-  // Get ammo preferences for all firearms
-  const firearmDataPromises = firearms.map(async (firearm) => {
-    const groups = await getPreferencesForFirearm(userId, firearm.id)
+  // Batch-fetch preferences for all firearms in one query (N+1 → 1).
+  // Ownership already validated by getGuns(userId) above — no redundant
+  // user_guns.findUnique checks needed.
+  const firearmIds = firearms.map(f => f.id)
+  const prefsMap = await getPreferencesForFirearms(userId, firearmIds)
+
+  const firearmData = firearms.map((firearm) => {
+    const groups = prefsMap.get(firearm.id) || []
 
     // Flatten preferences from all groups
     const allPreferences: AmmoPreference[] = []
@@ -200,8 +205,6 @@ async function getGunLockerWithPrices(userId: string): Promise<LoadoutData['gunL
       preferences: allPreferences,
     }
   })
-
-  const firearmData = await Promise.all(firearmDataPromises)
 
   // Collect all ammo SKU IDs for batch price fetch
   const allAmmoSkuIds: string[] = []

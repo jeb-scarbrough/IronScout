@@ -193,6 +193,7 @@ export function createCaliberDatasetJsonLd(
     variableMeasured: ['price_per_round', 'availability_status'],
     measurementTechnique: snapshot?.methodology.measurementTechnique ?? FALLBACK_MEASUREMENT_TECHNIQUE,
     isAccessibleForFree: true,
+    license: `${siteBaseUrl.replace(/\/$/, '')}/terms`,
     distribution: [
       {
         '@type': 'DataDownload',

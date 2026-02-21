@@ -611,7 +611,7 @@ export function GunLockerManager() {
 
       {/* Firearm Detail Dialog with Ammo Preferences */}
       <Dialog open={!!selectedGun} onOpenChange={(open) => !open && handleCloseGunDetail()}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden">
           {selectedGun && (
             <>
               <DialogHeader>

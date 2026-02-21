@@ -116,6 +116,75 @@ function splitList(value) {
     .filter(Boolean)
 }
 
+function nowTag() {
+  return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+function parsePositiveInt(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback
+  const parsed = Number.parseInt(String(value), 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return parsed
+}
+
+function parseDiscoveryUrls(discoveryFilePath) {
+  if (!discoveryFilePath || !existsSync(discoveryFilePath)) {
+    return []
+  }
+  const text = readFileSync(discoveryFilePath, 'utf8')
+  const urls = []
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    if (/^https?:\/\//i.test(line)) {
+      urls.push(line)
+    }
+  }
+  return Array.from(new Set(urls))
+}
+
+function buildBootstrapArtifacts({ adapterId, discoveredUrls, scrapeConfig }) {
+  const runDir = resolve(projectRoot, 'tmp', 'scraper-bootstrap', `${adapterId}-${nowTag()}`)
+  mkdirSync(runDir, { recursive: true })
+
+  const urlListPath = resolve(runDir, 'urls.txt')
+  writeFileSync(urlListPath, `${discoveredUrls.join('\n')}\n`, 'utf8')
+
+  const csvLines = ['url,adapterId', ...discoveredUrls.map(url => `${url},${adapterId}`)]
+  const csvPath = resolve(runDir, 'targets-import.csv')
+  writeFileSync(csvPath, `${csvLines.join('\n')}\n`, 'utf8')
+
+  const scrapeConfigPath = resolve(runDir, 'scrape-config.suggested.json')
+  writeFileSync(scrapeConfigPath, `${JSON.stringify(scrapeConfig, null, 2)}\n`, 'utf8')
+
+  return {
+    runDir,
+    urlListPath,
+    csvPath,
+    scrapeConfigPath,
+  }
+}
+
+function printUiHandoffChecklist({ adapterId, artifacts, discoveredCount }) {
+  console.log('')
+  console.log('UI handoff checklist (complete in Admin):')
+  console.log('1. Create or verify Retailer record for the site domain.')
+  console.log(`2. Create or verify Source for adapter "${adapterId}".`)
+  console.log('3. Set source trust config values as required by policy.')
+  console.log('4. Update source scrapeConfig (if needed) using suggested JSON:')
+  console.log(`   ${artifacts.scrapeConfigPath}`)
+  console.log('5. Import scrape targets in Admin /scrapers using CSV:')
+  console.log(`   ${artifacts.csvPath}`)
+  console.log(`   (discovered URLs: ${discoveredCount})`)
+  console.log('6. Keep source disabled until approval gates are complete, then enable for controlled run.')
+  console.log('')
+  console.log('Generated artifacts:')
+  console.log(`- runDir: ${artifacts.runDir}`)
+  console.log(`- urlList: ${artifacts.urlListPath}`)
+  console.log(`- uploadCsv: ${artifacts.csvPath}`)
+  console.log(`- scrapeConfig: ${artifacts.scrapeConfigPath}`)
+}
+
 function printHelp() {
   console.log('bootstrap.mjs')
   console.log('  --id <adapterId> (required)')
@@ -131,6 +200,10 @@ function printHelp() {
   console.log('  --max-pages 10 (discovery)')
   console.log('  --max-urls 500 (discovery)')
   console.log('  --skip-dry-run (run discovery without --dry-run)')
+  console.log('  --skip-validate (skip scraper:validate step)')
+  console.log('  --skip-smoke (skip scraper:smoke step)')
+  console.log('  --smoke-limit 20 (smoke URL cap)')
+  console.log('  --scrape-config-json \'{"fetcherType":"http"}\' (suggested UI config output)')
 }
 
 async function main() {
@@ -316,6 +389,33 @@ async function main() {
 
   const discoveryArgs = [...baseArgs]
   const runAsDryRun = flags['skip-dry-run'] !== true
+  const runValidate = flags['skip-validate'] !== true
+  const runSmoke = flags['skip-smoke'] !== true
+  const smokeLimit = parsePositiveInt(flags['smoke-limit'] ?? storedDiscovery.smokeLimit, 20)
+  const suggestedScrapeConfigRaw = typeof flags['scrape-config-json'] === 'string'
+    ? flags['scrape-config-json']
+    : null
+  let suggestedScrapeConfig = { fetcherType: 'http' }
+  if (suggestedScrapeConfigRaw) {
+    try {
+      const parsed = JSON.parse(suggestedScrapeConfigRaw)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        fail('--scrape-config-json must be a JSON object')
+      }
+      suggestedScrapeConfig = parsed
+    } catch {
+      fail('Invalid --scrape-config-json (must be valid JSON)')
+    }
+  }
+
+  const discoveryOutPath = resolve(
+    projectRoot,
+    'tmp',
+    'scraper-bootstrap',
+    `${adapterId}-discovery-${nowTag()}.txt`
+  )
+  mkdirSync(resolve(discoveryOutPath, '..'), { recursive: true })
+  discoveryArgs.push('--output', discoveryOutPath)
   if (runAsDryRun) {
     discoveryArgs.push('--dry-run')
   }
@@ -329,6 +429,63 @@ async function main() {
       ? 'Discovery completed in dry-run mode (CLI/text-file output only; no DB writes).'
       : 'Discovery completed (CLI/text-file output only; no DB writes).'
   )
+
+  const discoveredUrls = parseDiscoveryUrls(discoveryOutPath)
+  if (discoveredUrls.length === 0) {
+    console.warn('No URLs discovered. Validate can still run; smoke will be skipped. Emitting UI handoff with empty target list.')
+  }
+
+  if (runValidate) {
+    const validateExit = await runNodeScript('scripts/scraper/validate.mjs', ['--site-id', adapterId])
+    if (validateExit !== 0) {
+      console.error('Validation failed. Fix adapter issues before UI onboarding.')
+      process.exit(validateExit)
+    }
+  } else {
+    console.log('Validation skipped (--skip-validate).')
+  }
+
+  if (runSmoke && discoveredUrls.length > 0) {
+    const preArtifacts = buildBootstrapArtifacts({
+      adapterId,
+      discoveredUrls,
+      scrapeConfig: suggestedScrapeConfig,
+    })
+
+    const smokeArgs = ['--site-id', adapterId, '--url-file', preArtifacts.urlListPath]
+    if (smokeLimit > 0) {
+      smokeArgs.push('--limit', String(smokeLimit))
+    }
+    const smokeExit = await runNodeScript('scripts/scraper/smoke.mjs', smokeArgs)
+    if (smokeExit !== 0) {
+      console.error('Smoke test failed. Resolve issues before UI onboarding.')
+      process.exit(smokeExit)
+    }
+
+    printUiHandoffChecklist({
+      adapterId,
+      artifacts: preArtifacts,
+      discoveredCount: discoveredUrls.length,
+    })
+    return
+  }
+
+  if (!runSmoke) {
+    console.log('Smoke skipped (--skip-smoke).')
+  } else {
+    console.log('Smoke skipped (no discovered URLs).')
+  }
+
+  const artifacts = buildBootstrapArtifacts({
+    adapterId,
+    discoveredUrls,
+    scrapeConfig: suggestedScrapeConfig,
+  })
+  printUiHandoffChecklist({
+    adapterId,
+    artifacts,
+    discoveredCount: discoveredUrls.length,
+  })
 }
 
 main().catch(error => {

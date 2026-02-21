@@ -57,6 +57,41 @@ function formatCurrency(cents) {
   return `$${(cents / 100).toFixed(2)}`
 }
 
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  const hh = String(hours).padStart(2, '0')
+  const mm = String(minutes).padStart(2, '0')
+  const ss = String(seconds).padStart(2, '0')
+  return `${hh}:${mm}:${ss}`
+}
+
+function estimateRemainingMs(startedAtMs, completed, total) {
+  if (completed <= 0) return null
+  const elapsedMs = Date.now() - startedAtMs
+  const avgPerItemMs = elapsedMs / completed
+  const remaining = Math.max(0, total - completed)
+  return Math.round(avgPerItemMs * remaining)
+}
+
+function printProgress(outputJson, startedAtMs, completed, total, stage, url) {
+  const elapsedMs = Date.now() - startedAtMs
+  const etaMs = estimateRemainingMs(startedAtMs, completed, total)
+  const pct = total > 0 ? ((completed / total) * 100).toFixed(1) : '100.0'
+  const etaText = etaMs === null ? 'ETA=calculating' : `ETA=${formatDuration(etaMs)}`
+  const line = `[progress] ${completed}/${total} (${pct}%) elapsed=${formatDuration(elapsedMs)} ${etaText} stage=${stage} url=${url}`
+
+  // Keep stdout clean for --json callers while still surfacing progress live.
+  if (outputJson) {
+    console.error(line)
+    return
+  }
+  console.log(line)
+}
+
 function normalizeUrlToken(token) {
   if (!token) return null
   const cleaned = token.trim().replace(/^["']|["']$/g, '').replace(/[),.;]+$/g, '')
@@ -195,6 +230,7 @@ async function main() {
   const selectedUrls = inputUrls.slice(0, limit)
   const logger = createLogger(verbose)
   const runId = `dry-run-${Date.now()}`
+  const runStartedAtMs = Date.now()
 
   const robotsPolicy = new robotsModule.RobotsPolicyImpl()
   const fetcher = new httpFetcherModule.HttpFetcher({ robotsPolicy })
@@ -216,7 +252,10 @@ async function main() {
   const results = []
   const lastFetchAtByDomain = new Map()
 
-  for (const url of selectedUrls) {
+  for (let index = 0; index < selectedUrls.length; index += 1) {
+    const url = selectedUrls[index]
+    printProgress(outputJson, runStartedAtMs, index, selectedUrls.length, 'starting', url)
+
     const domain = urlUtilsModule.getRegistrableDomain(url)
     const crawlDelay = await robotsPolicy.getCrawlDelay(domain)
     const effectiveDelayMs = Math.max(minDelayMs, crawlDelay ? crawlDelay * 1000 : 0)
@@ -242,6 +281,7 @@ async function main() {
         fetchStatus: fetchResult.status,
         error: fetchResult.error,
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'fetch_failed', url)
       continue
     }
 
@@ -266,6 +306,7 @@ async function main() {
         reason: 'EXCEPTION',
         error: error?.message || String(error),
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'extract_exception', url)
       continue
     }
 
@@ -279,6 +320,7 @@ async function main() {
         reason: extractResult.reason,
         details: extractResult.details,
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'extract_failed', url)
       continue
     }
 
@@ -303,6 +345,7 @@ async function main() {
         reason: 'EXCEPTION',
         error: error?.message || String(error),
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'normalize_exception', url)
       continue
     }
 
@@ -315,6 +358,7 @@ async function main() {
         priceCents: normalizeResult.offer.priceCents,
         availability: normalizeResult.offer.availability,
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'ok', url)
     } else if (normalizeResult.status === 'drop') {
       counters.dropped += 1
       counters.normalizeReasons[normalizeResult.reason] =
@@ -324,6 +368,7 @@ async function main() {
         status: 'dropped',
         reason: normalizeResult.reason,
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'dropped', url)
     } else {
       counters.quarantined += 1
       counters.normalizeReasons[normalizeResult.reason] =
@@ -333,6 +378,7 @@ async function main() {
         status: 'quarantined',
         reason: normalizeResult.reason,
       })
+      printProgress(outputJson, runStartedAtMs, index + 1, selectedUrls.length, 'quarantined', url)
     }
   }
 
@@ -362,7 +408,8 @@ async function main() {
     } else if (result.status === 'fetch_failed') {
       console.log(`FETCH   ${result.fetchStatus} ${result.url}`)
     } else if (result.status === 'extract_failed') {
-      console.log(`EXTRACT ${result.reason} ${result.url}`)
+      const detailsSuffix = result.details ? ` (${result.details})` : ''
+      console.log(`EXTRACT ${result.reason}${detailsSuffix} ${result.url}`)
     } else if (result.status === 'dropped') {
       console.log(`DROP    ${result.reason} ${result.url}`)
     } else {
