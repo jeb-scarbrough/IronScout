@@ -109,7 +109,7 @@ export default function DashboardPage() {
         setLoadingPrices(false)
       }
     },
-    []
+    [token]
   )
 
   // Handle "Find similar" click - navigate to search with caliber filter

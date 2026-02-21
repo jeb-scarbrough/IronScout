@@ -197,44 +197,48 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
           <Label className="text-xs text-muted-foreground">Performance Characteristics</Label>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <Label htmlFor="filter-subsonic" className="flex items-center gap-2 cursor-pointer">
               <VolumeX className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Subsonic</span>
-            </div>
+            </Label>
             <Switch
+              id="filter-subsonic"
               checked={filters.isSubsonic}
               onCheckedChange={(checked) => applyFilter('isSubsonic', checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <Label htmlFor="filter-short-barrel" className="flex items-center gap-2 cursor-pointer">
               <Gauge className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Short Barrel Optimized</span>
-            </div>
+            </Label>
             <Switch
+              id="filter-short-barrel"
               checked={filters.shortBarrelOptimized}
               onCheckedChange={(checked) => applyFilter('shortBarrelOptimized', checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <Label htmlFor="filter-low-flash" className="flex items-center gap-2 cursor-pointer">
               <Eye className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Low Flash</span>
-            </div>
+            </Label>
             <Switch
+              id="filter-low-flash"
               checked={filters.lowFlash}
               onCheckedChange={(checked) => applyFilter('lowFlash', checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <Label htmlFor="filter-match-grade" className="flex items-center gap-2 cursor-pointer">
               <Crosshair className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Match Grade</span>
-            </div>
+            </Label>
             <Switch
+              id="filter-match-grade"
               checked={filters.matchGrade}
               onCheckedChange={(checked) => applyFilter('matchGrade', checked)}
             />

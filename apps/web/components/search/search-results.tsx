@@ -180,12 +180,16 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
                   variant="outline"
                   size="sm"
                   disabled={page <= 1}
-                  asChild
+                  asChild={page > 1}
                 >
-                  <a href={`/search?${new URLSearchParams({ ...params, page: (page - 1).toString() })}`}>
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    Previous
-                  </a>
+                  {page > 1 ? (
+                    <a href={`/search?${new URLSearchParams({ ...params, page: (page - 1).toString() })}`}>
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Previous
+                    </a>
+                  ) : (
+                    <span><ChevronLeft className="h-4 w-4 mr-1" />Previous</span>
+                  )}
                 </Button>
 
                 <div className="flex items-center space-x-1">
@@ -226,12 +230,16 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
                   variant="outline"
                   size="sm"
                   disabled={page >= totalPages}
-                  asChild
+                  asChild={page < totalPages}
                 >
-                  <a href={`/search?${new URLSearchParams({ ...params, page: (page + 1).toString() })}`}>
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </a>
+                  {page < totalPages ? (
+                    <a href={`/search?${new URLSearchParams({ ...params, page: (page + 1).toString() })}`}>
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </a>
+                  ) : (
+                    <span>Next<ChevronRight className="h-4 w-4 ml-1" /></span>
+                  )}
                 </Button>
               </div>
             )
