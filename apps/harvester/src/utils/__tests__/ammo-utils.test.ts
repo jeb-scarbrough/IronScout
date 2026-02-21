@@ -271,6 +271,50 @@ describe('extractRoundCount - comma-separated numbers', () => {
 })
 
 // ============================================================================
+// /BX ROUND COUNT PATTERN
+// ============================================================================
+
+describe('extractRoundCount - /bx shorthand', () => {
+  it.each([
+    ['V-Match 6.5 Creedmoor 100gr ELD-VT 20/bx', 20],
+    ['Premier STS 12ga 2-3/4" 1-1/8oz 50/Bx', 50],
+    ['Federal Top Gun 12ga 25/bx', 25],
+  ])('extracts round count from "%s" → %s', (input, expected) => {
+    expect(extractRoundCount(input)).toBe(expected)
+  })
+})
+
+// ============================================================================
+// PRODUCT LINE → BRAND MAPPING
+// ============================================================================
+
+describe('extractBrand - product line brand mappings', () => {
+  it.each([
+    ['V-Match 6.5 Creedmoor 100gr ELD-VT 20/bx', 'Hornady'],
+    ['Premier STS 12ga 2-3/4" 1-1/8oz 50/Bx', 'Remington'],
+    ['Top Gun 12ga 2-3/4" 1-1/8oz #8 25/bx', 'Federal'],
+    ['Deer Season XP .308 Win 150gr Poly Tip 20/box', 'Winchester'],
+    ['USA White Box 9mm 115gr FMJ 50/box', 'Winchester'],
+    ['Game Load Upland 12ga 2-3/4" 1oz #8 25/bx', 'Federal'],
+    ['AA Sporting Clays 12ga 2-3/4" 1-1/8oz #8 25/bx', 'Winchester'],
+    ['AA Heavy Target 12ga 2-3/4" 1-1/8oz #8 25/bx', 'Winchester'],
+    ['Gold Medal .308 Win 168gr BTHP 20/box', 'Federal'],
+    ['Shooting Dynamics 9mm 115gr FMJ 50/box', 'Fiocchi'],
+    ['Long Beard XR 12ga 3" 1-3/4oz #5 10/box', 'Winchester'],
+    ['Xpert Game 12ga 2-3/4" 1oz #6 25/bx', 'Winchester'],
+    ['American Whitetail .30-06 150gr SP 20/box', 'Hornady'],
+    ['Gun Club Target 12ga 2-3/4" 1-1/8oz #8 25/bx', 'Federal'],
+    ['Dove & Quail 12ga 2-3/4" 1oz #8 25/bx', 'Federal'],
+    ['Golden Pheasant 12ga 2-3/4" 1-3/8oz #5 25/bx', 'Fiocchi'],
+    ['Hi-Bird 12ga 2-3/4" 1-1/4oz #7.5 25/bx', 'Federal'],
+    ['UMC .45 ACP 230gr FMJ 50/box', 'Remington'],
+    ['Challenger Target 12ga 2-3/4" 1oz #8 25/bx', 'Challenger'],
+  ])('extracts brand from "%s" → %s', (input, expected) => {
+    expect(extractBrand(input)).toBe(expected)
+  })
+})
+
+// ============================================================================
 // GRAIN EDGE CASE
 // ============================================================================
 

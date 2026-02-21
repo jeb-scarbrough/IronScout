@@ -482,6 +482,7 @@ export function extractRoundCount(productName: string): number | null {
     /(\d[\d,]*)\s?(?:rd|round)s?\s?range\s?pack/i,
     // Box/pack shorthand patterns
     /(\d[\d,]*)\/box\b/i,                        // "20/box"
+    /(\d[\d,]*)\/bx\b/i,                         // "20/bx", "50/Bx"
     /(?:pk|pack)\s?of\s?(\d[\d,]*)/i,            // "pk of 20", "pack of 20"
     /(\d[\d,]*)\s?-?\s?pk\b/i,                   // "20pk", "20-pk", "20 pk"
     /(\d[\d,]*)\s?-?\s?pack\b/i,                 // "20-pack", "20 pack"
@@ -557,6 +558,7 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bblazer\b/i, normalized: 'Blazer' },
   { pattern: /\bbrowning\b/i, normalized: 'Browning' },
   { pattern: /\bcbc\b/i, normalized: 'CBC' },
+  { pattern: /\bchallenger\b/i, normalized: 'Challenger' },
   { pattern: /\bcci\b/i, normalized: 'CCI' },
   { pattern: /\bcor-?bon\b/i, normalized: 'CorBon' },
   { pattern: /\belen\b/i, normalized: 'Eley' },
@@ -613,6 +615,24 @@ const KNOWN_BRANDS: Array<{ pattern: RegExp; normalized: string }> = [
   { pattern: /\bsuper-?x\b/i, normalized: 'Winchester' },
   { pattern: /\bsupernova\b/i, normalized: 'Piney Mountain' },
   { pattern: /\bsuperformance\b/i, normalized: 'Hornady' },
+  { pattern: /\bv-?match\b/i, normalized: 'Hornady' },
+  { pattern: /\bpremier\s*sts\b/i, normalized: 'Remington' },
+  { pattern: /\btop\s*gun\b/i, normalized: 'Federal' },
+  { pattern: /\bdeer\s*season\s*xp\b/i, normalized: 'Winchester' },
+  { pattern: /\busa\s*white\s*box\b/i, normalized: 'Winchester' },
+  { pattern: /\bgame\s*load\s*upland\b/i, normalized: 'Federal' },
+  { pattern: /\baa\s*sporting\s*clays\b/i, normalized: 'Winchester' },
+  { pattern: /\baa\s*heavy\s*target\b/i, normalized: 'Winchester' },
+  { pattern: /\bgold\s*medal\b/i, normalized: 'Federal' },
+  { pattern: /\bshooting\s*dynamics\b/i, normalized: 'Fiocchi' },
+  { pattern: /\blong\s*beard\s*xr\b/i, normalized: 'Winchester' },
+  { pattern: /\bxpert\s*game\b/i, normalized: 'Winchester' },
+  { pattern: /\bamerican\s*whitetail\b/i, normalized: 'Hornady' },
+  { pattern: /\bgun\s*club\s*target\b/i, normalized: 'Federal' },
+  { pattern: /\bdove\s*[&and]+\s*quail\b/i, normalized: 'Federal' },
+  { pattern: /\bgolden\s*pheasant\b/i, normalized: 'Fiocchi' },
+  { pattern: /\bhi-?bird\b/i, normalized: 'Federal' },
+  { pattern: /\bumc\b/i, normalized: 'Remington' },
 
   // Country-of-origin pseudo-brands (military surplus ammo)
   // Placed last so real brands always take precedence
