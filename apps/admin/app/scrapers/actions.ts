@@ -12,6 +12,7 @@ import { prisma, Prisma } from '@ironscout/db'
 import { revalidatePath } from 'next/cache'
 import { getAdminSession, logAdminAction } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
+import { resolveSourceAdapterId } from '@/lib/scraper-adapter-status'
 import { KNOWN_ADAPTERS } from '@/lib/scraper-constants'
 import { createRedisClient } from '@ironscout/redis'
 import CronParser from 'cron-parser'
@@ -1348,12 +1349,13 @@ export async function updateSourceScrapeConfig(
       return { success: false, error: 'Source not found' }
     }
 
-    // Validate adapterId if provided
-    if (data.adapterId !== undefined && data.adapterId !== null) {
-      const validAdapter = KNOWN_ADAPTERS.find((a) => a.id === data.adapterId)
-      if (!validAdapter) {
-        return { success: false, error: `Invalid adapter: ${data.adapterId}` }
+    let resolvedAdapterId = existing.adapterId
+    if (data.adapterId !== undefined) {
+      const adapterResolution = await resolveSourceAdapterId(data.adapterId)
+      if (adapterResolution.error) {
+        return { success: false, error: adapterResolution.error }
       }
+      resolvedAdapterId = adapterResolution.adapterId
     }
 
     const now = new Date()
@@ -1363,7 +1365,7 @@ export async function updateSourceScrapeConfig(
       where: { id: sourceId },
       data: {
         scrapeEnabled: data.scrapeEnabled ?? existing.scrapeEnabled,
-        adapterId: data.adapterId !== undefined ? data.adapterId : existing.adapterId,
+        adapterId: resolvedAdapterId,
         robotsCompliant: data.robotsCompliant ?? existing.robotsCompliant,
         ...(shouldStampTos && {
           tosReviewedAt: existing.tosReviewedAt ?? now,

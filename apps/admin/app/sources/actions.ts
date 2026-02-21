@@ -4,6 +4,7 @@ import { prisma, Prisma } from '@ironscout/db';
 import { revalidatePath } from 'next/cache';
 import { getAdminSession, logAdminAction } from '@/lib/auth';
 import { loggers } from '@/lib/logger';
+import { resolveSourceAdapterId } from '@/lib/scraper-adapter-status';
 
 // =============================================================================
 // Types
@@ -308,6 +309,11 @@ export async function createSource(data: CreateSourceInput) {
       return { success: false, error: 'Retailer not found' };
     }
 
+    const adapterResolution = await resolveSourceAdapterId(data.adapterId);
+    if (adapterResolution.error) {
+      return { success: false, error: adapterResolution.error };
+    }
+
     // Create the source
     const source = await prisma.sources.create({
       data: {
@@ -318,7 +324,7 @@ export async function createSource(data: CreateSourceInput) {
         enabled: data.enabled ?? true,
         interval: data.interval ?? 3600,
         scrapeEnabled: data.scrapeEnabled ?? false,
-        adapterId: data.adapterId || null,
+        adapterId: adapterResolution.adapterId,
         scrapeConfig: data.scrapeConfig as Prisma.InputJsonValue | undefined,
       },
     });
@@ -379,7 +385,13 @@ export async function updateSource(id: string, data: UpdateSourceInput) {
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
     if (data.interval !== undefined) updateData.interval = data.interval;
     if (data.scrapeEnabled !== undefined) updateData.scrapeEnabled = data.scrapeEnabled;
-    if (data.adapterId !== undefined) updateData.adapterId = data.adapterId || null;
+    if (data.adapterId !== undefined) {
+      const adapterResolution = await resolveSourceAdapterId(data.adapterId);
+      if (adapterResolution.error) {
+        return { success: false, error: adapterResolution.error };
+      }
+      updateData.adapterId = adapterResolution.adapterId;
+    }
     if (data.scrapeConfig !== undefined) updateData.scrapeConfig = data.scrapeConfig as Prisma.InputJsonValue | undefined;
 
     const source = await prisma.sources.update({

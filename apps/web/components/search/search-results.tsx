@@ -161,66 +161,81 @@ export async function SearchResults({ searchParams }: SearchResultsProps) {
           <SearchResultsGridV2 products={products} />
 
           {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center space-x-2 mt-8">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                asChild
-              >
-                <a href={`/search?${new URLSearchParams({ 
-                  ...Object.fromEntries(
-                    Object.entries(searchParams).filter(([_, v]) => v !== undefined) as [string, string][]
-                  ), 
-                  page: (page - 1).toString() 
-                })}`}>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Previous
-                </a>
-              </Button>
-              
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                  const pageNum = i + 1
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={page === pageNum ? "default" : "outline"}
-                      size="sm"
-                      asChild
-                    >
-                      <a href={`/search?${new URLSearchParams({ 
-                        ...Object.fromEntries(
-                          Object.entries(searchParams).filter(([_, v]) => v !== undefined) as [string, string][]
-                        ), 
-                        page: pageNum.toString() 
-                      })}`}>
-                        {pageNum}
-                      </a>
-                    </Button>
-                  )
-                })}
-              </div>
+          {(pagination.totalPages > 1 || page > 1) && (() => {
+            const totalPages = Math.max(pagination.totalPages, page)
+            const maxVisible = 5
+            const half = Math.floor(maxVisible / 2)
+            let start = Math.max(1, page - half)
+            let end = start + maxVisible - 1
+            if (end > totalPages) {
+              end = totalPages
+              start = Math.max(1, end - maxVisible + 1)
+            }
+            const params = Object.fromEntries(
+              Object.entries(searchParams).filter(([_, v]) => v !== undefined) as [string, string][]
+            )
+            return (
+              <div className="flex items-center justify-center space-x-2 mt-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  asChild
+                >
+                  <a href={`/search?${new URLSearchParams({ ...params, page: (page - 1).toString() })}`}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </a>
+                </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= pagination.totalPages}
-                asChild
-              >
-                <a href={`/search?${new URLSearchParams({ 
-                  ...Object.fromEntries(
-                    Object.entries(searchParams).filter(([_, v]) => v !== undefined) as [string, string][]
-                  ), 
-                  page: (page + 1).toString() 
-                })}`}>
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </a>
-              </Button>
-            </div>
-          )}
+                <div className="flex items-center space-x-1">
+                  {start > 1 && (
+                    <>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/search?${new URLSearchParams({ ...params, page: '1' })}`}>1</a>
+                      </Button>
+                      {start > 2 && <span className="px-1 text-muted-foreground">...</span>}
+                    </>
+                  )}
+                  {Array.from({ length: end - start + 1 }, (_, i) => {
+                    const pageNum = start + i
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? "default" : "outline"}
+                        size="sm"
+                        asChild
+                      >
+                        <a href={`/search?${new URLSearchParams({ ...params, page: pageNum.toString() })}`}>
+                          {pageNum}
+                        </a>
+                      </Button>
+                    )
+                  })}
+                  {end < totalPages && (
+                    <>
+                      {end < totalPages - 1 && <span className="px-1 text-muted-foreground">...</span>}
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`/search?${new URLSearchParams({ ...params, page: totalPages.toString() })}`}>{totalPages}</a>
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  asChild
+                >
+                  <a href={`/search?${new URLSearchParams({ ...params, page: (page + 1).toString() })}`}>
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </a>
+                </Button>
+              </div>
+            )
+          })()}
 
           {/* Soft closing nudge - captures hesitant users without pressure */}
           <div className="mt-10 text-center">

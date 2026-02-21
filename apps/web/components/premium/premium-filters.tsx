@@ -14,12 +14,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 
 // Bullet type options grouped by category
 const BULLET_TYPE_OPTIONS = [
@@ -119,19 +113,6 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
     router.push(`/search?${params.toString()}`)
   }
 
-  const FilterWrapper = ({ children }: { children: React.ReactNode; label: string }) => (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div>{children}</div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="text-sm">Filter option</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )
-
   return (
     <div className={className}>
       {/* Header */}
@@ -159,146 +140,106 @@ export function PremiumFilters({ className }: PremiumFiltersProps) {
 
       <div className="space-y-4">
         {/* Bullet Type */}
-        <FilterWrapper label="bullet type filter">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1.5 block">
-              Bullet Type
-            </Label>
-            <Select
-              value={filters.bulletType || '_all'}
-              onValueChange={(value) => applyFilter('bulletType', value === '_all' ? '' : value)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="All types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">All types</SelectItem>
-                {BULLET_TYPE_OPTIONS.map((group) => (
-                  <div key={group.category}>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
-                      {group.category}
-                    </div>
-                    {group.options.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">
+            Bullet Type
+          </Label>
+          <Select
+            value={filters.bulletType || '_all'}
+            onValueChange={(value) => applyFilter('bulletType', value === '_all' ? '' : value)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All types</SelectItem>
+              {BULLET_TYPE_OPTIONS.map((group) => (
+                <div key={group.category}>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
+                    {group.category}
                   </div>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </FilterWrapper>
+                  {group.options.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </div>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Pressure Rating */}
-        <FilterWrapper label="pressure rating filter">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1.5 block">
-              Pressure Rating
-            </Label>
-            <Select
-              value={filters.pressureRating || '_all'}
-              onValueChange={(value) => applyFilter('pressureRating', value === '_all' ? '' : value)}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="All pressures" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">All pressures</SelectItem>
-                {PRESSURE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </FilterWrapper>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">
+            Pressure Rating
+          </Label>
+          <Select
+            value={filters.pressureRating || '_all'}
+            onValueChange={(value) => applyFilter('pressureRating', value === '_all' ? '' : value)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="All pressures" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All pressures</SelectItem>
+              {PRESSURE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Performance Toggles */}
         <div className="space-y-3 pt-2">
           <Label className="text-xs text-muted-foreground">Performance Characteristics</Label>
-          
-          <FilterWrapper label="subsonic filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <VolumeX className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Subsonic</span>
-              </div>
-              <Switch
-                checked={filters.isSubsonic}
-                onCheckedChange={(checked) => applyFilter('isSubsonic', checked)}
-              />
-            </div>
-          </FilterWrapper>
 
-          <FilterWrapper label="short barrel filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Gauge className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Short Barrel Optimized</span>
-              </div>
-              <Switch
-                checked={filters.shortBarrelOptimized}
-                onCheckedChange={(checked) => applyFilter('shortBarrelOptimized', checked)}
-              />
-            </div>
-          </FilterWrapper>
-
-          <FilterWrapper label="low flash filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Low Flash</span>
-              </div>
-              <Switch
-                checked={filters.lowFlash}
-                onCheckedChange={(checked) => applyFilter('lowFlash', checked)}
-              />
-            </div>
-          </FilterWrapper>
-
-          <FilterWrapper label="match grade filter">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Crosshair className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Match Grade</span>
-              </div>
-              <Switch
-                checked={filters.matchGrade}
-                onCheckedChange={(checked) => applyFilter('matchGrade', checked)}
-              />
-            </div>
-          </FilterWrapper>
-        </div>
-
-        {/* Velocity Range - Future enhancement */}
-        {/* <FilterWrapper label="velocity range filter">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1.5 block">
-              Muzzle Velocity (fps)
-            </Label>
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <input
-                type="number"
-                placeholder="Min"
-                value={filters.minVelocity}
-                onChange={(e) => applyFilter('minVelocity', e.target.value)}
-                
-                className="w-full h-9 px-3 text-sm border rounded-md"
-              />
-              <span className="text-muted-foreground">-</span>
-              <input
-                type="number"
-                placeholder="Max"
-                value={filters.maxVelocity}
-                onChange={(e) => applyFilter('maxVelocity', e.target.value)}
-                
-                className="w-full h-9 px-3 text-sm border rounded-md"
-              />
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Subsonic</span>
             </div>
+            <Switch
+              checked={filters.isSubsonic}
+              onCheckedChange={(checked) => applyFilter('isSubsonic', checked)}
+            />
           </div>
-        </FilterWrapper> */}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Short Barrel Optimized</span>
+            </div>
+            <Switch
+              checked={filters.shortBarrelOptimized}
+              onCheckedChange={(checked) => applyFilter('shortBarrelOptimized', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Low Flash</span>
+            </div>
+            <Switch
+              checked={filters.lowFlash}
+              onCheckedChange={(checked) => applyFilter('lowFlash', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Match Grade</span>
+            </div>
+            <Switch
+              checked={filters.matchGrade}
+              onCheckedChange={(checked) => applyFilter('matchGrade', checked)}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
