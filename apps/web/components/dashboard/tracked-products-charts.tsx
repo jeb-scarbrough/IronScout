@@ -1,36 +1,52 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getUserAlerts, getProductPriceHistory, type Alert as AlertType, PriceHistory } from '@/lib/api'
+import { refreshSessionToken } from '@/hooks/use-session-refresh'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { TrendingDown, TrendingUp, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { safeLogger } from '@/lib/safe-logger'
 
 export function TrackedProductsCharts() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
+  const token = session?.accessToken
   const [alerts, setAlerts] = useState<AlertType[]>([])
   const [priceData, setPriceData] = useState<Record<string, PriceHistory>>({})
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchData()
-    }
-  }, [session])
+  const fetchData = useCallback(async () => {
+    if (status === 'loading') return
 
-  const fetchData = async () => {
-    if (!session?.user?.id) return
+    if (status === 'unauthenticated') {
+      setAlerts([])
+      setPriceData({})
+      setLoading(false)
+      return
+    }
+
+    let authToken: string | undefined = token
+    if (!authToken) {
+      const refreshed = await refreshSessionToken()
+      if (refreshed) authToken = refreshed
+    }
+
+    if (!authToken) {
+      setAlerts([])
+      setPriceData({})
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
 
       // Get active alerts
-      const userAlerts = await getUserAlerts(session.user.id, true)
+      const userAlerts = await getUserAlerts(authToken, true)
 
       // Take top 3 most recent alerts
       const topAlerts = userAlerts.slice(0, 3)
@@ -49,10 +65,16 @@ export function TrackedProductsCharts() {
       setPriceData(histories)
     } catch (error) {
       safeLogger.dashboard.error('Failed to fetch tracked products', {}, error)
+      setAlerts([])
+      setPriceData({})
     } finally {
       setLoading(false)
     }
-  }
+  }, [status, token])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   if (loading) {
     return (

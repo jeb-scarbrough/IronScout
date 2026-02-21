@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { getUserAlerts } from '@/lib/api'
+import { refreshSessionToken } from '@/hooks/use-session-refresh'
 import { safeLogger } from '@/lib/safe-logger'
 
 export interface DashboardStats {
@@ -20,7 +21,8 @@ export interface UseDashboardStatsResult {
 }
 
 export function useDashboardStats(): UseDashboardStatsResult {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
+  const token = session?.accessToken
   const [stats, setStats] = useState<DashboardStats>({
     activeAlerts: 0,
     triggeredAlerts: 0,
@@ -30,16 +32,31 @@ export function useDashboardStats(): UseDashboardStatsResult {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStats = async () => {
-    if (!session?.user?.id) {
+  const fetchStats = useCallback(async () => {
+    if (status === 'loading') return
+
+    if (status === 'unauthenticated') {
       setLoading(false)
+      setError(null)
+      return
+    }
+
+    let authToken: string | undefined = token
+    if (!authToken) {
+      const refreshed = await refreshSessionToken()
+      if (refreshed) authToken = refreshed
+    }
+
+    if (!authToken) {
+      setLoading(false)
+      setError('Failed to load dashboard stats')
       return
     }
 
     try {
       setLoading(true)
       setError(null)
-      const alerts = await getUserAlerts(session.user.id, false)
+      const alerts = await getUserAlerts(authToken, false)
 
       const activeCount = alerts.filter(a => a.isActive).length
       const triggeredCount = alerts.filter(a => {
@@ -65,13 +82,11 @@ export function useDashboardStats(): UseDashboardStatsResult {
     } finally {
       setLoading(false)
     }
-  }
+  }, [status, token])
 
   useEffect(() => {
-    if (session?.user?.id) {
-      fetchStats()
-    }
-  }, [session])
+    fetchStats()
+  }, [fetchStats])
 
   return { stats, loading, error, refetch: fetchStats }
 }
