@@ -1,0 +1,10 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+
+[allowlist]
+  # Scraper test fixtures are raw HTML captured from retailer product pages.
+  # They contain the retailer's own public client-side keys (Google Maps,
+  # Application Insights, Hawk Search, etc.) — not IronScout secrets.
+  paths = [
+    '''apps/harvester/src/ingestion/scrape/sites/.*/fixtures/.*\.html''',
+  ]
