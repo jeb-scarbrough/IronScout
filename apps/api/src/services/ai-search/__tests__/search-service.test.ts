@@ -22,6 +22,9 @@ vi.mock('@ironscout/db', () => ({
       groupBy: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
+    current_visible_prices: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     $queryRawUnsafe: vi.fn().mockResolvedValue([]),
     $disconnect: vi.fn(),
   },
@@ -158,6 +161,26 @@ function createProduct(overrides: Partial<any> = {}): any {
     ],
     ...overrides,
   }
+}
+
+function hasIdInConstraint(node: unknown, expectedId: string): boolean {
+  if (Array.isArray(node)) {
+    return node.some((value) => hasIdInConstraint(value, expectedId))
+  }
+  if (!node || typeof node !== 'object') {
+    return false
+  }
+
+  const record = node as Record<string, unknown>
+  const idValue = record.id
+  if (idValue && typeof idValue === 'object' && !Array.isArray(idValue)) {
+    const idConstraint = idValue as { in?: unknown }
+    if (Array.isArray(idConstraint.in) && idConstraint.in.includes(expectedId)) {
+      return true
+    }
+  }
+
+  return Object.values(record).some((value) => hasIdInConstraint(value, expectedId))
 }
 
 // =============================================
@@ -1149,6 +1172,68 @@ describe('aiSearch stock filtering with lens enabled', () => {
 
     expect(mockApplyLensPipeline).toHaveBeenCalled()
     expect(result.products).toHaveLength(0)
+  })
+})
+
+describe('aiSearch inStock candidate prefilter', () => {
+  let mockFindMany: ReturnType<typeof vi.fn>
+  let mockGroupBy: ReturnType<typeof vi.fn>
+  let mockCount: ReturnType<typeof vi.fn>
+  let mockCurrentVisiblePricesFindMany: ReturnType<typeof vi.fn>
+  let mockBatchGetPricesWithConfidence: ReturnType<typeof vi.fn>
+  let mockApplyPremiumRanking: ReturnType<typeof vi.fn>
+
+  beforeEach(async () => {
+    const { prisma } = await import('@ironscout/db')
+    mockFindMany = prisma.products.findMany as ReturnType<typeof vi.fn>
+    mockGroupBy = prisma.products.groupBy as ReturnType<typeof vi.fn>
+    mockCount = prisma.products.count as ReturnType<typeof vi.fn>
+    mockCurrentVisiblePricesFindMany = prisma.current_visible_prices.findMany as ReturnType<typeof vi.fn>
+
+    const { batchGetPricesWithConfidence } = await import('../price-resolver')
+    mockBatchGetPricesWithConfidence = batchGetPricesWithConfidence as ReturnType<typeof vi.fn>
+
+    const { applyPremiumRanking } = await import('../premium-ranking')
+    mockApplyPremiumRanking = applyPremiumRanking as ReturnType<typeof vi.fn>
+
+    mockFindMany.mockResolvedValue([
+      createProduct({
+        id: 'p-in-stock',
+        name: 'In Stock Product',
+      }),
+    ])
+    mockGroupBy.mockResolvedValue([])
+    mockCount.mockResolvedValue(1)
+    mockCurrentVisiblePricesFindMany.mockResolvedValue([{ productId: 'p-in-stock' }])
+    mockBatchGetPricesWithConfidence.mockResolvedValue({
+      pricesMap: new Map([
+        ['p-in-stock', [{ id: 'pr-in', price: 19.99, inStock: true, retailers: { id: 'r-1', name: 'Retailer 1', tier: 'PREMIUM' } }]],
+      ]),
+      confidenceMap: new Map([['p-in-stock', 0.91]]),
+    })
+    mockApplyPremiumRanking.mockImplementation((products: any[]) => products)
+  })
+
+  it('pre-constrains product candidates by in-stock price rows before pagination', async () => {
+    await aiSearch('9mm', {
+      useVectorSearch: false,
+      explicitFilters: { inStock: true },
+    })
+
+    expect(mockCurrentVisiblePricesFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ inStock: true }),
+        distinct: ['productId'],
+      })
+    )
+
+    const whereClauses = [
+      ...mockFindMany.mock.calls.map((call) => call?.[0]?.where),
+      ...mockCount.mock.calls.map((call) => call?.[0]?.where),
+    ].filter(Boolean)
+
+    expect(whereClauses.length).toBeGreaterThan(0)
+    expect(whereClauses.some((where) => hasIdInConstraint(where, 'p-in-stock'))).toBe(true)
   })
 })
 

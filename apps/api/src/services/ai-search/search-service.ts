@@ -310,9 +310,13 @@ export async function aiSearch(
   })
 
   // 4. Build price/stock conditions
-  // Note: These are applied AFTER fetching products since prices come via product_links
-  // (Spec v1.2 §0.0: prices.productId is denormalized, query through product_links)
+  // These are still applied post-fetch to returned price rows, but we also pre-filter
+  // product candidates via current_visible_prices to keep pagination consistent.
   const priceConditions = buildPriceConditions(mergedIntent, explicitFilters)
+
+  // Pre-filter product candidates for explicit stock/price predicates so pagination
+  // doesn't hide valid matches before post-fetch price filtering runs.
+  await applyPriceCandidateFilter(where, priceConditions)
 
   // 5. Fetch products - use vector search if enabled and sorting by relevance
   const skip = (page - 1) * limit
@@ -1200,6 +1204,68 @@ function buildPriceConditions(intent: SearchIntent, explicitFilters: ExplicitFil
   }
 
   return conditions
+}
+
+/**
+ * Pre-filter products by price predicates using current_visible_prices.
+ *
+ * Why this exists:
+ * - inStock/min/max filters were previously applied only after product pagination.
+ * - That could drop all results even when matching products existed outside the
+ *   initial page window.
+ *
+ * This function narrows the product candidate set before pagination so explicit
+ * price filters remain consistent with user expectations.
+ */
+async function applyPriceCandidateFilter(where: any, priceConditions: any): Promise<void> {
+  const hasStockFilter = priceConditions.inStock === true
+  const hasPriceRange =
+    priceConditions.price?.gte !== undefined || priceConditions.price?.lte !== undefined
+
+  if (!hasStockFilter && !hasPriceRange) {
+    return
+  }
+
+  const cvpWhere: any = {
+    productId: { not: null },
+  }
+
+  if (hasStockFilter) {
+    cvpWhere.inStock = true
+  }
+
+  if (hasPriceRange) {
+    cvpWhere.visiblePrice = {}
+    if (priceConditions.price?.gte !== undefined) {
+      cvpWhere.visiblePrice.gte = priceConditions.price.gte
+    }
+    if (priceConditions.price?.lte !== undefined) {
+      cvpWhere.visiblePrice.lte = priceConditions.price.lte
+    }
+  }
+
+  const rows = await prisma.current_visible_prices.findMany({
+    where: cvpWhere,
+    select: { productId: true },
+    distinct: ['productId'],
+  })
+
+  const matchingProductIds = rows
+    .map((row: { productId: string | null }) => row.productId)
+    .filter((id): id is string => !!id)
+
+  // Empty IN-lists are not guaranteed across dialects, so use an impossible ID sentinel.
+  if (matchingProductIds.length === 0) {
+    addCondition(where, { id: { in: ['__no_matching_products__'] } })
+  } else {
+    addCondition(where, { id: { in: matchingProductIds } })
+  }
+
+  log.debug('SEARCH_PRICE_CANDIDATE_FILTER', {
+    hasStockFilter,
+    hasPriceRange,
+    candidateCount: matchingProductIds.length,
+  })
 }
 
 /**

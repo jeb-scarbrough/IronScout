@@ -153,6 +153,7 @@ const SAFE_FIELDS = new Set([
     'caliber', 'brand', 'category', 'purpose', 'tier',
     'count', 'total', 'page', 'limit', 'offset',
     'query', 'sortBy', 'sort_by', 'filter', 'filters',
+    'availability', 'reason', 'reasonCode', 'domain',
     // Scheduling / worker metrics
     'intervalMs', 'timeoutMs', 'maxAttempts', 'attempt', 'attempts',
     'concurrency', 'queueName', 'resolverVersion', 'workflow', 'stage', 'maxStalledCount',
@@ -163,6 +164,7 @@ const SAFE_FIELDS = new Set([
     'feedSchedule', 'benchmarkSchedule', 'openaiConfigured',
     'totalStale', 'markedStale', 'deletedBroken', 'brokenRechecked',
     'brokenReactivated', 'staleQueueRemoved',
+    'pendingCount', 'batchSize', 'enqueuedCount', 'rejectedCount', 'claimedCount', 'tickDurationMs',
     // Recompute job metrics / labels
     'scope', 'triggeredBy', 'lookbackDays', 'inserted', 'deleted',
     // Metrics object fields
