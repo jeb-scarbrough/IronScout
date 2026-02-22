@@ -1,43 +1,42 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { Bookmark, ChevronUp, ChevronDown } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { Bookmark, ChevronUp, ChevronDown, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { trackTrackToggle } from '@/lib/analytics'
+import { trackTrackToggle, trackRetailerClick, extractDomain } from '@/lib/analytics'
 import { toast } from 'sonner'
-import type { ResultRowV2Props } from './types'
+import type { ResultRowV2Props, RetailerPrice } from './types'
 import { formatPrice, truncate } from './types'
 import { BADGE_CONFIG } from '@/lib/api'
 import type { PerformanceBadge } from '@/lib/api'
 
-/**
- * ResultRowV2 - Dense table row for grid view
- *
- * Per search-results-ux-spec.md:
- * - Shows retailer count, not single retailer
- * - lowestPricePerRound is the lowest in-stock price
- * - Compare button opens panel
- * - No recommendation language
- */
 /** Max performance badges to show inline in grid */
 const MAX_GRID_BADGES = 2
+
+/** Max retailers in hover preview */
+const MAX_HOVER_RETAILERS = 3
+
+/** Delay before showing hover preview (ms) */
+const HOVER_DELAY = 400
 
 export function ResultRowV2({
   id,
   productTitle,
   caliber,
   brand,
+  bulletType,
   grainWeight,
+  caseMaterial,
   roundCount,
   badges,
+  retailers,
   lowestPricePerRound,
   retailerCount,
   anyInStock,
@@ -46,19 +45,28 @@ export function ResultRowV2({
   onCompareClick,
 }: ResultRowV2Props) {
   const [watchingOptimistic, setWatchingOptimistic] = useState(isWatched)
+  const [showPreview, setShowPreview] = useState(false)
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rowRef = useRef<HTMLTableRowElement>(null)
 
   useEffect(() => {
     setWatchingOptimistic(isWatched)
   }, [isWatched])
 
-  const handleWatchToggle = useCallback(async () => {
+  // Cleanup hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    }
+  }, [])
+
+  const handleWatchToggle = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
     const nextState = !watchingOptimistic
 
-    // Optimistically update UI
     setWatchingOptimistic(nextState)
     trackTrackToggle(id, nextState)
 
-    // Await parent handler — it handles auth checks and API calls
     const success = await onWatchToggle(id)
 
     if (success) {
@@ -75,22 +83,44 @@ export function ResultRowV2({
         toast.success('Removed from watchlist', { duration: 2000 })
       }
     } else {
-      // Revert optimistic state on failure
       setWatchingOptimistic(!nextState)
     }
   }, [id, watchingOptimistic, onWatchToggle])
 
-  const handleCompareClick = useCallback(() => {
+  const handleRowClick = useCallback(() => {
     onCompareClick(id)
   }, [id, onCompareClick])
 
-  // Determine CTA text
-  const ctaText = retailerCount === 1 ? 'View' : 'Compare'
+  // Hover preview handlers
+  const handleMouseEnter = useCallback(() => {
+    hoverTimeout.current = setTimeout(() => setShowPreview(true), HOVER_DELAY)
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    setShowPreview(false)
+  }, [])
+
+  // Sorted retailers for hover preview
+  const sortedRetailers = useMemo(() => {
+    const inStock = retailers.filter((r) => r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    const oos = retailers.filter((r) => !r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    return [...inStock, ...oos]
+  }, [retailers])
+
+  // First retailer name for single-retailer display
+  const singleRetailerName = retailerCount === 1 && retailers.length > 0
+    ? retailers[0].retailerName
+    : null
 
   return (
     <tr
+      ref={rowRef}
+      onClick={handleRowClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={cn(
-        'border-b border-border hover:bg-muted/50 transition-colors',
+        'border-b border-border hover:bg-muted/50 transition-colors cursor-pointer relative',
         !anyInStock && 'opacity-60'
       )}
     >
@@ -107,7 +137,7 @@ export function ResultRowV2({
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="font-medium text-foreground cursor-default leading-snug">
+                <span className="font-medium text-foreground cursor-pointer leading-snug">
                   {truncate(productTitle, 50)}
                 </span>
               </TooltipTrigger>
@@ -152,41 +182,31 @@ export function ResultRowV2({
         </span>
       </td>
 
-      {/* $/rd */}
+      {/* $/rd — stock status merged into price color */}
       <td className="py-3 px-4 text-right">
-        <span className="font-mono font-bold text-lg text-foreground">
+        <span className={cn(
+          'font-mono font-bold text-lg',
+          anyInStock
+            ? 'text-emerald-500 dark:text-emerald-400'
+            : 'text-muted-foreground line-through decoration-1'
+        )}>
           {formatPrice(lowestPricePerRound)}
         </span>
         <span className="text-xs text-muted-foreground ml-0.5">/rd</span>
       </td>
 
-      {/* Retailers */}
+      {/* Retailers — show name for single, count for multi */}
       <td className="py-3 px-4">
-        {retailerCount === 1 ? (
-          <span className="text-sm text-muted-foreground">1 retailer</span>
+        {singleRetailerName ? (
+          <span className="text-sm text-muted-foreground">{singleRetailerName}</span>
         ) : (
           <button
-            onClick={handleCompareClick}
+            onClick={(e) => { e.stopPropagation(); onCompareClick(id) }}
             className="text-sm text-primary hover:underline underline-offset-4"
           >
             {retailerCount} retailers
           </button>
         )}
-      </td>
-
-      {/* Stock */}
-      <td className="py-3 px-4 text-center">
-        <Badge
-          variant="outline"
-          className={cn(
-            'text-xs font-medium',
-            anyInStock
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'border-red-400 text-red-500 dark:text-red-400'
-          )}
-        >
-          {anyInStock ? 'In Stock' : 'Out'}
-        </Badge>
       </td>
 
       {/* Watch */}
@@ -214,18 +234,125 @@ export function ResultRowV2({
         </TooltipProvider>
       </td>
 
-      {/* Action */}
-      <td className="py-3 px-4">
-        <Button
-          onClick={handleCompareClick}
-          size="sm"
-          variant="outline"
-          className="h-8 text-xs"
-        >
-          {ctaText}
-        </Button>
-      </td>
+      {/* Hover Preview — positioned below the row */}
+      {showPreview && sortedRetailers.length > 0 && (
+        <td className="absolute left-0 right-0 top-full z-50 px-4 pointer-events-auto" colSpan={5}>
+          <HoverPreview
+            productTitle={productTitle}
+            caliber={caliber}
+            bulletType={bulletType}
+            grainWeight={grainWeight}
+            caseMaterial={caseMaterial}
+            roundCount={roundCount}
+            retailers={sortedRetailers.slice(0, MAX_HOVER_RETAILERS)}
+            productId={id}
+          />
+        </td>
+      )}
     </tr>
+  )
+}
+
+/**
+ * HoverPreview — Quick Glance floating card below grid row
+ */
+function HoverPreview({
+  productTitle,
+  caliber,
+  bulletType,
+  grainWeight,
+  caseMaterial,
+  roundCount,
+  retailers,
+  productId,
+}: {
+  productTitle: string
+  caliber: string
+  bulletType?: string
+  grainWeight?: number
+  caseMaterial?: string
+  roundCount?: number
+  retailers: RetailerPrice[]
+  productId: string
+}) {
+  const attrs = [
+    caliber,
+    grainWeight ? `${grainWeight}gr` : null,
+    bulletType,
+    caseMaterial,
+    roundCount && roundCount > 1 ? `${roundCount.toLocaleString()} rds` : null,
+  ].filter(Boolean)
+
+  const handleRetailerClick = useCallback((retailer: RetailerPrice) => {
+    if (!retailer.out_url) return
+    trackRetailerClick({
+      retailer: retailer.retailerName,
+      product_id: productId,
+      placement: 'hover_preview',
+      destination_domain: extractDomain(retailer.url),
+      price_per_round: retailer.pricePerRound,
+      price_total: retailer.totalPrice,
+      in_stock: retailer.inStock,
+    })
+    window.open(retailer.out_url, '_blank', 'noopener,noreferrer')
+  }, [productId])
+
+  return (
+    <div
+      className="bg-card border border-border rounded-lg shadow-lg p-4 mt-1 animate-in fade-in slide-in-from-top-1 duration-150"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Title + Attributes */}
+      <p className="font-semibold text-foreground text-sm leading-snug mb-0.5">
+        {productTitle}
+      </p>
+      <p className="text-xs text-muted-foreground mb-3">
+        {attrs.join(' \u00b7 ')}
+      </p>
+
+      {/* Retailer prices with direct buy links */}
+      <div className="space-y-2">
+        {retailers.map((r) => (
+          <div
+            key={r.retailerId}
+            className={cn(
+              'flex items-center justify-between gap-3 py-1.5 px-2 rounded',
+              r.inStock ? 'hover:bg-muted/50' : 'opacity-50'
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                r.inStock ? 'bg-emerald-500' : 'bg-red-400'
+              )} />
+              <span className="text-sm text-foreground truncate">{r.retailerName}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className={cn(
+                'font-mono font-bold text-sm',
+                r.inStock ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'
+              )}>
+                {formatPrice(r.pricePerRound)}/rd
+              </span>
+              {r.inStock && r.out_url && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleRetailerClick(r)
+                  }}
+                >
+                  Buy
+                  <ArrowUpRight className="h-3 w-3 ml-0.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -248,13 +375,7 @@ export function ResultRowV2Skeleton() {
         <div className="h-4 w-20 bg-muted rounded animate-pulse" />
       </td>
       <td className="py-3 px-4">
-        <div className="h-5 w-14 bg-muted rounded animate-pulse mx-auto" />
-      </td>
-      <td className="py-3 px-4">
         <div className="h-4 w-4 bg-muted rounded animate-pulse mx-auto" />
-      </td>
-      <td className="py-3 px-4">
-        <div className="h-8 w-16 bg-muted rounded animate-pulse" />
       </td>
     </tr>
   )
@@ -319,6 +440,9 @@ function SortableHeader({
 
 /**
  * ResultTableHeaderV2 - Column headers with sorting
+ *
+ * Columns: Product | Cal | $/rd | Retailers | ★
+ * Stock column removed — stock status is merged into price color.
  */
 export function ResultTableHeaderV2({
   currentSort,
@@ -337,7 +461,7 @@ export function ResultTableHeaderV2({
   return (
     <thead className="bg-muted/30">
       <tr className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        <th className="py-3 px-4">Product</th>
+        <th className="py-3 px-4 w-[45%]">Product</th>
         <th className="py-3 px-4">Cal</th>
         <SortableHeader
           isAsc={currentSort === 'price_asc'}
@@ -348,9 +472,7 @@ export function ResultTableHeaderV2({
           $/rd
         </SortableHeader>
         <th className="py-3 px-4">Retailers</th>
-        <th className="py-3 px-4 text-center">Stock</th>
         <th className="py-3 px-4 text-center">★</th>
-        <th className="py-3 px-4">Action</th>
       </tr>
     </thead>
   )

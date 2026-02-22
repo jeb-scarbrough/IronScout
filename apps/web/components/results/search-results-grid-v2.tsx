@@ -95,8 +95,8 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
     | 'price_asc'
     | 'price_desc'
 
-  // Hide out of stock filter
-  const [hideOutOfStock, setHideOutOfStock] = useState(false)
+  // Hide out of stock filter — default to true so users see actionable results first
+  const [hideOutOfStock, setHideOutOfStock] = useState(true)
 
   // Panel state
   const [panelProductId, setPanelProductId] = useState<string | null>(null)
@@ -327,9 +327,12 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
                       productTitle={product.name}
                       caliber={product.caliber || 'Unknown'}
                       brand={product.brand}
+                      bulletType={product.premium?.bulletType}
                       grainWeight={product.grainWeight}
+                      caseMaterial={product.caseMaterial}
                       roundCount={product.roundCount}
                       badges={product.premium?.premiumRanking?.badges}
+                      retailers={product.retailers}
                       lowestPricePerRound={getLowestPricePerRound(product.retailers)}
                       retailerCount={product.retailers.length}
                       anyInStock={product.retailers.some((r) => r.inStock)}
@@ -340,7 +343,7 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
                       {hideOutOfStock ? 'No in-stock items found' : 'No results'}
                     </td>
                   </tr>

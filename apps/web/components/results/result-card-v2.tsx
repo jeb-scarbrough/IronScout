@@ -190,8 +190,9 @@ export function ResultCardV2({
 
   return (
     <Card
+      onClick={handleViewPrices}
       className={cn(
-        'overflow-hidden h-full flex flex-col border bg-card transition-all',
+        'overflow-hidden h-full flex flex-col border bg-card transition-all cursor-pointer',
         anyInStock
           ? 'border-border hover:border-primary/40 hover:shadow-sm'
           : 'opacity-70 border-border'
@@ -205,9 +206,12 @@ export function ResultCardV2({
         <ProductHeader
           productTitle={productTitle}
           caliber={caliber}
+          brand={brand}
           bulletType={bulletType}
           grainWeight={grainWeight}
           caseMaterial={caseMaterial}
+          roundCount={roundCount}
+          badges={badges}
         />
 
         {/* Retailer Prices */}
@@ -222,10 +226,10 @@ export function ResultCardV2({
               />
             ))}
 
-            {/* "No other retailers" message if only showing few */}
-            {retailers.length <= MAX_INLINE_RETAILERS && retailers.length < 3 && (
-              <p className="text-xs text-muted-foreground/60 italic">
-                No other retailers found
+            {/* Single-retailer exclusivity label */}
+            {retailers.length === 1 && (
+              <p className="text-xs text-muted-foreground/50">
+                Only at {retailers[0].retailerName}
               </p>
             )}
           </div>

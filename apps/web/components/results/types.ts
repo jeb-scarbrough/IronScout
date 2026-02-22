@@ -130,8 +130,10 @@ export interface ResultRowV2Props {
   brand?: string
   bulletType?: string
   grainWeight?: number
+  caseMaterial?: string
   roundCount?: number
   badges?: string[]
+  retailers: RetailerPrice[]
   lowestPricePerRound: number
   retailerCount: number
   anyInStock: boolean
