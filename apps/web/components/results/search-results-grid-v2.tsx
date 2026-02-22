@@ -261,10 +261,12 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
                 id={product.id}
                 productTitle={product.name}
                 caliber={product.caliber || 'Unknown'}
+                brand={product.brand}
                 bulletType={product.premium?.bulletType}
                 grainWeight={product.grainWeight}
                 caseMaterial={product.caseMaterial}
                 roundCount={product.roundCount}
+                badges={product.premium?.premiumRanking?.badges}
                 retailers={product.retailers}
                 isWatched={trackedIds.has(product.id)}
                 onWatchToggle={handleWatchToggle}
@@ -290,10 +292,12 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
                   id={product.id}
                   productTitle={product.name}
                   caliber={product.caliber || 'Unknown'}
+                  brand={product.brand}
                   bulletType={product.premium?.bulletType}
                   grainWeight={product.grainWeight}
                   caseMaterial={product.caseMaterial}
                   roundCount={product.roundCount}
+                  badges={product.premium?.premiumRanking?.badges}
                   retailers={product.retailers}
                   isWatched={trackedIds.has(product.id)}
                   onWatchToggle={handleWatchToggle}
@@ -322,6 +326,10 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
                       id={product.id}
                       productTitle={product.name}
                       caliber={product.caliber || 'Unknown'}
+                      brand={product.brand}
+                      grainWeight={product.grainWeight}
+                      roundCount={product.roundCount}
+                      badges={product.premium?.premiumRanking?.badges}
                       lowestPricePerRound={getLowestPricePerRound(product.retailers)}
                       retailerCount={product.retailers.length}
                       anyInStock={product.retailers.some((r) => r.inStock)}

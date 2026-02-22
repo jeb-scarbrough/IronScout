@@ -108,10 +108,12 @@ export interface ResultCardV2Props {
   id: string
   productTitle: string
   caliber: string
+  brand?: string
   bulletType?: string
   grainWeight?: number
   caseMaterial?: string
   roundCount?: number
+  badges?: string[]
   retailers: RetailerPrice[]
   isWatched: boolean
   onWatchToggle: (productId: string) => Promise<boolean>
@@ -125,9 +127,11 @@ export interface ResultRowV2Props {
   id: string
   productTitle: string
   caliber: string
+  brand?: string
   bulletType?: string
   grainWeight?: number
   roundCount?: number
+  badges?: string[]
   lowestPricePerRound: number
   retailerCount: number
   anyInStock: boolean

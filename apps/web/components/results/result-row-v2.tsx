@@ -15,6 +15,8 @@ import { trackTrackToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
 import type { ResultRowV2Props } from './types'
 import { formatPrice, truncate } from './types'
+import { BADGE_CONFIG } from '@/lib/api'
+import type { PerformanceBadge } from '@/lib/api'
 
 /**
  * ResultRowV2 - Dense table row for grid view
@@ -25,10 +27,17 @@ import { formatPrice, truncate } from './types'
  * - Compare button opens panel
  * - No recommendation language
  */
+/** Max performance badges to show inline in grid */
+const MAX_GRID_BADGES = 2
+
 export function ResultRowV2({
   id,
   productTitle,
   caliber,
+  brand,
+  grainWeight,
+  roundCount,
+  badges,
   lowestPricePerRound,
   retailerCount,
   anyInStock,
@@ -87,18 +96,53 @@ export function ResultRowV2({
     >
       {/* Product */}
       <td className="py-3 px-4">
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="font-medium text-foreground cursor-default">
-                {truncate(productTitle, 45)}
+        <div className="flex flex-col gap-0.5">
+          {/* Brand */}
+          {brand && (
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-none">
+              {brand}
+            </span>
+          )}
+          {/* Title */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="font-medium text-foreground cursor-default leading-snug">
+                  {truncate(productTitle, 50)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <p className="text-xs">{productTitle}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {/* Specs line: grain · round count + badges */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(grainWeight || (roundCount && roundCount > 1)) && (
+              <span className="text-xs text-muted-foreground">
+                {[
+                  grainWeight ? `${grainWeight}gr` : null,
+                  roundCount && roundCount > 1 ? `${roundCount.toLocaleString()} rds` : null,
+                ].filter(Boolean).join(' \u00b7 ')}
               </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs">
-              <p className="text-xs">{productTitle}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+            )}
+            {(badges || []).slice(0, MAX_GRID_BADGES).map((b) => {
+              const config = BADGE_CONFIG[b as PerformanceBadge]
+              if (!config) return null
+              return (
+                <span
+                  key={b}
+                  className={cn(
+                    'inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold leading-none',
+                    config.color
+                  )}
+                >
+                  {config.label}
+                </span>
+              )
+            })}
+          </div>
+        </div>
       </td>
 
       {/* Caliber */}

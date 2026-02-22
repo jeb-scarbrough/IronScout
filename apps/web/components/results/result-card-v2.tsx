@@ -14,6 +14,8 @@ import { trackTrackToggle } from '@/lib/analytics'
 import { toast } from 'sonner'
 import type { ResultCardV2Props, RetailerPrice } from './types'
 import { formatPrice, formatShippingInfo } from './types'
+import { BADGE_CONFIG } from '@/lib/api'
+import type { PerformanceBadge } from '@/lib/api'
 
 /** Max retailer rows to show inline */
 const MAX_INLINE_RETAILERS = 3
@@ -73,10 +75,12 @@ export function ResultCardV2({
   id,
   productTitle,
   caliber,
+  brand,
   bulletType,
   grainWeight,
   caseMaterial,
   roundCount,
+  badges,
   retailers,
   isWatched,
   onWatchToggle,
@@ -154,9 +158,12 @@ export function ResultCardV2({
           <ProductHeader
             productTitle={productTitle}
             caliber={caliber}
+            brand={brand}
             bulletType={bulletType}
             grainWeight={grainWeight}
             caseMaterial={caseMaterial}
+            roundCount={roundCount}
+            badges={badges}
           />
           <div className="flex-1 flex items-center justify-center py-6">
             <div className="text-center">
@@ -317,22 +324,32 @@ function WatchButton({
   )
 }
 
+/** Max performance badges to show inline */
+const MAX_INLINE_BADGES = 2
+
 /**
- * Product header - title and inline attribute line
+ * Product header - brand, title, attribute chips, and performance badges
  */
 function ProductHeader({
   productTitle,
   caliber,
+  brand,
   bulletType,
   grainWeight,
   caseMaterial,
+  roundCount,
+  badges,
 }: {
   productTitle: string
   caliber: string
+  brand?: string
   bulletType?: string
   grainWeight?: number
   caseMaterial?: string
+  roundCount?: number
+  badges?: string[]
 }) {
+  // Build attribute chips: caliber · grain · bullet type · case material · round count
   const attrs = [
     caliber,
     grainWeight ? `${grainWeight}gr` : null,
@@ -340,15 +357,53 @@ function ProductHeader({
     caseMaterial,
   ].filter(Boolean)
 
+  // Get badge configs for display (limit to MAX_INLINE_BADGES)
+  const displayBadges = (badges || [])
+    .slice(0, MAX_INLINE_BADGES)
+    .map((b) => BADGE_CONFIG[b as PerformanceBadge])
+    .filter(Boolean)
+
   return (
     <>
+      {/* Brand name */}
+      {brand && (
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-0.5">
+          {brand}
+        </p>
+      )}
       <h3 className="font-semibold text-foreground leading-tight pr-20 mb-1 line-clamp-2">
         {productTitle}
       </h3>
+      {/* Attribute line: caliber · grain · bullet type · case material */}
       {attrs.length > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {attrs.join(' \u00b7 ')}
-        </p>
+        <div className="flex items-center gap-1.5 flex-wrap text-sm text-muted-foreground">
+          <span>{attrs.join(' \u00b7 ')}</span>
+          {/* Round count — visually distinct */}
+          {roundCount && roundCount > 1 && (
+            <>
+              <span className="text-muted-foreground/40">\u00b7</span>
+              <span className="font-medium text-foreground/70">
+                {roundCount.toLocaleString()} rds
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {/* Performance badges */}
+      {displayBadges.length > 0 && (
+        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+          {displayBadges.map((badge) => (
+            <span
+              key={badge.label}
+              className={cn(
+                'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none',
+                badge.color
+              )}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
       )}
     </>
   )
