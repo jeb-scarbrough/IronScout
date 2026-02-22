@@ -140,6 +140,10 @@ export interface ResultRowV2Props {
   isWatched: boolean
   onWatchToggle: (productId: string) => Promise<boolean>
   onCompareClick: (productId: string) => void
+  /** Called on mouseenter — parent manages hover delay and preview rendering */
+  onHoverStart?: () => void
+  /** Called on mouseleave — parent clears hover state */
+  onHoverEnd?: () => void
 }
 
 /**

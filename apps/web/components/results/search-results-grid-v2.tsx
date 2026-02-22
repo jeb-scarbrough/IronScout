@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { ResultCardV2, ResultCardV2Skeleton } from './result-card-v2'
-import { ResultRowV2, ResultRowV2Skeleton, ResultTableHeaderV2 } from './result-row-v2'
+import { ResultRowV2, ResultRowV2Skeleton, ResultTableHeaderV2, HoverPreviewRow } from './result-row-v2'
 import { RetailerPanel } from './retailer-panel'
 import type { Product } from '@/lib/api'
 import { getSavedItems, saveItem, unsaveItem, AuthError } from '@/lib/api'
@@ -103,6 +103,38 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
 
   // Track which products are saved
   const [trackedIds, setTrackedIds] = useState<Set<string>>(new Set())
+
+  // Hover preview state — lifted here so HoverPreviewRow renders as a sibling <tr>
+  const [hoveredProductId, setHoveredProductId] = useState<string | null>(null)
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    }
+  }, [])
+
+  const handleRowHoverStart = useCallback((productId: string) => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    hoverTimeout.current = setTimeout(() => setHoveredProductId(productId), 400)
+  }, [])
+
+  const handleRowHoverEnd = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    // Small delay so mouse can travel from row to preview without dismissing
+    hoverTimeout.current = setTimeout(() => setHoveredProductId(null), 150)
+  }, [])
+
+  const handlePreviewMouseEnter = useCallback(() => {
+    // Cancel any pending dismiss when mouse enters preview
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+  }, [])
+
+  const handlePreviewMouseLeave = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+    setHoveredProductId(null)
+  }, [])
 
   // Transform products to include retailers
   const productsWithRetailers = useMemo(() => {
@@ -312,7 +344,7 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
           </div>
 
           {/* Desktop: Table layout */}
-          <div className="hidden md:block border border-border rounded-lg overflow-hidden">
+          <div className="hidden md:block border border-border rounded-lg overflow-x-auto">
             <table className="w-full">
               <ResultTableHeaderV2
                 currentSort={currentSort}
@@ -321,25 +353,41 @@ export function SearchResultsGridV2({ products }: SearchResultsGridV2Props) {
               <tbody>
                 {displayProducts.length > 0 ? (
                   displayProducts.map((product) => (
-                    <ResultRowV2
-                      key={product.id}
-                      id={product.id}
-                      productTitle={product.name}
-                      caliber={product.caliber || 'Unknown'}
-                      brand={product.brand}
-                      bulletType={product.premium?.bulletType}
-                      grainWeight={product.grainWeight}
-                      caseMaterial={product.caseMaterial}
-                      roundCount={product.roundCount}
-                      badges={product.premium?.premiumRanking?.badges}
-                      retailers={product.retailers}
-                      lowestPricePerRound={getLowestPricePerRound(product.retailers)}
-                      retailerCount={product.retailers.length}
-                      anyInStock={product.retailers.some((r) => r.inStock)}
-                      isWatched={trackedIds.has(product.id)}
-                      onWatchToggle={handleWatchToggle}
-                      onCompareClick={handleCompareClick}
-                    />
+                    <Fragment key={product.id}>
+                      <ResultRowV2
+                        id={product.id}
+                        productTitle={product.name}
+                        caliber={product.caliber || 'Unknown'}
+                        brand={product.brand}
+                        bulletType={product.premium?.bulletType}
+                        grainWeight={product.grainWeight}
+                        caseMaterial={product.caseMaterial}
+                        roundCount={product.roundCount}
+                        badges={product.premium?.premiumRanking?.badges}
+                        retailers={product.retailers}
+                        lowestPricePerRound={getLowestPricePerRound(product.retailers)}
+                        retailerCount={product.retailers.length}
+                        anyInStock={product.retailers.some((r) => r.inStock)}
+                        isWatched={trackedIds.has(product.id)}
+                        onWatchToggle={handleWatchToggle}
+                        onCompareClick={handleCompareClick}
+                        onHoverStart={() => handleRowHoverStart(product.id)}
+                        onHoverEnd={handleRowHoverEnd}
+                      />
+                      <HoverPreviewRow
+                        show={hoveredProductId === product.id}
+                        productTitle={product.name}
+                        caliber={product.caliber || 'Unknown'}
+                        bulletType={product.premium?.bulletType}
+                        grainWeight={product.grainWeight}
+                        caseMaterial={product.caseMaterial}
+                        roundCount={product.roundCount}
+                        retailers={product.retailers}
+                        productId={product.id}
+                        onMouseEnter={handlePreviewMouseEnter}
+                        onMouseLeave={handlePreviewMouseLeave}
+                      />
+                    </Fragment>
                   ))
                 ) : (
                   <tr>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Bookmark, ChevronUp, ChevronDown, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -20,11 +20,8 @@ import type { PerformanceBadge } from '@/lib/api'
 /** Max performance badges to show inline in grid */
 const MAX_GRID_BADGES = 2
 
-/** Max retailers in hover preview */
-const MAX_HOVER_RETAILERS = 3
-
-/** Delay before showing hover preview (ms) */
-const HOVER_DELAY = 400
+/** Max retailers shown in hover preview */
+const MAX_PREVIEW_RETAILERS = 5
 
 export function ResultRowV2({
   id,
@@ -43,22 +40,14 @@ export function ResultRowV2({
   isWatched,
   onWatchToggle,
   onCompareClick,
+  onHoverStart,
+  onHoverEnd,
 }: ResultRowV2Props) {
   const [watchingOptimistic, setWatchingOptimistic] = useState(isWatched)
-  const [showPreview, setShowPreview] = useState(false)
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rowRef = useRef<HTMLTableRowElement>(null)
 
   useEffect(() => {
     setWatchingOptimistic(isWatched)
   }, [isWatched])
-
-  // Cleanup hover timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-    }
-  }, [])
 
   const handleWatchToggle = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -91,23 +80,6 @@ export function ResultRowV2({
     onCompareClick(id)
   }, [id, onCompareClick])
 
-  // Hover preview handlers
-  const handleMouseEnter = useCallback(() => {
-    hoverTimeout.current = setTimeout(() => setShowPreview(true), HOVER_DELAY)
-  }, [])
-
-  const handleMouseLeave = useCallback(() => {
-    if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-    setShowPreview(false)
-  }, [])
-
-  // Sorted retailers for hover preview
-  const sortedRetailers = useMemo(() => {
-    const inStock = retailers.filter((r) => r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
-    const oos = retailers.filter((r) => !r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
-    return [...inStock, ...oos]
-  }, [retailers])
-
   // First retailer name for single-retailer display
   const singleRetailerName = retailerCount === 1 && retailers.length > 0
     ? retailers[0].retailerName
@@ -115,10 +87,9 @@ export function ResultRowV2({
 
   return (
     <tr
-      ref={rowRef}
       onClick={handleRowClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       className={cn(
         'border-b border-border hover:bg-muted/50 transition-colors cursor-pointer relative',
         !anyInStock && 'opacity-60'
@@ -234,21 +205,58 @@ export function ResultRowV2({
         </TooltipProvider>
       </td>
 
-      {/* Hover Preview — positioned below the row */}
-      {showPreview && sortedRetailers.length > 0 && (
-        <td className="absolute left-0 right-0 top-full z-50 px-4 pointer-events-auto" colSpan={5}>
-          <HoverPreview
-            productTitle={productTitle}
-            caliber={caliber}
-            bulletType={bulletType}
-            grainWeight={grainWeight}
-            caseMaterial={caseMaterial}
-            roundCount={roundCount}
-            retailers={sortedRetailers.slice(0, MAX_HOVER_RETAILERS)}
-            productId={id}
-          />
-        </td>
-      )}
+    </tr>
+  )
+}
+
+/**
+ * HoverPreviewRow — Renders as a separate <tr> to keep valid table HTML.
+ * Called from parent grid, not inline in ResultRowV2, to avoid nesting issues.
+ * However, for encapsulation we keep it co-located and export for parent use.
+ */
+export function HoverPreviewRow({
+  show,
+  productTitle,
+  caliber,
+  bulletType,
+  grainWeight,
+  caseMaterial,
+  roundCount,
+  retailers,
+  productId,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  show: boolean
+  productTitle: string
+  caliber: string
+  bulletType?: string
+  grainWeight?: number
+  caseMaterial?: string
+  roundCount?: number
+  retailers: RetailerPrice[]
+  productId: string
+  /** Keep preview visible when mouse moves onto it */
+  onMouseEnter?: () => void
+  /** Dismiss preview when mouse leaves it */
+  onMouseLeave?: () => void
+}) {
+  if (!show || retailers.length === 0) return null
+
+  return (
+    <tr className="border-0" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <td colSpan={5} className="p-0 border-0">
+        <HoverPreview
+          productTitle={productTitle}
+          caliber={caliber}
+          bulletType={bulletType}
+          grainWeight={grainWeight}
+          caseMaterial={caseMaterial}
+          roundCount={roundCount}
+          retailers={retailers}
+          productId={productId}
+        />
+      </td>
     </tr>
   )
 }
@@ -283,6 +291,13 @@ function HoverPreview({
     roundCount && roundCount > 1 ? `${roundCount.toLocaleString()} rds` : null,
   ].filter(Boolean)
 
+  // Sort in-stock first by price, then OOS by price; cap to MAX_PREVIEW_RETAILERS
+  const sortedRetailers = useMemo(() => {
+    const inStock = retailers.filter((r) => r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    const oos = retailers.filter((r) => !r.inStock).sort((a, b) => a.pricePerRound - b.pricePerRound)
+    return [...inStock, ...oos].slice(0, MAX_PREVIEW_RETAILERS)
+  }, [retailers])
+
   const handleRetailerClick = useCallback((retailer: RetailerPrice) => {
     if (!retailer.out_url) return
     trackRetailerClick({
@@ -312,7 +327,7 @@ function HoverPreview({
 
       {/* Retailer prices with direct buy links */}
       <div className="space-y-2">
-        {retailers.map((r) => (
+        {sortedRetailers.map((r) => (
           <div
             key={r.retailerId}
             className={cn(
@@ -384,8 +399,6 @@ export function ResultRowV2Skeleton() {
 // ============================================
 // Table Header
 // ============================================
-
-type SortDirection = 'asc' | 'desc' | null
 
 interface ResultTableHeaderV2Props {
   currentSort: 'relevance' | 'price_asc' | 'price_desc'
