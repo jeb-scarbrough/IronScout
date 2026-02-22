@@ -25,6 +25,11 @@
       "types": "./visibility.d.ts",
       "import": "./visibility.js",
       "default": "./visibility.js"
+    },
+    "./calibers": {
+      "types": "./calibers.d.ts",
+      "import": "./calibers.js",
+      "default": "./calibers.js"
     }
   },
   "scripts": {

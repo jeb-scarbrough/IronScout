@@ -4,6 +4,7 @@ import {
   PLATFORM_CALIBER_MAP,
   PURPOSE_SYNONYMS,
   CALIBER_ALIASES,
+  BARE_NUMBER_CALIBERS,
   RANGE_GRAIN_PREFERENCES,
   AMMO_BRANDS,
   BULLET_TYPE_KEYWORDS,
@@ -12,6 +13,7 @@ import {
   normalizePurpose,
   getCaliberVariations,
 } from './ammo-knowledge'
+import { CALIBER_ALIASES as DB_CALIBER_ALIASES } from '@ironscout/db/calibers'
 import { loggers } from '../../config/logger'
 import { getCachedIntent, cacheIntent } from './cache'
 
@@ -250,11 +252,42 @@ function tryQuickParse(query: string): SearchIntent | null {
     }
   }
 
-  // Check for direct caliber mentions
+  // Check for direct caliber mentions using word-boundary matching.
+  // Sorted longest-first to prevent substring collisions (e.g. ".380 acp" before ".38").
   if (!intent.calibers) {
-    for (const [alias, variations] of Object.entries(CALIBER_ALIASES)) {
-      if (lowerQuery.includes(alias.toLowerCase())) {
+    const sortedAliases = Object.entries(CALIBER_ALIASES)
+      .sort(([a], [b]) => b.length - a.length)
+
+    for (const [alias, variations] of sortedAliases) {
+      // Exact match (query IS the alias)
+      if (lowerQuery === alias) {
         intent.calibers = variations
+        matchCount++
+        break
+      }
+      // Word-boundary match: prevent ".38" from matching inside ".380"
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(?:^|\\s|[^\\w.])${escaped}(?:\\s|[^\\w]|$)`, 'i')
+      if (regex.test(lowerQuery)) {
+        intent.calibers = variations
+        matchCount++
+        break
+      }
+    }
+  }
+
+  // Bare-number fallback for queries like "38 range", "357 mag", "22 ammo"
+  // that didn't match any specific alias (no dot prefix).
+  if (!intent.calibers) {
+    for (const [num, calibers] of Object.entries(BARE_NUMBER_CALIBERS)) {
+      const regex = new RegExp(`(?:^|\\s)${num}(?:\\s|$)`)
+      if (regex.test(lowerQuery)) {
+        // Expand each canonical name to its full alias set for WHERE clause coverage
+        const expanded = calibers.flatMap(cal => {
+          const dbAliases = DB_CALIBER_ALIASES[cal as keyof typeof DB_CALIBER_ALIASES]
+          return dbAliases ? [cal, ...dbAliases] : [cal]
+        })
+        intent.calibers = expanded
         matchCount++
         break
       }

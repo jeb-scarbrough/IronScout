@@ -3,6 +3,8 @@
  * Used by the AI intent parser to understand user queries
  */
 
+import { CALIBER_ALIASES as DB_CALIBER_ALIASES } from '@ironscout/db/calibers'
+
 // Common platform-to-caliber mappings
 export const PLATFORM_CALIBER_MAP: Record<string, string[]> = {
   // Rifles
@@ -72,32 +74,60 @@ export const PURPOSE_SYNONYMS: Record<string, string> = {
   'game': 'Hunting',
 }
 
-// Caliber aliases and normalizations
-export const CALIBER_ALIASES: Record<string, string[]> = {
-  '9mm': ['9mm Luger', '9mm', '9x19mm', '9mm Parabellum'],
-  '9mm luger': ['9mm Luger', '9mm', '9x19mm'],
-  '.223': ['.223 Remington', '5.56 NATO'],
-  '5.56': ['5.56 NATO', '.223 Remington'],
-  '.308': ['.308 Winchester', '7.62 NATO'],
-  '7.62': ['7.62 NATO', '.308 Winchester'],
-  '7.62x39': ['7.62x39mm'],
-  '7.62x51': ['7.62 NATO', '.308 Winchester'],
-  '7.62x54': ['7.62x54R'],
-  '.45': ['.45 ACP', '.45 Auto'],
-  '.45 acp': ['.45 ACP', '.45 Auto'],
-  '.40': ['.40 S&W'],
-  '.40 s&w': ['.40 S&W'],
-  '.380': ['.380 ACP', '.380 Auto'],
-  '12ga': ['12 Gauge'],
-  '12 gauge': ['12 Gauge'],
-  '20ga': ['20 Gauge'],
-  '20 gauge': ['20 Gauge'],
-  '.22': ['.22 LR', '.22 Long Rifle'],
-  '.22lr': ['.22 LR', '.22 Long Rifle'],
-  '.30-06': ['.30-06 Springfield'],
-  '6.5 creedmoor': ['6.5 Creedmoor'],
-  '.300 blackout': ['.300 AAC Blackout', '.300 BLK'],
-  '.300 blk': ['.300 AAC Blackout', '.300 BLK'],
+// Caliber aliases derived from the authoritative DB source (packages/db/calibers.ts).
+// Canonical name is placed first in each variations array so intent.calibers[0]
+// works correctly for grain weight lookup in CALIBER_GRAIN_RANGES.
+export const CALIBER_ALIASES: Record<string, string[]> = {}
+for (const [canonical, aliases] of Object.entries(DB_CALIBER_ALIASES)) {
+  if (canonical === 'Other') continue
+  const variations = [canonical, ...aliases]
+  for (const alias of aliases) {
+    CALIBER_ALIASES[alias] = variations
+  }
+}
+
+// Bare-prefix aliases commonly used in search queries but not in the DB's
+// authoritative list (which is tuned for exact DB matching, not fuzzy user input).
+const SHORT_FORM_CALIBERS: Record<string, string> = {
+  '.22': '.22 LR',
+  '.25': '.25 ACP',
+  '.32': '.32 ACP',
+  '.38': '.38 Special',
+  '.40': '.40 S&W',
+  '.45': '.45 ACP',
+  '.223': '.223/5.56',
+  '.243': '.243 Winchester',
+  '.270': '.270 Winchester',
+  '.308': '.308/7.62x51',
+  '.380': '.380 ACP',
+  '7.62': '.308/7.62x51',
+}
+for (const [short, canonical] of Object.entries(SHORT_FORM_CALIBERS)) {
+  if (!CALIBER_ALIASES[short]) {
+    const dbAliases = DB_CALIBER_ALIASES[canonical as keyof typeof DB_CALIBER_ALIASES]
+    if (dbAliases) {
+      CALIBER_ALIASES[short] = [canonical, ...dbAliases]
+    }
+  }
+}
+
+// Bare-number caliber fallback — maps bare digits (without dots) to canonical calibers.
+// Used when no alias matches: "38 range" → [.38 Special, .380 ACP]
+export const BARE_NUMBER_CALIBERS: Record<string, string[]> = {
+  '22':  ['.22 LR', '.22 WMR'],
+  '17':  ['.17 HMR'],
+  '25':  ['.25 ACP'],
+  '32':  ['.32 ACP'],
+  '38':  ['.38 Special', '.380 ACP'],
+  '40':  ['.40 S&W'],
+  '45':  ['.45 ACP', '.45 Colt'],
+  '223': ['.223/5.56'],
+  '243': ['.243 Winchester'],
+  '270': ['.270 Winchester'],
+  '308': ['.308/7.62x51'],
+  '357': ['.357 Magnum'],
+  '380': ['.380 ACP'],
+  '410': ['.410 Bore'],
 }
 
 // Range preferences - maps to grain weight recommendations

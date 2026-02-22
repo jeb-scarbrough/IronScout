@@ -895,7 +895,7 @@ function buildWhereClause(intent: SearchIntent, explicitFilters: ExplicitFilters
 
   // If no structured filters matched, fall back to text search
   if (Object.keys(where).length === 0 && intent.originalQuery) {
-    const keywords = intent.keywords || intent.originalQuery.split(/\s+/).filter(w => w.length > 2)
+    const keywords = intent.keywords || intent.originalQuery.split(/\s+/).filter(w => w.length > 2 || /^\d+$/.test(w))
 
     if (keywords.length > 0) {
       keywords.forEach(keyword => {
