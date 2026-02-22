@@ -903,6 +903,55 @@ export async function getMarketPulse(token: string): Promise<MarketPulseResponse
 }
 
 // ============================================================================
+// Market Deals API
+// ============================================================================
+
+export interface MarketDeal {
+  productId: string
+  productName: string
+  caliber: string
+  pricePerRound: number | null
+  price: number
+  retailerName: string
+  retailerId: string
+  url: string
+  out_url: string | null
+  contextLine: string
+  detectedAt: string
+  reason: 'PRICE_DROP' | 'BACK_IN_STOCK' | 'LOWEST_90D'
+}
+
+export interface MarketDealsSection {
+  title: string
+  deals: MarketDeal[]
+}
+
+export interface MarketDealsResponse {
+  hero: MarketDeal | null
+  sections: MarketDealsSection[]
+  lastCheckedAt: string
+  _meta: {
+    personalized: boolean
+    userCalibers?: string[]
+  }
+}
+
+/**
+ * Get notable market-wide price events.
+ * Auth is optional — personalization (Gun Locker matching) requires a token.
+ */
+export async function getMarketDeals(token?: string): Promise<MarketDealsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/market-deals`, {
+    headers: token ? buildAuthHeaders(token) : {},
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    throw new Error('Failed to fetch market deals')
+  }
+  return response.json()
+}
+
+// ============================================================================
 // Dashboard v4 State API
 // ============================================================================
 

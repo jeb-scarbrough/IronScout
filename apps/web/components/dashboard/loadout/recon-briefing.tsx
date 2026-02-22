@@ -4,7 +4,7 @@ import { Zap, TrendingDown, PackageCheck, ArrowDownRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { cn, formatTimeAgo } from '@/lib/utils'
 import type { WatchingItemWithPrice } from '@/hooks/use-loadout'
 import type { AlertHistoryEntry } from '@/lib/api'
 import { useRecentChanges, type RecentChange } from '@/hooks/use-recent-changes'
@@ -148,24 +148,6 @@ const CHANGE_COLORS: Record<string, string> = {
   'lowest-90-days': 'bg-emerald-500/10 text-emerald-500',
   'back-in-stock': 'bg-blue-500/10 text-blue-500',
   'price-moved': 'bg-amber-500/10 text-amber-500',
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-function formatTimeAgo(date: Date): string {
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays === 1) return 'yesterday'
-  return `${diffDays}d ago`
 }
 
 export default ReconBriefing

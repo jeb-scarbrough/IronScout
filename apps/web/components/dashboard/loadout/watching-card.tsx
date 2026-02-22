@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { Eye, Search, Bookmark } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,26 @@ export function WatchingCard({
     )
   }
 
+  // Sort by actionability so the most important items survive the truncation.
+  // Priority: status items first (90-day low > back-in-stock > price-moved),
+  // then in-stock by lowest price, then out-of-stock last.
+  const sortedItems = useMemo(() => {
+    const STATUS_RANK: Record<string, number> = {
+      'lowest-90-days': 0,
+      'back-in-stock': 1,
+      'price-moved': 2,
+    }
+    return [...items].sort((a, b) => {
+      const ra = a.status ? (STATUS_RANK[a.status] ?? 3) : (a.inStock ? 4 : 5)
+      const rb = b.status ? (STATUS_RANK[b.status] ?? 3) : (b.inStock ? 4 : 5)
+      if (ra !== rb) return ra - rb
+      // Within same rank, sort by lowest price ascending
+      const pa = a.priceRange?.min ?? Infinity
+      const pb = b.priceRange?.min ?? Infinity
+      return pa - pb
+    })
+  }, [items])
+
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
@@ -89,7 +110,7 @@ export function WatchingCard({
       </CardHeader>
       <CardContent className="pt-0">
         <div className="space-y-2">
-          {items.slice(0, 10).map((item) => (
+          {sortedItems.slice(0, 10).map((item) => (
             <WatchingItemRow
               key={item.id}
               item={item}
@@ -99,7 +120,7 @@ export function WatchingCard({
           ))}
           {totalCount > 10 && (
             <Button variant="ghost" size="sm" className="w-full" asChild>
-              <a href="/watchlist">View all {totalCount} items</a>
+              <a href="/dashboard/saved">View all {totalCount} items</a>
             </Button>
           )}
         </div>

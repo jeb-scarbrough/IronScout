@@ -4,8 +4,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { useLoadout, type AmmoItemWithPrice, type WatchingItemWithPrice } from '@/hooks/use-loadout'
-import { GunLockerCard, WatchingCard, MarketActivityCard, GetStartedChecklist, ReconBriefing, ReconGreeting } from '@/components/dashboard/loadout'
+import { GunLockerCard, WatchingCard, MarketActivityCard, GetStartedChecklist, ReconBriefing, ReconGreeting, NotableMovesCard } from '@/components/dashboard/loadout'
 import { useAlertHistory } from '@/hooks/use-alert-history'
+import { useMarketDeals } from '@/hooks/use-market-deals'
 import { DashboardContent } from '@/components/dashboard/dashboard-content'
 import { RetailerPanel } from '@/components/results/retailer-panel'
 import { Card, CardContent } from '@/components/ui/card'
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const { data: session, status: sessionStatus } = useSession()
   const { data, isLoading, error, mutate } = useLoadout()
   const { entries: alertHistory } = useAlertHistory(10)
+  const { data: marketDeals } = useMarketDeals()
   const router = useRouter()
   const token = session?.accessToken
   const [hasAlerts, setHasAlerts] = useState(false)
@@ -225,6 +227,16 @@ export default function DashboardPage() {
         recentAlerts={alertHistory}
         onCompareClick={handleCompareClick}
       />
+
+      {/* Notable Moves — market-wide price events */}
+      {marketDeals && (
+        <NotableMovesCard
+          sections={marketDeals.sections}
+          hero={marketDeals.hero}
+          lastCheckedAt={marketDeals.lastCheckedAt}
+          personalized={marketDeals._meta.personalized}
+        />
+      )}
 
       {bothEmpty ? (
         // Combined layout when both Gun Locker and Watching are empty:

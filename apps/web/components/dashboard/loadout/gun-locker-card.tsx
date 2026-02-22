@@ -145,10 +145,18 @@ function FirearmSection({
   const displayName = firearm.nickname || firearm.caliber
   const ammoCount = firearm.ammoItems.length
 
+  // Collapsed mini-summary: best price + stock status at a glance
+  const summary = summarizeAmmoItems(firearm.ammoItems)
+
   return (
     <Collapsible open={isExpanded} onOpenChange={onToggle}>
       <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+        <button className={cn(
+          'w-full flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors',
+          ammoCount > 0 && summary.inStockCount === 0 && 'border-l-2 border-l-amber-500/60',
+          ammoCount > 0 && summary.inStockCount > 0 && summary.inStockCount < ammoCount && 'border-l-2 border-l-amber-500/60',
+          ammoCount > 0 && summary.inStockCount === ammoCount && 'border-l-2 border-l-emerald-500/60',
+        )}>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded bg-muted text-xs font-medium">
               {firearm.caliber.slice(0, 3)}
@@ -156,7 +164,12 @@ function FirearmSection({
             <div className="text-left">
               <p className="font-medium">{displayName}</p>
               <p className="text-xs text-muted-foreground">
-                {ammoCount} {ammoCount === 1 ? 'ammo' : 'ammos'} saved
+                {ammoCount === 0
+                  ? 'No ammo saved'
+                  : summary.inStockCount > 0
+                    ? `from $${summary.bestPrice!.toFixed(2)}/rd \u00b7 ${summary.inStockCount} in stock`
+                    : `${ammoCount} saved \u00b7 none in stock`
+                }
               </p>
             </div>
           </div>
@@ -253,6 +266,31 @@ function AmmoItemRow({ item, onCompareClick, onFindSimilarClick }: AmmoItemRowPr
       </div>
     </div>
   )
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+interface AmmoSummary {
+  bestPrice: number | null
+  inStockCount: number
+}
+
+function summarizeAmmoItems(items: AmmoItemWithPrice[]): AmmoSummary {
+  let bestPrice: number | null = null
+  let inStockCount = 0
+
+  for (const item of items) {
+    if (item.inStock && item.priceRange) {
+      inStockCount++
+      if (bestPrice === null || item.priceRange.min < bestPrice) {
+        bestPrice = item.priceRange.min
+      }
+    }
+  }
+
+  return { bestPrice, inStockCount }
 }
 
 export default GunLockerCard
