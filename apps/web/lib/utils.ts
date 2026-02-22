@@ -25,8 +25,11 @@ export function formatNumber(num: number): string {
 }
 
 export function formatTimeAgo(date: Date): string {
+  const ts = date.getTime()
+  if (Number.isNaN(ts)) return ''
+
   const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+  const diffMs = now.getTime() - ts
   const diffMins = Math.floor(diffMs / (1000 * 60))
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))

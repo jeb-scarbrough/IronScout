@@ -28,13 +28,18 @@ const log = loggers.ai
  *          '9mm' → ['9mm']  (no change)
  */
 function expandCaliberFilter(calibers: string[]): string[] {
+  const seen = new Set<string>()
   const expanded: string[] = []
   for (const cal of calibers) {
-    if (cal.includes('/')) {
-      // Split on '/' and trim each part
-      expanded.push(...cal.split('/').map(c => c.trim()).filter(Boolean))
-    } else {
-      expanded.push(cal)
+    const parts = cal.includes('/')
+      ? cal.split('/').map(c => c.trim()).filter(Boolean)
+      : [cal]
+    for (const part of parts) {
+      const key = part.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        expanded.push(part)
+      }
     }
   }
   return expanded

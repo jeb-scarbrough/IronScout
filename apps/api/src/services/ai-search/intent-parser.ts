@@ -19,6 +19,30 @@ import { getCachedIntent, cacheIntent } from './cache'
 
 const log = loggers.ai
 
+// Pre-computed alias lookup sorted longest-first with compiled regex.
+// Built once at module load — avoids O(n log n) sort + 100+ RegExp compilations per search call.
+const SORTED_CALIBER_ALIASES: Array<{ alias: string; variations: string[]; regex: RegExp }> =
+  Object.entries(CALIBER_ALIASES)
+    .sort(([a], [b]) => b.length - a.length)
+    .map(([alias, variations]) => {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return {
+        alias,
+        variations,
+        regex: new RegExp(`(?:^|\\s|[^\\w.])${escaped}(?:\\s|[^\\w]|$)`, 'i'),
+      }
+    })
+
+// Pre-compiled bare-number regex patterns (static — no need to compile per call)
+const SORTED_BARE_NUMBER_ENTRIES: Array<{ num: string; calibers: string[]; regex: RegExp }> =
+  Object.entries(BARE_NUMBER_CALIBERS)
+    .sort(([a], [b]) => b.length - a.length)
+    .map(([num, calibers]) => ({
+      num,
+      calibers,
+      regex: new RegExp(`(?:^|\\s)${num}(?:\\s|$)`),
+    }))
+
 // Initialize OpenAI client only if API key is configured
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const openai = OPENAI_API_KEY
@@ -253,22 +277,11 @@ function tryQuickParse(query: string): SearchIntent | null {
   }
 
   // Check for direct caliber mentions using word-boundary matching.
-  // Sorted longest-first to prevent substring collisions (e.g. ".380 acp" before ".38").
+  // Uses pre-computed sorted aliases (longest-first) to prevent substring collisions
+  // (e.g. ".380 acp" before ".38"). Regex is pre-compiled at module load.
   if (!intent.calibers) {
-    const sortedAliases = Object.entries(CALIBER_ALIASES)
-      .sort(([a], [b]) => b.length - a.length)
-
-    for (const [alias, variations] of sortedAliases) {
-      // Exact match (query IS the alias)
-      if (lowerQuery === alias) {
-        intent.calibers = variations
-        matchCount++
-        break
-      }
-      // Word-boundary match: prevent ".38" from matching inside ".380"
-      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const regex = new RegExp(`(?:^|\\s|[^\\w.])${escaped}(?:\\s|[^\\w]|$)`, 'i')
-      if (regex.test(lowerQuery)) {
+    for (const { alias, variations, regex } of SORTED_CALIBER_ALIASES) {
+      if (lowerQuery === alias || regex.test(lowerQuery)) {
         intent.calibers = variations
         matchCount++
         break
@@ -278,9 +291,9 @@ function tryQuickParse(query: string): SearchIntent | null {
 
   // Bare-number fallback for queries like "38 range", "357 mag", "22 ammo"
   // that didn't match any specific alias (no dot prefix).
+  // Uses pre-compiled regex from SORTED_BARE_NUMBER_ENTRIES.
   if (!intent.calibers) {
-    for (const [num, calibers] of Object.entries(BARE_NUMBER_CALIBERS)) {
-      const regex = new RegExp(`(?:^|\\s)${num}(?:\\s|$)`)
+    for (const { calibers, regex } of SORTED_BARE_NUMBER_ENTRIES) {
       if (regex.test(lowerQuery)) {
         // Expand each canonical name to its full alias set for WHERE clause coverage
         const expanded = calibers.flatMap(cal => {

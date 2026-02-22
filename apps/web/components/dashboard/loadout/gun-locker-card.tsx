@@ -153,9 +153,8 @@ function FirearmSection({
       <CollapsibleTrigger asChild>
         <button className={cn(
           'w-full flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors',
-          ammoCount > 0 && summary.inStockCount === 0 && 'border-l-2 border-l-amber-500/60',
-          ammoCount > 0 && summary.inStockCount > 0 && summary.inStockCount < ammoCount && 'border-l-2 border-l-amber-500/60',
           ammoCount > 0 && summary.inStockCount === ammoCount && 'border-l-2 border-l-emerald-500/60',
+          ammoCount > 0 && summary.inStockCount < ammoCount && 'border-l-2 border-l-amber-500/60',
         )}>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded bg-muted text-xs font-medium">

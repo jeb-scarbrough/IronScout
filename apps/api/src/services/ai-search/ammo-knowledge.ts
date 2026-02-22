@@ -80,7 +80,8 @@ export const PURPOSE_SYNONYMS: Record<string, string> = {
 export const CALIBER_ALIASES: Record<string, string[]> = {}
 for (const [canonical, aliases] of Object.entries(DB_CALIBER_ALIASES)) {
   if (canonical === 'Other') continue
-  const variations = [canonical, ...aliases]
+  // Deduplicate: canonical may already appear in aliases (e.g. '9mm' key + '9mm' alias)
+  const variations = [canonical, ...aliases.filter(a => a !== canonical)]
   for (const alias of aliases) {
     CALIBER_ALIASES[alias] = variations
   }
